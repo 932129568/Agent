@@ -1,0 +1,65 @@
+# P0-4 T04：electron-builder NSIS 打包链（设计 §5.1/Q3 裁定）。
+#
+# 口径：
+#   - 载荷模型：目录产物（exe + resources）→ NSIS 标准安装；产物输出独立目录
+#     dist-electron/（directories.output），dist/ 恒冻结（红线 6）；
+#   - per-user NSIS（perMachine:false）→ 装 %LOCALAPPDATA%\Programs\Harbor 同位；
+#     deleteAppDataOnUninstall:false → 卸载保留 ~/.glm-chat（§5.4/Q5 语义）；
+#   - app 目录 = 仓库根（package.json main=electron/main.js）；files 白名单制——
+#     资产清单（设计 §8 T04）：harbor.html / libs/ / VERSION / backend/prompts/
+#     backend/experts_builtin/ / server/src（含 prisma generated client）/
+#     server/package.json（"type":"module"——asar 内 ESM 判定必需，spike 实测）
+#     / server/node_modules（生产依赖树；prisma CLI 为 @prisma/client 的运行时
+#     依赖，npm 语义保留）/ electron/（main.js+preload.js）；
+#   - 显式排除：server/data（dev 数据库——auth/业务 DB 生产一律落 CONFIG_DIR，
+#     密钥排查口径：dev 产物绝不入包）、server/test、server/prisma（schema 仅
+#     构建期事实源，运行时 DDL 内嵌 db.js）；
+#   - asar + asarUnpack：原生模块 .node（libsql napi）与 .wasm 解包到
+#     app.asar.unpacked（Electron fs 补丁自动重定向）；ESM 动态 import 与
+#     import.meta.url 相对链在 asar 内可用（2026-11-01 electron 45.2.1 双 spike
+#     实测：ESM-ASAR-OK / TYPE-MODULE-OK，见 T04 交付报告）；
+#   - 版本锚 VERSION=1.9.0（extraMetadata 注入 artifact 命名，不污染 package.json
+#     version 字段）；icon 未配置（harbor.ico 仅 48px、harbor-icon.png 实为 JPEG，
+#     均不满足 NSIS 256px 要求——用 eb 默认图标，P1 换正式图标资产）；
+#   - npmRebuild:false：libsql 为 N-API 预构建绑定（Node/Electron 通用），
+#     避免 eb 按 electron ABI 触发 node-gyp 重建。
+appId: com.harbor.desktop
+productName: Harbor
+directories:
+  output: dist-electron
+  buildResources: electron/build-resources
+files:
+  - electron/**/*
+  - harbor.html
+  - libs/**/*
+  - VERSION
+  - backend/prompts/**/*
+  - backend/experts_builtin/**/*
+  - server/src/**/*
+  - server/package.json
+  - server/node_modules/**/*
+  - '!server/data/**/*'
+  - '!server/test/**/*'
+  - '!server/prisma/**/*'
+  - '!server/prisma.config.ts'
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/*.wasm'
+extraMetadata:
+  version: 1.9.0
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  deleteAppDataOnUninstall: false
+  uninstallDisplayName: Harbor
+  artifactName: ${productName}-Setup-${version}.${ext}
+compression: normal

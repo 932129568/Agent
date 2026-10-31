@@ -16,7 +16,8 @@
     "diff:all": "npm --prefix server run diff:all",
     "smoke:island": "node tools/smoke_harbor_island.js",
     "perf:confirm": "node tools/perf_confirm_path.js",
-    "desktop": "electron ."
+    "desktop": "electron .",
+    "dist:win": "electron-builder --win nsis --config electron-builder.yml"
   },
   "dependencies": {
     "zod": "4.6.7"

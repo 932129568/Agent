@@ -37,6 +37,9 @@ push_exe_tmp.py
 dist/*.exe
 build/
 
+# P0-4 T04：Electron 打包产物输出（electron-builder NSIS，dist/ 恒冻结）
+dist-electron/
+
 # 测试/QA 临时产物（2026-10-30 快照决策：outputs/ 下新增文件不入库；历史已跟踪文件不受影响）
 outputs/
 
