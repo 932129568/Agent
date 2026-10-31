@@ -25,7 +25,7 @@
 - **最终全量差分（两次复跑零翻转）**：`outputs/diff/20261031035719/` 与 `outputs/diff/20261031041627/` —— **fixtures=29 / calls=275 / match=267 / intentional=8 / suspect=0 / error=0，退出码 0**（两轮逐数字一致）
 - 族级终态：meta 1i；sessions 12+3i；history-dir 8+1i；plans/ck 20；guard 25；commands 15；export 7；browser 22；software 11；files 16；workspace 17；memory 11；misc-config 21；provider 13+2i；os-system 8+1i；update 6；webdav 8；experts 10；mcp 16；rpc 11；selftest 10（含新建金丝雀 6）
 - **suspect 86 → 0**（P0-1c 全部收敛；残留 3 项按方案登记为 ID-201/202/203）
-- **intentional 5 → 8**（ID-201/202/203 预登记待签核，approvedBy=pending）
+- **intentional 5 → 8**（ID-201/202/203 已经 team-lead 于 2026-10-31 签核生效，提交 4d0bb90——QA 终验复核登记簿 8 项 approvedBy 全部非空）
 - 覆盖门禁：`npm run diff:coverage` exit 0 维持（fixture 覆盖 **139/145**，uncovered 登记 13，缺口 0，runId 20261031042522）
 - selftest 金丝雀重建：`fixed-shape-canary.json` 新建（6 calls：ts/ts_iso 双字段/remaining+越界 BAD_PARAMS/sid null 透传/对照项）——今日全 match=修复在位，任一转 suspect=修复回退即时可见；既有三个分类器金丝雀维持
 - Node 回归：**16 组测试全绿**（smoke 37 含 CF1-CF7+RP1/RP2+WD1/WD2 端到端、state 31、webdav 13、system/guard/files/experts/mcp/browser/contract 等）
@@ -42,9 +42,9 @@
 | ID-102 | sessions-validation c04 | ID-101 回读级联 | **已签核**（2026-10-30） | P0-2 复评 |
 | ID-103 | history-dir-basic c05 | DB 存储无文件可搬（migrate 语义） | **已签核**（2026-10-30） | P0-2 复评 |
 | ID-104 | sessions-validation c01 | JSON 解析器文案（CPython vs V8） | **已签核**（2026-10-30） | 2099-12-31（永久，Q3 裁定） |
-| ID-201 | prompts-tools c01 | build_system_prompt 沙箱尾注缺失（Node 无 Job 沙箱，不注入虚假安全声明；编码形态已对齐） | **pending 待签核** | P0-2 沙箱迁移后撤销 |
-| ID-202 | clipboard-process c08 | get_platform_info python 键值披露宿主（结构/格式全对齐，键冻结值披露——ID-001 同构） | **pending 待签核** | 2099-12-31（永久，运行时身份） |
-| ID-203 | prompts-tools c11 | test_provider_endpoint 库文本片段（urllib vs undici；键集与外层文案已对齐） | **pending 待签核** | 2099-12-31（永久，库实现细节） |
+| ID-201 | prompts-tools c01 | build_system_prompt 沙箱尾注缺失（Node 无 Job 沙箱，不注入虚假安全声明；编码形态已对齐） | **已签核**（2026-10-31，4d0bb90） | P0-2 沙箱迁移后撤销 |
+| ID-202 | clipboard-process c08 | get_platform_info python 键值披露宿主（结构/格式全对齐，键冻结值披露——ID-001 同构） | **已签核**（2026-10-31，4d0bb90） | 2099-12-31（永久，运行时身份） |
+| ID-203 | prompts-tools c11 | test_provider_endpoint 库文本片段（urllib vs undici；键集与外层文案已对齐） | **已签核**（2026-10-31，4d0bb90） | 2099-12-31（永久，库实现细节） |
 
 ## 四、P0-2/P0-3/P0-4 交接累积清单
 
