@@ -136,6 +136,31 @@ async function runOne(app, call) {
 function sha256File(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
+
+/** P0-1c H1②/③：快照哈希前的环境产物归一（Q4 裁定口径，与 fakes.py 同构）——
+ * CRLF→LF（文本模式换行翻译是平台产物）+ _glm_worklog.md 的 [MM-DD HH:MM]
+ * 行级掩蔽 [TS]（分钟级运行时刻）+ 含 NUL 的二进制不归一（字节即语义）。 */
+function stripCrLf(raw) {
+  const marker = Buffer.from([0x0d, 0x0a])
+  const parts = []
+  let start = 0
+  for (;;) {
+    const idx = raw.indexOf(marker, start)
+    if (idx === -1) { parts.push(raw.subarray(start)); break }
+    parts.push(raw.subarray(start, idx))
+    start = idx + 2
+  }
+  return Buffer.concat(parts)
+}
+function sha256FileNormalized(file) {
+  const raw = fs.readFileSync(file)
+  if (raw.subarray(0, 8192).includes(0)) return crypto.createHash('sha256').update(raw).digest('hex')
+  let data = stripCrLf(raw)
+  if (path.basename(file).toLowerCase() === '_glm_worklog.md') {
+    data = Buffer.from(data.toString('utf8').replace(/\[\d{2}-\d{2} \d{2}:\d{2}\]/g, '[TS]'), 'utf8')
+  }
+  return crypto.createHash('sha256').update(data).digest('hex')
+}
 function snapshotWorkspace(dir) {
   const out = []
   if (!fs.existsSync(dir)) return out
@@ -144,7 +169,7 @@ function snapshotWorkspace(dir) {
       const full = path.join(base, item.name)
       const relPath = rel ? `${rel}/${item.name}` : item.name
       if (item.isDirectory()) walk(full, relPath)
-      else out.push({ path: relPath, sha256: sha256File(full) })
+      else out.push({ path: relPath, sha256: sha256FileNormalized(full) })
     }
   }
   walk(dir, '')

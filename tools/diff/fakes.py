@@ -15,6 +15,7 @@
 """
 import ctypes
 import hashlib
+import re
 import json
 import os
 import shutil
@@ -399,8 +400,28 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
+def _sha256_file_normalized(path):
+    """P0-1c H1②/③：快照哈希前的环境产物归一（Q4 裁定口径）。
+
+    - 换行归一：运行时文本模式换行翻译（search_replace 的
+      atomic_write_text_mode——legacy 钉死行为）是 Windows 平台产物非契约
+      语义（macOS 双侧天然一致）；\\r\\n → \\n 后再哈希。
+    - worklog 时间戳行掩蔽：_glm_worklog.md 的 '[MM-DD HH:MM]' 前缀是分钟级
+      运行时刻，双侧先后执行必差一分钟——行级掩蔽 [TS]。
+    - 二进制保护：含 NUL 的文件不归一（字节即语义）。
+    """
+    with open(path, 'rb') as f:
+        raw = f.read()
+    if b'\x00' in raw[:8192]:
+        return hashlib.sha256(raw).hexdigest()
+    data = raw.replace(b'\r\n', b'\n')
+    if os.path.basename(path).lower() == '_glm_worklog.md':
+        data = re.sub(rb'\[\d{2}-\d{2} \d{2}:\d{2}\]', b'[TS]', data)
+    return hashlib.sha256(data).hexdigest()
+
+
 def snapshot_workspace(ws_dir):
-    """工作区树快照：相对路径（'/' 分隔）+ sha256，按路径排序。"""
+    """工作区树快照：相对路径（'/' 分隔）+ sha256（H1 归一口径），按路径排序。"""
     out = []
     if not os.path.isdir(ws_dir):
         return out
@@ -409,7 +430,7 @@ def snapshot_workspace(ws_dir):
         for name in sorted(files):
             full = os.path.join(base, name)
             rel = os.path.relpath(full, ws_dir).replace(os.sep, '/')
-            out.append({'path': rel, 'sha256': _sha256_file(full)})
+            out.append({'path': rel, 'sha256': _sha256_file_normalized(full)})
     out.sort(key=lambda x: x['path'])
     return out
 
