@@ -1,100 +1,114 @@
 {
-  "version": 1,
-  "_meta": {
-    "policy": "C 类（环境绑定不可离线差分）登记簿：真实窗口/网络/外部软件/真实端点。正向路径不纳入跨语言差分，其错误路径仍由 A 类 fixture 覆盖。tracking 填后续任务编号（P0-1b=差分修复批，P1-2=真机验收，T05=全覆盖收尾）。",
-    "parallelBoundary": "P0-3 并行增强面（X-Harbor-Sid 请求级 sid 路由 / per-sid 容器（trust/grant/budget/dedup/cwd/cursor）/ per-root 写互斥 / 多 run 实例）= Node 增强，超出 Python 串行语义——Python 无并行对应物，不属 145 方法差分面（§3.4：单会话默认路径响应逐字节不变为底线；并行面正确性由 Node 侧 server/test/parallel.mjs 实证（11 组：交错隔离/写互斥/legacy 混用/purge/全量数组/静态断言/bridge 端到端）而非跨语言对拍。跨 sid 去重命名空间使不同 sid 同命令不再互拒（单 sid 行为不变）属并行增强语义，不在无头单会话 fixture 中对照"
+ "version": 1,
+ "_meta": {
+  "policy": "C 类（环境绑定不可离线差分）登记簿：真实窗口/网络/外部软件/真实端点。正向路径不纳入跨语言差分，其错误路径仍由 A 类 fixture 覆盖。tracking 填后续任务编号（P0-1b=差分修复批，P1-2=真机验收，T05=全覆盖收尾）。",
+  "parallelBoundary": "P0-3 并行增强面（X-Harbor-Sid 请求级 sid 路由 / per-sid 容器（trust/grant/budget/dedup/cwd/cursor）/ per-root 写互斥 / 多 run 实例）= Node 增强，超出 Python 串行语义——Python 无并行对应物，不属 145 方法差分面（§3.4：单会话默认路径响应逐字节不变为底线；并行面正确性由 Node 侧 server/test/parallel.mjs 实证（11 组：交错隔离/写互斥/legacy 混用/purge/全量数组/静态断言/bridge 端到端）而非跨语言对拍。跨 sid 去重命名空间使不同 sid 同命令不再互拒（单 sid 行为不变）属并行增强语义，不在无头单会话 fixture 中对照",
+  "closure": "P0-4 T06 L2 真机销项(2026-11-01): 12/13 PASS + browser_takeover 条件性 SKIP(触发条件未成立,如实证); 驱动=dist-electron/win-unpacked 隔离 CONFIG_DIR; 证据归档 outputs/diff/live-replay/ 与 QA 报告(harbor-qa-t06)"
+ },
+ "entries": [
+  {
+   "method": "browser_navigate",
+   "aspect": "positive-navigation",
+   "reason": "正向导航需真实浏览器渲染（Python pywebview 次窗 / Node Playwright Edge），无外网环境不可离线对等；错误路径（协议/SSRF/会话缺失）已由 browser 族 fixture 覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: 真机 navigate(example.com) session_id 落池, title=Example Domain, 2203ms (QA L2-1 #1)"
   },
-  "entries": [
-    {
-      "method": "browser_navigate",
-      "aspect": "positive-navigation",
-      "reason": "正向导航需真实浏览器渲染（Python pywebview 次窗 / Node Playwright Edge），无外网环境不可离线对等；错误路径（协议/SSRF/会话缺失）已由 browser 族 fixture 覆盖",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_extract",
-      "aspect": "positive-extraction",
-      "reason": "依赖真实导航后的页面 DOM；离线无可比内容",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_click",
-      "aspect": "positive-interaction",
-      "reason": "点击/前后态截图依赖真实页面与渲染引擎；错误路径已覆盖",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_fill",
-      "aspect": "positive-interaction",
-      "reason": "表单填充与敏感字段拒填依赖真实页面元素；错误路径已覆盖",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_screenshot",
-      "aspect": "positive-capture",
-      "reason": "截图内容（b64）随屏幕内容变化，非确定输出；错误路径已覆盖",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_search",
-      "aspect": "positive-search",
-      "reason": "检索结果依赖真实公网；CAPTCHA/接管正向流不可离线复现；参数校验错误路径已覆盖",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_takeover",
-      "aspect": "positive-resume",
-      "reason": "续跑依赖在途 CAPTCHA 会话（真实公网产物）；action 非法/空 id 错误路径已覆盖",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "browser_open",
-      "aspect": "positive-fetch",
-      "reason": "打开 URL 提取正文依赖真实公网页面；属 C 类（族 8 的正向分支）",
-      "tracking": "P1-2",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "take_screenshot",
-      "aspect": "positive-capture",
-      "reason": "屏幕截图 b64 非确定输出；os-system 族（T05）以 shape 模式或错误路径覆盖",
-      "tracking": "T05",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "open_app",
-      "aspect": "positive-launch",
-      "reason": "真实启动外部应用产生本机副作用（GUI 进程），不可离线对等；os-system 族 T05 处理",
-      "tracking": "T05",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "open_url",
-      "aspect": "positive-launch",
-      "reason": "真实打开系统浏览器产生本机副作用；os-system 族 T05 处理",
-      "tracking": "T05",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "open_billing",
-      "aspect": "positive-launch",
-      "reason": "真实打开系统浏览器访问计费页（webbrowser.open）——本机副作用类，与 open_url 同口径；T05 处理（错误路径无意义：该方法无参数无错误分支）",
-      "tracking": "T05",
-      "plannedPhase": "T05"
-    },
-    {
-      "method": "list_processes",
-      "aspect": "positive-list",
-      "reason": "真实进程清单随宿主机瞬时变化（非确定输出）；B 类 mock 表在 T05 评估是否纳入",
-      "tracking": "T05",
-      "plannedPhase": "T05"
-    }
-  ]
+  {
+   "method": "browser_extract",
+   "aspect": "positive-extraction",
+   "reason": "依赖真实导航后的页面 DOM；离线无可比内容",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: markdown char_count=976, UNTRUSTED 全包裹, per-sid cursor 归位, 37ms (QA L2-1 #2)"
+  },
+  {
+   "method": "browser_click",
+   "aspect": "positive-interaction",
+   "reason": "点击/前后态截图依赖真实页面与渲染引擎；错误路径已覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: text=Learn more 点击跳转 iana.org, 前后态截图审计 54908/154760B, token 单用即毁, 14273ms (QA L2-1 #3)"
+  },
+  {
+   "method": "browser_fill",
+   "aspect": "positive-interaction",
+   "reason": "表单填充与敏感字段拒填依赖真实页面元素；错误路径已覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: httpbin forms/post filled=true masked=true 零明文回显, 48ms (QA L2-1 #4)"
+  },
+  {
+   "method": "browser_screenshot",
+   "aspect": "positive-capture",
+   "reason": "截图内容（b64）随屏幕内容变化，非确定输出；错误路径已覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: b64=27816B PNG 魔数 89504e47 viewport 1440x900, 36ms (QA L2-1 #5)"
+  },
+  {
+   "method": "browser_search",
+   "aspect": "positive-search",
+   "reason": "检索结果依赖真实公网；CAPTCHA/接管正向流不可离线复现；参数校验错误路径已覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: 真机 bing count=10 source=live untrusted=true, 2913ms (QA L2-1 #7); 登记搜索解析维护项: 首条 title/snippet 空弃(bing DOM 变化, 回落路径补位)"
+  },
+  {
+   "method": "browser_takeover",
+   "aspect": "positive-resume",
+   "reason": "续跑依赖在途 CAPTCHA 会话（真实公网产物）；action 非法/空 id 错误路径已覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 条件性 SKIP(如实登记): 真机 search 无在途 CAPTCHA 无 takeover_id——触发条件未成立; 错误路径已有 fixture, 正向留首次真实 CAPTCHA 会话销项"
+  },
+  {
+   "method": "browser_open",
+   "aspect": "positive-fetch",
+   "reason": "打开 URL 提取正文依赖真实公网页面；属 C 类（族 8 的正向分支）",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: 正向打开 example.com markdown 非空且会话自收池空, 1953ms (QA L2-2)"
+  },
+  {
+   "method": "take_screenshot",
+   "aspect": "positive-capture",
+   "reason": "屏幕截图 b64 非确定输出；os-system 族（T05）以 shape 模式或错误路径覆盖",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: 真实屏幕 b64=174268B PNG, token 腿 label=屏幕截图 (QA L2-3)"
+  },
+  {
+   "method": "open_app",
+   "aspect": "positive-launch",
+   "reason": "真实启动外部应用产生本机副作用（GUI 进程），不可离线对等；os-system 族 T05 处理",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: notepad 绝对路径 ok 且进程确实现身(newPid)后收尾 (QA L2-3)"
+  },
+  {
+   "method": "open_url",
+   "aspect": "positive-launch",
+   "reason": "真实打开系统浏览器产生本机副作用；os-system 族 T05 处理",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: example.com 默认浏览器新标签 ok=true 用户可见 (QA L2-3)"
+  },
+  {
+   "method": "open_billing",
+   "aspect": "positive-launch",
+   "reason": "真实打开系统浏览器访问计费页（webbrowser.open）——本机副作用类，与 open_url 同口径；T05 处理（错误路径无意义：该方法无参数无错误分支）",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: bigmodel 账单页打开 ok=true (QA L2-3)"
+  },
+  {
+   "method": "list_processes",
+   "aspect": "positive-list",
+   "reason": "真实进程清单随宿主机瞬时变化（非确定输出）；B 类 mock 表在 T05 评估是否纳入",
+   "tracking": "P0-4-T06",
+   "plannedPhase": "P0-4-T06",
+   "evidence": "T06-L2 PASS: 293 行含自身 Harbor.exe (QA L2-3)"
+  }
+ ]
 }
