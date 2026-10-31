@@ -300,15 +300,30 @@ export async function browserOpen(params) {
     return json(result)
   } catch (error) { if (id) await closeOne(id); return asError(error) }
 }
-async function searchResults(page) {
+async function searchResults(page, searchHost = '') {
+  // bing 解析健壮化(T06 L2 维护项): DOM 变化下 h2 a 命中率下降——标题多候选 +
+  // 空标题过滤; b_algo 零命中时再试 #b_results li h2 a(cn.bing 变体); 全链接回落
+  // 排除引擎自身导航链接(取请求 host+最终重定向 host)与家具标题
+  // (T06 探针实证: 回落曾捞回「跳至内容/网页/图片」; www.bing.com 会 302 到 cn.bing.com)
   const bing = await page.locator('li.b_algo').evaluateAll(items => items.slice(0, 10).map(item => {
-    const a = item.querySelector('h2 a'); const p = item.querySelector('.b_caption p')
-    return a ? { title: (a.innerText || '').trim(), url: a.href, snippet: (p?.innerText || '').trim() } : null
-  }).filter(Boolean))
+    const link = item.querySelector('h2 a') || item.querySelector('a[href^="http"]')
+    const title = (item.querySelector('h2 a')?.innerText || item.querySelector('h2')?.innerText
+      || link?.innerText || link?.getAttribute('aria-label') || '').trim()
+    const snippet = (item.querySelector('.b_caption p')?.innerText || item.querySelector('.b_caption')?.innerText || '').trim()
+    return link && /^https?:/.test(link.href) ? { title, url: link.href, snippet } : null
+  }).filter(x => x && x.title))
   if (bing.length) return bing
-  return page.locator('a[href]').evaluateAll(nodes => nodes.map(a => ({ title: (a.innerText || a.textContent || '').trim(), url: a.href,
-    snippet: (a.closest('article,li,div')?.innerText || '').trim().slice(0, 500) }))
-    .filter(x => x.title && /^https?:/.test(x.url)).slice(0, 10))
+  const alt = await page.locator('#b_results li h2 a').evaluateAll(nodes => nodes.slice(0, 10).map(a => ({
+    title: (a.innerText || a.getAttribute('aria-label') || '').trim(), url: a.href,
+    snippet: (a.closest('li')?.querySelector('.b_caption p, .b_caption')?.innerText || '').trim(),
+  })).filter(x => x.title && /^https?:/.test(x.url)))
+  if (alt.length) return alt
+  const engineHosts = [searchHost, 'bing.com', 'google.com', 'baidu.com'].filter(Boolean)
+  const furniture = ['跳至内容', '辅助功能反馈', '网页', '图片', '视频', '地图', '新闻', '更多', '工具', '设置', '反馈', 'privacy', 'terms']
+  const isEngineNav = x => engineHosts.some(h => x.url.includes(h)) || furniture.some(f => x.title === f)
+  const raw = await page.locator('a[href]').evaluateAll(nodes => nodes.map(a => ({ title: (a.innerText || a.textContent || '').trim(), url: a.href,
+    snippet: (a.closest('article,li,div')?.innerText || '').trim().slice(0, 500) })))
+  return raw.filter(x => x.title && x.title.length >= 4 && /^https?:/.test(x.url) && !isEngineNav(x)).slice(0, 10)
 }
 export async function browserSearch(params, token = null) {
   const input = parse(params); const query = String(input.query || '').trim()
@@ -326,7 +341,7 @@ export async function browserSearch(params, token = null) {
       takeovers.set(takeoverId, { id: takeoverId, sessionId: entry.id, query, retry: 0 })
       return fail('CAPTCHA_REQUIRED', '搜索页需要人工完成验证', '', { takeover_id: takeoverId })
     }
-    const results = await searchResults(entry.page)
+    const results = await searchResults(entry.page, new URL(url).host)
     return json({ ok: true, query, results, count: results.length, session_id: entry.id,
       real_time: true, source: 'live', untrusted: true,
       provenance: { engine: input.engine || 'bing', query_sha256: crypto.createHash('sha256').update(query).digest('hex').slice(0, 16), fetched_at: new Date().toISOString() } })
@@ -365,7 +380,7 @@ export async function browserTakeover(takeoverId, action) {
       if (pending.retry >= 3) takeovers.delete(takeoverId)
       return fail('CAPTCHA_REQUIRED', pending.retry >= 3 ? '验证仍未通过，已达到重试上限' : '验证仍未通过，请完成后重试', '', { takeover_id: takeoverId })
     }
-    const results = await searchResults(entry.page); takeovers.delete(takeoverId)
+    const results = await searchResults(entry.page, new URL(entry.page.url()).host); takeovers.delete(takeoverId)
     return json({ ok: true, query: pending.query, results, count: results.length, resumed: true,
       session_id: entry.id, untrusted: true, source: provenance(entry.page.url()) })
   } catch (error) { return asError(error) }

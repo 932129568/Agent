@@ -50,6 +50,7 @@ extraMetadata:
   version: 1.9.0
 npmRebuild: false
 win:
+  icon: assets/harbor.ico
   target:
     - target: nsis
       arch:

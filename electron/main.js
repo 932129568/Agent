@@ -87,6 +87,15 @@ async function boot() {
   // injectEnv 触发 config.js 加载，DATABASE_URL 冻结为 dev 默认值）。
   injectEnv()
 
+  // 时序⓪.5（T06 L2 QA 发现）：HEADLESS（server-only 验收）必须隔离 Electron
+  // userData——缺省 %APPDATA%\harbor-desktop 是用户真实桌面实例的 profile，headless
+  // 复跑会触碰其 GPU shader cache 等条目。锚到 <CONFIG_DIR>/electron-profile：
+  // 持久（HARBOR_SAFESTORAGE=1 时 Local State 同样归位）且与桌面实例零交集。
+  // 带窗模式不在此列（真实用户语义）。
+  if (HEADLESS) {
+    app.setPath('userData', path.join(process.env.HARBOR_CONFIG_DIR, 'electron-profile'))
+  }
+
   // 时序①：safeStorage 探测日志（先于 server 启动）+ DPAPI codec 路径披露
   // （T02：路径 1 默认停用、HARBOR_SAFESTORAGE=1 选回——见 dpapi.js T02 修订注）
   try {

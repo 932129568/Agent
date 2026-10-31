@@ -380,6 +380,7 @@ Q1=A（全面接管）；Q2=A1 主进程宿主（spike 不过预授权降级 A3�
 **执行偏差记录（工程师交付，主会话核验归档）**：
 - **T01（2026-10-31）：无偏差。** spike 4 项全过（electron 45.2.1 / 内嵌 Node 24.22.1 ≥ 24.22 实测基线），A1 维持；验收 ①-⑤ 全过；差分 runId 20261031145045（fixtures=30 / calls=291 / match=280 / intentional=11 / suspect=0 / error=0）零翻转；单实例锁与 window.open deny 附验证。遗留：safeStorage 弃用告警决策归 T02（已决，见下）、fresh-DB 启动链归 T02（已接）。
 - **T02（2026-10-31）：重大偏差——safeStorage 路径 1 由「激活」改为「默认停用 + env 选回」，暂行生效待主理人追认（可否决，撤销面=revert dpapi.js/storage-status.js + main.js 日志行）。** 事实（四向实测）：Electron safeStorage 在 Windows 走 Chromium OSCrypt（`v10`+AES-256-GCM，密钥在 `<userData>/Local State` 的 DPAPI 保护键），与 P0-2 的裸 DPAPI 密文契约（`dpapi:` 前缀 CurrentUser CryptProtectData）四向互解全部失败——激活即违反 dpapi.js 自身格式契约，且 Q6 双轨期内密码字段双向锁死。处置：dpapi.js 最小触碰（`useSafeStorage()` = electron 宿主 + `HARBOR_SAFESTORAGE=1` 显式选入；`activeCodecPath()` 唯一事实源），`/storage/security` 增 `source` 字段（旁路端点，不占 145 契约面，§3.1 预授权），PS/DPAPI 默认守恒；互解四向、PS 历史密文读回、明文迁移幂等（二次启动 125 文件 MD5 零变化）、fresh-DB 建表链、真实 ~/.glm-chat 537 文件指纹零漂移——验收 ①-⑤ 全过；Node 19/19 组全绿。v10→DPAPI 迁移工具的全链恢复代码已验证可复用（P1 翻转默认的前置）。弃用告警决策：保留同步 safeStorage API（仅选回路径触达；Electron 未来移除风险已登记）。
+  **追认状态（2026-11-01 收口）**：主会话两度向主理人征询未获明示答复——按「可逆默认维持」关闭：**现状维持（PS/DPAPI 守恒，路径 1 选回机制保留）**；任何时点否决即按撤销面回退，P1 翻转前置不变。
 - 环境备注（复现用）：Electron 二进制下载被 npm install-scripts 门禁静默跳过，需 `node install.js` 手动补齐（npmmirror 镜像，包内 checksums 校验 sha）。
 
 ---
