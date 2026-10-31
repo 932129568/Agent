@@ -33,6 +33,34 @@ export function classify(text) {
 
 const normalize = text => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase()
 
+/** P0-1c M1：时间双字段（memory_service 口径）——ts 'MM-DD HH:MM' 显示形态 +
+ * ts_iso datetime.now().isoformat() 全量（淘汰/衰减比较无跨年歧义）。 */
+function timeStamp() {
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const ts = `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+  const tsIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T`
+    + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${String(now.getMilliseconds()).padStart(3, '0')}`
+  return { ts, ts_iso: tsIso }
+}
+
+/** 条目时间 → epoch 毫秒（ts_iso 优先；回落 'MM-DD HH:MM' 按当前年推断）。 */
+function itemTime(item) {
+  const iso = String(item.ts_iso || '').trim()
+  if (iso) {
+    const parsed = Date.parse(iso)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  const match = String(item.ts || '').match(/(\d{2})-(\d{2}) (\d{2}):(\d{2})/)
+  if (!match) return null
+  const now = new Date()
+  let dt = new Date(now.getFullYear(), Number(match[1]) - 1, Number(match[2]),
+    Number(match[3]), Number(match[4]))
+  if (dt.getTime() > now.getTime() + 86400000) dt = new Date(now.getFullYear() - 1,
+    Number(match[1]) - 1, Number(match[2]), Number(match[3]), Number(match[4]))
+  return dt.getTime()
+}
+
 export async function getMemory() {
   return JSON.stringify(loadAll())
 }
@@ -54,13 +82,13 @@ export async function appendMemory(entry) {
   if (kind === 'rule' || kind === 'preference') {
     const existing = list.findIndex(item => normalize(item.text) === key)
     if (existing >= 0) {
-      list[existing] = { ...list[existing], text, kind, ts: Date.now() }
+      list[existing] = { ...list[existing], text, kind, ...timeStamp() }
       saveAll(list)
       return JSON.stringify({ ok: true, kind, total: list.length, deduped: true })
     }
   }
 
-  list.push({ text, kind, ts: Date.now() })
+  list.push({ text, kind, ...timeStamp() })
   const facts = list.filter(item => (item.kind || 'fact') === 'fact')
   if (facts.length > MAX_FACTS) {
     const overflow = facts.length - MAX_FACTS
@@ -78,14 +106,19 @@ export async function appendMemory(entry) {
 }
 
 export async function memoryDelete(index) {
+  // P0-1c M3/M4：{ok, remaining}；越界/非整数 → 结构化 BAD_PARAMS（人话+hint）
   const list = loadAll()
   const i = Number(index)
-  if (!Number.isInteger(i) || i < 0 || i >= list.length) {
-    return JSON.stringify({ error: `索引越界: ${index}` })
+  if (typeof index === 'boolean' || !Number.isInteger(i)) {
+    return JSON.stringify({ ok: false, error: { code: 'BAD_PARAMS', message: '序号需要是整数' } })
+  }
+  if (i < 0 || i >= list.length) {
+    return JSON.stringify({ ok: false, error: { code: 'BAD_PARAMS',
+      message: `序号越界：当前共 ${list.length} 条记忆`, hint: '刷新列表后重试；序号从 0 开始' } })
   }
   list.splice(i, 1)
   saveAll(list)
-  return JSON.stringify({ ok: true, total: list.length })
+  return JSON.stringify({ ok: true, remaining: list.length })
 }
 
 function bigrams(text) {
@@ -96,20 +129,29 @@ function bigrams(text) {
 }
 
 export async function memoryRetrieve(query, limit = 5) {
+  // P0-1c M2：memory_service.retrieve 同构——bigram 重叠（零重叠排除）+
+  // kind 加成 + 0.5**(ageDays/30) 时间衰减；输出原条目（无 score 键）
   const q = bigrams(query)
-  if (!q.size) return JSON.stringify({ ok: true, items: [] })
+  if (!q.size || !q) return JSON.stringify({ ok: true, items: [] })
   const now = Date.now()
-  const items = loadAll().map(item => {
+  const all = loadAll()
+  const scored = []
+  all.forEach((item, idx) => {
     const grams = bigrams(item.text)
     let overlap = 0
     grams.forEach(gram => { if (q.has(gram)) overlap += 1 })
+    if (overlap <= 0) return
     const base = overlap / Math.max(1, q.size)
     const kindBoost = item.kind === 'rule' ? 0.25 : (item.kind === 'preference' ? 0.1 : 0)
-    const ageDays = Math.max(0, (now - (item.ts || now)) / 86400000)
-    const decay = 1 / (1 + ageDays / 30)
-    return { ...item, score: Number(((base + kindBoost) * decay).toFixed(4)) }
-  }).filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(1, Number(limit) || 5))
+    let score = base + kindBoost
+    const t = itemTime(item)
+    if (t !== null) {
+      const ageDays = Math.max(0, (now - t) / 86400000)
+      score *= 0.5 ** (ageDays / 30)
+    }
+    scored.push({ score, idx, item })
+  })
+  scored.sort((a, b) => b.score - a.score || a.idx - b.idx)
+  const items = scored.slice(0, Math.max(1, Number(limit) || 5)).map(x => x.item)
   return JSON.stringify({ ok: true, items })
 }

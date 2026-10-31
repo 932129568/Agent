@@ -34,99 +34,144 @@ export function wsEnabledFor(sid) {
 }
 
 export function touchRecent(dir) {
+  // P0-1c W5：recent 条目 {path, name, ts}（workspace_service.touch_recent_ws 同构）
   if (!dir) return
-  recentWs = [dir, ...recentWs.filter(item => item !== dir)].slice(0, 12)
+  const target = path.resolve(String(dir))
+  recentWs = [
+    { path: target, name: path.basename(target) || target, ts: Date.now() / 1000 },
+    ...recentWs.filter(item => item.path !== target),
+  ].slice(0, 12)
   persist()
 }
 
 export async function getEffectiveWs(sid) {
-  const id = sid || runtime.currentSid
-  const root = effectiveRoot(id)
-  return okJson({ ok: true, ws: root, enabled: wsEnabledFor(id), bound: !!(id && runtime.sessionWs[id]) })
+  // P0-1c W1：{sid, ws, source, exists}（workspace_service.py:99-107，无 ok 键；
+  // sid 原样回传——空即 null 语义）
+  const id = sid || ''
+  let ws = runtime.cwd
+  let source = 'global'
+  if (id && runtime.sessionWs[id]) { ws = runtime.sessionWs[id]; source = 'session' }
+  return okJson({ sid: id, ws, source, exists: !!(ws && fs.existsSync(ws) && fs.statSync(ws).isDirectory()) })
 }
 
 export async function getSessionWs(sid) {
-  const id = sid || runtime.currentSid
-  return okJson({ ok: true, sid: id, ws: (id && runtime.sessionWs[id]) || null })
+  // P0-1c W2：{ws, bound}（workspace_service.py:94-97——get 无 ok 键，ws 回落 cwd）
+  const bound = !!(sid && runtime.sessionWs[sid])
+  return okJson({ ws: (sid && runtime.sessionWs[sid]) || runtime.cwd, bound })
 }
 
 export async function setSessionWs(sid, dir, enabled = true) {
-  if (!sid) return errJson('缺少 sid')
+  // P0-1c W2：workspace_service.py:75-93——空 path 或禁用即解绑；目录校验；
+  // touch recent（path 或 cwd）；响应 {ok, sid, ws(回落 cwd), bound}
+  if (!sid) return okJson({ ok: false, error: '缺少 sid' })
   const target = String(dir || '')
-  if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
-    return errJson(`目录不存在: ${target}`)
+  if (target && enabled) {
+    if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
+      return okJson({ ok: false, error: `目录不存在: ${target}` })
+    }
+    runtime.sessionWs[sid] = path.resolve(target)
+  } else {
+    delete runtime.sessionWs[sid]
   }
-  runtime.sessionWs[sid] = target
-  wsEnabledMap.set(sid, enabled !== false)
-  touchRecent(target)
+  touchRecent(target || runtime.cwd)
   persist()
-  return okJson({ ok: true, sid, ws: target, enabled: wsEnabledFor(sid) })
+  const ws = runtime.sessionWs[sid] || runtime.cwd
+  return okJson({ ok: true, sid, ws, bound: !!runtime.sessionWs[sid] })
 }
 
 export async function deleteSessionWs(sid) {
-  if (!sid) return errJson('缺少 sid')
-  delete runtime.sessionWs[sid]
-  wsEnabledMap.delete(sid)
+  // P0-1c W7：裸 '{"ok":true}'（workspace_service.py:111-119——sid 空串亦合法）
+  delete runtime.sessionWs[sid || '']
+  wsEnabledMap.delete(sid || '')
   persist()
-  return okJson({ ok: true, sid })
+  return okJson({ ok: true })
 }
 
 export async function getWsEnabled(sid) {
-  const id = sid || runtime.currentSid
-  return okJson({ ok: true, enabled: wsEnabledFor(id) })
+  // P0-1c W3：{enabled}（workspace_service.py:126-128——get 无 ok 键）
+  return okJson({ enabled: wsEnabledFor(sid || runtime.currentSid) })
 }
 
 export async function setWsEnabled(sid, enabled) {
+  // P0-1c W3：{ok, enabled}（workspace_service.py:121-124——无 sid 回显）
   const id = sid || runtime.currentSid
-  if (!id) return errJson('缺少 sid')
-  wsEnabledMap.set(id, !!enabled)
+  if (id) wsEnabledMap.set(id, !!enabled)
   persist()
-  return okJson({ ok: true, sid: id, enabled: wsEnabledFor(id) })
+  return okJson({ ok: true, enabled: wsEnabledFor(id) })
 }
 
 export async function getWsState(sid) {
-  const id = sid || runtime.currentSid
-  const root = effectiveRoot(id)
+  // P0-1c W4：{ws, bound, enabled, recent[:8]}（workspace_service.py:130-142——无 ok/exists）
+  const bound = !!(sid && runtime.sessionWs[sid])
   return okJson({
-    ok: true, ws: root, enabled: wsEnabledFor(id),
-    exists: fs.existsSync(root), bound: !!(id && runtime.sessionWs[id]),
+    ws: (sid && runtime.sessionWs[sid]) || runtime.cwd, bound,
+    enabled: wsEnabledFor(sid || runtime.currentSid),
+    recent: recentWs.slice(0, 8),
   })
 }
 
 export async function setWsDir(dir) {
+  // P0-1c W7：{ok, ws}（workspace_service.py:165-176——path 键改 ws）
   const target = String(dir || '')
   if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
-    return errJson(`目录不存在: ${target}`)
+    return okJson({ ok: false, error: '目录不存在' })
   }
   setCwd(target)
   touchRecent(target)
-  return okJson({ ok: true, path: runtime.cwd })
+  return okJson({ ok: true, ws: runtime.cwd })
 }
 
 export async function listRecentWs() {
-  return okJson(recentWs.filter(dir => fs.existsSync(dir)))
+  // P0-1c W5：裸 JSON 数组（workspace_service.py:156-162——原样回放不包装不过滤）
+  return JSON.stringify(recentWs)
 }
 
+/** 消毒文件名（workspace_service.sanitize_name:203-206：非法字符替换 + .. 穿越）。 */
+export function sanitizeName(name) {
+  const safe = String(name || 'attachment').replace(/[\\/:*?<>|]/g, '_').replace(/\.\./g, '__')
+  return safe || 'attachment'
+}
+
+const pad2 = n => String(n).padStart(2, '0')
+
 export async function saveWorkspaceFile(name, text) {
-  const clean = String(name || '').replace(/[\\/]/g, '_').replace(/\.\./g, '_')
-  if (!clean) return errJson('缺少文件名')
-  const root = effectiveRoot(runtime.currentSid)
-  const dir = path.join(root, 'attachments')
-  fs.mkdirSync(dir, { recursive: true })
-  const target = path.join(dir, clean)
-  fs.writeFileSync(target, String(text ?? ''), 'utf8')
-  return okJson({ ok: true, path: shortPath(target) })
+  // P0-1c W6：返回裸绝对路径字符串（legacy ok(p) 直通语义）+
+  // YYYYMMDD_HHMMSS_ 时间戳前缀（N05 <TSFN> 归一）
+  try {
+    const root = effectiveRoot(runtime.currentSid)
+    const dir = path.join(root, 'attachments')
+    fs.mkdirSync(dir, { recursive: true })
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}_`
+      + `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
+    const target = path.join(dir, `${stamp}_${sanitizeName(name)}`)
+    fs.writeFileSync(target, String(text ?? ''), 'utf8')
+    return target
+  } catch (error) { return okJson({ ok: false, error: String(error.message || error) }) }
 }
 
 export async function copyIntoWs(src, dstName) {
-  const source = String(src || '')
-  if (!fs.existsSync(source)) return errJson(`源文件不存在: ${source}`)
-  const root = effectiveRoot(runtime.currentSid)
-  const dir = path.join(root, 'attachments')
-  fs.mkdirSync(dir, { recursive: true })
-  const target = path.join(dir, dstName ? String(dstName) : path.basename(source))
-  fs.copyFileSync(source, target)
-  return okJson({ ok: true, path: shortPath(target) })
+  // P0-1c W8：HHMMSS_ 前缀 + {ok, path(绝对)}（workspace_service.py:200-222）
+  try {
+    const source = String(src || '')
+    if (!source || !fs.existsSync(source) || !fs.statSync(source).isFile()) {
+      return errJson(`文件不存在: ${source}`)
+    }
+    const root = effectiveRoot(runtime.currentSid)
+    const dir = path.join(root, 'attachments')
+    fs.mkdirSync(dir, { recursive: true })
+    const now = new Date()
+    const stamp = `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
+    const base = `${stamp}_${sanitizeName(dstName || path.basename(source))}`
+    const target = path.join(dir, base)
+    // 双保险：目标必须仍在 attachments 内
+    const norm = value => path.normalize(path.resolve(value)).toLowerCase()
+    if (norm(target) !== norm(dir) && !norm(target).startsWith(`${norm(dir)}${path.sep}`)) {
+      return errJson(`非法文件名: ${dstName}`)
+    }
+    fs.copyFileSync(source, target)
+    return okJson({ ok: true, path: target })
+  } catch (error) { return errJson(String(error.message || error)) }
 }
 
 /* copy_path/move_path 已迁移至 files.js（P0-1c F4：绝对路径口径 + 存在性校验） */

@@ -60,6 +60,12 @@
       "pattern": "http://127\\.0\\.0\\.1:\\d+",
       "replace": "<PROXY>",
       "note": "P0-1c PR6：本地 CORS 代理基址（端口随机）"
+    },
+    {
+      "id": "N11",
+      "pattern": "\\\\b\\\\d{6}_",
+      "replace": "<TS6>_",
+      "note": "P0-1c W8：copy_into_ws HHMMSS_ 前缀（N05 之后运行避免部分重叠）"
     }
   ],
   "separatorRule": {
