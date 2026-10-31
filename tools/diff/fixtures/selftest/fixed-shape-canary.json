@@ -1,0 +1,53 @@
+{
+  "id": "fixed-shape-canary",
+  "family": "selftest",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "harness 自检（P0-1c T05 金丝雀重建）：本轮收敛的易回退形状——memory ts/ts_iso 双字段（M1）、memory_delete remaining/越界 BAD_PARAMS（M3/M4）、get_effective_ws sid null 透传（W1）。今日全 match=修复在位；任一转 suspect=修复回退（diff:all 门禁即时可见，不引入未修复分叉）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "append_memory",
+      "args": ["{\"text\": \"金丝雀：记忆条目须带双时间字段\", \"kind\": \"rule\"}"],
+      "note": "M1 回归金丝雀：条目 {text,kind,ts:'MM-DD HH:MM',ts_iso:ISO}——回退（ts_iso 键缺失）即 suspect"
+    },
+    {
+      "id": "c02",
+      "method": "get_memory",
+      "args": [],
+      "note": "M1 回归金丝雀：回读条目键集含 ts_iso（持久化文件同形状）"
+    },
+    {
+      "id": "c03",
+      "method": "memory_delete",
+      "args": [0],
+      "note": "M3 回归金丝雀：{ok,remaining}——回退（total 键）即 suspect"
+    },
+    {
+      "id": "c04",
+      "method": "memory_delete",
+      "args": [99],
+      "note": "M4 回归金丝雀：越界 BAD_PARAMS{message:'序号越界：当前共 0 条记忆',hint:'刷新列表后重试；序号从 0 开始'}——回退（拍平 error 串）即 suspect"
+    },
+    {
+      "id": "c05",
+      "method": "get_effective_ws",
+      "args": [],
+      "note": "W1 回归金丝雀：无会话绑定 → {sid:null,ws,source:'global',exists}（api 层 current_sid 注入 null 透传）——回退（sid 空串）即 suspect"
+    },
+    {
+      "id": "c06",
+      "method": "set_current_sid",
+      "args": ["s_canary"],
+      "note": "对照项（P0-1 金丝雀延续）：裸 '{\"ok\":true}'"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}
