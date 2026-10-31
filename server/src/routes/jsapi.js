@@ -9,6 +9,7 @@
  */
 import { z } from 'zod'
 import { invoke, JsApiError } from '../registry.js'
+import { resolveContext, runWithContext } from '../session-context.js'
 
 const BodySchema = z.union([
   z.object({ args: z.array(z.any()).default([]) }).passthrough(),
@@ -27,7 +28,8 @@ export async function jsapiRoutes(app) {
     }
     const args = Array.isArray(parsed.data) ? parsed.data : parsed.data.args
     try {
-      return await invoke(request.params.method, args)
+      // P0-3：请求级 sid 路由（X-Harbor-Sid 头 → ALS；无头=legacy 逐字节行为）
+      return await runWithContext(resolveContext(request), () => invoke(request.params.method, args))
     } catch (error) {
       if (error instanceof JsApiError) {
         // 未迁移：200 + 结构化错误串，交给前端既有降级逻辑，而不是 500

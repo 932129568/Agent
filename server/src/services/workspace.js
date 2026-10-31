@@ -9,6 +9,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { runtime, setCwd, effectiveRoot } from '../runtime.js'
+import { ctxSid, ctxExplicit, ctxRoot, sessionCwds, withRootLock } from '../session-context.js'
 import { resolveWs, shortPath } from './jail.js'
 import { atomicWriteJson, RUNTIME_PATH, readJsonIfExists } from '../paths.js'
 import { enforceExec } from './guard.js'
@@ -34,6 +35,7 @@ function persist() {
     currentSid: runtime.currentSid,
     cwd: runtime.cwd,
     sessionWs: runtime.sessionWs,
+    sessionCwds: runtime.sessionCwds,
     recentWs,
     wsEnabled: Object.fromEntries(wsEnabledMap),
   })
@@ -62,9 +64,10 @@ export function touchRecent(dir) {
 export async function getEffectiveWs(sid) {
   // P0-1c W1：{sid, ws, source, exists}（workspace_service.py:99-107，无 ok 键）。
   // api 层注入 current_sid（api.py:687-688）：registry 无参调用 → undefined 时取
-  // runtime.currentSid；sid 原样回传（null 透传——差分未设 sid 时 Python=null）
-  const id = sid === undefined ? runtime.currentSid : sid
-  let ws = runtime.cwd
+  // ctxSid()（header 请求返回请求 sid——自省与路由一致；null 透传）
+  const id = sid === undefined ? ctxSid() : sid
+  // P0-3：显式请求自身会话的 cwd 覆盖参与有效根计算（无头/他 sid 查询不影响）
+  let ws = (id && id === ctxSid() && ctxExplicit() && sessionCwds.get(id)) || runtime.cwd
   let source = 'global'
   if (id && runtime.sessionWs[id]) { ws = runtime.sessionWs[id]; source = 'session' }
   return okJson({ sid: id, ws, source, exists: !!(ws && fs.existsSync(ws) && fs.statSync(ws).isDirectory()) })
@@ -156,8 +159,10 @@ export async function saveWorkspaceFile(name, text) {
   // P0-1c W6：返回裸绝对路径字符串（legacy ok(p) 直通语义）+
   // YYYYMMDD_HHMMSS_ 时间戳前缀（N05 <TSFN> 归一）。
   // 异常路径：Python 仅告警并返回 ''（H12 外层保护——裸 reject 会穿透 js_api 桥）
-  try {
-    const root = effectiveRoot(runtime.currentSid)
+  // P0-3 T02：per-root 写互斥
+  return withRootLock(ctxRoot(), async () => {
+    try {
+    const root = ctxRoot()
     const dir = path.join(root, 'attachments')
     fs.mkdirSync(dir, { recursive: true })
     const now = new Date()
@@ -170,16 +175,18 @@ export async function saveWorkspaceFile(name, text) {
     log.warn({ err: error }, 'save_workspace_file 失败')
     return ''
   }
+  })
 }
 
 export async function copyIntoWs(src, dstName) {
   // P0-1c W8：HHMMSS_ 前缀 + {ok, path(绝对)}（workspace_service.py:200-222）
-  try {
+  return withRootLock(ctxRoot(), async () => {
+    try {
     const source = String(src || '')
     if (!source || !fs.existsSync(source) || !fs.statSync(source).isFile()) {
       return errJson(`文件不存在: ${source}`)
     }
-    const root = effectiveRoot(runtime.currentSid)
+    const root = ctxRoot()
     const dir = path.join(root, 'attachments')
     fs.mkdirSync(dir, { recursive: true })
     const now = new Date()
@@ -194,6 +201,7 @@ export async function copyIntoWs(src, dstName) {
     fs.copyFileSync(source, target)
     return okJson({ ok: true, path: target })
   } catch (error) { return errJson(String(error.message || error)) }
+  })
 }
 
 /* copy_path/move_path 已迁移至 files.js（P0-1c F4：绝对路径口径 + 存在性校验） */
@@ -220,11 +228,13 @@ export async function deletePath(input, recycle = true, token = null) {
   const refusal = await enforceExec('delete_path', { path: input }, token)
   if (refusal) return errJson(refusal)
 
-  const target = resolveWs(input)
+  // P0-3 T02：per-root 写互斥
+  return withRootLock(ctxRoot(), async () => {
+    const target = resolveWs(input)
   try {
     const normCase = value => path.normalize(path.resolve(value)).toLowerCase()
     const cwdN = normCase(runtime.cwd || process.cwd())
-    const rootN = normCase(effectiveRoot(runtime.currentSid))
+    const rootN = normCase(ctxRoot())
     if (normCase(target) === cwdN || normCase(target) === rootN
         || path.dirname(target) === target) {
       return errJson('拒绝删除：工作目录本身或驱动器根目录')
@@ -255,4 +265,5 @@ export async function deletePath(input, recycle = true, token = null) {
   } catch (error) {
     return errJson(error.message || String(error))
   }
+  })
 }

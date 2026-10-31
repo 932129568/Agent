@@ -2,8 +2,9 @@
  * 进程运行态：当前 sid、会话工作区绑定、cwd。
  * 持久化到独立 runtime.json（config.json 零污染）。
  *
- * 已知边界：currentSid 是进程级单值，与 legacy RuntimeState 同形。
- * 多会话真正并行时必须改为 per-run 上下文（见升级文档未完成项）。
+ * P0-3：currentSid 保留为 legacy 全局默认上下文（Q6 永久保留）；header 请求
+ * 的 per-sid 覆盖由 session-context.js 承载。sessionCwds（per-sid cwd 覆盖）
+ * 并入本文件持久化（向后兼容缺省 {}）。
  */
 import { RUNTIME_PATH, readJsonIfExists, atomicWriteJson } from './paths.js'
 
@@ -13,6 +14,8 @@ export const runtime = {
   currentSid: persisted.currentSid || null,
   cwd: persisted.cwd || process.cwd(),
   sessionWs: persisted.sessionWs || {},
+  // P0-3：per-sid cwd 覆盖（header 请求的 set_workspace 写入；无头不写）
+  sessionCwds: persisted.sessionCwds || {},
 }
 
 export function setCurrentSid(sid) {
@@ -26,8 +29,16 @@ export function setCwd(dir) {
     currentSid: runtime.currentSid,
     cwd: runtime.cwd,
     sessionWs: runtime.sessionWs,
+    sessionCwds: runtime.sessionCwds,
   })
   return runtime.cwd
+}
+
+/** header 请求的 per-sid cwd 覆盖写入（不影响其他会话的全局 cwd）。 */
+export function setSessionCwd(sid, dir) {
+  if (sid) runtime.sessionCwds[sid] = dir
+  setCwd(runtime.cwd)
+  return dir
 }
 
 export function setSessionWs(sid, dir) {

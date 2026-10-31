@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CONFIG_DIR, atomicWriteJson, readJsonIfExists } from '../paths.js'
-import { effectiveRoot, runtime } from '../runtime.js'
+import { ctxRoot } from '../session-context.js'
 
 const run = promisify(execFile)
 const PLANS_DIR = path.join(CONFIG_DIR, 'plans')
@@ -163,7 +163,7 @@ function pruneCheckpoints() {
 export async function checkpointCreate(taskId, files, wsDir = '') {
   let tid
   try { tid = safeCkptTid(taskId) } catch { return json({ ok: false, error: { code: 'BAD_PARAMS', message: 'task_id 非法（防路径逃逸）' } }) }
-  const ws = path.resolve(String(wsDir || effectiveRoot(runtime.currentSid)))
+  const ws = path.resolve(String(wsDir || ctxRoot()))
   // P0-1b P3：对齐 legacy create(files)——字符串按 CSV 拆（'[]' 是文件名而非 JSON 数组）
   let list = files
   if (typeof list === 'string') list = list.split(',').map(x => x.trim()).filter(Boolean)
@@ -249,7 +249,7 @@ export async function checkpointRollback(taskId, wsDir = '', confirm = false) {
   try { dest = checkpointDir(taskId) } catch { return json({ ok: false, error: { code: 'BAD_PARAMS', message: 'task_id 非法（防路径逃逸）' } }) }
   const manifest = readJsonIfExists(path.join(dest, 'manifest.json'), null)
   if (!manifest) return json({ ok: false, error: { code: 'ROLLBACK_FAILED', message: `未找到检查点: ${taskId}（可能创建时超限降级为仅记录）` } })
-  const ws = path.resolve(String(wsDir || manifest.ws_dir || effectiveRoot(runtime.currentSid)))
+  const ws = path.resolve(String(wsDir || manifest.ws_dir || ctxRoot()))
   const restored = []; const failed = []
   if (manifest.git_head && !(manifest.files || []).length) {
     return json({ ok: true, mode: 'git', restored, deleted, failed, verified: true,

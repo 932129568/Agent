@@ -12,7 +12,8 @@ import {
   listDir, readFile, readMore, writeFile, appendFile, searchReplace, makeDir, getFileInfo,
   movePath, copyPath,
 } from './services/files.js'
-import { setCurrentSid } from './runtime.js'
+import { setCurrentSid, runtime } from './runtime.js'
+import { clearTrustForSid } from './session-context.js'
 import { readConfigNormalized, mergeConfigValidated } from './services/jsonstore.js'
 import { CONFIG_SPECS } from './services/config-specs.js'
 import * as workspace from './services/workspace.js'
@@ -112,7 +113,14 @@ register('get_cwd', async () => getCwd())
 register('set_workspace', async path => setWorkspace(path))
 
 /* 会话身份与工作日志 */
-register('set_current_sid', async sid => { setCurrentSid(sid); return '{"ok":true}' })
+register('set_current_sid', async sid => {
+  // P0-3：全局默认上下文切换（Q6 永久保留）。legacy clear-on-switch——
+  // 仅清旧全局 sid 的会话信任项（其他 sid 容器不动；header 请求已 pin 不受影响）
+  const previous = runtime.currentSid
+  setCurrentSid(sid)
+  if (previous !== runtime.currentSid) clearTrustForSid(previous)
+  return '{"ok":true}'
+})
 register('get_worklog', async () => getWorklog())
 register('append_worklog', async text => appendWorklog(text))
 

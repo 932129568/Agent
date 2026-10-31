@@ -8,7 +8,8 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { CONFIG_DIR, atomicWriteJson } from '../paths.js'
 import { readConfigJson } from './jsonstore.js'
-import { effectiveRoot, runtime } from '../runtime.js'
+import { runtime } from '../runtime.js'
+import { ctxSid, ctxRoot, purgeSid } from '../session-context.js'
 import { prisma } from '../db.js'
 import { cacheToolOutput as cacheOutput, clearFileCaches } from './files.js'
 import { consumeExportPath } from './system.js'
@@ -328,7 +329,7 @@ export async function buildTools(role = 'full', includeMcp = false, includeAgent
   const tools = [READ_MORE]
   if (role === 'full') {
     const { getWsEnabled } = await import('./workspace.js')
-    const wsOn = JSON.parse(await getWsEnabled(runtime.currentSid)).enabled !== false
+    const wsOn = JSON.parse(await getWsEnabled(ctxSid())).enabled !== false
     if (wsOn) tools.push(...FILE_TOOLS)
     tools.push(...FULL_TOOLS)
     if (includeMcp) {
@@ -383,8 +384,8 @@ export async function buildSystemPrompt(query = '') {
   // PR1：编码形态对齐——legacy ok(text)=json.dumps(text)（HTTP body 是 JSON
   // 编码字符串）。沙箱尾注不注入（Node 无 Job 沙箱，不伪造安全声明 → ID-201）。
   const { getWsEnabled } = await import('./workspace.js')
-  const enabled = JSON.parse(await getWsEnabled(runtime.currentSid)).enabled !== false
-  const root = effectiveRoot(runtime.currentSid)
+  const enabled = JSON.parse(await getWsEnabled(ctxSid())).enabled !== false
+  const root = ctxRoot()
   const tail = await memoryTail(String(query || ''))
   const rendered = renderPrompt(enabled ? 'system-base' : 'system-ws-off', { ws_root: root })
   if (rendered) return okJson(rendered + tail)
@@ -454,6 +455,9 @@ export async function sessionPurge(sid, taskIdsJson = '[]') {
     delete runtime.sessionWs[sid]
     removed.ws = 1
   }
+  // P0-3 T02：session_purge 挂接 per-sid 容器清理（trust/grant/budget/dedup/
+  // sessionCwds/cursor 全清——其他 sid 不受影响）
+  purgeSid(sid)
   const plansDir = path.join(CONFIG_DIR, 'plans')
   const ids = Array.isArray(taskIds) && taskIds.length ? taskIds : [sid]
   for (const id of ids) {

@@ -5,13 +5,22 @@ import net from 'node:net'
 import dns from 'node:dns/promises'
 import { chromium } from 'playwright-core'
 import { enforceExec } from './guard.js'
+import { ctxSid, registerSidContainer } from '../session-context.js'
 
 const sessions = new Map()
 const takeovers = new Map()
 const urlCache = new Map()
 const MAX_SESSIONS = 3
 const IDLE_MS = 60000
-let cursor = ''
+// P0-3：浏览器游标 per-sid（A 的 extract 不落到 B 的页面）；池全局共享上限 3 不变
+const cursors = registerSidContainer('cursors', new Map())   // sid -> sessionId
+function cursorFor(sid) { return cursors.get(sid) || '' }
+function setCursor(id) { cursors.set(ctxSid(), id) }
+function clearCursorIf(id) {
+  for (const [sid, value] of cursors) {
+    if (value === id) cursors.set(sid, [...sessions.keys()].at(-1) || '')
+  }
+}
 const json = value => JSON.stringify(value)
 const fail = (code, message, hint = '', extra = {}) => json({ ok: false,
   error: { code, message, ...(hint ? { hint } : {}), ...extra } })
@@ -83,7 +92,7 @@ async function closeOne(id) {
   const entry = sessions.get(id)
   if (!entry) return 0
   sessions.delete(id)
-  if (cursor === id) cursor = [...sessions.keys()].at(-1) || ''
+  clearCursorIf(id)
   await entry.browser.close().catch(() => {})
   return 1
 }
@@ -107,7 +116,7 @@ async function newSession(url, mode = 'hidden', timeout = 60, waitSelector = '')
   const id = `brw_${crypto.randomBytes(6).toString('hex')}`
   const entry = { id, browser, context, page, mode, url: '', title: '', busy: false,
     created_at: new Date().toISOString(), last_used: Date.now() }
-  sessions.set(id, entry); cursor = id
+  sessions.set(id, entry); setCursor(id)
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.max(1000, Number(timeout) * 1000 || 60000) })
     await validateUrl(page.url())
@@ -118,7 +127,7 @@ async function newSession(url, mode = 'hidden', timeout = 60, waitSelector = '')
 }
 function current(sessionId = '', exclusive = true) {
   // legacy _prim 口径（P0-1b B8）：无会话 → BAD_PARAMS + 人话 hint
-  const entry = sessions.get(sessionId || cursor)
+  const entry = sessions.get(sessionId || cursorFor(ctxSid()))
   if (!entry) {
     throw { code: 'BAD_PARAMS', message: '没有可用浏览器会话（先 browser_navigate）', hint: '会话可能已被回收，请重新导航' }
   }

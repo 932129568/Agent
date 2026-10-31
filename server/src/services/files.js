@@ -16,6 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import iconv from 'iconv-lite'
 import { resolveWs, shortPath } from './jail.js'
+import { withRootLock, ctxRoot } from '../session-context.js'
 
 const MAX_LIST = 200
 const READ_BUDGET = 240000
@@ -245,7 +246,9 @@ export async function readMore(cacheId, offset = 0, limit = 400) {
 /* ---------------- 写族 ---------------- */
 
 export async function writeFile(input, content) {
-  const target = resolveWs(input)
+  // P0-3 T02：per-root 写互斥（同 root 写操作串行不撕裂）
+  return withRootLock(ctxRoot(), async () => {
+    const target = resolveWs(input)
   try {
     if (fs.existsSync(target) && fs.statSync(target).size > 20000) {
       return errJson('目标文件已存在且 >20KB。请改用 search_replace 局部修改；确需整体重写，先 delete_path 删掉它再 write_file。')
@@ -258,11 +261,13 @@ export async function writeFile(input, content) {
     invalidate(target)
     return okJson({ ok: true, path: shortPath(target), bytes: Buffer.byteLength(String(content ?? ''), 'utf8') })
   } catch (error) { return errJson(error.message || String(error)) }
+  })
 }
 
 const appendHistory = new Map()   // abs path -> timestamps[]（10 分钟窗口 6 次限流）
 export async function appendFile(input, content) {
-  const target = resolveWs(input)
+  return withRootLock(ctxRoot(), async () => {
+    const target = resolveWs(input)
   try {
     const now = Date.now()
     const hist = (appendHistory.get(target) || []).filter(t => now - t < 600000)
@@ -280,6 +285,7 @@ export async function appendFile(input, content) {
     invalidate(target)
     return okJson({ ok: true, path: shortPath(target), bytes: Buffer.byteLength(String(content ?? ''), 'utf8') })
   } catch (error) { return errJson(error.message || String(error)) }
+  })
 }
 
 /** 原编码写回载荷（file_service.py:340-345 同构：GBK/utf-8-sig/utf-8）。 */
@@ -292,7 +298,8 @@ function encodeForWrite(text, encoding) {
 }
 
 export async function searchReplace(input, oldText, newText, replaceAll = false) {
-  const target = resolveWs(input)
+  return withRootLock(ctxRoot(), async () => {
+    const target = resolveWs(input)
   try {
     if (fs.existsSync(target) && fs.statSync(target).isDirectory()) {
       return errJson(`路径是目录: ${target}`)
@@ -345,14 +352,17 @@ export async function searchReplace(input, oldText, newText, replaceAll = false)
     invalidate(target)
     return okJson({ ok: true, path: shortPath(target), replaced: replaceAll ? count : 1 })
   } catch (error) { return errJson(error.message || String(error)) }
+  })
 }
 
 export async function makeDir(input) {
-  const target = resolveWs(input)
+  return withRootLock(ctxRoot(), async () => {
+    const target = resolveWs(input)
   try {
     fs.mkdirSync(target, { recursive: true })
     return okJson({ ok: true, path: target })
   } catch (error) { return errJson(error.message || String(error)) }
+  })
 }
 
 /** '%Y-%m-%d %H:%M:%S' 本地时间（get_file_info 契约格式）。 */
@@ -374,7 +384,8 @@ export async function getFileInfo(input) {
 }
 
 export async function movePath(src, dst) {
-  const from = resolveWs(src)
+  return withRootLock(ctxRoot(), async () => {
+    const from = resolveWs(src)
   const to = resolveWs(dst)
   try {
     if (!fs.existsSync(from)) return errJson(`源不存在: ${from}`)
@@ -385,10 +396,12 @@ export async function movePath(src, dst) {
     invalidate(to)
     return okJson({ ok: true, src: from, dst: to })
   } catch (error) { return errJson(error.message || String(error)) }
+  })
 }
 
 export async function copyPath(src, dst) {
-  const from = resolveWs(src)
+  return withRootLock(ctxRoot(), async () => {
+    const from = resolveWs(src)
   const to = resolveWs(dst)
   try {
     if (!fs.existsSync(from)) return errJson(`源不存在: ${from}`)
@@ -400,4 +413,5 @@ export async function copyPath(src, dst) {
     }
     return okJson({ ok: true, src: from, dst: to })
   } catch (error) { return errJson(error.message || String(error)) }
+  })
 }

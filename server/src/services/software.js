@@ -19,7 +19,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CONFIG_DIR, atomicWriteJson } from '../paths.js'
 import { resolveWs } from './jail.js'
-import { effectiveRoot, runtime } from '../runtime.js'
+import { ctxRoot } from '../session-context.js'
 import { enforceExec } from './guard.js'
 import { guardAudit } from './misc.js'
 import { cacheToolOutput } from './files.js'
@@ -374,7 +374,7 @@ export async function softwareCall(params, token = null) {
   const exe = entry.resolved_exec || await resolveExecutable(entry)
   try {
     const { stdout, stderr } = await run(exe, buildArgv(entry, act, gated), {
-      cwd: effectiveRoot(runtime.currentSid), timeout: timeout * 1000, killSignal: 'SIGKILL',
+      cwd: ctxRoot(), timeout: timeout * 1000, killSignal: 'SIGKILL',
       maxBuffer: 16 * 1024 * 1024, windowsHide: true,
     })
     const out = await truncateOutput(stdout); const err = await truncateOutput(stderr)

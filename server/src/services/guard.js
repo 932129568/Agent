@@ -31,7 +31,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { CONFIG_DIR, atomicWriteJson } from '../paths.js'
 import { guardAudit } from './misc.js'
-import { runtime } from '../runtime.js'
+import { ctxSid, registerSidContainer } from '../session-context.js'
 
 const GUARD_FILE = path.join(CONFIG_DIR, 'guard.json')
 const TOKEN_TTL_SECONDS = 60
@@ -102,13 +102,25 @@ const LISTLESS_OPS = new Set(['clipboard_write', 'clipboard_read', 'take_screens
 export const ARMED = process.env.HARBOR_GUARD_ARMED !== 'false'
 
 /* ---------------- 会话级内存态（Python 进程内语义） ---------------- */
-const tokens = new Map()          // token -> {op, digest, exp, used}
-const sessionTrust = new Set()    // 本会话已信任的 op
-let trustedSid = null
-let grant = null                  // 当前任务授权（进程内，不入 guard.json）
-let approvalUsed = 0              // 会话级审批计数（Python _cfg.approval_budget.used 同源）
-let approvalEscalated = false     // 会话级升级标志
+const tokens = new Map()          // token -> {op, digest, exp, used}（全局单用即毁）
+// P0-3：per-sid 容器（单 sid 时与原单值变量行为一致；purgeSid 统一清理）
+const trustBySid = registerSidContainer('sessionTrust', new Map())   // sid -> Set<op>
+const grants = registerSidContainer('grants', new Map())             // sid -> grant
+const budgetBySid = registerSidContainer('budget', new Map())        // sid -> {used, escalated}
 const ruleHits = new Map()        // rule_id -> hits（内存叠加，写档时落盘）
+
+/** 当前请求 sid 的会话信任集（懒创建——P0-3 隔离矩阵）。 */
+function sidTrust() {
+  const sid = ctxSid()
+  if (!trustBySid.has(sid)) trustBySid.set(sid, new Set())
+  return trustBySid.get(sid)
+}
+function sidGrant() { return grants.get(ctxSid()) || null }
+function sidBudget() {
+  const sid = ctxSid()
+  if (!budgetBySid.has(sid)) budgetBySid.set(sid, { used: 0, escalated: false })
+  return budgetBySid.get(sid)
+}
 
 const now = () => Date.now()
 const digestOf = detail => crypto.createHash('sha256')
@@ -184,7 +196,7 @@ function persistCfg(cfg) {
     protect_paths: cfg.protect_paths,
     protect_processes: cfg.protect_processes,
     trustedOps: cfg.trustedOps,
-    approval_budget: { limit: cfg.approval_budget.limit, used: approvalUsed, escalated: approvalEscalated },
+    approval_budget: { limit: cfg.approval_budget.limit, used: sidBudget().used, escalated: sidBudget().escalated },
   }
   if (cfg.allow_rules && cfg.allow_rules.length) {
     out.allow_rules = cfg.allow_rules.map(r => ({ ...r, hits: ruleHits.get(r.rule_id) ?? r.hits }))
@@ -291,12 +303,13 @@ export async function guardCheck(op, detail = {}) {
     return JSON.stringify({ action: 'allow', via: 'rule', rule_id: allowRule.rule_id || null })
   }
 
-  // ③ 任务授权（仅映射 op；fail-closed）
-  if (grant && grant.idle_deadline > now()) {
+  // ③ 任务授权（仅映射 op；fail-closed；per-sid 容器——授权互不覆盖）
+  const activeGrant = sidGrant()
+  if (activeGrant && activeGrant.idle_deadline > now()) {
     const scope = OP_GRANT_SCOPES[op]
-    if (scope && grant.scope.includes(scope)) {
-      grant.idle_deadline = now() + GRANT_IDLE_SECONDS * 1000
-      return JSON.stringify({ action: 'allow', via: 'grant', grant_id: grant.grant_id })
+    if (scope && activeGrant.scope.includes(scope)) {
+      activeGrant.idle_deadline = now() + GRANT_IDLE_SECONDS * 1000
+      return JSON.stringify({ action: 'allow', via: 'grant', grant_id: activeGrant.grant_id })
     }
   }
 
@@ -327,12 +340,13 @@ export async function guardCheckApi(op, detailJson = '{}') {
 
 /* ---------------- token（G3：{token, ttl:60}；op 白名单校验） ---------------- */
 async function countApproval(op) {
-  approvalUsed += 1
+  const budget = sidBudget()
+  budget.used += 1
   const cfg = loadCfg()
   const limit = Number(cfg.approval_budget.limit) || 20
-  if (approvalUsed >= limit && !approvalEscalated) {
-    approvalEscalated = true
-    await guardAudit('guard_budget', { used: approvalUsed, limit }, 'decision', 'escalated')
+  if (budget.used >= limit && !budget.escalated) {
+    budget.escalated = true
+    await guardAudit('guard_budget', { used: budget.used, limit }, 'decision', 'escalated')
   }
 }
 
@@ -359,7 +373,7 @@ export async function refundToken(op, detail, token) {
   const key = String(token || '')
   if (!key || tokens.has(key)) return false
   tokens.set(key, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false })
-  approvalUsed = Math.max(0, approvalUsed - 1)
+  sidBudget().used = Math.max(0, sidBudget().used - 1)
   return true
 }
 
@@ -368,11 +382,9 @@ export async function guardSessionTrust(op) {
   if (!GUARD_OPS.includes(op)) {
     return JSON.stringify({ error: `未知护栏操作: ${op}` })
   }
-  if (trustedSid !== runtime.currentSid) {
-    sessionTrust.clear()
-    trustedSid = runtime.currentSid
-  }
-  sessionTrust.add(op)
+  // P0-3：per-sid 信任容器（A 的信任永不命中 B）；legacy clear-on-switch 由
+  // registry 的全局 set_current_sid 经 clearTrustForSid 保留
+  sidTrust().add(op)
   await countApproval(op)
   return '{"ok":true}'
 }
@@ -467,63 +479,68 @@ export async function guardTaskGrant(scope, ttlSeconds = GRANT_TTL_DEFAULT) {
   }
   const started = now()
   const grantId = `g_${crypto.randomBytes(8).toString('hex')}`
-  grant = {
+  const grantObj = {
     grant_id: grantId, scope: scopes, granted_at: started,
     expires_at: started + ttl * 1000, idle_deadline: started + GRANT_IDLE_SECONDS * 1000,
     granted_by: 'user',
   }
+  grants.set(ctxSid(), grantObj)
   await guardAudit('guard_grant', { grant_id: grantId, scope: scopes.slice().sort().join(','), ttl }, 'grant', 'grant')
   return JSON.stringify({
     ok: true, grant_id: grantId,
-    expires_at: isoSeconds(grant.expires_at),
-    idle_deadline: isoSeconds(grant.idle_deadline),
-    remaining_s: Math.floor((Math.min(grant.expires_at, grant.idle_deadline) - started) / 1000),
+    expires_at: isoSeconds(grantObj.expires_at),
+    idle_deadline: isoSeconds(grantObj.idle_deadline),
+    remaining_s: Math.floor((Math.min(grantObj.expires_at, grantObj.idle_deadline) - started) / 1000),
     scope: scopes.slice().sort(), granted_by: 'user',
   })
 }
 
 export async function guardTaskRevoke(grantId = null) {
-  const target = grantId ? String(grantId).trim() : grant?.grant_id
-  const revoked = !!(target && grant && grant.grant_id === target)
+  const current = sidGrant()
+  const target = grantId ? String(grantId).trim() : current?.grant_id
+  const revoked = !!(target && current && current.grant_id === target)
   if (revoked) {
-    const id = grant.grant_id
-    grant = null
+    const id = current.grant_id
+    grants.delete(ctxSid())
     await guardAudit('guard_revoke', { grant_id: id }, 'revoke', 'revoke')
   }
   return JSON.stringify({ ok: true, revoked })
 }
 
 export async function guardTaskStatus() {
-  if (!grant || grant.idle_deadline <= now() || grant.expires_at <= now()) {
+  const current = sidGrant()
+  if (!current || current.idle_deadline <= now() || current.expires_at <= now()) {
     return JSON.stringify({ ok: true, active: false })
   }
-  const remaining = Math.max(0, Math.floor((Math.min(grant.expires_at, grant.idle_deadline) - now()) / 1000))
+  const remaining = Math.max(0, Math.floor((Math.min(current.expires_at, current.idle_deadline) - now()) / 1000))
   return JSON.stringify({
-    ok: true, active: true, grant_id: grant.grant_id,
-    expires_at: isoSeconds(grant.expires_at), idle_deadline: isoSeconds(grant.idle_deadline),
-    remaining_s: remaining, scope: [...grant.scope].sort(), granted_by: grant.granted_by,
+    ok: true, active: true, grant_id: current.grant_id,
+    expires_at: isoSeconds(current.expires_at), idle_deadline: isoSeconds(current.idle_deadline),
+    remaining_s: remaining, scope: [...current.scope].sort(), granted_by: current.granted_by,
     expiring_soon: remaining < 600,
   })
 }
 
 /* ---------------- 审批预算 ---------------- */
 export async function guardApprovalBudget(limit = null) {
+  const budget = sidBudget()
   if (limit !== null && limit !== undefined) {
     if (!Number.isInteger(limit) || typeof limit === 'boolean' || limit < 1 || limit > 100) {
       return JSON.stringify({ error: `审批预算上限需为 1-100 的整数（当前 ${JSON.stringify(limit)}）` })
     }
     const cfg = loadCfg()
     cfg.approval_budget.limit = limit
-    approvalEscalated = approvalUsed >= limit
+    budget.escalated = budget.used >= limit
     persistCfg(cfg)
     await guardAudit('guard_budget', { limit }, 'decision', 'set-limit')
   }
   const cfg = loadCfg()
   const configured = Number(cfg.approval_budget.limit) || 20
+  const activeGrant = sidGrant()
   return JSON.stringify({
-    ok: true, used: approvalUsed, limit: configured,
-    escalated: approvalEscalated, remaining: Math.max(0, configured - approvalUsed),
-    grant_active: !!(grant && grant.idle_deadline > now() && grant.expires_at > now()),
+    ok: true, used: budget.used, limit: configured,
+    escalated: budget.escalated, remaining: Math.max(0, configured - budget.used),
+    grant_active: !!(activeGrant && activeGrant.idle_deadline > now() && activeGrant.expires_at > now()),
   })
 }
 
@@ -562,7 +579,7 @@ export async function enforceExec(op, detail = {}, token = null) {
   }
   // armed（E7）：未武装环境（无窗口的测试/嵌入态）放行——与 Python 逐行同构
   if (!ARMED) return null
-  if (trustedSid === runtime.currentSid && sessionTrust.has(op)) return null
+  if (sidTrust().has(op)) return null
   let tier = tierOf(op)
   if (tier === 'list' && LISTLESS_OPS.has(op)) tier = 'always'
   if (tier === 'off' || tier === 'list') return null
@@ -576,7 +593,8 @@ export async function enforceExec(op, detail = {}, token = null) {
 /* ---------------- 配置读写（G9/G12：归一化全量） ---------------- */
 export function guardGetConfig() {
   const cfg = loadCfg()
-  cfg.approval_budget = { ...cfg.approval_budget, used: approvalUsed, escalated: approvalEscalated }
+  const budget = sidBudget()
+  cfg.approval_budget = { ...cfg.approval_budget, used: budget.used, escalated: budget.escalated }
   if (cfg.allow_rules) {
     cfg.allow_rules = cfg.allow_rules.map(r => ({ ...r, hits: ruleHits.get(r.rule_id) ?? r.hits }))
   }

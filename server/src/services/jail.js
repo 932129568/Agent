@@ -8,7 +8,8 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { runtime, effectiveRoot } from '../runtime.js'
+import { effectiveRoot } from '../runtime.js'
+import { ctxRoot } from '../session-context.js'
 
 export class PathJailError extends Error {
   constructor(message) {
@@ -17,8 +18,10 @@ export class PathJailError extends Error {
   }
 }
 
-export function resolveWs(input, sid = runtime.currentSid) {
-  const root = path.resolve(effectiveRoot(sid))
+export function resolveWs(input, sid) {
+  // P0-3：缺省 sid 走请求上下文完整解析（含 per-sid cwd 覆盖）；
+  // 显式 sid 参数维持原绑定表语义（API 显式传 sid 的调用面）
+  const root = path.resolve(sid === undefined ? ctxRoot() : effectiveRoot(sid))
   let p = String(input == null ? '' : input).trim()
   while (p.length >= 2 && p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1).trim()
   if (!p) throw new PathJailError('缺少 path 参数')
@@ -48,9 +51,10 @@ function realpathSafe(p) {
   }
 }
 
-export function shortPath(abs, sid = runtime.currentSid) {
+export function shortPath(abs, sid) {
   // P0-1c：短路径分隔符统一 '/'（workspace_service.py:69 rel.replace('\\', '/')）
-  const root = path.resolve(effectiveRoot(sid))
+  // P0-3：缺省 sid 走 ctxRoot()（含 per-sid 覆盖）
+  const root = path.resolve(sid === undefined ? ctxRoot() : effectiveRoot(sid))
   const rel = path.relative(root, abs)
   return rel && !rel.startsWith('..') ? rel.split(path.sep).join('/') : abs
 }

@@ -17,7 +17,7 @@
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { effectiveRoot, runtime } from '../runtime.js'
+import { ctxRoot, ctxSid } from '../session-context.js'
 import { enforceExec } from './guard.js'
 import { cacheToolOutput } from './files.js'
 
@@ -46,28 +46,31 @@ const BLACKLIST = [
   /:\(\)\s*\{\s*:\|:&\s*\};:/,
 ]
 
-const recent = new Map()   // dedupKey -> last-run ts（全窗；begin_task 复位）
-let lastKey = null         // Python RunDeduper._last（紧邻去重与窗口去重文案分叉）
+const recent = new Map()   // `${sid}:${cmd}` -> last-run ts（P0-3 per-sid 命名空间；begin_task 仅清当前 sid）
+const lastKeys = new Map() // sid -> 紧邻去重键（Python RunDeduper._last 的 per-sid 形态）
 
 const WRITE_VERBS = new Set(['del', 'erase', 'rmdir', 'rd', 'remove-item', 'ri', 'mkdir', 'md',
   'new-item', 'ni', 'move', 'move-item', 'copy', 'copy-item', 'cp',
   'reg', 'regedit', 'regsvr32', 'setx', 'format', 'taskkill',
   'stop-process', 'start-process', 'iex', 'invoke-expression', 'rm', 'rm-item'])
 
-/** begin_task 的唯一职责：新任务重置命令去重；clear_caches 不得调用它。 */
+/** begin_task 的唯一职责：新任务重置命令去重；clear_caches 不得调用它。
+ * P0-3：仅清当前 sid 的去重窗口（其他会话的最近记录不受影响）。 */
 export async function beginTask() {
-  recent.clear()
-  lastKey = null
+  const prefix = `${ctxSid()}:`
+  for (const key of recent.keys()) if (key.startsWith(prefix)) recent.delete(key)
+  lastKeys.delete(ctxSid())
   return 'ok'
 }
 
-/** 去重键（Python dedup_key 语义：小写化 + 剥引号与 ./ .\ 前缀的命令归一）。 */
+/** 去重键（Python dedup_key 语义：小写化 + 剥引号与 ./ .\ 前缀的命令归一）。
+ * P0-3：加 sid 命名空间——A 的「与上一条相同」不拒 B。 */
 function dedupKey(command) {
   const key = String(command || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
     .replace(/^["']|["']$/g, '')
     .replace(/^\.\//, '')
     .replace(/^\.\\/, '')
-  return key
+  return `${ctxSid()}:${key}`
 }
 
 /** Python RunDeduper.check 三变体文案（cmd_service.py:67-90 逐字）。 */
@@ -76,7 +79,7 @@ function checkDedup(command) {
   if (key.includes('[console]::outputencoding')) {
     return '后端已强制 UTF-8，命令里不要再设置编码；读文件请用 read_file（自动识别 UTF-8/GBK）。'
   }
-  if (key === lastKey) {
+  if (key === lastKeys.get(ctxSid())) {
     return '与上一条命令完全相同，已拒绝；如需刷新结果请加参数或说明目的。'
   }
   if (recent.has(key)) {
@@ -89,7 +92,7 @@ function checkDedup(command) {
 
 function markDedup(command) {
   const key = dedupKey(command)
-  lastKey = key
+  lastKeys.set(ctxSid(), key)
   recent.set(key, Date.now())
   if (recent.size > 64) recent.delete(recent.keys().next().value)
 }
@@ -98,7 +101,7 @@ function markDedup(command) {
 function unmarkDedup(command) {
   const key = dedupKey(command)
   recent.delete(key)
-  if (lastKey === key) lastKey = null
+  if (lastKeys.get(ctxSid()) === key) lastKeys.delete(ctxSid())
 }
 
 function blacklistHit(command) {
@@ -140,7 +143,7 @@ export async function execute(command, timeout, token, shell = 'cmd', guardOp = 
     return errJson(`命令命中沙箱黑名单（${hit}），已拒绝执行。请改用更窄、可逆的操作。`)
   }
 
-  const cwd = effectiveRoot(runtime.currentSid)
+  const cwd = ctxRoot()
   const timeoutSeconds = Math.max(5, Math.min(Number(timeout) || 60, 600))
   const timeoutMs = timeoutSeconds * 1000
 

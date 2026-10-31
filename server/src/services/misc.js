@@ -18,6 +18,7 @@ import { CONFIG_SPECS } from './config-specs.js'
 import { runtime } from '../runtime.js'
 import { currentDbPath, switchDatabaseCore, withDbSwitchLock } from '../db.js'
 import { materializeSessions } from './session-migrate.js'
+import { ctxSid } from '../session-context.js'
 
 const AUDIT_FILE = path.join(CONFIG_DIR, 'audit_log.jsonl')
 const AUDIT_CHAIN_FILE = path.join(CONFIG_DIR, 'audit_chain.json')
@@ -93,7 +94,7 @@ export async function guardAudit(op, detailJson, action = 'check', decision = nu
     }
     if (decision) entry.decision = decision
     entry.trace = TRACE_ID
-    entry.identity = { sid: String(runtime.currentSid || ''), principal: 'user' }
+    entry.identity = { sid: String(ctxSid() || ''), principal: 'user' }
     entry.intent = { trace: TRACE_ID, summary: `${entry.op} ${decision || entry.action}` }
     if (Object.keys(normalizedDetail).length) {
       entry.evidence = {
