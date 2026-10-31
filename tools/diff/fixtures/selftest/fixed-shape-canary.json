@@ -6,6 +6,7 @@
   "description": "harness 自检（P0-1c T05 金丝雀重建）：本轮收敛的易回退形状——memory ts/ts_iso 双字段（M1）、memory_delete remaining/越界 BAD_PARAMS（M3/M4）、get_effective_ws sid null 透传（W1）。今日全 match=修复在位；任一转 suspect=修复回退（diff:all 门禁即时可见，不引入未修复分叉）",
   "setup": {
     "workspaceFiles": [],
+    "dirs": ["canary-hist"],
     "callsBefore": []
   },
   "calls": [
@@ -44,6 +45,18 @@
       "method": "set_current_sid",
       "args": ["s_canary"],
       "note": "对照项（P0-1 金丝雀延续）：裸 '{\"ok\":true}'"
+    },
+    {
+      "id": "c07",
+      "method": "save_sessions",
+      "args": ["[{\"id\": \"canary-s1\", \"title\": \"迁移介质披露\", \"updatedAt\": 1000, \"messages\": []}]"],
+      "note": "P0-2 前置：双侧各写一条会话（Python=sessions.json / Node=DB）"
+    },
+    {
+      "id": "c08",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/canary-hist", true],
+      "note": "P0-2 介质披露金丝雀：migrate 已实现 DB→DB——migrated:true 双侧一致；migrated_from 披露旧介质路径（ID-103 口径登记。回退为恒 false 即 suspect）"
     }
   ],
   "sideEffects": {

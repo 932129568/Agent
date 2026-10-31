@@ -20,22 +20,22 @@
       "fixture": "sessions-validation",
       "callId": "c03",
       "method": "save_sessions",
-      "reason": "存储实现分叉：Python sessions.json 原文保底写入任意数组条目（[1,2] 原样落盘）；Node Prisma 结构化校验拒绝非对象条目。Node 拒绝路径更严格（fail-closed 增强），P0-2 存储语义定案时复评",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。存储实现分叉属架构级差异，Node 拒绝路径更严（fail-closed）合理；P0-2 存储语义定案时必须复评并收敛或正式化",
-      "date": "2026-10-30",
-      "expires": null,
-      "frontendCompat": "前端 save_sessions 调用方恒发合法会话对象数组；对抗性输入在 Node 得到更显式拒绝（200 + {error}，S3 修复后形状同构）"
+      "reason": "P0-2 定案（正式化）：Prisma 结构化校验拒绝非对象条目为定案行为；Python 数组原文保底写入语义不迁移（合法输入双侧逐字节一致；保底写入在 Prisma 模型下无自然等价物且会污染存储模型；Node fail-closed 显式拒绝优于静默写坏；P0-4 后 Python 运行时退役该宽容度无消费者）",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
+      "expires": "2099-12-31",
+      "frontendCompat": "前端 save_sessions 调用方恒发合法会话对象数组；对抗性/误用输入在 Node 得到 200+{error} 显式拒绝（比静默写坏更利于排查）。sessions-validation fixture 转为长期契约差异存证用例（非待办缺陷）"
     },
     {
       "id": "ID-102",
       "fixture": "sessions-validation",
       "callId": "c04",
       "method": "get_sessions",
-      "reason": "ID-101 的回读级联：Python 回读原文 [1,2]；Node 拒绝写入后空库 []",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。ID-101 的回读级联，随 ID-101 在 P0-2 复评时一并处置",
-      "date": "2026-10-30",
-      "expires": null,
-      "frontendCompat": "同 ID-101——合法数组条目双侧回读一致；仅对抗性输入的持久化语义分叉"
+      "reason": "ID-101 定案的回读级联：Python 保底写入后回读原文 [1,2]；Node 拒绝写入后空库 []。定案行为即如此（拒绝路径为长期契约差异），随 ID-101 永久登记",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
+      "expires": "2099-12-31",
+      "frontendCompat": "同 ID-101——合法数组条目双侧回读逐字节一致；仅对抗性输入的持久化语义分叉（定案的长期契约差异）"
     },
     {
       "id": "ID-103",
@@ -113,6 +113,17 @@
       "date": "2026-10-31",
       "expires": "2099-12-31",
       "frontendCompat": "前端仅展示 error 字符串（toast）；库文本是运行时实现细节（同 ID-104 解析器文案先例），无文案分支逻辑"
+    },
+    {
+      "id": "ID-103C",
+      "fixture": "fixed-shape-canary",
+      "callId": "c08",
+      "method": "history_dir_set",
+      "reason": "P0-2 介质披露金丝雀（与 ID-103 同族）：migrate 已实现 DB→DB——migrated:true 双侧一致；migrated_from 披露旧介质路径（Python=<CFG>/sessions.json / Node=<tmp>/diff.db）。回退为恒 false 时本 call 即 suspect（修复回归探测器）",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
+      "expires": null,
+      "frontendCompat": "同 ID-103——migrated:true 双侧一致；介质路径披露不影响功能分支"
     }
   ]
 }
