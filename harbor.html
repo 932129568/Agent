@@ -3300,6 +3300,12 @@ body.dark .modal-mask,body.dark .settings-panel{background:rgba(0,0,0,.52)}
   overflow:hidden;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg)}
 .modal-title{font-family:var(--font-display);font-size:17px;font-weight:500;line-height:1.45;overflow-wrap:anywhere}
 .modal-body{min-height:0;overflow:auto;overscroll-behavior:contain;line-height:1.65;overflow-wrap:anywhere}
+/* P0-4 T03：确认框来源会话徽标（多并行 run 时区分弹窗来源；无标注时零渲染） */
+.modal-session-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:1px 9px;
+  font-size:11px;font-weight:600;line-height:18px;color:var(--text-2);background:var(--bg);
+  border:1px solid var(--border);border-radius:9px;max-width:200px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;overflow-wrap:normal}
+
 .modal-btns{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding-top:12px}
 .modal-btns .modal-btn{min-height:44px}
 .toast-stack{max-height:min(72vh,640px);overflow:auto;overscroll-behavior:contain}
@@ -5145,6 +5151,28 @@ function toast(msg, type, opts) {
 }
 
 /* ---- 模态层 ---- */
+/* P0-4 T03（§4.4）：确认框来源会话标注——多并行 run 时区分弹窗来源（会话名徽标）。
+ * 解析序：在途 run 注册表（__agentRuns，覆盖后台并行 run）→ 会话列表 title →
+ * 短 sid 兜底；任一步取不到/异常返回 ''（不渲染徽标，pywebview 串行链零变化）。 */
+function _confirmSessionLabel(sid) {
+  sid = String(sid == null ? '' : sid).trim();
+  if (!sid) return '';
+  try {
+    let title = '';
+    if (typeof __agentRuns !== 'undefined' && __agentRuns && typeof __agentRuns.get === 'function') {
+      const r = __agentRuns.get(sid);
+      if (r && r.session && r.session.title) title = r.session.title;
+    }
+    if (!title && typeof sessions !== 'undefined' && Array.isArray(sessions)) {
+      const s = sessions.find(x => x && x.id === sid);
+      if (s && s.title) title = s.title;
+    }
+    title = String(title == null ? '' : title).trim();
+    if (title) return title;
+  } catch (e) { /* 标注失败不影响确认流程 */ }
+  return sid.length > 12 ? sid.slice(0, 8) + '…' + sid.slice(-4) : sid;
+}
+
 let _uiConfirmResolve = null;   // 修复 S22：当前挂起确认的兜底 resolve（模态被外部关闭时按「取消」收尾）
 let _uiPromptResolve = null;    // 修复 W22（二轮）：uiPrompt 的兜底 resolve（原其 Promise 永不 settle）
 let _uiConfirmQueue = Promise.resolve();   // 修复 S22：全局串行队列——并发确认依次弹窗，不再互相覆盖
@@ -5242,7 +5270,8 @@ function _closeModal() {
 }
 
 /**
- * uiConfirm({title, body, danger, okText, cancelText, checkboxLabel, checkboxLabel2})
+ * uiConfirm({title, body, danger, okText, cancelText, checkboxLabel, checkboxLabel2, sessionLabel})
+ *   sessionLabel = P0-4 T03 来源会话标注（标题旁会话名徽标，多并行 run 区分来源）
  * → Promise<{ok:boolean, checked?:boolean, checked2?:boolean}>
  *   checked  = 第一勾选（本会话内不再提示）；checked2 = 第二勾选（永久信任，UX-2 v1.4）
  */
@@ -5265,6 +5294,14 @@ function uiConfirm(opts) {
       '<button class="modal-btn modal-ok"></button>' +
       '</div></div>';
     m.querySelector('.modal-title').textContent = opts.title || '确认';
+    // P0-4 T03：来源会话徽标（多并行 run 区分弹窗来源；无标注时零渲染）
+    if (opts.sessionLabel) {
+      const badge = document.createElement('span');
+      badge.className = 'modal-session-badge';
+      badge.title = '来源会话：' + opts.sessionLabel;
+      badge.textContent = opts.sessionLabel;
+      m.querySelector('.modal-title').appendChild(badge);
+    }
     const body = m.querySelector('.modal-body');
     if (opts.bodyHtml) body.innerHTML = opts.bodyHtml;
     else body.textContent = opts.body || '';
@@ -5412,7 +5449,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
   // v1.2 R2：破坏性操作护栏（delete/kill/剪贴板/截屏/命令执行 → 确认矩阵/保护名单）
   let guardToken = null;
   try {
-    const g = await guardCheckTool(name, args);
+    const g = await guardCheckTool(name, args, runSid);
     if (g && g.blocked) return g.blocked;
     guardToken = (g && g.token) || null;   // 修复 S4①：确认通过换取的一次性 token
   } catch (e) { /* 护栏自身异常不阻断工具执行（fail-open 由后端名单兜底） */ }
@@ -5421,7 +5458,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
   let mcpToken = null;
   if (name.startsWith('mcp__')) {
     try {
-      const g = await mcpGuardCheck(name, args);
+      const g = await mcpGuardCheck(name, args, runSid);
       if (g.blocked) return g.blocked;
       mcpDecision = g.decision;
       mcpToken = (g && g.token) || null;   // 修复 S4①：MCP 确认 token
@@ -5525,7 +5562,10 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // agentGuardCheck（guard_check → 确认弹窗 → 一次性 token 回传后端
     // enforce_exec；session 档会话信任缓存，dangerous 每次确认）
     if (name === 'browser_search') {
-      const g = await agentGuardCheck('web_search', { query: String((args && args.query) || '').slice(0, 120) });
+      // P0-4 T03 §4.4：AI 发起的确认弹窗带来源会话徽标 + guard 链按 run 级 sid
+      // 路由（origin 缺省走 'ai'；与 guardCheckTool/mcpGuardCheck 传参同口径）
+      const g = await agentGuardCheck('web_search',
+        { query: String((args && args.query) || '').slice(0, 120) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       // §2.4：CAPTCHA_REQUIRED → 挂起标记（fail-fast + 前端挂起，browser_takeover
       // 终态才由 60-agent-loop 注入上下文——Agent 循环永不挂死在人类动作上）
@@ -5540,7 +5580,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // APPROVAL_BUDGET_EXCEEDED → maybeBudgetInvite 任务授权邀请，不弹逐项确认）
     if (name === 'browser_navigate') {
       const g = await agentGuardCheck('browser_navigate',
-        { url: String((args && args.url) || '').slice(0, 200) });
+        { url: String((args && args.url) || '').slice(0, 200) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_navigate',
         [(args && args.url) || '', (args && args.wait_selector) || '',
@@ -5549,34 +5589,34 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     }
     if (name === 'browser_extract') {
       const g = await agentGuardCheck('browser_extract',
-        { selector: String((args && args.selector) || '').slice(0, 80) });
+        { selector: String((args && args.selector) || '').slice(0, 80) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_extract',
         [(args && args.selector) || '', (args && args.mode) || 'markdown', g.token], 90000));
     }
     if (name === 'browser_click') {
       const g = await agentGuardCheck('browser_click',
-        { target: String((args && args.target) || '').slice(0, 120) });
+        { target: String((args && args.target) || '').slice(0, 120) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_click',
         [(args && args.target) || '', g.token], 90000));
     }
     if (name === 'browser_fill') {
       const g = await agentGuardCheck('browser_fill',
-        { selector: String((args && args.selector) || '').slice(0, 80) });
+        { selector: String((args && args.selector) || '').slice(0, 80) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_fill',
         [(args && args.selector) || '', (args && args.text) || '', g.token], 90000));
     }
     if (name === 'browser_screenshot') {
-      const g = await agentGuardCheck('browser_screenshot', {});
+      const g = await agentGuardCheck('browser_screenshot', {}, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_screenshot',
         [args && args.full_page === true, g.token], 90000));
     }
     if (name === 'browser_close') {
       // 会话管理类（session 档）：确认后执行；缺省关全部（session_id 可选）
-      const g = await agentGuardCheck('browser_close', {});
+      const g = await agentGuardCheck('browser_close', {}, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_close',
         [(args && args.session_id) || '', g.token], 60000));
@@ -5587,7 +5627,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
         action: String((args && args.action) || '').slice(0, 40),
         args: args && args.args,
         force_always: args && args.__dangerous === true,
-      });
+      }, undefined, runSid);
       if (g.blocked) return g.blocked;
       // 后端执行上限 600s + 30s 缓冲（与 run_command 660000 同款口径）
       const _swT = pickTimeout(args);
@@ -5802,6 +5842,9 @@ async function agentGuardCheck(op, detail, origin, runSid, realCallApi = callApi
     title: op === 'web_search' ? '确认执行浏览器搜索'
       : (_isBrowserOp ? '确认浏览器操作' : '确认调用外部软件'),
     body, danger: dangerous || verdict.tier === 'always',
+    // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
+    // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
+    sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: '允许执行',
     checkboxLabel: dangerous ? null : '本会话内不再提示同类操作'
   });
@@ -5936,7 +5979,7 @@ async function _guardDescribe(op, args) {
  *   blocked 为 null → 放行；blocked 为 JSON 字符串 → 拦截结果（直接作为工具结果返回给 AI）；
  *   token → 修复 S4①：用户「允许」后从后端换取的一次性 confirm token（携带调实际 op）。
  */
-async function guardCheckTool(name, args) {
+async function guardCheckTool(name, args, runSid) {
   const op = GUARD_OP_MAP[name];
   if (!op) return { blocked: null, token: null };
   args = args || {};
@@ -5969,6 +6012,9 @@ async function guardCheckTool(name, args) {
   const desc = await _guardDescribe(op, args);
   const r = await uiConfirm({
     title: desc.title, body: desc.body, danger: desc.danger,
+    // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
+    // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
+    sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: desc.danger ? '允许执行' : '允许',
     checkboxLabel: '本会话内不再提示「' + GUARD_OP_LABEL[op] + '」',
     // 修复 UX-2（v1.4）：第二勾选=永久信任（op 级，写 guard.json trustedOps，重启仍生效）
@@ -14217,7 +14263,7 @@ function mcpParseName(name) {
  * - 否则 decision ∈ allow/session-trust + token（修复 S4①）传给 mcpExecTool。
  * 异常 → fail-closed（blocked 错误结果）。
  */
-async function mcpGuardCheck(name, args) {
+async function mcpGuardCheck(name, args, runSid) {
   const p = mcpParseName(name);
   if (!p) return { blocked: null, decision: 'allow', token: null };
   args = args || {};
@@ -14254,6 +14300,9 @@ async function mcpGuardCheck(name, args) {
     (_localMode ? '\n\n⚠ ' + MCP_LOCAL_CAUTION : '');
   const r = await uiConfirm({
     title: '确认调用 MCP 工具', body, danger: verdict.tier === 'always',
+    // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
+    // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
+    sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: '允许调用',
     checkboxLabel: '本会话内不再提示「' + p.server + ' · ' + p.tool + '」' + (_localMode ? '（本地模式：仅本任务有效）' : '')
   });

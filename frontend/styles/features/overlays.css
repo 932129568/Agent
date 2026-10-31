@@ -5,6 +5,12 @@ body.dark .modal-mask,body.dark .settings-panel{background:rgba(0,0,0,.52)}
   overflow:hidden;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg)}
 .modal-title{font-family:var(--font-display);font-size:17px;font-weight:500;line-height:1.45;overflow-wrap:anywhere}
 .modal-body{min-height:0;overflow:auto;overscroll-behavior:contain;line-height:1.65;overflow-wrap:anywhere}
+/* P0-4 T03：确认框来源会话徽标（多并行 run 时区分弹窗来源；无标注时零渲染） */
+.modal-session-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:1px 9px;
+  font-size:11px;font-weight:600;line-height:18px;color:var(--text-2);background:var(--bg);
+  border:1px solid var(--border);border-radius:9px;max-width:200px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;overflow-wrap:normal}
+
 .modal-btns{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding-top:12px}
 .modal-btns .modal-btn{min-height:44px}
 .toast-stack{max-height:min(72vh,640px);overflow:auto;overscroll-behavior:contain}

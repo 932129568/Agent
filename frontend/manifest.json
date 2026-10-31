@@ -130,14 +130,18 @@
       "path": "frontend/src/components/overlays.js",
       "provides": [
         "DND_SUPPRESS_TYPES",
+        "_bindOverlayKeyboard",
         "_closeModal",
+        "_confirmSessionLabel",
         "_modalRoot",
         "_notifyItems",
+        "_overlayFocusables",
         "_settlePendingModal",
         "_toastBox",
         "_uiConfirmQueue",
         "_uiConfirmResolve",
         "_uiPromptResolve",
+        "_unbindOverlayKeyboard",
         "dndEnabled",
         "dndSuppressActive",
         "loadDndSetting",
@@ -145,10 +149,7 @@
         "saveDndSetting",
         "toast",
         "uiConfirm",
-        "uiPrompt",
-        "_overlayFocusables",
-        "_bindOverlayKeyboard",
-        "_unbindOverlayKeyboard"
+        "uiPrompt"
       ],
       "requires": []
     },

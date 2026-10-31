@@ -9,9 +9,14 @@
  */
 
 /**
- * 宿主提供者形态（T03 定型）：
- *   - adminMessageBox(cmd): Promise<{allow: boolean}> —— admin 提权人审。
- * @type {{adminMessageBox?: (cmd: string) => Promise<{allow: boolean}>}|null}
+ * 宿主提供者形态（T03 定型，§4.2）：
+ *   - adminMessageBox(req): Promise<{allow: boolean, requestId?: number}>
+ *     req = { cmd: string, sid: string|null } —— admin 提权人审。cmd=用户原
+ *     命令全文（对话框明文展示）；sid=发起 run 的会话 id（commands.js 经
+ *     ALS ctxSid() 取得，宿主用于会话名标注，宿主侧与 server 内部解耦）。
+ *     并发触发由 provider 内部排队串行弹窗、按 requestId 路由回执（§4.2）。
+ * @type {{adminMessageBox?: (req: {cmd: string, sid: string|null}) =>
+ *   Promise<{allow: boolean, requestId?: number}>}|null}
  */
 let host = null
 

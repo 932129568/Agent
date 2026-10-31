@@ -21,7 +21,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
   // v1.2 R2：破坏性操作护栏（delete/kill/剪贴板/截屏/命令执行 → 确认矩阵/保护名单）
   let guardToken = null;
   try {
-    const g = await guardCheckTool(name, args);
+    const g = await guardCheckTool(name, args, runSid);
     if (g && g.blocked) return g.blocked;
     guardToken = (g && g.token) || null;   // 修复 S4①：确认通过换取的一次性 token
   } catch (e) { /* 护栏自身异常不阻断工具执行（fail-open 由后端名单兜底） */ }
@@ -30,7 +30,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
   let mcpToken = null;
   if (name.startsWith('mcp__')) {
     try {
-      const g = await mcpGuardCheck(name, args);
+      const g = await mcpGuardCheck(name, args, runSid);
       if (g.blocked) return g.blocked;
       mcpDecision = g.decision;
       mcpToken = (g && g.token) || null;   // 修复 S4①：MCP 确认 token
@@ -134,7 +134,10 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // agentGuardCheck（guard_check → 确认弹窗 → 一次性 token 回传后端
     // enforce_exec；session 档会话信任缓存，dangerous 每次确认）
     if (name === 'browser_search') {
-      const g = await agentGuardCheck('web_search', { query: String((args && args.query) || '').slice(0, 120) });
+      // P0-4 T03 §4.4：AI 发起的确认弹窗带来源会话徽标 + guard 链按 run 级 sid
+      // 路由（origin 缺省走 'ai'；与 guardCheckTool/mcpGuardCheck 传参同口径）
+      const g = await agentGuardCheck('web_search',
+        { query: String((args && args.query) || '').slice(0, 120) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       // §2.4：CAPTCHA_REQUIRED → 挂起标记（fail-fast + 前端挂起，browser_takeover
       // 终态才由 60-agent-loop 注入上下文——Agent 循环永不挂死在人类动作上）
@@ -149,7 +152,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // APPROVAL_BUDGET_EXCEEDED → maybeBudgetInvite 任务授权邀请，不弹逐项确认）
     if (name === 'browser_navigate') {
       const g = await agentGuardCheck('browser_navigate',
-        { url: String((args && args.url) || '').slice(0, 200) });
+        { url: String((args && args.url) || '').slice(0, 200) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_navigate',
         [(args && args.url) || '', (args && args.wait_selector) || '',
@@ -158,34 +161,34 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     }
     if (name === 'browser_extract') {
       const g = await agentGuardCheck('browser_extract',
-        { selector: String((args && args.selector) || '').slice(0, 80) });
+        { selector: String((args && args.selector) || '').slice(0, 80) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_extract',
         [(args && args.selector) || '', (args && args.mode) || 'markdown', g.token], 90000));
     }
     if (name === 'browser_click') {
       const g = await agentGuardCheck('browser_click',
-        { target: String((args && args.target) || '').slice(0, 120) });
+        { target: String((args && args.target) || '').slice(0, 120) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_click',
         [(args && args.target) || '', g.token], 90000));
     }
     if (name === 'browser_fill') {
       const g = await agentGuardCheck('browser_fill',
-        { selector: String((args && args.selector) || '').slice(0, 80) });
+        { selector: String((args && args.selector) || '').slice(0, 80) }, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_fill',
         [(args && args.selector) || '', (args && args.text) || '', g.token], 90000));
     }
     if (name === 'browser_screenshot') {
-      const g = await agentGuardCheck('browser_screenshot', {});
+      const g = await agentGuardCheck('browser_screenshot', {}, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_screenshot',
         [args && args.full_page === true, g.token], 90000));
     }
     if (name === 'browser_close') {
       // 会话管理类（session 档）：确认后执行；缺省关全部（session_id 可选）
-      const g = await agentGuardCheck('browser_close', {});
+      const g = await agentGuardCheck('browser_close', {}, undefined, runSid);
       if (g.blocked) return g.blocked;
       return maybeBudgetInvite(await callApi('browser_close',
         [(args && args.session_id) || '', g.token], 60000));
@@ -196,7 +199,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
         action: String((args && args.action) || '').slice(0, 40),
         args: args && args.args,
         force_always: args && args.__dangerous === true,
-      });
+      }, undefined, runSid);
       if (g.blocked) return g.blocked;
       // 后端执行上限 600s + 30s 缓冲（与 run_command 660000 同款口径）
       const _swT = pickTimeout(args);
@@ -411,6 +414,9 @@ async function agentGuardCheck(op, detail, origin, runSid, realCallApi = callApi
     title: op === 'web_search' ? '确认执行浏览器搜索'
       : (_isBrowserOp ? '确认浏览器操作' : '确认调用外部软件'),
     body, danger: dangerous || verdict.tier === 'always',
+    // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
+    // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
+    sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: '允许执行',
     checkboxLabel: dangerous ? null : '本会话内不再提示同类操作'
   });

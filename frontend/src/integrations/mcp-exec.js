@@ -46,7 +46,7 @@ function mcpParseName(name) {
  * - 否则 decision ∈ allow/session-trust + token（修复 S4①）传给 mcpExecTool。
  * 异常 → fail-closed（blocked 错误结果）。
  */
-async function mcpGuardCheck(name, args) {
+async function mcpGuardCheck(name, args, runSid) {
   const p = mcpParseName(name);
   if (!p) return { blocked: null, decision: 'allow', token: null };
   args = args || {};
@@ -83,6 +83,9 @@ async function mcpGuardCheck(name, args) {
     (_localMode ? '\n\n⚠ ' + MCP_LOCAL_CAUTION : '');
   const r = await uiConfirm({
     title: '确认调用 MCP 工具', body, danger: verdict.tier === 'always',
+    // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
+    // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
+    sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: '允许调用',
     checkboxLabel: '本会话内不再提示「' + p.server + ' · ' + p.tool + '」' + (_localMode ? '（本地模式：仅本任务有效）' : '')
   });

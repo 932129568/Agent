@@ -8,6 +8,10 @@
  *   4. purge 清理：session_purge 后该 sid 容器全清、其他 sid 不受影响；
  *   5. A/B 交替 save 全量数组不丢条目（R4 共享知识纪律）；
  *   6. 静态断言：services/** 无 runtime.currentSid 直读（persist 全局写除外）。
+ * P0-4 T03 增补：
+ *   7. 并行 run 端到端（bridge 源码 → HTTP → ALS 隔离）；
+ *   8. admin 人审并发（host mock 注入 setHostDialogProvider：provider 按 sid
+ *      配对回执互不串扰 + 拒绝文案逐字 + 无宿主 fail-closed 桩原样）。
  *
  * 全部经 buildServer + app.inject 走真实路由（ALS 请求级上下文唯一真实路径）。
  */
@@ -223,6 +227,77 @@ await check('并行 run 端到端：bridge 注入 sid，两会话各自工作区
   // get_cwd 各自独立
   assert.equal(await callApi('get_cwd', [], 60000, 'e2e-A'), wsE2eA)
   assert.equal(await callApi('get_cwd', [], 60000, 'e2e-B'), wsE2eB)
+})
+
+/* ---------------- 8. admin 人审并发（P0-4 T03 §4.2：host mock 注入 + sid 路由） ---------------- */
+await check('admin 人审并发：provider 按 sid 配对回执，A 允许越过人审门、B 拒绝文案逐字（互不串扰）', async () => {
+  const host = await import('../src/host.js')
+  assert.equal(host.hasHost(), false, '前置：本用例前无宿主注册（dev/差分 fail-closed 基线）')
+
+  // A=允许腿、B=拒绝腿：各自独立工作区（per-sid cwd）。**允许腿** A 的工作区在
+  // set_workspace 之后删除——放行后 execute 在 spawn 处 ENOENT 快速失败，**不点
+  // UAC 实弹**（留给 T06 真机验收），仍可证明「允许裁决已路由回 A 并越过人审门」
+  // （回执=admin 成功方言 exit_code=1，而拒绝腿收到的是 skipped 回执）。
+  const wsAadm = path.join(tmp, 'wsAadm')
+  const wsBadm = path.join(tmp, 'wsBadm')
+  fs.mkdirSync(wsAadm, { recursive: true })
+  fs.mkdirSync(wsBadm, { recursive: true })
+  await call('set_workspace', [wsAadm], 'sid-Aadm')
+  await call('set_workspace', [wsBadm], 'sid-Badm')
+  fs.rmSync(wsAadm, { recursive: true, force: true })
+
+  const cmdA = 'echo admin-allow-probe-a'
+  const cmdB = 'echo admin-deny-probe-b'
+  const seen = []            // provider 到达记录（(sid, cmd, requestId) 配对断言）
+  const pending = new Map()  // requestId -> resolve（回执路由 + 失败路径防悬挂）
+  let seq = 0
+  let gateClosed = false
+  host.setHostDialogProvider({
+    // 生产 provider 语义复刻（§4.2）：并发触发 → 内部排队串行弹窗、按 requestId 回执
+    adminMessageBox(req) {
+      const requestId = ++seq
+      if (gateClosed) return Promise.resolve({ allow: false, requestId })
+      seen.push({ sid: req.sid, cmd: req.cmd, requestId })
+      return new Promise(resolve => { pending.set(requestId, resolve) })
+    },
+  })
+  assert.equal(host.hasHost(), true)
+
+  try {
+    const pA = call('run_admin_command', [cmdA, null, 5], 'sid-Aadm')
+    const pB = call('run_admin_command', [cmdB, null, 5], 'sid-Badm')
+    // 等 A/B 两个人审请求都到达 provider（并发触发，到达序不定 → 按集合断言）
+    for (let i = 0; i < 200 && seen.length < 2; i += 1) {
+      await new Promise(r => setTimeout(r, 10))
+    }
+    assert.equal(seen.length, 2, `A/B 两请求都应到达 provider: ${JSON.stringify(seen)}`)
+    const bySid = Object.fromEntries(seen.map(x => [x.sid, x]))
+    assert.deepEqual(
+      [bySid['sid-Aadm'].cmd, bySid['sid-Badm'].cmd], [cmdA, cmdB],
+      'provider 收到的 (sid, cmd) 必须与会话一一配对（ALS ctxSid 标注零串扰）')
+    assert.notEqual(bySid['sid-Aadm'].requestId, bySid['sid-Badm'].requestId, 'requestId 互异')
+
+    // 回执路由：A 允许 / B 拒绝——各自 requestId 对号入座
+    pending.get(bySid['sid-Aadm'].requestId)({ allow: true, requestId: bySid['sid-Aadm'].requestId })
+    pending.get(bySid['sid-Badm'].requestId)({ allow: false, requestId: bySid['sid-Badm'].requestId })
+    const [resA, resB] = await Promise.all([pA, pB])
+
+    // 拒绝腿：文案逐字（契约面零变化）
+    assert.equal(resB.body, '{"info":"用户拒绝了本次管理员命令，请改用无需提权的方案。","skipped":true}')
+    // 允许腿：A 越过人审门进入 UAC 腿（本测试环境因工作区已删除 spawn-ENOENT
+    // 快速失败 → admin 成功方言 exit_code=1）；B 则停留在人审门的 skipped 回执
+    assert.equal(resA.body, '{"exit_code":1,"output":"","note":"已通过管理员权限执行"}')
+  } finally {
+    gateClosed = true
+    for (const resolve of pending.values()) resolve({ allow: false })
+    pending.clear()
+  }
+
+  // 注销宿主=回退无宿主行为：fail-closed 桩原样（拒绝文案逐字，不再咨询 provider）
+  host.setHostDialogProvider(null)
+  assert.equal(host.hasHost(), false)
+  const resC = await call('run_admin_command', ['echo admin-failclosed-probe-c', null, 5], 'sid-Cadm')
+  assert.equal(resC.body, '{"info":"用户拒绝了本次管理员命令，请改用无需提权的方案。","skipped":true}')
 })
 
 await app.close()

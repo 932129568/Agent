@@ -144,6 +144,28 @@ function toast(msg, type, opts) {
 }
 
 /* ---- 模态层 ---- */
+/* P0-4 T03（§4.4）：确认框来源会话标注——多并行 run 时区分弹窗来源（会话名徽标）。
+ * 解析序：在途 run 注册表（__agentRuns，覆盖后台并行 run）→ 会话列表 title →
+ * 短 sid 兜底；任一步取不到/异常返回 ''（不渲染徽标，pywebview 串行链零变化）。 */
+function _confirmSessionLabel(sid) {
+  sid = String(sid == null ? '' : sid).trim();
+  if (!sid) return '';
+  try {
+    let title = '';
+    if (typeof __agentRuns !== 'undefined' && __agentRuns && typeof __agentRuns.get === 'function') {
+      const r = __agentRuns.get(sid);
+      if (r && r.session && r.session.title) title = r.session.title;
+    }
+    if (!title && typeof sessions !== 'undefined' && Array.isArray(sessions)) {
+      const s = sessions.find(x => x && x.id === sid);
+      if (s && s.title) title = s.title;
+    }
+    title = String(title == null ? '' : title).trim();
+    if (title) return title;
+  } catch (e) { /* 标注失败不影响确认流程 */ }
+  return sid.length > 12 ? sid.slice(0, 8) + '…' + sid.slice(-4) : sid;
+}
+
 let _uiConfirmResolve = null;   // 修复 S22：当前挂起确认的兜底 resolve（模态被外部关闭时按「取消」收尾）
 let _uiPromptResolve = null;    // 修复 W22（二轮）：uiPrompt 的兜底 resolve（原其 Promise 永不 settle）
 let _uiConfirmQueue = Promise.resolve();   // 修复 S22：全局串行队列——并发确认依次弹窗，不再互相覆盖
@@ -241,7 +263,8 @@ function _closeModal() {
 }
 
 /**
- * uiConfirm({title, body, danger, okText, cancelText, checkboxLabel, checkboxLabel2})
+ * uiConfirm({title, body, danger, okText, cancelText, checkboxLabel, checkboxLabel2, sessionLabel})
+ *   sessionLabel = P0-4 T03 来源会话标注（标题旁会话名徽标，多并行 run 区分来源）
  * → Promise<{ok:boolean, checked?:boolean, checked2?:boolean}>
  *   checked  = 第一勾选（本会话内不再提示）；checked2 = 第二勾选（永久信任，UX-2 v1.4）
  */
@@ -264,6 +287,14 @@ function uiConfirm(opts) {
       '<button class="modal-btn modal-ok"></button>' +
       '</div></div>';
     m.querySelector('.modal-title').textContent = opts.title || '确认';
+    // P0-4 T03：来源会话徽标（多并行 run 区分弹窗来源；无标注时零渲染）
+    if (opts.sessionLabel) {
+      const badge = document.createElement('span');
+      badge.className = 'modal-session-badge';
+      badge.title = '来源会话：' + opts.sessionLabel;
+      badge.textContent = opts.sessionLabel;
+      m.querySelector('.modal-title').appendChild(badge);
+    }
     const body = m.querySelector('.modal-body');
     if (opts.bodyHtml) body.innerHTML = opts.bodyHtml;
     else body.textContent = opts.body || '';

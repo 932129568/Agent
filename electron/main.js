@@ -30,10 +30,15 @@
  *     裸 blob 契约、四向互解不成立 → dpapi.js 路径 1 默认停用（HARBOR_SAFESTORAGE=1
  *     选回），全宿主统一 PS ProtectedData 保跨语言/双轨回退兼容。
  *
+ * T03 增量（2026-10-31）：admin 人审对话框 provider（§4.2/Q7 原生 dialog）——
+ *   listen 后注册 setHostDialogProvider（HEADLESS 不注册=fail-closed 桩）；
+ *   并发人审经 Promise 队列串行弹窗、按 requestId 路由回执；sid 标注=DB 会话
+ *   名（不可查则短 sid）；默认按钮/Esc=拒绝（fail-closed）。
+ *
  * 红线对位：main.py / backend/ Python 零改动；config.json 零污染（shell 配置仅
  * 经本进程 env 注入）；server 只绑 127.0.0.1；dist/ 不触碰。
  */
-const { app, BrowserWindow, safeStorage } = require('electron')
+const { app, BrowserWindow, dialog, safeStorage } = require('electron')
 const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -105,6 +110,16 @@ async function boot() {
   const port = serverApp.server.address().port
   console.log('[harbor] server listening:', base, '(methods 面 /health)')
 
+  // T03（§4.2）：admin 人审对话框 provider 注册——任何 run_admin_command 人审
+  // 请求经 host 接缝路由到本进程的原生 dialog（并发排队串行 + requestId 回执
+  // 路由 + 会话名标注）。HEADLESS（server-only 验收）不注册 → 维持无宿主
+  // fail-closed 桩语义（与差分/dev 环境一致）。
+  if (!HEADLESS) {
+    const host = await import(pathToFileURL(path.join(ROOT, 'server', 'src', 'host.js')).href)
+    host.setHostDialogProvider({ adminMessageBox: adminMessageBoxProvider })
+    console.log('[harbor] host dialog provider registered (adminMessageBox)')
+  }
+
   // 时序③（T02）：fresh-DB 建表先行——ensureSchema 幂等 DDL（db.js SCHEMA_DDL
   // 与 prisma db push 逐字一致），避免首窗 /health、会话面与 bootstrap 后台链
   // 的建表竞态；失败=数据库不可用，按 fail-fast 处理（boot 失败退出）。
@@ -159,6 +174,69 @@ async function boot() {
   })
   await win.loadFile(path.join(ROOT, 'harbor.html'))
   console.log('[harbor] window loaded; bridge base =', process.env.HARBOR_API_BASE)
+}
+
+/* ================= T03：admin 人审对话框 provider（§4.2 / Q7 原生 dialog） =================
+ * 注册进 server/src/host.js 接缝：runAdminCommand 人审点经 hasHost() 调到此处。
+ * - 形态：Electron 原生 dialog.showMessageBox（模态、含命令全文 + 来源会话标识 +
+ *   允许/拒绝按钮；安全门独立于渲染进程存活——页面卡死人审仍可达）；
+ * - 并发排队（§4.2）：多并行 run 同时触发人审 → Promise 队列串行弹窗，每个请求
+ *   分配递增 requestId，回执携带 requestId 路由回对应调用方，杜绝「确认框与来源
+ *   会话错位」；
+ * - sid 标注：commands.js 经 ALS ctxSid() 传 sid → DB 可查会话名则标注会话名，
+ *   否则短 sid 兜底；
+ * - fail-closed：dialog 失败/异常一律回 {allow:false}（R9：唯一提权门不 fail-open）；
+ *   默认按钮与 Esc 均为「拒绝」（回车误触不提权）；
+ * - HARBOR_HEADLESS=1（server-only 验收）不注册：无 UI 可交互，维持无宿主
+ *   fail-closed 桩语义（与差分/dev 环境一致）。 */
+let adminDialogSeq = 0
+let adminDialogTail = Promise.resolve()
+
+async function adminSessionLabel(sid) {
+  const id = String(sid || '').trim()
+  if (!id) return '（未知会话）'
+  try {
+    const db = await importDb()
+    const row = await db.prisma.session.findUnique({ where: { id } })
+    const title = row && row.title ? String(row.title).trim() : ''
+    if (title) return title
+  } catch (error) { /* DB 不可查（未就绪/已断连）：短 sid 兜底 */ }
+  return id.length > 12 ? id.slice(0, 8) + '…' + id.slice(-4) : id
+}
+
+/** 单次弹窗（队列串行化后逐个执行）；回执 {allow, requestId}。 */
+async function showAdminMessageBoxOnce(requestId, req) {
+  const cmdText = String((req && req.cmd) || '')
+  const label = await adminSessionLabel(req && req.sid)
+  const opts = {
+    type: 'warning',
+    buttons: ['允许执行', '拒绝'],
+    defaultId: 1,   // 回车=拒绝（fail-closed 默认）
+    cancelId: 1,    // Esc=拒绝
+    noLink: true,
+    title: 'Harbor 管理员命令人审',
+    message: `AI 请求以管理员权限执行命令（请求 #${requestId}）`,
+    detail: `来源会话：${label}\n命令全文：\n${cmdText}\n\n允许后将弹出 UAC 提权确认；拒绝则该命令不执行。`,
+  }
+  try {
+    const parent = win && !win.isDestroyed() ? win : undefined
+    const { response } = parent
+      ? await dialog.showMessageBox(parent, opts)
+      : await dialog.showMessageBox(opts)
+    console.log(`[harbor] admin dialog #${requestId} resolved: response=${response} sid=${(req && req.sid) || ''}`)
+    return { allow: response === 0, requestId }
+  } catch (error) {
+    console.error(`[harbor] admin dialog #${requestId} failed (fail-closed):`, error && error.message)
+    return { allow: false, requestId }
+  }
+}
+
+/** provider 入口：并发请求入 Promise 队列（串行弹窗），回执按 requestId 路由。 */
+function adminMessageBoxProvider(req) {
+  const requestId = ++adminDialogSeq
+  const run = adminDialogTail.then(() => showAdminMessageBoxOnce(requestId, req))
+  adminDialogTail = run.then(() => {}, () => {})   // 队尾吞错：后续请求不受前序失败阻塞
+  return run
 }
 
 /** 关窗优雅停机（§2.3）：mcp/browser（app.close→onClose 钩子）→ db 断连 → quit。 */

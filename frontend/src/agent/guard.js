@@ -93,7 +93,7 @@ async function _guardDescribe(op, args) {
  *   blocked 为 null → 放行；blocked 为 JSON 字符串 → 拦截结果（直接作为工具结果返回给 AI）；
  *   token → 修复 S4①：用户「允许」后从后端换取的一次性 confirm token（携带调实际 op）。
  */
-async function guardCheckTool(name, args) {
+async function guardCheckTool(name, args, runSid) {
   const op = GUARD_OP_MAP[name];
   if (!op) return { blocked: null, token: null };
   args = args || {};
@@ -126,6 +126,9 @@ async function guardCheckTool(name, args) {
   const desc = await _guardDescribe(op, args);
   const r = await uiConfirm({
     title: desc.title, body: desc.body, danger: desc.danger,
+    // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
+    // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
+    sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: desc.danger ? '允许执行' : '允许',
     checkboxLabel: '本会话内不再提示「' + GUARD_OP_LABEL[op] + '」',
     // 修复 UX-2（v1.4）：第二勾选=永久信任（op 级，写 guard.json trustedOps，重启仍生效）

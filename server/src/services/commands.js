@@ -18,6 +18,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { ctxRoot, ctxSid } from '../session-context.js'
+import { hasHost, getHostDialogProvider } from '../host.js'
 import { enforceExec } from './guard.js'
 import { cacheToolOutput } from './files.js'
 
@@ -189,13 +190,29 @@ export async function runPowershell(command, timeout, token) {
   return execute(command, timeout, token, 'powershell')
 }
 
-/** admin 人审门（E4）：HARBOR_TEST_MSGBOX seam（6=放行/7=拒绝）；无 seam 且无
- * UI 钩子 → fail-closed 拒绝（与 Python IDNO 同款回执）。UAC 为第二道门。 */
-function adminMessageBoxDecision(cmd) {
+/** admin 人审门（E4 + P0-4 §4.2 接线）：优先级 seam → 宿主 provider → fail-closed。
+ *   ① HARBOR_TEST_MSGBOX seam（6=放行/7=拒绝）——测试钩子，语义逐字保留；
+ *   ② 有宿主（A1 Electron 主进程注册 setHostDialogProvider）→ provider 模态
+ *      对话框（含命令全文 + 会话标识；并发 run 由 provider 内排队串行，按
+ *      requestId 路由回执）；provider 缺 adminMessageBox/异常/非法回执一律
+ *      按 fail-closed 收敛（R9：唯一提权门不 fail-open）；
+ *   ③ 无宿主（dev/差分/测试环境）→ fail-closed 桩原样（逐字节不变——差分
+ *      零翻转的根基）。UAC（Start-Process -Verb RunAs）为放行后的第二道门。 */
+async function adminMessageBoxDecision(cmd) {
   const seam = process.env.HARBOR_TEST_MSGBOX
   if (seam === '6') return { allow: true }
   if (seam === '7') return { allow: false }
-  // 生产：P0-4 接 Electron 对话框；接线前 fail-closed（收紧，不静默提权）
+  if (hasHost()) {
+    const hook = getHostDialogProvider()?.adminMessageBox
+    if (typeof hook === 'function') {
+      try {
+        // sid 标注（§4.2）：ALS 请求上下文取当前会话，宿主侧查会话名做对话框标注
+        const verdict = await hook({ cmd, sid: ctxSid() })
+        if (verdict && typeof verdict.allow === 'boolean') return { allow: verdict.allow }
+      } catch { /* provider 异常 → 落 fail-closed */ }
+    }
+  }
+  // 无宿主 fail-closed 桩（与 Python IDNO 同款回执；收紧，不静默提权）
   return { allow: false }
 }
 
@@ -214,7 +231,7 @@ export async function runAdminCommand(command, token, timeout) {
     return okJson({ info: dedupTip, skipped: true })
   }
 
-  const verdict = adminMessageBoxDecision(cmd)
+  const verdict = await adminMessageBoxDecision(cmd)
   if (!verdict.allow) {
     return okJson({ info: '用户拒绝了本次管理员命令，请改用无需提权的方案。', skipped: true })
   }
