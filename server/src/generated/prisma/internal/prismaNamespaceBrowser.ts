@@ -51,7 +51,8 @@ export const AnyNull = runtime.AnyNull
 
 
 export const ModelName = {
-  Session: 'Session'
+  Session: 'Session',
+  Meta: 'Meta'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -80,6 +81,14 @@ export const SessionScalarFieldEnum = {
 } as const
 
 export type SessionScalarFieldEnum = (typeof SessionScalarFieldEnum)[keyof typeof SessionScalarFieldEnum]
+
+
+export const MetaScalarFieldEnum = {
+  key: 'key',
+  value: 'value'
+} as const
+
+export type MetaScalarFieldEnum = (typeof MetaScalarFieldEnum)[keyof typeof MetaScalarFieldEnum]
 
 
 export const SortOrder = {

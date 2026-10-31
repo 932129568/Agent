@@ -9,4 +9,5 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/Session.ts'
+export type * from './models/Meta.ts'
 export type * from './commonInputTypes.ts'

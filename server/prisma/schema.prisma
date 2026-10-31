@@ -29,3 +29,11 @@ model Session {
   @@index([updatedAt])
   @@index([projectId])
 }
+
+// P0-2：迁移/元数据标记表（schema_version、migration_legacy_sessions、
+// dpapi-migration-v1.done 等）。键值形，绝不承载业务数据；新标记一律独立键，
+// 不写入 config.json（零污染红线）。
+model Meta {
+  key   String @id
+  value String
+}

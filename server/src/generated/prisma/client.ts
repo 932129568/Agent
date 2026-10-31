@@ -46,3 +46,8 @@ export { Prisma }
  * 
  */
 export type Session = Prisma.SessionModel
+/**
+ * Model Meta
+ * 
+ */
+export type Meta = Prisma.MetaModel
