@@ -7,6 +7,7 @@
     "node": ">=27.0.0-alpha.0.0.0",
     "npm": ">=12.0.0"
   },
+  "main": "electron/main.js",
   "scripts": {
     "build:ui-schema": "node tools/build_ui_schema_bundle.js",
     "build:island": "npm --prefix frontend/react run build",
@@ -14,12 +15,15 @@
     "build:all": "npm run build:island && npm run build",
     "diff:all": "npm --prefix server run diff:all",
     "smoke:island": "node tools/smoke_harbor_island.js",
-    "perf:confirm": "node tools/perf_confirm_path.js"
+    "perf:confirm": "node tools/perf_confirm_path.js",
+    "desktop": "electron ."
   },
   "dependencies": {
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
     "esbuild": "0.28.2"
   },
   "allowScripts": {

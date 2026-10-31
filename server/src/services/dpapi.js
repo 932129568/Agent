@@ -5,9 +5,17 @@
  * 不可用/异常 → 原样明文 + 日志（不锁死用户配置）；解密失败（换机/换用户）
  * → 返回内层串（面板告警语义）。
  *
- * 实现路径优先级（Q4 裁定）：
- *   1. Electron safeStorage（process.versions.electron 存在时，P0-4 注入）；
- *   2. PowerShell .NET ProtectedData.Protect/Unprotect（独立 Node 主路径——
+ * 实现路径优先级（Q4 裁定；**P0-4 T02 修订**）：
+ *   1. Electron safeStorage——**默认停用，HARBOR_SAFESTORAGE=1 可选回**。T02 实测
+ *      （2026-10-31，electron 45.2.1）：safeStorage 在 Windows 走 Chromium OSCrypt，
+ *      密文 = 'v10' 前缀 + AES-256-GCM、密钥在 <userData>/Local State（DPAPI 保护），
+ *      **不是**本文件格式契约的 CurrentUser 域 CryptProtectData 裸 blob；且
+ *      decryptString 硬性要求 v10 前缀、无 DPAPI 回退——四向互解实测全不成立
+ *      （Electron→PS「数据无效」、Electron→mcp_dpapi 原样兜底、PS/Python→Electron
+ *      「does not appear to be encrypted」）。在 Q6=② 双轨周期内激活会双向锁死
+ *      密钥字段，故宿主默认统一走路径 2 保格式兼容；路径 1 待迁移工具 + 双轨期
+ *      结束（P1）再裁定默认翻转。
+ *   2. PowerShell .NET ProtectedData.Protect/Unprotect（**默认主路径，全宿主**——
  *      与 Python ctypes 同一底层 CryptProtectData，跨语言密文兼容）；
  *   3. 不可用 → 明文兜底 + W17 warning（与 Python 逐字一致）。
  *
@@ -88,11 +96,31 @@ foreach ($item in $items) {
 
 let availabilityProbe = null
 
-/** 当前环境 DPAPI 是否可用（Electron safeStorage 优先；否则 PS 往返探测缓存）。 */
+/**
+ * 路径 1（safeStorage）启用判定（T02 修订）：electron 宿主 + HARBOR_SAFESTORAGE=1
+ * 显式选入。缺省关闭——保 'dpapi:' CurrentUser 裸 blob 格式契约与 PS/Python 双向兼容
+ * （理由见文件头 T02 修订注）。
+ */
+function useSafeStorage() {
+  return !!process.versions.electron && process.env.HARBOR_SAFESTORAGE === '1'
+}
+
+/**
+ * 当前宿主的 codec 路径（T02 §3.1 /storage/security source 字段唯一事实源）：
+ * 'electron-safeStorage' | 'powershell' | 'unavailable'。纯函数，零副作用。
+ */
+export function activeCodecPath() {
+  if (useSafeStorage()) return 'electron-safeStorage'
+  if (process.platform === 'win32') return 'powershell'
+  return 'unavailable'
+}
+
+/** 当前环境 DPAPI 是否可用（默认 PS 往返探测缓存；HARBOR_SAFESTORAGE=1 时
+ * Electron 宿主走 safeStorage 探测）。 */
 export async function isAvailable() {
   if (availabilityProbe !== null) return availabilityProbe
   availabilityProbe = (async () => {
-    if (process.versions.electron) {
+    if (useSafeStorage()) {
       try {
         const { safeStorage } = await import('electron')
         return safeStorage.isEncryptionAvailable()
@@ -128,7 +156,7 @@ export async function encryptValues(values) {
   if (input.every(v => v === '')) return input
   if (await isAvailable()) {
     try {
-      if (process.versions.electron) {
+      if (useSafeStorage()) {
         const safeStorage = await electronApi()
         return input.map(v => (v === '' ? v : ENC_PREFIX + safeStorage.encryptString(v).toString('base64')))
       }
@@ -158,7 +186,7 @@ export async function decryptValues(markers) {
   if (await isAvailable()) {
     try {
       let plain
-      if (process.versions.electron) {
+      if (useSafeStorage()) {
         const safeStorage = await electronApi()
         plain = pending.map(b64 => (b64 === null ? null : safeStorage.decryptString(Buffer.from(b64, 'base64')).toString('utf8')))
       } else {
