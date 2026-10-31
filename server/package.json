@@ -1,0 +1,56 @@
+{
+  "name": "harbor-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Harbor Node backend (fastify + zod + prisma + better-auth + pino), Node 27 baseline",
+  "engines": {
+    "node": ">=27.0.0-alpha.0.0.0",
+    "npm": ">=12.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "smoke": "node test/smoke.mjs",
+    "test:auth": "node test/auth-flow.mjs",
+    "test:files": "node test/files.mjs",
+    "test:state": "node test/state-services.mjs",
+    "test:checkpoint-git": "node test/checkpoint-git.mjs",
+    "test:system": "node test/system-misc.mjs",
+    "test:provider": "node test/provider-http.mjs",
+    "test:guard": "node test/guard.mjs",
+    "test:commands": "node test/commands.mjs",
+    "test:update": "node test/update.mjs",
+    "test:webdav": "node test/webdav.mjs",
+    "test:experts": "node test/experts.mjs",
+    "test:mcp": "node test/mcp.mjs",
+    "test:browser": "node test/browser.mjs",
+    "test:contract": "node test/contract-coverage.mjs && node test/contract-signatures.mjs",
+    "test:bridge": "node ../tools/test_bridge_http.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@libsql/kysely-libsql": "^0.4.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@prisma/adapter-libsql": "^7.10.1",
+    "@prisma/client": "7.10.1",
+    "better-auth": "1.7.14",
+    "fastify": "5.12.7",
+    "iconv-lite": "^0.7.3",
+    "kysely": "^0.29.7",
+    "pino": "10.4.0",
+    "playwright-core": "^1.64.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "prisma": "7.10.1"
+  },
+  "allowScripts": {
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true,
+    "better-sqlite3@12.11.1": true,
+    "better-sqlite3@13.0.3": true
+  }
+}

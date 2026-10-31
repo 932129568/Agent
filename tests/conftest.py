@@ -276,7 +276,7 @@ def _reset_sandbox_stats():
     每个测试从干净计数起步；既有断言全部为 st0→st1 增量式，两种起步态下等价。
     取当前模块对象（reload 后为重绑定模块），重置其 _STATS。"""
     try:
-        from backend.services import sandbox_service as _sb
+        from backend.domains.workspace import sandbox_service as _sb
         with _sb._STATS_LOCK:
             for _k in list(_sb._STATS.keys()):
                 _sb._STATS[_k] = 0

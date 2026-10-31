@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Harbor 入口：装配 backend 并启动 pywebview 窗口。
 
-业务逻辑全部在 backend/ 包（门面 + services + 基础设施）；
+业务逻辑全部在 backend/ 包（协议门面 + application + domains + 基础设施）；
 本文件只做装配与启动，`import main` 不产生副作用（webview 延迟导入）。
 """
 import atexit
@@ -13,8 +13,7 @@ from backend import paths
 from backend.api import API_VERSION, Api
 from backend.fio import cleanup_stale_tmps
 from backend.logging_setup import setup_logging
-from backend.services.local_proxy import shutdown_proxy
-from backend.services.update_service import APP_VERSION, cleanup_old_backup
+from backend.domains.integrations.update_service import APP_VERSION, cleanup_old_backup
 
 
 def _write_api_log(api):
@@ -40,46 +39,39 @@ def _write_api_log(api):
         pass
 
 
-def _enable_context_menu(window):
-    """强制开启 WebView2 右键菜单（pywebview 非 debug 模式默认关闭）。
-    CoreWebView2 只能在 UI 线程访问；loaded 回调在后台线程，
-    必须 BeginInvoke 切回 UI 线程，否则报
-    'CoreWebView2 can only be accessed from the UI thread' / E_NOINTERFACE。"""
-    try:
-        form = window.native
-        if form is None:
-            print('[ctxmenu] 窗口未就绪，前端自定义右键菜单兜底')
-            return
-
-        def _find_ctrl():
-            # 只能在 UI 线程里找控件、读属性
+def _enable_context_menu(api, window):
+    """Route CoreWebView2 settings through the window-affine dispatcher."""
+    def _ui_work():
+        try:
+            form = window.native
+            if form is None:
+                print('[ctxmenu] 窗口未就绪，前端自定义右键菜单兜底')
+                return
+            ctrl = None
             for name in ('web_view', 'webview', 'webView'):
                 ctrl = getattr(form, name, None)
                 if ctrl is not None:
-                    return ctrl
-            try:
-                for c in form.Controls:
-                    if 'WebView2' in c.GetType().FullName:
-                        return c
-            except Exception:
-                pass
-            return None
+                    break
+            if ctrl is None:
+                try:
+                    for candidate in form.Controls:
+                        if 'WebView2' in candidate.GetType().FullName:
+                            ctrl = candidate
+                            break
+                except Exception:
+                    pass
+            core = getattr(ctrl, 'CoreWebView2', None) if ctrl is not None else None
+            if core is None:
+                print('[ctxmenu] CoreWebView2 暂不可用，前端自定义右键菜单兜底')
+                return
+            core.Settings.AreDefaultContextMenusEnabled = True
+            core.Settings.AreDevToolsEnabled = True
+            print('[ctxmenu] 原生右键菜单已开启')
+        except Exception as e:
+            print('[ctxmenu] UI 线程内开启失败，前端自定义右键菜单兜底:', e)
 
-        def _ui_work():
-            try:
-                ctrl = _find_ctrl()
-                core = getattr(ctrl, 'CoreWebView2', None) if ctrl is not None else None
-                if core is None:
-                    print('[ctxmenu] CoreWebView2 暂不可用，前端自定义右键菜单兜底')
-                    return
-                core.Settings.AreDefaultContextMenusEnabled = True
-                core.Settings.AreDevToolsEnabled = True
-                print('[ctxmenu] 原生右键菜单已开启')
-            except Exception as e:
-                print('[ctxmenu] UI 线程内开启失败，前端自定义右键菜单兜底:', e)
-
-        from System import Action
-        form.BeginInvoke(Action(_ui_work))
+    try:
+        api._native_ui.invoke(window, _ui_work, stage='context-menu')
     except Exception as e:
         print('[ctxmenu] 开启失败，前端自定义右键菜单兜底:', e)
 
@@ -165,24 +157,19 @@ def main():
         api = Api()
         _write_api_log(api)
 
-        # v1.3 MCP：进程退出时按规范关停全部 stdio 子进程（关 stdin→等→TERM→KILL）
-        atexit.register(api.mcp_shutdown)
-        # v1.9.0 M3：浏览器驱动服务随进程退出关闭全部会话（daemon sweeper 双保险）
-        atexit.register(api._driver.shutdown)
-        # v1.6 HF-P0：本地 CORS 代理随进程退出关停（daemon 线程，双保险）
-        atexit.register(shutdown_proxy)
+        # 单容器逆序关闭搜索、代理、驱动与 MCP，避免重复注册和第二套装配。
+        atexit.register(api._shutdown)
 
-        window = webview.create_window(
-            # 修复（2026-10-17）：窗口标题显示**应用版本**（APP_VERSION，用户感知版本），
-            # 不再是 API_VERSION（js_api 契约版本，被契约差分钉死永远 v1.0.0）——
-            # 原标题让用户永远看到 v1.0.0，无法判断自己跑的版本/更新是否生效
-            'Harbor [v' + APP_VERSION + ']',
-            url=html_path,
-            js_api=api,
-            width=1180,
-            height=800,
-            min_size=(860, 620),
-        )
+        window = api._native_ui.bootstrap_create(
+            'main', lambda: webview.create_window(
+                # 标题使用用户感知应用版本，不用冻结的 API 契约版本。
+                'Harbor [v' + APP_VERSION + ']',
+                url=html_path,
+                js_api=api,
+                width=1180,
+                height=800,
+                min_size=(800, 600),
+            ))
         api._set_window(window)  # Window 引用放 RuntimeState，不挂 js_api 实例（同时武装护栏）
 
         # v1.8.0 B 域：搜索次窗装配（照 api._set_window 注入模式——680×520 隐藏
@@ -195,14 +182,14 @@ def main():
         # （file: vs about: 伪盘符）直接崩在 webview.start()。指向主窗口同一
         # harbor.html（次窗 hidden，加载什么无所谓，用时 load_url 导航）。
         try:
-            _search_win = webview.create_window(
-                'Harbor 搜索', url=html_path, js_api=None,
-                width=680, height=520, hidden=True)
+            _search_win = api._native_ui.bootstrap_create(
+                'search', lambda: webview.create_window(
+                    'Harbor 搜索', url=html_path, js_api=None,
+                    width=680, height=520, hidden=True))
             api._search.set_window(_search_win)
-            atexit.register(api._search.shutdown)   # 退出时停回收线程 + 销毁次窗
         except Exception as e:            log.warning('搜索次窗装配失败（搜索将回落 urllib 直连抓取）: %r', e)
 
-        window.events.loaded += lambda: _enable_context_menu(window)
+        window.events.loaded += lambda: _enable_context_menu(api, window)
 
         # 修复（2026-10-21 用户实测 P1）：关窗后进程永驻。pywebview 的
         # webview.start() 要等**所有**窗口关闭才返回——「Harbor 搜索」次窗
@@ -216,7 +203,7 @@ def main():
             try:
                 for w in list(webview.windows):
                     if w is not window:
-                        w.destroy()
+                        api._native_ui.destroy(w)
                         log.info('关窗时销毁次窗: %s', getattr(w, 'title', '?'))
             except Exception as e:
                 log.warning('关窗销毁次窗失败: %r', e)

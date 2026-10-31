@@ -50,7 +50,7 @@ def _read(fname):
 
 
 def _load(pid):
-    from backend.services import prompt_loader as pl
+    from backend.domains.providers import prompt_loader as pl
     pl.clear_cache()
     return pl.load(pid)
 
@@ -58,7 +58,7 @@ def _load(pid):
 class TestFifteenPrompts:
     def test_fifteen_prompts_load(self):
         """manifest 15 条全部经 loader 可加载（text+version 非空）。"""
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         ids = pl.list_ids()
         assert len(ids) == 15, ids

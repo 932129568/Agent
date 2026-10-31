@@ -12,7 +12,7 @@ from conftest import fresh_home  # noqa: E402
 
 class TestGuardMatrix:
     def test_new_ops_in_matrix(self):
-        from backend.services.guard_service import GUARD_OPS, DEFAULT_TIERS
+        from backend.domains.security.guard_service import GUARD_OPS, DEFAULT_TIERS
         assert 'web_search' in GUARD_OPS and 'software_call' in GUARD_OPS
         # 用户裁决（2026-10-24）：搜索只读无本地副作用、全程留审计——默认放行
         # 免每次确认（原 session 档）；护栏设置可提档 session/always 加固
@@ -20,14 +20,14 @@ class TestGuardMatrix:
         assert DEFAULT_TIERS['software_call'] == 'session'
 
     def test_check_confirm_default(self, fresh_home):
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         g = GuardService()
         assert g.check('web_search', {'query': 'x'})['action'] == 'allow'
         r = g.check('software_call', {'software': 'git', 'action': 'status'})
         assert r['action'] == 'confirm'      # session 档默认需确认
 
     def test_off_tier_allow(self, fresh_home):
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         g = GuardService()
         g.save_config(json.dumps({'tiers': {'web_search': 'off'}}))
         assert g.check('web_search', {'query': 'x'})['action'] == 'allow'
@@ -77,7 +77,7 @@ class TestApiEnforce:
     def test_dangerous_force_always(self, fresh_home):
         """dangerous action：force_always 置位 → 无 token 必拒（§4.4）。"""
         from backend.api import Api
-        from backend.services import software_service as ss_mod
+        from backend.domains.integrations import software_service as ss_mod
         api = Api()
         svc = api._software
         # 塞一个 dangerous 动作的假注册项

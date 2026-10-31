@@ -5,14 +5,14 @@
     HTTP 500: Jinja Exception: System message must be at the beginning
 
 根因链路（已确认）：
-1. ``frontend/src/100-send.js`` 首轮会话把【工作日志】以 ``role:'system'``
+1. ``frontend/src/chat/send.js`` 首轮会话把【工作日志】以 ``role:'system'``
    **追加到历史末尾**（``s.messages.push(...)``）；
-2. ``frontend/src/60-agent-loop.js`` 组请求时 ``[system(系统提示词), ...slimMsgs]``，
+2. ``frontend/src/agent/run-controller.js`` 组请求时 ``[system(系统提示词), ...slimMsgs]``，
    slimMsgs 里带着那条末尾 system；
 3. 发给 Ollama 的 messages 形如 ``[system, user, system]`` → Qwen 的 chat template
    （要求所有 system 在最前、通常只允许一条）直接 raise → HTTP 500。
 
-修复：``normalizeSystemMessages(msgs)``（定义在 ``frontend/src/30-history-shrink.js``）
+修复：``normalizeSystemMessages(msgs)``（定义在 ``frontend/src/agent/context.js``）
 把所有 system 按相对顺序用 ``'\\n\\n'`` 合并成一条置于数组最前；0/1 条 system 时
 原样返回（零行为变化）。三处接线：60-agent-loop 主请求（根因点）、
 45-request-debounce ``fetchGLMStream`` 最后一道闸（幂等，覆盖所有流式请求）、
@@ -29,14 +29,17 @@ import tempfile
 
 import pytest
 
+from helpers.frontend import (LEGACY_SCRIPT_PATHS, frontend_node_map,
+                              read_frontend_source, script_paths)
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 BUILT_HTML = os.path.join(PROJECT_ROOT, 'harbor.html')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _src(rel):
@@ -83,8 +86,12 @@ function __ctx(extra) {
 }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 _JS_MAIN = r"""
 (async () => {
@@ -355,7 +362,7 @@ class TestNormalizeWiring:
 
     def test_fetch_choke_point_uses_normalize(self):
         code = _fe('45-request-debounce.js')
-        assert 'normalizeSystemMessages(_body.messages)' in code
+        assert 'normalizeSystemMessages(body.messages)' in code
 
     def test_compact_request_never_sends_system(self):
         """压缩请求只发一条 user（无 system）；归一化以 typeof 守卫接线（未来加 system 也不漏 500）。
@@ -375,16 +382,21 @@ class TestNormalizeWiring:
         """全库发送体构造点：有 system 的必须过归一化；无 system 的保持纯 user。"""
         covered = {
             '60-agent-loop.js': 'messages: reqMsgs',   # reqMsgs 由 normalizeSystemMessages 产出
-            '45-request-debounce.js': 'normalizeSystemMessages(_body.messages)',
+            '45-request-debounce.js': 'normalizeSystemMessages(body.messages)',
             # v1.8.0 M3 计划生成：planMsgs 由 normalizeSystemMessages 产出（同 reqMsgs 模式）
             '100-send.js': 'const planMsgs = normalizeSystemMessages(',
+            # builder 只组装，transport 在发送前统一 normalizeSystemMessages。
+            'request-builder.js': 'messages: options.messages',
         }
         for name, needle in covered.items():
             assert needle in _fe(name), '%s 未按约定接线: 期待 %r' % (name, needle)
         # 其余模块（会话存储/会话创建等，字段名恰好叫 messages；97-compact 是纯 user 压缩请求）
         not_send_body = {'65-session-store.js', '85-session-mgmt.js', '97-compact.js'}
-        for name in sorted(os.listdir(SRC_DIR)):
-            if not name.endswith('.js') or name in covered or name in not_send_body:
+        new_to_legacy = {new: old for old, new in LEGACY_SCRIPT_PATHS.items()}
+        for name in script_paths(PROJECT_ROOT):
+            short_name = name.rsplit('/', 1)[-1]
+            legacy_name = new_to_legacy.get(name, short_name)
+            if legacy_name in covered or legacy_name in not_send_body:
                 continue
             for lineno, line in enumerate(_fe(name).splitlines(), 1):
                 assert 'messages:' not in line, (
@@ -570,23 +582,26 @@ class TestStopButtonImmediate:
     """
 
     def test_source_has_user_stopped_flag(self):
-        src = open('frontend/src/60-agent-loop.js', encoding='utf-8').read()
+        src = open('frontend/src/agent/run-controller.js', encoding='utf-8').read()
         assert 'let userStopped = false;' in src
         assert 'userStopped = true;' in src
 
     def test_loop_checkpoints(self):
-        src = open('frontend/src/60-agent-loop.js', encoding='utf-8').read()
-        assert 'if (userStopped) { finished = true; break; }' in src, '主循环轮次检查点缺失'
-        assert 'if (userStopped) break;' in src, '工具批检查点缺失'
+        src = open('frontend/src/agent/run-controller.js', encoding='utf-8').read()
+        checkpoint = 'if (userStopped || !agentRunCurrent(run))'
+        assert checkpoint + " return { stop: true, finished: true, status: 'cancelled' };" in src, \
+            'beforeRound 轮次检查点缺失'
+        assert checkpoint + ' break;' in src, '工具批检查点缺失'
 
     def test_button_immediate_feedback(self):
-        src = open('frontend/src/60-agent-loop.js', encoding='utf-8').read()
-        # 点击即置位 + 立即按钮态 + toast
-        i = src.find('sendBtn.onclick = () => {')
+        src = open('frontend/src/agent/run-controller.js', encoding='utf-8').read()
+        # 点击即置位 + 立即按钮态 + toast（run.stopHandler 支持切回会话时复用）
+        i = src.find('run.stopHandler = () => {')
         assert i > 0
+        assert 'sendBtn.onclick = run.stopHandler;' in src
         seg = src[i:i + 500]
         assert 'userStopped = true;' in seg
-        assert "sendBtn.textContent = '⏸'" in seg
+        assert "setSendButtonVisual(sendBtn, 'pause')" in seg
         assert '正在停止' in seg
 
     def test_build_contains_flags(self):

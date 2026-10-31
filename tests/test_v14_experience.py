@@ -20,18 +20,19 @@ import tempfile
 import pytest
 
 from conftest import HOME, NewApi, install_fake_windll, legacy, reset_home
+from helpers.frontend import frontend_node_map, read_frontend_source
 
 from backend import paths
-from backend.services.guard_service import GuardService
-from backend.services.mcp_config_service import McpConfigService
+from backend.domains.security.guard_service import GuardService
+from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 # ============================================================ node 前端测试设施
@@ -99,8 +100,12 @@ function __ctx(extra) {
 }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 _JS_MAIN = r"""
 (async () => {
@@ -390,8 +395,8 @@ class TestF2CallTimeout:
 
     def test_call_tool_uses_configured_timeout(self):
         """mcp_service.call_tool 用配置超时（打桩 client 捕获 timeout 实参）。"""
-        from backend.services import mcp_service as ms_mod
-        from backend.services.toolcache_service import ToolcacheService
+        from backend.domains.integrations.mcp import mcp_service as ms_mod
+        from backend.domains.workspace.toolcache_service import ToolcacheService
 
         class _PassGuard:
             armed = True
@@ -620,6 +625,25 @@ class TestV14ContractRedlines:
         h2 = _md5(os.path.join(PROJECT_ROOT, 'harbor.html'))
         assert p1.returncode == 0 and p2.returncode == 0
         assert h1 == h2, '构建不幂等'
+
+
+class TestPerformanceRendering:
+    def test_single_snapshot_and_terminal_flush(self):
+        from tools.perf_benchmark import frontend_benchmark
+
+        report = frontend_benchmark(3)
+        assert report['correctness']['analytics_aggregate_calls_per_render'] == {
+            'sessions': 1, 'tools': 1,
+        }
+        assert report['correctness']['terminal_renders_last_run'] == 1
+        assert report['correctness']['terminal_checksum'] > 0
+
+    def test_analytics_is_lazy_until_panel_open(self):
+        boot = _fe('110-boot.js')
+        panel = _fe('16-panel-fx.js')
+        load_all = boot.split('async function loadAll()', 1)[1].split('async function bridgeDependentInit', 1)[0]
+        assert 'renderAnalytics(' not in load_all
+        assert "name === 'analytics' && typeof renderAnalytics === 'function'" in panel
 
 
 def _md5(path):

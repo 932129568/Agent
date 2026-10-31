@@ -41,11 +41,13 @@ import pytest
 
 from conftest import HOME, NewApi, legacy
 
+from backend.application.native_ui import NativeUiDispatcher
+from helpers.frontend import read_frontend_source
 from backend import paths
-from backend.services.guard_service import GuardService
-from backend.services.browser.session_win import SearchBrowser
-from backend.services.browser.service import SearchService
-from backend.services.toolcache_service import ToolcacheService
+from backend.domains.security.guard_service import GuardService
+from backend.domains.integrations.browser.session_win import SearchBrowser
+from backend.domains.integrations.browser.service import SearchService
+from backend.domains.workspace.toolcache_service import ToolcacheService
 
 
 # ---- 沙箱 DNS 劫持处置（2026-10-23 实测；同 test_v19_browser 口径）----
@@ -54,9 +56,9 @@ from backend.services.toolcache_service import ToolcacheService
 # 绕过 host 公网判定（SSRF 语义由 test_v19_browser 的字面 IP 专测锁定）。
 @pytest.fixture(autouse=True)
 def _bypass_sandbox_dns_hijack(monkeypatch):
-    import backend.services.browser.service as _svc_mod
-    import backend.services.browser.session_base as _sb
-    import backend.services.browser.session_win as _sw
+    import backend.domains.integrations.browser.service as _svc_mod
+    import backend.domains.integrations.browser.session_base as _sb
+    import backend.domains.integrations.browser.session_win as _sw
     monkeypatch.setattr(_svc_mod, '_is_public_host', lambda host: True)
     monkeypatch.setattr(_sb, '_is_public_host', lambda host: True)
     monkeypatch.setattr(_sw, '_is_public_host', lambda host: True)
@@ -64,7 +66,7 @@ def _bypass_sandbox_dns_hijack(monkeypatch):
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            'fixtures', 'v18')
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 FRONTEND_SRC = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 NEW_APIS = {'browser_search', 'browser_open', 'search_cache_stats',
@@ -648,7 +650,7 @@ class TestSearchBrowserWindow:
 
     def _patch_timeouts(self, monkeypatch, load=0.2, read=0.2, tick=0.05,
                         idle=0.2):
-        from backend.services.browser import session_win as sb
+        from backend.domains.integrations.browser import session_win as sb
         monkeypatch.setattr(sb, 'LOAD_TIMEOUT_SECONDS', load)
         monkeypatch.setattr(sb, 'READ_DOM_TIMEOUT_SECONDS', read)
         monkeypatch.setattr(sb, '_RECYCLE_TICK_SECONDS', tick)
@@ -656,7 +658,7 @@ class TestSearchBrowserWindow:
 
     def test_window_channel_success(self):
         win = FakeWin(html='<html><body>window-html</body></html>')
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         b.set_window(win)
         r = b.open_url('https://www.bing.com/search?q=x')
         assert r['ok'] is True and r['channel'] == 'window'
@@ -667,7 +669,7 @@ class TestSearchBrowserWindow:
         """loaded 永不触发（8s 看门狗替身 0.2s）→ urllib 兜底 channel=urllib。"""
         self._patch_timeouts(monkeypatch)
         win = FakeWin(fire_loaded=False)
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         b.set_window(win)
         monkeypatch.setattr(urllib.request, 'urlopen',
                             lambda req, timeout=None: _FakeResp(b'<html>u</html>'))
@@ -679,7 +681,7 @@ class TestSearchBrowserWindow:
     def test_evaluate_js_unavailable_falls_back(self, monkeypatch):
         """本沙箱实证限制：evaluate_js 抛异常 → 回落 urllib（回落路径真跑通）。"""
         win = FakeWin(eval_raises=True)
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         b.set_window(win)
         monkeypatch.setattr(urllib.request, 'urlopen',
                             lambda req, timeout=None: _FakeResp(b'<html>u2</html>'))
@@ -688,7 +690,7 @@ class TestSearchBrowserWindow:
 
     def test_file_scheme_blocked_before_navigation(self):
         win = FakeWin()
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         b.set_window(win)
         for bad in ('file:///C:/x.txt', 'javascript:alert(1)', 'about:blank', ''):
             r = b.open_url(bad)
@@ -700,7 +702,7 @@ class TestSearchBrowserWindow:
         def _raise(req, timeout=None):
             raise urllib.error.HTTPError('https://www.bing.com/', 429, 'Too Many', {}, None)
         monkeypatch.setattr(urllib.request, 'urlopen', _raise)
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         # SSRF 防护（2026-10-21）：host 须可解析到公网——'https://x/' 这类
         # 不可解析主机按 fail-closed 拒（NAV_BLOCKED），故用可解析公网主机
         # 验 HTTP 码映射（urlopen 已桩，主机选择不影响映射断言）
@@ -714,14 +716,14 @@ class TestSearchBrowserWindow:
         def _raise(req, timeout=None):
             raise urllib.error.URLError(socket.timeout('timed out'))
         monkeypatch.setattr(urllib.request, 'urlopen', _raise)
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         r = b.open_url('https://www.bing.com/')
         assert r['error'] == 'TIMEOUT'
 
     def test_idle_recycle_and_shutdown(self, monkeypatch):
         self._patch_timeouts(monkeypatch)
         win = FakeWin()
-        b = SearchBrowser(idle_recycle=True)
+        b = SearchBrowser(idle_recycle=True, dispatcher=NativeUiDispatcher.inline())
         b.set_window(win)
         b._touch()
         b._start_recycler()
@@ -733,7 +735,7 @@ class TestSearchBrowserWindow:
 
     def test_focus_window_best_effort(self):
         win = FakeWin()
-        b = SearchBrowser(idle_recycle=False)
+        b = SearchBrowser(idle_recycle=False, dispatcher=NativeUiDispatcher.inline())
         b.set_window(win)
         assert b.focus_window() is True and win.shown is True
 
@@ -1040,8 +1042,7 @@ class TestFrontendSearchPanelVm:
     def test_harness(self):
         if not os.path.exists(NODE):
             pytest.skip('node 不可用: %s' % NODE)
-        src = io.open(os.path.join(FRONTEND_SRC, '63-search-panel.js'),
-                      encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '63-search-panel.js')
         js = _SEARCH_PANEL_HARNESS.replace('__PANEL__', src)
         fd, path = tempfile.mkstemp(suffix='.js', prefix='qa_sp_')
         with os.fdopen(fd, 'w', encoding='utf-8') as f:

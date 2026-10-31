@@ -1,0 +1,21 @@
+# Harbor 1.9.0 Windows frozen-build and runtime dependencies.
+# Install into the isolated Python 3.13 build environment before running
+# tools/check_build_dependencies.py and PyInstaller.
+#
+# WebView host and EdgeChromium/WinForms backends (also ships WebView2 DLL/runtimes).
+pywebview==5.4
+# .NET bridge used by pywebview winforms and the existing frozen runtime.
+pythonnet==3.2.1
+clr_loader==0.3.1
+cffi==2.1.1
+pycparser==3.12
+# pywebview's local HTTP server, proxy and typing dependencies.
+bottle==0.13.4
+proxy_tools==0.1.0
+typing_extensions==4.16.0
+# Existing lazy runtime dependencies already required by Harbor.spec.
+Pillow==13.0.0
+send2trash==2.1.0
+# Frozen executable builder and its pywebview collection hook.
+PyInstaller==6.22.3
+pyinstaller-hooks-contrib==2026.9

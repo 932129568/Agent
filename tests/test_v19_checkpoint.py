@@ -11,13 +11,21 @@ import shutil
 import subprocess
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from conftest import fresh_home  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def isolate_tmp_from_parent_git(tmp_path, monkeypatch):
+    """Keep snapshot tests independent of a repository above basetemp."""
+    monkeypatch.setenv('GIT_CEILING_DIRECTORIES', str(tmp_path))
+
+
 def _svc():
-    from backend.services.checkpoint_service import CheckpointService
+    from backend.domains.planning.checkpoint_service import CheckpointService
     return CheckpointService()
 
 
@@ -180,7 +188,7 @@ class TestSixRules:
 class TestPlanDelegation:
     def test_delegation_equiv(self, fresh_home, tmp_path):
         """plan_service 委托=行为等价（create/list/rollback 同口径）。"""
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ws = str(tmp_path / 'ws')
         os.makedirs(ws)
         (open(os.path.join(ws, 'a.py'), 'w')).write('v1')

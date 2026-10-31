@@ -1,0 +1,26 @@
+/* W4B shared overlay geometry and quiet surfaces. Focus trap/return stays in existing JS. */
+.modal-mask,.settings-panel{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(29,29,31,.28)}
+body.dark .modal-mask,body.dark .settings-panel{background:rgba(0,0,0,.52)}
+.modal-card{width:min(560px,calc(100vw - 32px));max-height:min(84vh,760px);display:flex;flex-direction:column;
+  overflow:hidden;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg)}
+.modal-title{font-family:var(--font-display);font-size:17px;font-weight:500;line-height:1.45;overflow-wrap:anywhere}
+.modal-body{min-height:0;overflow:auto;overscroll-behavior:contain;line-height:1.65;overflow-wrap:anywhere}
+.modal-btns{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding-top:12px}
+.modal-btns .modal-btn{min-height:44px}
+.toast-stack{max-height:min(72vh,640px);overflow:auto;overscroll-behavior:contain}
+.toast{max-width:min(440px,calc(100vw - 24px));border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--card-bg);box-shadow:var(--shadow-md)}
+.toast-msg,.toast-detail{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.6}
+.toast-close,.toast-more{min-width:32px;min-height:44px}
+.ctx-menu,.notify-pop,.at-pop,.mc-pop,.cn-pop,.wsq-menu,.cs-menu{max-width:calc(100vw - 16px);
+  border:1px solid var(--border);border-radius:var(--radius-md);background:var(--card-bg);box-shadow:var(--shadow-lg)}
+.ctx-menu-item,.cn-row,.mc-item,.at-item,.cs-opt{min-height:44px;overflow-wrap:anywhere}
+.ob-root .ob-card,.sc-mask,.hd-mask{border-color:var(--border)}
+body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
+@media (max-width:600px){
+  .modal-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}
+  .modal-btns .modal-btn{flex:1;min-width:120px}
+  .toast-stack{max-height:60vh}
+  .set-win-head{position:sticky;top:0;z-index:4}
+  .set-win-close{position:sticky;right:0}
+}

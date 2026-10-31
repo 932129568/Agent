@@ -13,7 +13,7 @@ from conftest import fresh_home  # noqa: E402
 class TestTraceId:
     def test_audit_carries_trace(self, fresh_home):
         from backend.api import Api
-        from backend.services.guard_service import AUDIT_LOG
+        from backend.domains.security.guard_service import AUDIT_LOG
         api = Api()
         t = api._current_trace()
         assert t.startswith('t_') and len(t) >= 10
@@ -38,7 +38,7 @@ class TestTraceId:
 
     def test_no_hook_backward_compat(self, fresh_home):
         """无 hook（旧装配路径）：audit 不带 trace 但不炸。"""
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         g = GuardService()
         g.audit('web_search', {'q': '1'}, 'check', 'allow')
         assert g.current_trace() is None
@@ -51,7 +51,7 @@ class TestTraceId:
 
 class TestReadiness:
     def test_full_setup(self):
-        from backend.services.local_model_service import readiness
+        from backend.domains.providers.local_model_service import readiness
         r = readiness({'id': 'qwen2.5:7b', 'ctx_window': 32768,
                        'tool_capable': True, 'estimated': False},
                       {'local_max_iter': 2},
@@ -61,19 +61,19 @@ class TestReadiness:
         assert len(r['items']) == 8 and r['suggestions'] == []
 
     def test_unreachable_cloud(self):
-        from backend.services.local_model_service import readiness
+        from backend.domains.providers.local_model_service import readiness
         r = readiness(None, None, {'reachable': False})
         assert r['verdict'] == 'cloud' and r['score'] < 8
         assert len(r['suggestions']) >= 5
 
     def test_partial_middle(self):
-        from backend.services.local_model_service import readiness
+        from backend.domains.providers.local_model_service import readiness
         r = readiness({'id': 'llama3.1:8b', 'tool_capable': True,
                        'estimated': True}, {}, {'schema_json': True})
         assert 8 <= r['score'] < 16
 
     def test_no_tool_capable_low(self):
-        from backend.services.local_model_service import readiness
+        from backend.domains.providers.local_model_service import readiness
         r = readiness({'id': 'x', 'tool_capable': False, 'estimated': False},
                       {'local_max_iter': 1}, {'schema_json': True})
         assert 'tool_capable' in [i['name'] for i in r['items'] if i['score'] == 0]
@@ -86,7 +86,7 @@ class TestReadiness:
 
     def test_js_api_mock_full(self, fresh_home, monkeypatch):
         from backend.api import Api
-        from backend.services import local_model_service as lms
+        from backend.domains.providers import local_model_service as lms
         monkeypatch.setattr(lms.LocalModelService, 'models',
                             lambda self, b, api_key='': {'ok': True, 'models': [
                                 {'id': 'qwen2.5:7b', 'ctx_window': 32768,

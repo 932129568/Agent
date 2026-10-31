@@ -20,8 +20,12 @@ from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INSTALLER_DIR = os.path.dirname(os.path.abspath(__file__))
-DIST = os.path.join(ROOT, 'dist')
+# 允许候选构建写入隔离目录，避免覆盖仓库根 dist/build；默认行为不变。
+DIST = os.path.abspath(os.environ.get('HARBOR_DIST') or os.path.join(ROOT, 'dist'))
+BUILD_ROOT = os.path.abspath(os.environ.get('HARBOR_BUILD_ROOT')
+                             or os.path.join(ROOT, 'build'))
 PY = sys.executable
+CHECK_DEPS = os.path.join(ROOT, 'tools', 'check_build_dependencies.py')
 
 
 def _check(r):
@@ -30,18 +34,28 @@ def _check(r):
         sys.exit(r.returncode)
 
 
+def check_build_dependencies():
+    """Fail before PyInstaller if pywebview or another frozen dependency is absent."""
+    print('+ 检查Windows冻结构建依赖')
+    r = subprocess.run([sys.executable, CHECK_DEPS], cwd=ROOT)
+    _check(r)
+
+
 def version():
     with open(os.path.join(ROOT, 'VERSION'), encoding='utf-8') as f:
         return f.read().strip()
 
 
 def build_app():
+    check_build_dependencies()
     if not os.path.exists(os.path.join(ROOT, 'harbor.html')):
         print('未找到 harbor.html，请先 node frontend/build.js')
         sys.exit(1)
     print('+ PyInstaller Harbor.spec')
     r = subprocess.run([sys.executable, '-m', 'PyInstaller',
-                        'Harbor.spec', '--noconfirm', '--clean'],
+                        'Harbor.spec', '--noconfirm', '--clean',
+                        '--distpath', DIST,
+                        '--workpath', os.path.join(BUILD_ROOT, 'Harbor')],
                        cwd=ROOT)
     _check(r)
 
@@ -53,7 +67,7 @@ def build_uninstaller():
                         os.path.join('installer', 'Harbor-Setup.spec'),
                         '--noconfirm', '--clean',
                         '--distpath', DIST,
-                        '--workpath', os.path.join(ROOT, 'build', 'uninstaller')],
+                        '--workpath', os.path.join(BUILD_ROOT, 'uninstaller')],
                        cwd=ROOT, env=env)
     _check(r)
 
@@ -69,7 +83,7 @@ def build_setup():
     with open(payload, 'rb') as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b''):
             _h.update(chunk)
-    sha_file = Path(ROOT) / 'build' / 'setup_payload.sha256'
+    sha_file = Path(BUILD_ROOT) / 'setup_payload.sha256'
     sha_file.parent.mkdir(parents=True, exist_ok=True)
     sha_file.write_text(_h.hexdigest(), encoding='utf-8')
     env = dict(os.environ, HARBOR_BUILD='setup',
@@ -81,7 +95,7 @@ def build_setup():
                         os.path.join('installer', 'Harbor-Setup.spec'),
                         '--noconfirm', '--clean',
                         '--distpath', DIST,
-                        '--workpath', os.path.join(ROOT, 'build', 'setup')],
+                        '--workpath', os.path.join(BUILD_ROOT, 'setup')],
                        cwd=ROOT, env=env)
     _check(r)
 

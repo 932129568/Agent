@@ -30,11 +30,12 @@ import tempfile
 import pytest
 
 from conftest import NewApi, legacy
+from helpers.frontend import read_frontend_source
 
 from backend import tools_schema
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 FRONTEND_SRC = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 NEW_APIS = {'software_list', 'software_probe', 'software_call',
@@ -161,7 +162,7 @@ class TestBuildToolsIncludeAgent:
         """S 域用户 CRUD 经 rpc 白名单通道（_software_save/_software_remove）——
         契约 js_api 方法面恰为 software×3；其余私有方法仍拒绝。"""
         from backend.api import Api, _RPC_PRIVATE_OK
-        from backend.services import software_service as sw_mod
+        from backend.domains.integrations import software_service as sw_mod
         assert _RPC_PRIVATE_OK == {'_software_save', '_software_remove'}
         monkeypatch.setattr(sw_mod, 'SOFTWARE_FILE',
                             str(tmp_path / 'software.json'))
@@ -357,8 +358,7 @@ class TestFrontendToolExecVm:
     def test_harness(self):
         if not os.path.exists(NODE):
             pytest.skip('node 不可用: %s' % NODE)
-        src = io.open(os.path.join(FRONTEND_SRC, '25-tool-exec.js'),
-                      encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '25-tool-exec.js')
         js = _TOOL_EXEC_HARNESS.replace('__PANEL__', src)
         fd, path = tempfile.mkstemp(suffix='.js', prefix='qa_te_')
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
@@ -385,8 +385,7 @@ class TestFrontendTakeoverWaitVm:
     def test_harness(self):
         if not os.path.exists(NODE):
             pytest.skip('node 不可用: %s' % NODE)
-        src = io.open(os.path.join(FRONTEND_SRC, '60-agent-loop.js'),
-                      encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '60-agent-loop.js')
         notify = _extract_fn(src, r'function harborTakeoverNotify\s*\(')
         await_fn = _extract_fn(src, r'function harborTakeoverAwaitTerminal\s*\(')
         js = _TAKEOVER_WAIT_HARNESS.replace('__NOTIFY__', notify) \

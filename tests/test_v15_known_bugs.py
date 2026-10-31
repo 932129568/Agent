@@ -26,17 +26,18 @@ import tempfile
 
 import pytest
 
+from helpers.frontend import read_frontend_source, read_frontend_styles
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 TEMPLATE = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
-AGENT_LOOP = os.path.join(PROJECT_ROOT, 'frontend', 'src', '60-agent-loop.js')
 
 # ============================================================ 后端：命令执行窗口与单次性
 class TestCmdExecutionWindow:
     """Bug A 的窗口面：当前代码已全程 CREATE_NO_WINDOW——锁定防回归。"""
 
     def test_run_command_popen_hidden_and_single(self, monkeypatch):
-        from backend.services import cmd_service
+        from backend.domains.workspace import cmd_service
         calls = []
 
         class FakeProc:
@@ -77,7 +78,7 @@ class TestCmdExecutionWindow:
         assert isinstance(args, str) and args.startswith('chcp 65001'), args
 
     def test_run_powershell_popen_hidden(self, monkeypatch):
-        from backend.services import cmd_service
+        from backend.domains.workspace import cmd_service
         calls = []
 
         class FakeProc:
@@ -108,21 +109,21 @@ class TestRunDeduperKeyNormalization:
     """两层去重键为精确字符串，语义等值变体可绕过——复现已知缺陷。"""
 
     def test_variant_quotes_bypasses_dedup(self):
-        from backend.services.cmd_service import RunDeduper
+        from backend.domains.workspace.cmd_service import RunDeduper
         d = RunDeduper()
         assert d.check('del x.txt') is None
         # 期望：语义等值变体应被拦；当前键口径（折叠空白+小写）放行 → 缺陷复现
         assert d.check('del "x.txt"') is not None
 
     def test_variant_dot_prefix_bypasses_dedup(self):
-        from backend.services.cmd_service import RunDeduper
+        from backend.domains.workspace.cmd_service import RunDeduper
         d = RunDeduper()
         assert d.check('del x.txt') is None
         assert d.check('del ./x.txt') is not None   # 当前放行 → 缺陷复现
 
     def test_nonadjacent_duplicate_bypasses_dedup(self):
         """单槽 last 语义：中间夹一条别的命令，同一条命令再次放行（Bug A 直接根因）。"""
-        from backend.services.cmd_service import RunDeduper
+        from backend.domains.workspace.cmd_service import RunDeduper
         d = RunDeduper()
         assert d.check('echo 1') is None
         assert d.check('echo 2') is None
@@ -134,19 +135,19 @@ class TestDecodeConsole:
     """_decode_console 的「替换符最少」未实现（s.count('') 恒为 len+1）——中文名回归锁定。"""
 
     def test_gbk_chinese_process_name(self):
-        from backend.services.process_service import _decode_console
+        from backend.domains.workspace.process_service import _decode_console
         raw = '中文工具.exe'.encode('gbk')
         assert _decode_console(raw) == '中文工具.exe'
 
     def test_utf8_process_name(self):
-        from backend.services.process_service import _decode_console
+        from backend.domains.workspace.process_service import _decode_console
         raw = '中文工具.exe'.encode('utf-8')
         assert _decode_console(raw) == '中文工具.exe'
 
 
 # ============================================================ 前端：cmdDeduper 行为（node vm 真实源码）
 def _extract_cmd_deduper_src():
-    src = io.open(AGENT_LOOP, encoding='utf-8').read()
+    src = read_frontend_source(PROJECT_ROOT, '60-agent-loop.js')
     m = re.search(r'const cmdDeduper = \(\(\) => \{.*?\}\)\(\);', src, re.S)
     assert m, 'cmdDeduper IIFE 未在 60-agent-loop.js 中找到（源码结构变更？）'
     return m.group(0)
@@ -218,7 +219,7 @@ class TestTextOverflowCss:
     """Bug B：溢出处理缺口的 CSS 契约。期望声明存在、当前缺失 → xfail 复现。"""
 
     def _tpl(self):
-        return io.open(TEMPLATE, encoding='utf-8').read()
+        return read_frontend_styles(PROJECT_ROOT)
 
     def test_input_textarea_explicit_overflow(self):
         rule = _css_rule(self._tpl(), '.input-row textarea')

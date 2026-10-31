@@ -9,7 +9,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from conftest import fresh_home  # noqa: E402
+from helpers.frontend import read_frontend_source  # noqa: E402
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            'backend', 'prompts')
 SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -19,7 +21,7 @@ SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 class TestLoader:
     def test_all_fifteen_load(self):
         # v1.9.0 T01：10 → 15（新增 browser-navigate/extract/click/fill/reader-extract 五提示词）
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         ids = pl.list_ids()
         assert len(ids) == 15
@@ -28,18 +30,18 @@ class TestLoader:
             assert text and ver, pid
 
     def test_render_placeholder(self):
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         text, _ = pl.render('system-base', ws_root='D://proj')
         assert 'D://proj' in text and '{ws_root}' not in text
 
     def test_unknown_id_empty(self):
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         assert pl.load('nope') == ('', '')
 
     def test_manifest_sha_all_match(self):
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         man = json.load(io.open(os.path.join(PROMPTS_DIR, 'manifest.json'),
                                 encoding='utf-8'))
@@ -50,7 +52,7 @@ class TestLoader:
 
     def test_prompts_dir_frozen_safe(self):
         """loader 定位不依赖 cwd（frozen 下 __file__ 在 _MEIPASS）。"""
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         d = pl.prompts_dir()
         assert os.path.isabs(d) and d.endswith('prompts')
 
@@ -65,17 +67,17 @@ class TestConsistency:
     BT = chr(96)   # 反引号（heredoc/编辑器安全）
 
     def test_efficiency_matches_frontend(self):
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
-        src = io.open(os.path.join(SRC_DIR, '55-tool-route.js'), encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '55-tool-route.js')
         m = re.search(r'const EFFICIENCY_PROMPT = ' + self.BT + r'([^' + self.BT + r']*)' + self.BT + ';', src, re.S)
         assert m, 'EFFICIENCY_PROMPT 常量未找到（前端回落路径被删？）'
         assert pl.load('efficiency')[0] == m.group(1)
 
     def test_compact_matches_frontend_fallback(self):
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
-        src = io.open(os.path.join(SRC_DIR, '97-compact.js'), encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '97-compact.js')
         # 前端回落内置串（_cmpPrompt 初值）与 prompts 渲染值一致
         m = re.search(r"_cmpPrompt = '(把以下[^']*)'", src)
         assert m, '_cmpPrompt 回落串未找到'
@@ -90,7 +92,7 @@ class TestConsistency:
         的 ws-off 分支即 render('system-ws-off') + tail，单元口径相同）。
         """
         from backend.api import Api
-        from backend.services import prompt_loader as pl
+        from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         off_text, _ = pl.render('system-ws-off')
         assert off_text.startswith('你是 Harbor 内置编程助手。当前**未启用工作区**')

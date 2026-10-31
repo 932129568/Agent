@@ -13,7 +13,9 @@ import tempfile
 
 import pytest
 
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+from helpers.frontend import read_frontend_source
+
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 FRONTEND_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'src')
 
 _HARNESS = r'''
@@ -92,7 +94,8 @@ console.log(JSON.stringify({ checks }));
 def test_onboarding_harness():
     if not os.path.exists(NODE):
         pytest.skip('node 不可用: %s' % NODE)
-    src = io.open(os.path.join(FRONTEND_SRC, '68-onboarding.js'), encoding='utf-8').read()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = read_frontend_source(root, '68-onboarding.js')
     js = _HARNESS.replace('__MODULE__', src)
     fd, path = tempfile.mkstemp(suffix='.js', prefix='qa_ob_')
     with os.fdopen(fd, 'w', encoding='utf-8') as f:

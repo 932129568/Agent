@@ -19,9 +19,9 @@ import pytest
 
 from conftest import HOME, NewApi, reset_home
 
-from backend.services import local_model_service as lms
-from backend.services import mcp_pool
-from backend.services import webdav_service as wds
+from backend.domains.providers import local_model_service as lms
+from backend.domains.integrations.mcp import mcp_pool
+from backend.domains.integrations import webdav_service as wds
 from backend.api import _V12_EXTRA
 
 V15_JS_API = ('local_probe', 'local_models', 'webdav_get_config', 'webdav_save_config',

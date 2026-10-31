@@ -1,0 +1,114 @@
+/* Harbor 岛层样式（React 实现）。
+ * 只消费既有设计令牌，不新增颜色字面量；类名 i- 前缀，与 legacy 契约类隔离。
+ */
+
+.i-history-list, .i-history-list *, .i-history-list *::before, .i-history-list *::after {
+  box-sizing: border-box;
+}
+
+.i-history-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-family: var(--font-sans);
+}
+
+.i-group-head {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  letter-spacing: .02em;
+  cursor: pointer;
+  text-align: left;
+}
+.i-group-head:hover { color: var(--text); }
+.i-group-title { flex: 1; min-width: 0; }
+.i-group-sub {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 400;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+.i-group-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--chip-bg);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  text-align: center;
+}
+.i-chevron { transition: transform var(--dur-fast) var(--ease); flex: 0 0 12px; }
+.i-chevron.closed { transform: rotate(-90deg); }
+
+.i-session {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 59px;
+  padding: 9px var(--space-3);
+  margin: 2px 0;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.i-session:hover { background: var(--hover); }
+.i-session.active { background: var(--active); }
+.i-session:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.i-session-title {
+  font-size: var(--fs-body);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.i-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+}
+
+.i-status { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-micro); }
+.i-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); display: inline-block; }
+.i-status.working .i-status-dot { background: var(--primary); animation: i-pulse 1.4s ease-in-out infinite; }
+.i-status.completed .i-status-dot { background: var(--ok); }
+.i-status.paused .i-status-dot,
+.i-status.failed .i-status-dot { background: var(--err); }
+@keyframes i-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.i-empty {
+  padding: var(--space-4) var(--space-3);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  text-align: center;
+}
+
+.i-new-chat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: var(--fs-body);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.i-new-chat:hover { border-color: var(--border-strong); background: var(--hover); }

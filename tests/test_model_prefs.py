@@ -18,7 +18,7 @@ from conftest import fresh_home  # noqa: F401  （autouse 隔离 HOME）
 
 class TestModelPrefsService:
     def _svc(self, tmp_path):
-        from backend.services.model_prefs_service import ModelPrefsService
+        from backend.domains.settings.model_prefs_service import ModelPrefsService
         return ModelPrefsService(path=str(Path(tmp_path) / 'model_prefs.json'))
 
     def test_default_when_absent(self, tmp_path):
@@ -55,6 +55,16 @@ class TestModelPrefsService:
         assert s.save({'thinking': 'auto', 'ctx_k': 2049}).get('error')
         assert s.save({'thinking': 'auto', 'ctx_k': 'abc'}).get('error')
 
+    def test_ctx_k_clamps_to_frontend_supported_values(self, tmp_path):
+        s = self._svc(tmp_path)
+        for raw, want in ((1, 0), (32, 32), (100, 32), (128, 128),
+                          (200, 128), (299, 256), (300, 300), (2048, 1024)):
+            r = s.save({'thinking': 'auto', 'ctx_k': raw})
+            assert r['ok'] is True and r['ctx_k'] == want, (raw, r)
+        p = Path(tmp_path) / 'model_prefs.json'
+        p.write_text(json.dumps({'thinking': 'auto', 'ctx_k': 200}), encoding='utf-8')
+        assert self._svc(tmp_path).get()['ctx_k'] == 128
+
     def test_corrupt_file_bad_backup(self, tmp_path):
         p = Path(tmp_path) / 'model_prefs.json'
         p.write_text('{corrupt!!!', encoding='utf-8')
@@ -65,7 +75,7 @@ class TestModelPrefsService:
 
     def test_config_json_untouched(self):
         """config.json 零污染铁律：get_config 输出不含推理偏好键。"""
-        from backend.services.config_service import ConfigService
+        from backend.domains.settings.config_service import ConfigService
         cfg = json.loads(ConfigService().get_config())
         assert 'model_prefs' not in cfg
         assert 'thinking' not in cfg and 'ctx_k' not in cfg

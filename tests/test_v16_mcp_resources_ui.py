@@ -17,6 +17,8 @@ import re
 
 import pytest
 
+from helpers.frontend import read_frontend_source, read_frontend_template_with_styles
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 TPL = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
@@ -26,11 +28,11 @@ from test_v16_batch1 import _run_node
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _tpl():
-    return io.open(TPL, encoding='utf-8').read()
+    return read_frontend_template_with_styles(PROJECT_ROOT)
 
 
 def _extract_fn(src, name):

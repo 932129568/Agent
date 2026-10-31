@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    participant R as run-diff.mjs（编排器）
+    participant P as python_driver.py（子进程）
+    participant A as backend.api.Api()
+    participant N as node-driver.mjs（子进程）
+    participant F as fastify app.inject
+    participant C as compare.mjs（比对器）
+
+    R->>R: 按 familyOrder 读取 fixture 清单
+    R->>P: spawn(pythonBin, python_driver.py, fixture, --result=py.json)
+    P->>P: 建临时 ROOT/HOME + 种子工作区 + 按 mocks 装 fakes
+    P->>A: getattr(api, method)(*args, **kwargs)（逐 call）
+    A-->>P: raw JSON 字符串 / 异常
+    P->>P: 工作区树快照 + probeConfigFiles 哈希
+    P-->>R: result-py.json（raw + meta.root/home）
+    R->>N: spawn(nodeBin, node-driver.mjs, fixture, --result=node.json)
+    N->>N: 建临时 ROOT + HARBOR_CONFIG_DIR/DATABASE_URL + prisma db push + 种子工作区
+    N->>F: POST /jsapi/<method> {args}（逐 call，经 zod 与错误映射）
+    F-->>N: HTTP status + body 字符串
+    N->>N: 工作区树快照 + probeConfigFiles 哈希
+    N-->>R: result-node.json（raw + status + meta.root/cfg）
+    R->>C: 双侧 result + intentional-deltas.json + normalize-rules.json
+    C->>C: 解析 JSON → 归一（<ROOT>/<WS>/<TS>/<CID>/<TOKEN>…）→ 深比对
+    C->>C: 三分类：match / intentional / suspect
+    C-->>R: 逐 call 裁决 + diffPath + 家族汇总 + 覆盖率
+    R->>R: 写 outputs/diff/<runId>/report.{json,md}；退出码 0/1/2

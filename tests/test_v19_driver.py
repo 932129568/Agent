@@ -26,9 +26,10 @@ import pytest
 
 from conftest import fresh_home  # noqa: F401  （autouse 隔离 HOME）
 
-from backend.services.browser import session_base, session_win
-from backend.services.browser.session_base import BrowserError, BrowserErrorCode
-from backend.services.browser.session_win import (
+from backend.application.native_ui import NativeUiDispatcher
+from backend.domains.integrations.browser import session_base, session_win
+from backend.domains.integrations.browser.session_base import BrowserError, BrowserErrorCode
+from backend.domains.integrations.browser.session_win import (
     WinSession, build_click_js, build_fill_js, build_wait_js, map_js_result)
 
 
@@ -266,7 +267,7 @@ class TestWinSessionPrimitives:
 class TestBridge:
 
     def _bridge(self):
-        from backend.services.browser.driver import Bridge
+        from backend.domains.integrations.browser.driver import Bridge
         return Bridge()
 
     def test_on_extract_collects_and_pops(self):
@@ -291,7 +292,7 @@ class TestBridge:
 
     def test_open_external_public_ok(self):
         """公网 URL → 外联回调被调（系统浏览器打开 + 审计钩子）。"""
-        from backend.services.browser.driver import Bridge
+        from backend.domains.integrations.browser.driver import Bridge
         seen = []
         b = Bridge(on_external=seen.append)
         assert b.open_external('https://example.com/page') == 'ok'
@@ -300,8 +301,8 @@ class TestBridge:
     def test_open_external_blocks_private_and_schemes(self, monkeypatch):
         """毒网页伪造 open_external 调用：内网/环回/非 http(s) 一律拒
         （SSRF 同口径——本测显式恢复私网判定语义，覆盖 autouse 绕过）。"""
-        from backend.services.browser.driver import Bridge
-        from backend.services.browser import session_base as sb
+        from backend.domains.integrations.browser.driver import Bridge
+        from backend.domains.integrations.browser import session_base as sb
         seen = []
         b = Bridge(on_external=seen.append)
         monkeypatch.setattr(sb, '_is_public_host',
@@ -314,7 +315,7 @@ class TestBridge:
         assert seen == []       # 非公网/非 http(s) 全拒（无系统浏览器打开）
 
     def test_download_blocked_records(self):
-        from backend.services.browser.driver import Bridge
+        from backend.domains.integrations.browser.driver import Bridge
         seen = []
         b = Bridge(on_blocked=seen.append)
         assert b.download_blocked('https://evil/x.exe') == 'ok'
@@ -325,7 +326,7 @@ class TestBridge:
 # ============================================================ BrowserService 会话池
 
 def _mk_service(pool_limit=3, idle_seconds=60.0, sweep_tick=5.0, path=None):
-    from backend.services.browser.driver import BrowserService
+    from backend.domains.integrations.browser.driver import BrowserService
     made = []
 
     def factory(mode):
@@ -486,7 +487,7 @@ class TestApiBrowserPrimitives:
 
     def test_guard_tiers_matrix(self):
         """M5.2 档位矩阵：click/fill=always；navigate/extract/screenshot/close=session。"""
-        from backend.services.guard_service import DEFAULT_TIERS
+        from backend.domains.security.guard_service import DEFAULT_TIERS
         assert DEFAULT_TIERS['browser_click'] == 'always'
         assert DEFAULT_TIERS['browser_fill'] == 'always'
         for op in ('browser_navigate', 'browser_extract',
@@ -525,6 +526,29 @@ class TestApiBrowserPrimitives:
         r = json.loads(api.browser_click('#x'))
         assert r['ok'] is False
         assert 'error' in r
+
+    def test_armed_close_requires_token_and_binds_session(self):
+        """会话关闭同样属于 session 档：不得绕过 API 直接回收；
+        token 还必须绑定创建时确认的目标 session_id。"""
+        api = self._api()
+        api._guard.arm()
+        called = []
+        orig = api._driver.close
+        api._driver.close = lambda sid='': called.append(sid) or {'ok': True, 'closed': [sid]}
+        try:
+            missing = json.loads(api.browser_close('bs_target'))
+            assert missing['ok'] is False
+            assert missing['error']['code'] == 'CONFIRM_REQUIRED'
+            assert called == []
+            token = api._guard.issue_confirm_token(
+                'browser_close', {'session_id': 'bs_target'})['token']
+            allowed = json.loads(api.browser_close('bs_target', token=token))
+            assert allowed['ok'] is True and called == ['bs_target']
+            called.clear()
+            replay = json.loads(api.browser_close('bs_target', token=token))
+            assert replay['ok'] is False and called == []
+        finally:
+            api._driver.close = orig
 
 
 # ============================================================ tools_schema strict（M5）
@@ -638,10 +662,12 @@ class TestReviewBatchRegression:
 
     # ---- P1-1：open_url 终态 URL 复检（重定向 SSRF 缺口） ----
     def test_open_url_redirect_to_private_blocked(self, monkeypatch, tmp_path):
-        from backend.services.browser import driver as drv
-        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'))
+        from backend.domains.integrations.browser import driver as drv
+        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'),
+                              dispatcher=NativeUiDispatcher.inline())
         win = _FakeDriverWin(final_url='http://169.254.169.254/latest/meta-data')
         dw._win = win
+        dw._dispatcher.register(win, 'driver-test')
         monkeypatch.setattr(drv, '_is_public_host',
                             lambda host: not str(host or '').startswith(
                                 ('127.', '192.168.', '10.', '169.254.')))
@@ -649,9 +675,11 @@ class TestReviewBatchRegression:
         assert r['ok'] is False and r['error'] == 'SSRF_BLOCKED', r
 
     def test_open_url_public_final_ok(self, monkeypatch, tmp_path):
-        from backend.services.browser import driver as drv
-        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'))
+        from backend.domains.integrations.browser import driver as drv
+        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'),
+                              dispatcher=NativeUiDispatcher.inline())
         dw._win = _FakeDriverWin(final_url='https://public.example.com/x')
+        dw._dispatcher.register(dw._win, 'driver-test')
         monkeypatch.setattr(drv, '_is_public_host', lambda host: True)
         r = dw.open_url('http://public.example.com/', timeout=2)
         assert r['ok'] is True and r['channel'] == 'driver-window'
@@ -659,11 +687,13 @@ class TestReviewBatchRegression:
     def test_open_url_initial_page_event_no_false_block(self, monkeypatch, tmp_path):
         """loaded 是窗口初始页事件的竞态：win.url 仍 file:// 时短暂等待真实
         导航落定——不误判 SSRF，最终以 http(s) 终态放行。"""
-        from backend.services.browser import driver as drv
+        from backend.domains.integrations.browser import driver as drv
         import threading as _th
-        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'))
+        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'),
+                              dispatcher=NativeUiDispatcher.inline())
         win = _FakeDriverWin()
         dw._win = win
+        dw._dispatcher.register(win, 'driver-test')
         monkeypatch.setattr(drv, '_is_public_host', lambda host: True)
 
         orig_load = win.load_url
@@ -678,36 +708,40 @@ class TestReviewBatchRegression:
 
     # ---- P2-5：load_url 抛异常时 loaded 处理器退订（原泄漏） ----
     def test_open_url_load_fail_unsubscribes(self, tmp_path):
-        from backend.services.browser import driver as drv
-        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'))
+        from backend.domains.integrations.browser import driver as drv
+        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'),
+                              dispatcher=NativeUiDispatcher.inline())
         win = _FakeDriverWin()
         win.load_fail = True
         dw._win = win
+        dw._dispatcher.register(win, 'driver-test')
         r = dw.open_url('https://example.com/', timeout=2)
         assert r['ok'] is False and r['error'] == 'WINDOW_UNAVAILABLE'
         assert win.events.loaded.handlers == []      # 已退订（原实现泄漏 1 个/次）
 
     # ---- P2-4：策略 JS 每次导航后重注入（页内二次导航不再失效） ----
     def test_install_policy_reinjects(self, tmp_path):
-        from backend.services.browser import driver as drv
-        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'))
+        from backend.domains.integrations.browser import driver as drv
+        dw = drv.DriverWindow(user_data_dir=str(tmp_path / 'p'),
+                              dispatcher=NativeUiDispatcher.inline())
         win = _FakeDriverWin()
         win.eval_value = 'ok'
         dw._win = win
+        dw._dispatcher.register(win, 'driver-test')
         dw._install_policy(win)
         dw._install_policy(win)
         assert len(win.eval_calls) == 2              # 原永久标记只注入 1 次
 
     # ---- P2-12：Bridge 提取载荷三重上限（条数/单条/累计） ----
     def test_on_extract_item_size_cap(self):
-        from backend.services.browser.driver import Bridge
+        from backend.domains.integrations.browser.driver import Bridge
         b = Bridge()
         big = '{"x":"' + 'a' * (256 * 1024) + '"}'
         assert b.on_extract(big) == 'ok'
         assert b.extracts() == []                    # 超单条上限丢弃
 
     def test_on_extract_total_size_cap(self):
-        from backend.services.browser.driver import Bridge
+        from backend.domains.integrations.browser.driver import Bridge
         b = Bridge()
         item = '{"pad":"%s"}' % ('a' * 250_000)      # ~250KB/条 < 单条上限
         for _ in range(20):                          # 累计 5MB > 4MB 上限
@@ -718,8 +752,8 @@ class TestReviewBatchRegression:
 
     # ---- P1-3：busy 闸（sweeper/驱逐不回收在飞会话；死 id 不回填） ----
     def test_sweeper_skips_busy_session(self, tmp_path):
-        from backend.services.browser.driver import BrowserService
-        from backend.services.browser.session_base import SessionState
+        from backend.domains.integrations.browser.driver import BrowserService
+        from backend.domains.integrations.browser.session_base import SessionState
         release = threading.Event()
 
         class SlowSession:
@@ -773,8 +807,8 @@ class TestReviewBatchRegression:
 
     def test_evict_skips_busy_session(self, tmp_path):
         """池满驱逐跳过 busy 条目（全部 busy 时放行本次超限）。"""
-        from backend.services.browser.driver import BrowserService
-        from backend.services.browser.session_base import SessionState
+        from backend.domains.integrations.browser.driver import BrowserService
+        from backend.domains.integrations.browser.session_base import SessionState
         release = threading.Event()
 
         class SlowSession:
@@ -831,8 +865,8 @@ class TestReviewBatchRegression:
 
     def test_navigate_during_close_no_dead_id_backfill(self, tmp_path):
         """导航期间会话被显式关闭 → 不回填已死 session_id（结构化错误）。"""
-        from backend.services.browser.driver import BrowserService
-        from backend.services.browser.session_base import SessionState
+        from backend.domains.integrations.browser.driver import BrowserService
+        from backend.domains.integrations.browser.session_base import SessionState
         release = threading.Event()
 
         class SlowSession:
@@ -896,7 +930,7 @@ class TestReviewBatchRegression:
 
     # ---- P2-8：profile 目录序号唯一 + 关闭清理 ----
     def test_close_entry_removes_profile_dir(self, tmp_path):
-        from backend.services.browser.driver import BrowserService
+        from backend.domains.integrations.browser.driver import BrowserService
         d = tmp_path / 'drv_123_1'
         d.mkdir()
         (d / 'f.txt').write_text('x', encoding='utf-8')

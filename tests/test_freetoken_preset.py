@@ -7,13 +7,15 @@
 import io
 import os
 
+from helpers.frontend import read_frontend_source
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 TPL = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _tpl():
@@ -68,7 +70,7 @@ class TestFreetokenBackendCompat:
     """后端零改的依据：_parse_model_list 已覆盖 FreeToken 的 OpenAI 清单形态。"""
 
     def test_parse_freetoken_shape(self):
-        from backend.services.local_model_service import _parse_model_list
+        from backend.domains.providers.local_model_service import _parse_model_list
         raw = json.dumps({'object': 'list', 'data': [
             {'id': 'Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf',
              'object': 'model', 'created': 1792461644, 'owned_by': 'FreeToken',
@@ -77,7 +79,7 @@ class TestFreetokenBackendCompat:
         assert out == ['Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf'], out
 
     def test_parse_plain_id_list(self):
-        from backend.services.local_model_service import _parse_model_list
+        from backend.domains.providers.local_model_service import _parse_model_list
         out = _parse_model_list(json.dumps({'data': ['a.gguf', 'b.gguf']}).encode())
         assert out == ['a.gguf', 'b.gguf']
 
@@ -89,11 +91,11 @@ class TestFreetokenProbeWiring:
     """探测链路接线（用户截图反馈修复：1919 不在 PROBE_PORTS 导致探测不到）。"""
 
     def test_probe_ports_include_1919(self):
-        from backend.services import local_model_service as lms
+        from backend.domains.providers import local_model_service as lms
         assert 1919 in lms.PROBE_PORTS, 'FreeToken 端口必须进探测表'
 
     def test_local_presets_freetoken(self):
-        from backend.services import local_model_service as lms
+        from backend.domains.providers import local_model_service as lms
         p = lms.LOCAL_PRESETS.get('freetoken')
         assert p and p['port'] == 1919
         assert p['base_url'] == 'http://127.0.0.1:1919/v1'
@@ -101,7 +103,7 @@ class TestFreetokenProbeWiring:
 
     def test_probe_one_kind_mapping(self):
         """1919 探测结果 kind=freetoken（前端据此一键填充+applyPreset）。"""
-        from backend.services import local_model_service as lms
+        from backend.domains.providers import local_model_service as lms
         import json as _json
         raw = _json.dumps({'object': 'list', 'data': [
             {'id': 'Gemma4-26B-A4B-QAT.gguf', 'owned_by': 'FreeToken'}]}).encode()

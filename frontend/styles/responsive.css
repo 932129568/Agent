@@ -1,0 +1,44 @@
+/* W4B responsive layout only; component states remain shared. */
+@media (max-width:1024px){
+  .set-window{width:calc(100% - 24px)}
+  .chart-duo{grid-template-columns:minmax(0,1fr)}
+  .set-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:768px){
+  .set-window{width:calc(100% - 16px);height:calc(100% - 16px);max-height:none}
+  .set-win-body{flex-direction:column;min-height:0}
+  .set-nav{display:flex;flex:0 0 auto;width:100%;max-width:none;overflow-x:auto;overflow-y:hidden;
+    border-right:0;border-bottom:1px solid var(--border);padding:6px 8px;gap:4px}
+  .set-nav-group{display:none}
+  .set-nav-btn{flex:0 0 auto;white-space:nowrap}
+  .set-content{flex:1;min-height:0;padding:16px 16px 24px;overflow:auto}
+  .set-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+  .provider-row{min-width:0;flex-wrap:wrap}
+  .provider-row input,.provider-row select,.provider-row button{max-width:100%}
+  .header-title{max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .panel-scroll,.panel-head,.panel{min-width:0}
+  .session-item{min-width:0}
+  .session-title,.session-preview{overflow-wrap:anywhere}
+}
+@media (max-width:480px){
+  .set-content{padding:12px 10px 20px}
+  .set-block,.g-card,.chart-card,.ws-card,.plan-card{padding:12px}
+  .provider-row{align-items:stretch;flex-direction:column}
+  .provider-row input,.provider-row select,.provider-row button,
+  .provider-row .cm-pick,.provider-row .cm-preset-slot{width:100%!important;max-width:none!important}
+  .cm-row,.cm-price,.ws-btn-row{align-items:stretch;flex-direction:column}
+  .cm-row>* ,.cm-price>*{width:100%!important;max-width:none!important}
+  .field-row{align-items:stretch;flex-direction:column;gap:8px}
+  .field-row>div,.field-row select{width:100%}
+  .session-item{align-items:flex-start}
+  .session-acts{display:flex;opacity:1}
+  .stat-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chart-card-head{align-items:flex-start;flex-direction:column}
+  .seg{max-width:100%;overflow-x:auto}
+}
+@media (max-height:640px){
+  .set-window{height:calc(100% - 12px);max-height:calc(100vh - 12px)}
+  .set-content,.modal-body,.panel-scroll{overflow:auto;overscroll-behavior:contain}
+  .modal-card{max-height:calc(100vh - 16px)}
+  .toast-stack{max-height:78vh}
+}

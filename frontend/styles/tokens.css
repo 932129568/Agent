@@ -1,0 +1,67 @@
+/* W4A neutral precision workbench. Aptos falls back to installed UI fonts. */
+:root{
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
+  --space-5:24px;--space-6:32px;--space-7:48px;
+  --w4-bg:#F5F5F7;--w4-sidebar:#EEEFF1;--w4-surface:#FFFFFF;
+  --w4-text:#1D1D1F;--w4-user:#E8EDF5;
+  --bg:#F5F5F7;--surface:#FFFFFF;--text:#1D1D1F;--muted:#6E6E73;--accent:#2563EB;
+  --sidebar-bg:#EEEFF1;--main-bg:var(--bg);--header-bg:rgba(255,255,255,.96);
+  --card-bg:var(--surface);--surface-2:#F0F1F3;
+  --border:#DFE1E5;--border-strong:#C7CBD2;
+  --text-2:var(--muted);--text-3:#6E6E73;
+  --primary:var(--accent);--primary-hover:#1D4ED8;--primary-soft:#E8EEFC;
+  --user-bubble:#E8EDF5;--user-bubble-text:var(--text);--ai-bubble:transparent;
+  --hover:#ECEDEF;--active:#E3E9F6;--chip-bg:#EFF0F2;
+  --ok:#23744A;--warn:#86590F;--err:#B42318;
+  --ok-bg:#E3F1E9;--warn-bg:#F7EEDC;--err-bg:#F9E7E4;
+  --shadow-sm:0 2px 2px rgba(29,29,31,.035);
+  --shadow-md:0 8px 24px rgba(29,29,31,.075);
+  --shadow-lg:0 24px 48px rgba(29,29,31,.10);
+  --edge-hi:none;--edge-hi-soft:none;--glow-inset:none;
+  --radius-xs:8px;--radius-sm:12px;--radius-md:16px;--radius-lg:20px;--radius-xl:24px;--radius-full:999px;
+  --font-sans:Aptos,"Microsoft YaHei UI",sans-serif;
+  --font-display:"Aptos Display","Microsoft YaHei UI",sans-serif;
+  --font-mono:"Cascadia Code",Consolas,monospace;
+  --dur-fast:120ms;--dur-base:180ms;--dur-slow:240ms;
+  --dur-panel:180ms;--dur-panel-out:120ms;--dur-panel-lg:240ms;--dur-narr:180ms;
+  --dur-comp:180ms;--dur-comp-out:120ms;--dur-theme:180ms;
+  --ease:cubic-bezier(.4,0,.2,1);--ease-out:cubic-bezier(.16,1,.3,1);
+  --ease-out-soft:cubic-bezier(.25,.8,.35,1);--ease-in-soft:cubic-bezier(.42,0,1,1);
+  --sidebar-w:248px;--content-w:880px;--rail-w:64px;--rail-btn:44px;--rail-gap:8px;
+  --panel-pad:24px;--panel-gap:16px;
+  --fs-display:20px;--fs-title:15px;--fs-body:14px;--fs-caption:12px;--fs-micro:11px;
+  --brand-gradient:none;--glass-bg:var(--surface);--glass-bg-2:var(--surface);
+  --glass-border:var(--border);--glass-blur:0px;--glass-fallback:var(--bg);--glass-saturate:1;
+  --glow:none;--glow-strong:none;--glow-color:rgba(37,99,235,.16);
+  --glow-focus:0 0 0 3px rgba(37,99,235,.16);--brand-glow:none;--main-veil:var(--bg);
+  --chart-1:#2563EB;--chart-2:#64748B;--chart-3:#94A3B8;--chart-4:#CBD5E1;
+  --chart-grid:rgba(29,29,31,.09);--chart-axis:#6E6E73;
+  --chart-area-from:rgba(37,99,235,.16);--chart-area-to:rgba(37,99,235,0);
+  --on-accent:#FFFFFF;--on-ok:#FFFFFF;--on-warn:#FFFFFF;--on-danger:#FFFFFF;
+  --focus-ring:var(--accent);--control-h:44px;
+}
+body.dark{
+  --w4-bg:#101114;--w4-sidebar:#141518;--w4-surface:#17181B;
+  --w4-text:#F5F5F7;--w4-user:#222A38;
+  --bg:#101114;--surface:#17181B;--text:#F5F5F7;--muted:#A1A1A6;--accent:#60A5FA;
+  --sidebar-bg:#141518;--main-bg:var(--bg);--header-bg:rgba(23,24,27,.96);
+  --card-bg:var(--surface);--surface-2:#1E2024;
+  --border:#303238;--border-strong:#494D56;
+  --text-2:var(--muted);--text-3:#A1A1A6;
+  --primary:var(--accent);--primary-hover:#93C5FD;--primary-soft:#1E2D45;
+  --user-bubble:#222A38;--user-bubble-text:var(--text);--ai-bubble:transparent;
+  --hover:#222429;--active:#22324A;--chip-bg:#222429;
+  --ok:#7BD6A3;--warn:#E8C270;--err:#FF9A91;
+  --ok-bg:#20382C;--warn-bg:#3B3322;--err-bg:#3D2624;
+  --shadow-sm:0 2px 2px rgba(0,0,0,.18);
+  --shadow-md:0 8px 24px rgba(0,0,0,.26);--shadow-lg:0 24px 48px rgba(0,0,0,.32);
+  --glass-bg:var(--surface);--glass-bg-2:var(--surface);--glass-border:var(--border);
+  --glass-fallback:var(--bg);--glass-blur:0px;--glass-saturate:1;
+  --edge-hi:none;--edge-hi-soft:none;--glow-inset:none;
+  --glow-color:rgba(96,165,250,.18);
+  --glow-focus:0 0 0 3px rgba(96,165,250,.20);--main-veil:var(--bg);
+  --chart-1:#60A5FA;--chart-2:#94A3B8;--chart-3:#64748B;--chart-4:#CBD5E1;
+  --chart-grid:rgba(245,245,247,.12);--chart-axis:#A1A1A6;
+  --chart-area-from:rgba(96,165,250,.18);--chart-area-to:rgba(96,165,250,0);
+  --on-accent:#101114;--on-ok:#20382C;--on-warn:#3B3322;--on-danger:#3D2624;
+}

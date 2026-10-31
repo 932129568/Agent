@@ -44,12 +44,12 @@ import pytest
 
 from conftest import HOME, fresh_home  # noqa: F401  （fresh_home：autouse 隔离 HOME）
 
-from backend.services.browser import create_session, detect_platform
-from backend.services.browser import session_base
-from backend.services.browser import session_headless, session_win
-from backend.services.browser.platform import get_platform_services
-from backend.services.browser.platform import win as win_mod
-from backend.services.browser.session_base import (BrowserError,
+from backend.domains.integrations.browser import create_session, detect_platform
+from backend.domains.integrations.browser import session_base
+from backend.domains.integrations.browser import session_headless, session_win
+from backend.domains.integrations.browser.platform import get_platform_services
+from backend.domains.integrations.browser.platform import win as win_mod
+from backend.domains.integrations.browser.session_base import (BrowserError,
                                                     BrowserErrorCode,
                                                     BrowserSession,
                                                     SessionState)
@@ -71,7 +71,7 @@ def _bypass_sandbox_dns_hijack(request, monkeypatch):
         monkeypatch.setattr(session_win, '_is_public_host', lambda host: True)
     # service 模块也 from .session_base import 了同名引用（browser_open 走它）
     try:
-        import backend.services.browser.service as _svc_mod
+        import backend.domains.integrations.browser.service as _svc_mod
         monkeypatch.setattr(_svc_mod, '_is_public_host', lambda host: True)
     except Exception:
         pass
@@ -264,7 +264,7 @@ class TestErrorTaxonomy:
             assert BrowserErrorCode(c.value) is c
 
     def test_map_error_code_unknown_to_internal(self):
-        from backend.services.browser.session_base import map_error_code
+        from backend.domains.integrations.browser.session_base import map_error_code
         assert map_error_code('NAV_BLOCKED') is BrowserErrorCode.NAV_BLOCKED
         assert map_error_code('bad_params') is BrowserErrorCode.BAD_PARAMS
         # search 栈通道码无会话层对映 → INTERNAL（不炸）
@@ -351,7 +351,7 @@ class TestWinSession:
         # SearchBrowser 类名与模块路径（迁移=行为等价锚）
         assert session_win.SearchBrowser.__name__ == 'SearchBrowser'
         assert session_win.SearchBrowser.__module__ == \
-            'backend.services.browser.session_win'
+            'backend.domains.integrations.browser.session_win'
         ch = _FakeChannel()
         s = session_win.WinSession(channel=ch)
         assert s.platform == 'win'
@@ -423,7 +423,7 @@ class TestWinSession:
     def test_ssrf_fakeip_benchmark_allowed(self, monkeypatch):
         """复核批修正回归：198.18.0.0/15（RFC 2544 基准段 = Clash/Surge
         fake-ip 标准地址池）按公网放行；真实私网/元数据照拦。"""
-        from backend.services.browser.session_base import _is_public_host
+        from backend.domains.integrations.browser.session_base import _is_public_host
         assert _is_public_host('198.18.5.5') is True          # fake-ip 字面 IP
         assert _is_public_host('198.19.255.1') is True        # /15 上半段
         assert _is_public_host('169.254.169.254') is False    # 云元数据照拦
@@ -574,7 +574,7 @@ class TestPlatformServices:
     def test_platform_factory_non_win_raises(self):
         # v1.9.0 M6 转正更新：mac 已交付理论实现（MacPlatformServices）——
         # 工厂不再对 mac 抛 UNSUPPORTED；headless/linux 仍拒
-        from backend.services.browser.platform.mac import MacPlatformServices
+        from backend.domains.integrations.browser.platform.mac import MacPlatformServices
         assert isinstance(get_platform_services('mac'), MacPlatformServices)
         for p in ('headless', 'linux'):
             with pytest.raises(BrowserError) as ei:
@@ -590,7 +590,7 @@ class TestPlatformServices:
 
     def test_platform_win_secrets_roundtrip(self):
         """DPAPI 加解密往返 + 落盘格式 + delete 幂等。"""
-        from backend.services import mcp_dpapi
+        from backend.domains.integrations.mcp import mcp_dpapi
         if not mcp_dpapi.is_available():
             pytest.skip('DPAPI 不可用（非 Windows 或 crypt32 缺失）')
         svc = win_mod.SecretsWin()
@@ -682,9 +682,9 @@ class TestSearchMigrationRegression:
     既有五方法经新路径全绿（fixture 即契约）。"""
 
     def _mk_service(self, html):
-        from backend.services.browser.service import SearchService
-        from backend.services.guard_service import GuardService
-        from backend.services.toolcache_service import ToolcacheService
+        from backend.domains.integrations.browser.service import SearchService
+        from backend.domains.security.guard_service import GuardService
+        from backend.domains.workspace.toolcache_service import ToolcacheService
         return SearchService(
             browser=_FxBrowser(html),
             toolcache=ToolcacheService(do_cleanup=False),
@@ -731,13 +731,14 @@ class TestSearchMigrationRegression:
 
 
 class TestApiImportPaths:
-    def test_api_import_paths_updated(self):
-        """api.py 走 browser.service；旧 search_service 路径已删干净。"""
+    def test_api_import_paths_updated(self, fresh_home):
+        """Api 容器走 browser.service；旧 search_service 路径已删干净。"""
         import importlib.util
 
         import backend.api as api_mod
-        from backend.services.browser import service as browser_service
-        assert api_mod.SearchService is browser_service.SearchService
+        from backend.domains.integrations.browser import service as browser_service
+        api = api_mod.Api()
+        assert api._search.__class__ is browser_service.SearchService
         # 旧模块路径不可导入（四文件删除的镜像断言）
         assert importlib.util.find_spec('backend.services.search_service') \
             is None
@@ -752,7 +753,7 @@ class TestApiImportPaths:
         负责），此处只验在册 + Api 实例可调。
         """
         from backend.api import Api, _V12_EXTRA
-        from backend.services.browser.service import SearchService
+        from backend.domains.integrations.browser.service import SearchService
         api = Api()
         assert type(api._search) is SearchService
         for m in ('browser_search', 'browser_open', 'search_cache_stats',

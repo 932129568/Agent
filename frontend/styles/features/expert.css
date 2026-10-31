@@ -1,0 +1,64 @@
+/* W5D expert center: quiet cobalt controls, neutral surfaces, no package skin. */
+.expert-overlay[hidden],.expert-timeline[hidden],.expert-run-actions [hidden],.expert-selection-chip[hidden]{display:none!important}
+.expert-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+  padding:24px;background:color-mix(in srgb,var(--bg) 72%,transparent)}
+.expert-dialog{display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr) auto;gap:12px;width:min(1120px,100%);
+  max-height:90dvh;padding:20px;overflow:hidden;background:var(--card-bg);color:var(--text);
+  border:1px solid var(--border);border-radius:16px;box-shadow:0 16px 48px rgb(0 0 0/.16)}
+.expert-dialog-head,.expert-dialog-actions,.expert-run-actions,.expert-import-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.expert-dialog-head{justify-content:space-between}.expert-dialog-head h2{margin:0;font-size:22px;font-weight:500}
+.expert-dialog-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.expert-btn{min-width:44px;min-height:44px;padding:0 14px;border:1px solid var(--border);border-radius:10px;
+  background:var(--card-bg);color:var(--text);font:inherit;white-space:nowrap;cursor:pointer}
+.expert-btn:hover{background:var(--surface-2);border-color:var(--border-strong)}
+.expert-btn:focus-visible,.expert-package-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.expert-btn:disabled{opacity:.48;cursor:not-allowed}.expert-btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.expert-btn-primary:hover{background:var(--accent);filter:brightness(.94)}
+.expert-import-row>input,.expert-dialog>input{min-width:0;min-height:44px;padding:0 12px;flex:1;
+  border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text);font:inherit}
+.expert-center-status{min-height:22px;margin:0;color:var(--muted);font-size:13px}
+.expert-center-status[data-kind="error"],.expert-error{color:var(--err)}
+.expert-layout{display:grid;grid-template-columns:minmax(220px,.38fr) minmax(0,1fr);gap:16px;min-height:0;overflow:hidden}
+.expert-package-list{display:grid;align-content:start;gap:8px;min-width:0;overflow:auto;padding:2px}
+.expert-package-row{display:grid;gap:4px;min-width:0;min-height:44px;padding:12px;text-align:left;
+  border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text);cursor:pointer}
+.expert-package-row.is-disabled{opacity:.62}.expert-package-name{font-weight:500;overflow-wrap:anywhere}
+.expert-package-meta{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.expert-package-detail{min-width:0;overflow:auto;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.expert-package-detail h3{margin:0 0 8px;overflow-wrap:anywhere}.expert-description{white-space:pre-wrap;overflow-wrap:anywhere}
+.expert-detail-block{display:grid;gap:6px;margin-top:16px}.expert-limit{display:inline-block;margin:0 8px 4px 0;font-family:var(--font-mono);font-size:12px}
+.expert-empty{padding:20px;color:var(--muted);text-align:center}.expert-selection-chip{margin:8px 0;padding:8px 12px;
+  color:var(--accent);background:var(--primary-soft);border:1px solid var(--border);border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+.expert-usage-guide{display:grid;gap:5px;margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--card-bg);color:var(--text-2);font-size:12px;line-height:1.55}
+.expert-usage-guide strong{color:var(--text);font-weight:500}
+.expert-inline-btn{display:inline-flex!important;align-items:center;justify-content:center;min-width:44px;height:44px;
+  padding:0 10px;border-radius:10px;color:var(--text-2);font-size:12px;white-space:nowrap}
+.input-row>.expert-inline-btn{display:inline-flex!important}
+.input-row .expert-selection-chip{display:inline-flex;align-items:center;gap:6px;max-width:220px;min-height:36px;
+  margin:0;padding:6px 8px;color:var(--accent);background:var(--primary-soft);border:1px solid var(--border);
+  border-radius:10px;font-size:12px;line-height:1.3;white-space:nowrap;overflow:hidden}
+.input-row .expert-selection-chip[hidden]{display:none!important}
+.expert-chip-name{max-width:104px;overflow:hidden;text-overflow:ellipsis}
+.expert-chip-note{color:var(--text-2);font-size:11px}
+.expert-chip-clear{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;padding:0;
+  border:0;border-radius:8px;background:transparent;color:var(--text-2);font-size:16px;line-height:1;cursor:pointer}
+.expert-chip-clear:hover{background:var(--hover);color:var(--text)}
+.expert-run-area{min-width:0}.expert-run-actions{justify-content:flex-end;margin:4px 0}
+.expert-timeline{display:grid;gap:12px;max-height:46vh;margin:0 0 12px;padding:14px;overflow:auto;
+  border:1px solid var(--border);border-radius:12px;background:var(--card-bg)}
+.expert-timeline-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.expert-status{padding:2px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:12px}
+.expert-actor-lane{padding:10px 12px;border-left:2px solid var(--accent);background:var(--surface-2);border-radius:0 8px 8px 0}
+.expert-actor-label{color:var(--muted);font-size:12px}.expert-actor-text{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.expert-mailbox-row{padding:10px 12px;border-left:3px solid var(--accent);background:var(--primary-soft);
+  border-radius:8px;overflow-wrap:anywhere}.expert-usage{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+body.fx-off .expert-overlay *,body.fx-off .expert-run-area *{transition:none!important;animation:none!important}
+@media (prefers-reduced-motion:reduce){.expert-overlay *,.expert-run-area *{transition:none!important;animation:none!important}}
+@media (max-width:767px){
+  .expert-overlay{padding:0}.expert-dialog{width:100%;max-height:100dvh;height:100dvh;padding:16px;border-radius:0;border-width:0}
+  .expert-layout{grid-template-columns:minmax(0,1fr);overflow:auto}.expert-package-list{max-height:32vh}
+  .expert-package-detail{max-height:42vh}.expert-import-row{align-items:stretch}.expert-import-row>input{flex-basis:100%}
+  .expert-run-actions{justify-content:flex-start}.expert-timeline{max-height:44vh;padding:12px}
+}
+@media (max-height:600px){.expert-dialog{max-height:100dvh}.expert-timeline{max-height:40vh}}

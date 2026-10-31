@@ -1,0 +1,44 @@
+/**
+ * 工作日志与工作目录：与 legacy workspace_service 同形。
+ *
+ *   get_cwd()               → 当前工作目录（字符串原文，非 JSON）
+ *   set_workspace(path)     → 目录存在才切换，返回 {"ok":true,"path":...}
+ *   get_worklog()           → <root>/_glm_worklog.md 原文
+ *   append_worklog(text)    → 追加 `- [MM-DD HH:MM] <text 截 500>`，UTF-8
+ */
+import fs from 'node:fs'
+import path from 'node:path'
+import { runtime, setCwd, effectiveRoot } from '../runtime.js'
+import { readTextIfExists } from '../paths.js'
+
+export function getCwd() {
+  return runtime.cwd
+}
+
+export function setWorkspace(dir) {
+  const target = String(dir || '')
+  if (!target || !fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
+    return JSON.stringify({ error: `目录不存在: ${target}` })
+  }
+  setCwd(target)
+  return JSON.stringify({ ok: true, path: runtime.cwd })
+}
+
+function worklogPath(sid) {
+  return path.join(effectiveRoot(sid), '_glm_worklog.md')
+}
+
+export function getWorklog() {
+  return readTextIfExists(worklogPath(runtime.currentSid), '')
+}
+
+export function appendWorklog(text) {
+  const file = worklogPath(runtime.currentSid)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const ts = `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+  const line = `- [${ts}] ${String(text).slice(0, 500)}\n`
+  fs.appendFileSync(file, line, 'utf8')
+  return '{"ok":true}'
+}

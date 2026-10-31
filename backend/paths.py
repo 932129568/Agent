@@ -36,6 +36,22 @@ CHECKPOINTS_FILE     = os.path.join(CONFIG_DIR, 'checkpoints.json')         # M2
 PLATFORM_DIR         = os.path.join(CONFIG_DIR, 'platform')                 # M1.4 secrets.json 等
 BROWSER_PROFILE_DIR  = os.path.join(CONFIG_DIR, 'browser_profile')          # M3 浏览器 profile（与主窗 webview_data 隔离）
 MODEL_PREFS_FILE     = os.path.join(CONFIG_DIR, 'model_prefs.json')         # 复核批：推理偏好（思考强度/上下文窗口）
+# W5A 专家包：独立注册表与 managed snapshot，不污染 config.json。
+EXPERTS_FILE = os.path.join(CONFIG_DIR, 'experts.json')
+EXPERTS_DIR = os.path.join(CONFIG_DIR, 'experts')
+EXPERT_SNAPSHOTS_DIR = os.path.join(EXPERTS_DIR, 'snapshots')
+EXPERT_STAGING_DIR = os.path.join(EXPERTS_DIR, 'staging')
+
+
+def builtin_experts_dir():
+    """Return the read-only builtin WorkBuddy expert assets bundled with Harbor."""
+    if getattr(sys, 'frozen', False):
+        base = getattr(sys, '_MEIPASS', None)
+        if not base:
+            raise RuntimeError('frozen build is missing sys._MEIPASS')
+        return os.path.join(base, 'backend', 'experts_builtin')
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'backend', 'experts_builtin')
 
 
 def ensure_dirs():

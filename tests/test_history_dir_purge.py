@@ -27,6 +27,24 @@ class TestHistoryDir:
         r = json.loads(Api().history_dir_get())
         assert r['dir'] == '' and r['sessions_file'].endswith('sessions.json')
 
+    def test_get_uses_single_history_snapshot(self, fresh_home, monkeypatch):
+        from backend.api import Api
+        from backend import paths
+        api = Api()
+        api.history_dir_set(_mk_dir(os.environ['HOME'], 'single-snapshot'))
+        real_open = open
+        reads = []
+
+        def counting_open(file, *args, **kwargs):
+            if os.path.abspath(str(file)) == os.path.abspath(paths.HISTORY_FILE):
+                reads.append(file)
+            return real_open(file, *args, **kwargs)
+
+        monkeypatch.setattr('builtins.open', counting_open)
+        result = json.loads(api.history_dir_get())
+        assert len(reads) == 1
+        assert result['sessions_file'] == os.path.join(result['dir'], 'sessions.json')
+
     def test_set_and_effect(self, fresh_home):
         from backend.api import Api
         api = Api()
@@ -115,7 +133,7 @@ class TestHistoryDir:
 
 class TestSessionPurge:
     def _seed_plan(self, tid):
-        from backend.services import plan_service as ps
+        from backend.domains.planning import plan_service as ps
         os.makedirs(ps._plans_dir(), exist_ok=True)
         with open(ps._task_path(tid), 'w', encoding='utf-8') as f:
             json.dump({'task_id': tid, 'title': 't', 'steps': [],
@@ -142,7 +160,7 @@ class TestSessionPurge:
         # 文件层面验证真没了
         assert json.loads(api.get_sessions()) == []
         assert 's1' not in json.load(open(paths.SESSION_WS_FILE, encoding='utf-8'))
-        from backend.services import plan_service as ps
+        from backend.domains.planning import plan_service as ps
         assert not os.path.exists(ps._task_path('tk1'))
         assert not os.path.exists(ps._ckpt_path('tk1'))
 

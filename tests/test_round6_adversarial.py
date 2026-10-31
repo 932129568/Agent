@@ -42,14 +42,18 @@ import tempfile
 
 import pytest
 
+from helpers.frontend import (frontend_node_map, read_frontend_source,
+                              read_frontend_styles, read_frontend_template_with_styles,
+                              resolve_script, script_paths)
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 TPL = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _strip_comments(src):
@@ -195,7 +199,8 @@ let planCurrent = null;
 let __stepCalls = [];
 function planStepStatus(i, st) { __stepCalls.push([i, st]); }
 let __finishArg = null;
-function planFinish(t) { __finishArg = t; }
+let __finishStatus = null;
+function planFinish(t, finalStatus) { __finishArg = t; __finishStatus = finalStatus; }
 const mkPlan = () => ({ task_id: 'tk1', status: 'running',
   steps: [{ status: 'pending' }, { status: 'doing' }, { status: 'done' }] });
 """
@@ -216,16 +221,31 @@ async function __main() {
   const ok = (n, c) => out.checks.push({ name: n, pass: !!c });
 
   // ① 反例主场景：熔断 break（naturalDone=false）→ 不收尾
-  planCurrent = mkPlan(); __stepCalls = []; __finishArg = null;
+  planCurrent = mkPlan(); __stepCalls = []; __finishArg = null; __finishStatus = null;
   planFinishIfNatural(false, false);
   ok('fuse_break_no_finish', __finishArg === null && __stepCalls.length === 0);
 
-  // ② 正常跑完（naturalDone=true）→ 收尾 + pending/doing 步骤置 done
-  planCurrent = mkPlan(); __stepCalls = []; __finishArg = null;
+  // ② 正常跑完只汇总真实状态；pending/doing 不得被伪置 done，也不伪称验收通过
+  planCurrent = mkPlan(); planCurrent.steps.push({ text: '被阻断步骤', status: 'blocked' });
+  planCurrent.steps[0].text = '待处理步骤'; planCurrent.steps[1].text = '进行中步骤';
+  __stepCalls = []; __finishArg = null;
   planFinishIfNatural(false, true);
-  ok('natural_done_finish', __finishArg && __finishArg.indexOf('3 步全部完成') >= 0
-     && __stepCalls.length === 2 && __stepCalls[0][0] === 0 && __stepCalls[1][0] === 1
-     && __stepCalls.every(c => c[1] === 'done'));
+  ok('natural_done_finish', __finishArg
+     && __finishArg.indexOf('模型已结束，未执行自动验收') >= 0
+     && __finishArg.indexOf('已完成 1/4 步') >= 0
+     && __finishArg.indexOf('待处理步骤') >= 0
+     && __finishArg.indexOf('被阻断步骤') >= 0
+     && __stepCalls.length === 0
+     && planCurrent.steps[0].status === 'pending'
+     && planCurrent.steps[1].status === 'doing'
+     && planCurrent.steps[3].status === 'blocked'
+     && __finishStatus === 'blocked');
+
+  // 全 done：才允许向下游传 done 终态
+  planCurrent = mkPlan(); planCurrent.steps.forEach(x => { x.status = 'done'; });
+  __stepCalls = []; __finishArg = null; __finishStatus = null;
+  planFinishIfNatural(false, true);
+  ok('all_done_finish_status', __finishStatus === 'done');
 
   // ③ 用户暂停（userStopped=true，即便 naturalDone）→ 不收尾
   planCurrent = mkPlan(); __stepCalls = []; __finishArg = null;
@@ -252,12 +272,58 @@ async function __main() {
         """结构侧：naturalDone 仅在「无工具调用」正常终结处置位。"""
         src = _fe('60-agent-loop.js')
         assert 'let naturalDone = false;' in src
-        # 唯一置位点与 finished=true 的正常终结 break 同块
-        i_nat = src.index('naturalDone = true;')
+        # 唯一置位点在正常终结块，并显式排除 length 截断路径
+        i_nat = src.index("naturalDone = finishReason !== 'length';")
         i_fin = src.rindex('finished = true;', 0, i_nat)
-        assert i_nat - i_fin < 80, 'naturalDone 置位点偏离正常终结路径'
-        assert src.count('naturalDone = true') == 1
+        assert i_nat - i_fin < 200, 'naturalDone 置位点偏离正常终结路径'
+        # ModelExecutor 终态结果投影 + run 状态镜像（初始 false / execution 投影），
+        # 都不是额外自然完成判据；判据仍只在上方正常终结块。
+        assert src.count('naturalDone =') == 5
+        assert 'execution.naturalDone' in src
         assert 'planFinishIfNatural(userStopped, naturalDone);' in src
+
+
+class TestPlanFinishTerminalStatus:
+    """67-plan-card.js：摘要、徽标、toast 与落库终态必须一致。"""
+
+    def test_blocked_and_default_done_stay_consistent(self):
+        _run_js('plan_terminal_status', ['67-plan-card.js'], r"""
+planCurrent = { task_id: 'tk-final', steps: [] };
+planCardEl = document.body;
+const __planUpdates = [];
+const __planToasts = [];
+function callApi(name, args) {
+  if (name === 'plan_update') __planUpdates.push(args);
+  return Promise.resolve('{}');
+}
+function scrollChat() {}
+function toast(message, kind) { __planToasts.push({ message, kind }); }
+""", r"""
+async function __main() {
+  const out = { checks: [] };
+  const ok = (n, c) => out.checks.push({ name: n, pass: !!c });
+  planFinish('仍有待处理步骤', 'blocked');
+  const blockedBadge = document.getElementById('planBadge');
+  ok('blocked_badge', blockedBadge.className === 'plan-badge blocked'
+     && blockedBadge.textContent === '有未决事项');
+  ok('blocked_plan_update', __planUpdates.length === 1
+     && __planUpdates[0][0] === 'tk-final' && __planUpdates[0][1] === 'blocked');
+  ok('blocked_toast', __planToasts.length === 1
+     && __planToasts[0].kind === 'warn'
+     && __planToasts[0].message.indexOf('有未决事项') >= 0);
+
+  planFinish('全部完成');
+  const doneBadge = document.getElementById('planBadge');
+  ok('default_done_badge', doneBadge.className === 'plan-badge done'
+     && doneBadge.textContent === '已完成');
+  ok('default_done_plan_update', __planUpdates.length === 2
+     && __planUpdates[1][1] === 'done');
+  ok('default_done_toast', __planToasts.length === 2
+     && __planToasts[1].kind === 'ok'
+     && __planToasts[1].message.indexOf('任务完成') >= 0);
+  return out;
+}
+""", 6)
 
 
 # ============================================================ A2 项2：会话信任登记
@@ -842,7 +908,7 @@ class TestStaticRound5Verification:
 
     # ---- 项5：玻璃变量双主题定义 + 历史面板只用已定义变量 ----
     def test_item5_glass_vars_both_themes(self):
-        tpl = io.open(TPL, encoding='utf-8').read()
+        tpl = read_frontend_styles(PROJECT_ROOT)
         root_block = tpl.split('body.dark{')[0]
         dark_block = tpl.split('body.dark{')[1].split('}')[0]
         for v in ('--glass-bg-2', '--glass-border', '--glass-blur', '--surface-2',
@@ -856,7 +922,7 @@ class TestStaticRound5Verification:
 
     # ---- 项10：msg-time / shortcutsBtn / fx-off ----
     def test_item10_msg_time_and_fxoff(self):
-        tpl = io.open(TPL, encoding='utf-8').read()
+        tpl = read_frontend_template_with_styles(PROJECT_ROOT)
         # user 隐藏规则必须后置于 order:-1 规则（同特异性 .message.user .msg-time，源序定胜负）
         i_order = tpl.index('.message.user .msg-time{order:-1}')
         i_hide = tpl.index('.message.user .msg-time{display:none}')
@@ -864,9 +930,8 @@ class TestStaticRound5Verification:
         assert '.message.assistant .msg-time{position:absolute;top:12px;right:4px' in tpl
         # shortcutsBtn 单定义 + src 无 getElementById 引用断裂
         assert tpl.count('id="shortcutsBtn"') == 1
-        for f in os.listdir(SRC_DIR):
-            if f.endswith('.js'):
-                assert "getElementById('shortcutsBtn')" not in _fe(f), f
+        for f in script_paths(PROJECT_ROOT):
+            assert "getElementById('shortcutsBtn')" not in _fe(f), f
         # fx-off：set-window/modal-card 入场停；非 fx-off 动画定义仍在
         assert 'body.fx-off .set-window,body.fx-off .modal-card{animation:none}' in tpl
         assert 'animation:v4SetWinIn var(--dur-panel) var(--ease-spring)' in tpl
@@ -971,7 +1036,7 @@ class TestPurgeMaliciousTaskIdClosedLoop:
         assert r['ok'] is True
         assert r['removed']['sessions'] == 1
         # 合法 tid 仍被清理；恶意 tid 被跳过（不抛、不中断）
-        from backend.services import plan_service as ps
+        from backend.domains.planning import plan_service as ps
         assert not os.path.exists(ps._task_path('ok_tid'))
         for bad_tid in ('../../etc/passwd', 'a' * 100, 'C:\\windows'):
             with pytest.raises(ValueError):
@@ -988,7 +1053,7 @@ require('vm').runInNewContext(src + '\n;globalThis.__out = normalizeSessions(' +
   sand);
 const s = sand.__out[0];
 console.log(JSON.stringify({ plan: s.plan, ok: s.plan && s.plan.task_id === 'tk_1' }));
-""", os.path.join(SRC_DIR, '65-session-store.js')], capture_output=True, text=True, timeout=30)
+""", os.path.join(PROJECT_ROOT, resolve_script(PROJECT_ROOT, '65-session-store.js'))], capture_output=True, text=True, timeout=30)
         assert r.returncode == 0, r.stderr
         out = json.loads(r.stdout)
         assert out['ok'] is True and out['plan']['task_id'] == 'tk_1'

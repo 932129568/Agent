@@ -68,7 +68,7 @@ class TestMemoryDelete:
 
     def test_delete_audit_written(self, fresh_home):
         from backend.api import Api
-        from backend.services.guard_service import AUDIT_LOG
+        from backend.domains.security.guard_service import AUDIT_LOG
         api = Api()
         api.append_memory(json.dumps({'text': 'y'}))
         json.loads(api.memory_delete(0))
@@ -81,7 +81,7 @@ class TestMemoryDelete:
 
     def test_delete_block_audit(self, fresh_home):
         from backend.api import Api
-        from backend.services.guard_service import AUDIT_LOG
+        from backend.domains.security.guard_service import AUDIT_LOG
         api = Api()
         json.loads(api.memory_delete(0))          # 空 → 拒绝
         lines = io.open(AUDIT_LOG, encoding='utf-8').read().strip().splitlines()

@@ -1,0 +1,31 @@
+// Harbor 会话持久化（Prisma 7 / SQLite）。
+//
+// 设计取舍：保留 `payload` 原文列——legacy sessions.json 的条目结构复杂且
+// 含 messages 全文，逐字段拆表会在迁移期引入不可逆的信息丢失。列表检索字段
+// （title/updatedAt/runStatus/project*）单独建列并索引，读列表不必解析 payload。
+// 后续若需要按消息检索，再引入 Message 表并保留 payload 作为迁移兜底。
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Session {
+  id               String @id
+  title            String @default("")
+  createdAt        BigInt
+  updatedAt        BigInt
+  runStatus        String?
+  projectId        String?
+  projectName      String?
+  projectWorkspace String?
+  /// legacy 会话条目原文（含 messages），读取时原样回填，保证零信息损失
+  payload          String
+
+  @@index([updatedAt])
+  @@index([projectId])
+}

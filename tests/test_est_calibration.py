@@ -12,9 +12,10 @@ import subprocess
 import sys
 import tempfile
 
-SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       'frontend', 'src')
-NODE = r'C:/Users/陈/.workbuddy/binaries/node/versions/22.22.2-6/node.exe'
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
+from helpers.frontend import frontend_node_map
+NODE = r'C:/Users/陈/.workbuddy/binaries/node/versions/node-v27.0.0-alpha.0.0.0-win-x64/node.exe'
 
 _PRELUDE = r"""
 const __vm = require('vm');
@@ -29,10 +30,10 @@ const __sand = {
 };
 __sand.window = __sand;
 const __ctx = __vm.createContext(__sand);
-function __fe(name){ return __fs.readFileSync(%r + '/' + name, 'utf8'); }
+function __fe(name){ return __fs.readFileSync(%r + '/' + ((%r)[name] || name), 'utf8'); }
 function __run(code){ __vm.runInContext(code, __ctx, { timeout: 20000 }); }
 function __vmEval(fnSrc){ return __vm.runInContext('(function(){' + fnSrc + '})()', __ctx, { timeout: 20000 }); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 # body 整体进 vm：模块加载 + 用例逻辑 + return
 _MAIN = r"""

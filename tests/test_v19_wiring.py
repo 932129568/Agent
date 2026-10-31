@@ -35,7 +35,7 @@ class _FakeBrowser:
 
 
 def _mk_service(html, tmpdir, **kw):
-    from backend.services.browser.service import SearchService
+    from backend.domains.integrations.browser.service import SearchService
     return SearchService(browser=_FakeBrowser(html),
                          cache_dir=os.path.join(str(tmpdir), 'cache'),
                          **kw)
@@ -105,7 +105,7 @@ class TestProvenanceWiring:
 
     def test_browser_open_reader_and_tag(self, tmp_path, monkeypatch):
         """browser_open：reader 未配置 → raw 模式 + digest=None + provenance tag。"""
-        import backend.services.browser.service as _svc_mod
+        import backend.domains.integrations.browser.service as _svc_mod
         monkeypatch.setattr(_svc_mod, '_is_public_host', lambda h: True)
         svc = _mk_service(_fx('bing_results.html'), tmp_path)
         r = svc.browser_open({'url': 'https://example.com/page'})
@@ -116,10 +116,10 @@ class TestProvenanceWiring:
         assert r['source']['url'] == 'https://example.com/page'
 
     def test_software_payload_tagged(self, fresh_home):
-        from backend.services.software_service import SoftwareService
-        from backend.services.guard_service import GuardService
-        from backend.services.cmd_service import CmdService
-        from backend.services.sandbox_service import SandboxService
+        from backend.domains.integrations.software_service import SoftwareService
+        from backend.domains.security.guard_service import GuardService
+        from backend.domains.workspace.cmd_service import CmdService
+        from backend.domains.workspace.sandbox_service import SandboxService
         svc = SoftwareService(guard=GuardService(), sandbox=SandboxService())
         # 直接测 _call_cli 的 tag（runner 注入假执行器）
         svc._runner = lambda argv, cwd, timeout, limits: {
@@ -133,9 +133,9 @@ class TestProvenanceWiring:
         assert payload['source'] == {'software': 'fake', 'action': 'run'}
 
     def test_sanitize_applied_to_stdout(self, fresh_home):
-        from backend.services.software_service import SoftwareService, sanitize_text
-        from backend.services.guard_service import GuardService
-        from backend.services.sandbox_service import SandboxService
+        from backend.domains.integrations.software_service import SoftwareService, sanitize_text
+        from backend.domains.security.guard_service import GuardService
+        from backend.domains.workspace.sandbox_service import SandboxService
         svc = SoftwareService(guard=GuardService(), sandbox=SandboxService())
         svc._runner = lambda argv, cwd, timeout, limits: {
             'stdout': '\x1b[31m红色\u200e输出\x00', 'stderr': '',
@@ -180,16 +180,16 @@ class TestReaderSharing:
         assert api._search._reader is api._reader    # 计数口径一致
 
     def test_stats_reflects_open_reader_calls(self, fresh_home, monkeypatch):
-        import backend.services.browser.service as _svc_mod
+        import backend.domains.integrations.browser.service as _svc_mod
         monkeypatch.setattr(_svc_mod, '_is_public_host', lambda h: True)
         """browser_open 走 reader 后，search_reader_stats 的 reader_calls 增长。"""
         from backend.api import Api
-        from backend.services.browser.service import SearchService
+        from backend.domains.integrations.browser.service import SearchService
         api = Api()
         before = json.loads(api.search_reader_stats())['reader_calls']
         # 直接调 SearchService.browser_open（经 FakeBrowser 不可注入——
         # 用 monkeypatch 方式在实例上换通道）
-        from backend.services.search_reader import SearchReader
+        from backend.domains.providers.search_reader import SearchReader
 
         class _StubBrowser:
             def open_url(self, url):
@@ -204,5 +204,5 @@ class TestReaderSharing:
 
 
 def _parse(xml):
-    from backend.services.browser.adapters import parse_rss
+    from backend.domains.integrations.browser.adapters import parse_rss
     return parse_rss(xml)

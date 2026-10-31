@@ -13,38 +13,15 @@ v1.2 追加 guard/update/provider 共 10 个、v1.3 追加 mcp_* 共 10 个隐�
 import json
 import os
 import sys
-import threading
-import time
 
-from . import paths
 from . import tools_schema
+from .application.operation import OperationDenied, OperationRequest
+from .application.task import TaskEnvelope
+from .bootstrap.container import ServiceContainer
+from .domains.providers.local_model_service import readiness as local_readiness_score
+from .domains.providers.local_proxy import get_proxy
 from .errors import err, ok
 from .logging_setup import get_logger
-from .runtime import RuntimeState
-from .services.config_service import ConfigService
-from .services.clipboard_service import ClipboardService
-from .services.cmd_service import CmdService
-from .services.file_service import FileService
-from .services.guard_service import GuardService
-from .services.hybrid_router import HybridRouter
-from .services.plan_service import PlanService
-from .services.search_reader import SearchReader
-from .services.local_model_service import LocalModelService
-from .services.local_model_service import readiness as local_readiness_score
-from .services.local_proxy import get_proxy
-from .services.mcp_config_service import McpConfigService
-from .services.mcp_service import McpService
-from .services.process_service import ProcessService
-from .services.provider_service import ProviderService
-from .services.sandbox_service import SandboxService
-from .services.screenshot_service import ScreenshotService
-from .services.browser.service import SearchService
-from .services.software_service import SoftwareService
-from .services.toolcache_service import ToolcacheService
-from .services.update_service import UpdateService
-from .services.webdav_service import WebDAVService
-from .services.workspace_service import WorkspaceService
-from .services import update_service as _update_mod
 
 API_VERSION = 'v1.0.0'
 
@@ -111,120 +88,63 @@ _V12_EXTRA = frozenset({
     'browser_sessions', 'browser_set_mode',
     # 复核批：流式渲染逼帧兜底（WebView2 后台化残余场景；前端流式期间轮询）
     'ui_nudge',
+    # W5A 专家包目录导入/快照资源服务（仅包治理，不含 Team/Agent 执行）
+    'expert_list', 'expert_get', 'expert_import_directory', 'expert_read_resource',
+    'expert_save_preferences', 'expert_set_enabled', 'expert_delete_package',
 })
 
 
 class Api:
-    def __init__(self):
+    def __init__(self, container=None):
+        """Bind the frozen protocol facade to one fully assembled container."""
+        self._container = container or ServiceContainer.build()
+        for alias, service in self._container.api_aliases().items():
+            setattr(self, alias, service)
         self._log = get_logger()
-        paths.ensure_dirs()   # 修复 W1：目录就绪提前（原在末尾，服务初始化写文件可能先于它）
-        # 公开可变属性（legacy L168-175）全部私有化，杜绝 pywebview CLR 枚举非序列化成员的崩溃面
-        self._runtime = RuntimeState()
-        self._config = ConfigService()
-        self._workspace = WorkspaceService(self._runtime, self._config)
-        self._toolcache = ToolcacheService()
-        self._guard = GuardService()
-        # W1 trace_id：审计全链路追踪钩子（每消息/任务一个 t_<ts36>_<rand4>，
-        # guard/plan/tool 的审计自动带 trace 字段；切会话换新 trace）
-        self._guard.set_trace_hook(self._current_trace)
-        self._trace_id = None
-        self._trace_lock = threading.Lock()   # trace 懒生成互斥（复核修正）
-        self._ui_vis_logged = set()           # visibilityState 诊断去重（ui_nudge）
-        self._update = UpdateService()
-        self._provider = ProviderService()
-        self._files = FileService(self._runtime, self._workspace)
-        self._cmds = CmdService(self._workspace, self._toolcache)
-        self._clipboard = ClipboardService()
-        self._process = ProcessService()
-        self._screenshot = ScreenshotService()
-        # v1.3 MCP：配置独立文件（不碰 config.json）；McpService 持有 config/guard/toolcache
-        self._mcp_cfg = McpConfigService()
-        self._mcp = McpService(self._mcp_cfg, self._guard, self._toolcache)
-        # v1.5 本地模型（预留接口层：连接层 A 实现就绪 / 适配层 B 判定就绪）
-        self._local = LocalModelService()
-        # v1.6 HF-P0：本地 CORS 代理（file:// 页面直连不输出 CORS 头的本地服务器必失败）
-        # ——Api 装配即启动（进程级单例，ensure_running 幂等）；前端经 get_local_proxy
-        # 取基址，local 模式 fetch 改打代理（X-Harbor-Target 头携带真实 base_url）。
-        # 启动失败不阻塞装配：前端拿不到代理基址时回落直连（行为不劣化）。
-        try:
-            get_proxy().ensure_running()
-        except Exception as e:
-            self._log.warning('本地 CORS 代理启动失败（本地端点将回落直连）: %r', e)
-        # v1.6 WebDAV（预留接口层：校验与冲突判定就绪，IO 为 reserved 占位）
-        self._webdav = WebDAVService()
-        # v1.6 沙箱（Job Object 进程隔离 + 资源限制；fail-closed）
-        self._sandbox = SandboxService()
-        # v1.9.0 装配预留挂点（T03/T04/T05 按序落，本轮只锚注释不装配）：
-        #   self._checkpoint = CheckpointService()  # T05：检查点六军规（checkpoint_* 切委托）
-        # v1.8.0 S 域·外部软件调用（software.json 独立文件；审计复用同一
-        # GuardService 实例；沙箱档位经 sandbox_service.limits_for_profile）
-        self._software = SoftwareService(guard=self._guard, sandbox=self._sandbox,
-                                         ws_root=lambda: self._workspace.effective_root(
-                                             self._runtime.get_current_sid()))
-        # v1.8.0 H 域·混合路由（hybrid.json 独立文件；决策 + 成本分账）
-        self._hybrid = HybridRouter()
-        # v1.9.0 M2.1：dual-LLM-lite 本地读取器（reader.json 独立配置；
-        # search_reader_stats 转正 + reader_config_get/save + SearchService 共享注入）
-        self._reader = SearchReader(router=self._hybrid)
-        # 复核批：推理偏好（思考强度/上下文窗口；model_prefs.json 独立文件，
-        # config.json 零污染铁律）——模型选择弹层内嵌消费
-        from .services.model_prefs_service import ModelPrefsService
-        self._model_prefs = ModelPrefsService()
-        # v1.9.0 M2.7：检查点六军规（plan_service 委托同实例——清单/回滚一口径）
-        from .services.checkpoint_service import CheckpointService
-        self._checkpoint = CheckpointService()
-        # v1.9.0 M2.6：审计双身份 hook（sid=当前会话 id；异常 → sid=None 不阻断）
-        self._guard.set_identity_hook(
-            lambda: {'sid': str(self._runtime.get_current_sid() or ''),
-                     'principal': 'user'})
-        # v1.8.0 B 域·浏览器搜索（search_cache/ 独立目录，config.json 零污染；
-        # 审计复用同一 GuardService 实例保持 audit_log.jsonl 单一口径）
-        # v1.9.0 M1.7：SearchService 自 backend.services.browser.service 导入（平台抽象包；
-        # 类名/五方法契约不变——鸭子类型只依赖通道 open_url）
-        # v1.9.0 M2.1：reader 与 search_reader_stats 同一实例（计数口径一致；
-        # SearchService.browser_open 的正文经它过读取器）——须后于 reader 装配
-        self._search = SearchService(guard=self._guard, reader=self._reader)
-        # v1.9.0 M3/M5：浏览器驱动服务（六原语会话池 + 提取桥 + 下载拦截；
-        # 与搜索管线解耦——design §A3.3 裁决，搜索次窗 SearchBrowser 不动）
-        # M3.6 外链接线（本批复核补接）：Bridge.open_external 公网 _blank →
-        # 系统浏览器 + 审计（此前默认 Bridge(on_external=None) 静默无动作）。
-        from .services.browser.driver import BrowserService
+        self._ui_vis_logged = set()
+        self._export_paths = self._container._export_paths
+        self._export_paths_lock = self._container._export_paths_lock
 
-        def _driver_open_external(url):
-            try:
-                import webbrowser
-                webbrowser.open(str(url))
-            except Exception:
-                pass
-            try:
-                self._guard.audit('browser_external',
-                                  {'url': str(url)[:200]},
-                                  'decision', 'allow')
-            except Exception:
-                pass
-        self._driver = BrowserService(on_external=_driver_open_external)
-        # v1.8.0 M3 域·计划执行与检查点（plans//checkpoints/ 独立目录，config.json 零污染）
-        self._plan = PlanService()
-        # v1.9.0 M2.7：plan 委托与 api 直连共享同一 CheckpointService 实例
-        self._plan._checkpoint = self._checkpoint
-        # 导出保存路径登记（一次性消费集合：pick_save_path 登记 → save_export_file
-        # pop 消费；线程安全——对话框回调与工具调用可能在不同线程）
-        self._export_paths = set()
-        self._export_paths_lock = threading.Lock()
-        # 修复 W6（二轮）：自更新强退（os._exit 绕过 atexit）前先关 MCP 子进程，防孤儿残留
-        _update_mod.set_before_exit_hook(self._mcp.shutdown)
+    def _shutdown(self):
+        return self._container.shutdown()
+
+    def _execute_guarded(self, op, detail, token, executor,
+                         denial='error', rejection_reason='backend-enforced'):
+        """Adapt OperationDenied to the three pre-existing public JSON dialects."""
+        request = OperationRequest(
+            op=op, detail=detail, token=token,
+            sid=self._runtime.get_current_sid() or '')
+        try:
+            return self._operation.execute(
+                request, executor, rejection_reason=rejection_reason)
+        except OperationDenied as denied:
+            if denied.budget:
+                return ok({'ok': False, 'error': denied.budget})
+            if denial == 'err':
+                return err(denied.reason)
+            if denial == 'structured':
+                return ok({'ok': False, 'error': {
+                    'code': 'CONFIRM_REQUIRED', 'message': denied.reason, 'op': op}})
+            return ok({'error': denied.reason})
 
     def _set_window(self, win):
         """入口装配：窗口引用放 RuntimeState（legacy _RT['win']），不挂 js_api 表面。
         命名为私有：get_api_info 经 dir() 自省，公开方法集合必须与 v1.0.0 逐字一致。
         修复 S4：窗口就绪即武装护栏——此后 always/session 档在执行点强制 token/信任校验。"""
         self._runtime.win = win
+        if win is not None:
+            self._native_ui.register(win, 'main',
+                                     self._native_ui.begin_invoke_adapter(win), bootstrap=True)
         self._guard.arm()
 
     # ============ 历史自选存放 + 真删（2026-10-21 用户需求）============
     def history_dir_get(self):
         """当前历史存放目录（''=默认 ~/.glm-chat/）+ sessions.json 实际路径。"""
-        return ok(self._config.history_dir_get())
+        envelope = TaskEnvelope.create(
+            'settings', 'history_dir_get', resourceKeys=('cfg:history',),
+            sessionId=self._runtime.get_current_sid() or '', timeout_ms=10000)
+        result = self._scheduler.submit(envelope).result(envelope.remaining())
+        return ok(result)
 
     def history_dir_set(self, dir_path, migrate=False):
         """设置历史存放目录（空串恢复默认；migrate=True 搬旧 sessions.json）。
@@ -311,17 +231,7 @@ class Api:
         except Exception as e:
             return err('写入失败: %s' % e)
 
-    # ============ v1.9.0 M1.9：新 js_api 占位（先登记后实现，防契约漂移）============
-    # master-plan §6.2 + frontend-handover-v19 §4.1 契约为唯一事实源。
-    # 口径：占位期返回 NOT_IMPLEMENTED 结构化错误（前端可发调用、按 milestone
-    # 显示「未就绪」降级态，开发不互阻）；转正时改签名行为不变、_V12_EXTRA
-    # 不动。checkpoint 三兄弟/plan_get/trace_new 为 v1.8 已交付项，不占位。
-    def _not_implemented(self, name, milestone):
-        return ok({'ok': False,
-                   'error': {'code': 'NOT_IMPLEMENTED',
-                             'message': '%s 尚未实现（v1.9.0 %s 转正）' % (name, milestone),
-                             'milestone': milestone}})
-
+    # ============ v1.9.0 浏览器驱动原语 ============
     def browser_navigate(self, url, wait_selector='', timeout=60,
                          mode='hidden', token=None):
         """M3/M5 转正：新建驱动会话并导航（任意 URL + 等待选择器/硬超时）。
@@ -331,51 +241,29 @@ class Api:
         最近导航的游标会话）。审计 op=browser_navigate。
         """
         detail = {'url': str(url or '')[:200]}
-        reason, bx = self._guard.enforce_exec_ex('browser_navigate', detail, token)
-        if bx:
-            self._guard.audit('browser_navigate', detail, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('browser_navigate', detail, 'block', reason)
-            return ok({'ok': False, 'error': {
-                'code': 'CONFIRM_REQUIRED', 'message': reason,
-                'op': 'browser_navigate'}})
-        return ok(self._driver.navigate(url, wait_selector, timeout, mode))
+        return self._execute_guarded(
+            'browser_navigate', detail, token,
+            lambda: ok(self._driver.navigate(url, wait_selector, timeout, mode)),
+            denial='structured', rejection_reason=None)
 
     def browser_extract(self, selector='', mode='markdown', token=None):
         """M3/M5 + M2.1 转正：正文提取（markdown/text/links 三态 + provenance
         经读取器管线——dual-LLM-lite 接入在会话层 digest 场景，本方法直出三态）。
         guard session 档。审计 op=browser_extract。"""
-        reason, bx = self._guard.enforce_exec_ex(
-            'browser_extract', {'selector': str(selector or '')[:80]}, token)
-        if bx:
-            self._guard.audit('browser_extract',
-                              {'selector': str(selector or '')[:80]},
-                              'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('browser_extract',
-                              {'selector': str(selector or '')[:80]},
-                              'block', reason)
-            return ok({'ok': False, 'error': {
-                'code': 'CONFIRM_REQUIRED', 'message': reason,
-                'op': 'browser_extract'}})
-        return ok(self._driver.extract_guarded(selector, mode))
+        detail = {'selector': str(selector or '')[:80]}
+        return self._execute_guarded(
+            'browser_extract', detail, token,
+            lambda: ok(self._driver.extract_guarded(selector, mode)),
+            denial='structured', rejection_reason=None)
 
     def browser_click(self, target, token=None):
         """M3/M5 转正（guard=always）：点击（selector|text；前后态截图审计；
         视口外/不可见元素拒点）。审计 op=browser_click。"""
         detail = {'target': str(target or '')[:120]}
-        reason, bx = self._guard.enforce_exec_ex('browser_click', detail, token)
-        if bx:
-            self._guard.audit('browser_click', detail, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('browser_click', detail, 'block', reason)
-            return ok({'ok': False, 'error': {
-                'code': 'CONFIRM_REQUIRED', 'message': reason,
-                'op': 'browser_click'}})
-        return ok(self._driver.click(target))
+        return self._execute_guarded(
+            'browser_click', detail, token,
+            lambda: ok(self._driver.click(target)),
+            denial='structured', rejection_reason=None)
 
     def browser_fill(self, selector, text, token=None):
         """M3/M5 转正（guard=always）：填充（敏感字段拒填；回传 masked:true
@@ -383,35 +271,28 @@ class Api:
         不落日志——token 摘要绑 selector+text_len 同口径）。"""
         detail = {'selector': str(selector or '')[:80],
                   'text_len': len(str(text if text is not None else ''))}
-        reason, bx = self._guard.enforce_exec_ex('browser_fill', detail, token)
-        if bx:
-            self._guard.audit('browser_fill', detail, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('browser_fill', detail, 'block', reason)
-            return ok({'ok': False, 'error': {
-                'code': 'CONFIRM_REQUIRED', 'message': reason,
-                'op': 'browser_fill'}})
-        return ok(self._driver.fill(selector, text))
+        return self._execute_guarded(
+            'browser_fill', detail, token,
+            lambda: ok(self._driver.fill(selector, text)),
+            denial='structured', rejection_reason=None)
 
     def browser_screenshot(self, full_page=False, token=None):
         """M3/M5 转正（guard=session）：当前页截图（win32 窗口捕获 b64，
         point 坐标系）。审计 op=browser_screenshot。"""
-        reason, bx = self._guard.enforce_exec_ex('browser_screenshot', {}, token)
-        if bx:
-            self._guard.audit('browser_screenshot', {}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('browser_screenshot', {}, 'block', reason)
-            return ok({'ok': False, 'error': {
-                'code': 'CONFIRM_REQUIRED', 'message': reason,
-                'op': 'browser_screenshot'}})
-        return ok(self._driver.screenshot(full_page))
+        return self._execute_guarded(
+            'browser_screenshot', {}, token,
+            lambda: ok(self._driver.screenshot(full_page)),
+            denial='structured', rejection_reason=None)
 
-    def browser_close(self, session_id=''):
+    def browser_close(self, session_id='', token=None):
         """M3/M5 转正：会话池回收（session_id 指定关一个；缺省全部；
-        browser_sessions.json 状态同步）。会话管理类不落审计（幂等操作）。"""
-        return ok(self._driver.close(session_id))
+        browser_sessions.json 状态同步）。session 档与其他原语同口径；
+        token 绑定目标 id，阻断/预算拒绝落审计，成功仍按幂等管理操作处理。"""
+        detail = {'session_id': str(session_id or '')}
+        return self._execute_guarded(
+            'browser_close', detail, token,
+            lambda: ok(self._driver.close(session_id)),
+            denial='structured', rejection_reason=None)
 
     def browser_sessions(self):
         """M3：会话池投影视图 {version, sessions[]}（browser_sessions.json
@@ -429,8 +310,8 @@ class Api:
         浏览器后端就绪度）。读取类不落审计（前端 boot/69-platform 数据源：
         window.__platformInfo 缓存后驱动 data-platform 根类与 Cmd 键位映射）。"""
         import platform as _pf
-        from .services.browser import detect_platform
-        from .services.browser.platform import get_platform_services
+        from .domains.integrations.browser import detect_platform
+        from .domains.integrations.browser.platform import get_platform_services
         services = {}
         try:
             ps = get_platform_services()
@@ -448,8 +329,8 @@ class Api:
             services = {'ok': False, 'error': str(e)[:200]}
         browser = {}
         try:
-            from .services.browser import create_session
-            from .services.browser.session_mac import mac_backend_available
+            from .domains.integrations.browser import create_session
+            from .domains.integrations.browser.session_mac import mac_backend_available
             browser = {'platform': detect_platform(),
                        'win': True, 'headless': True,
                        'mac': bool(mac_backend_available()),
@@ -508,7 +389,7 @@ class Api:
 
         thinking ∈ auto/off/low/medium/high（auto=智能档；off=禁思考；其余
         手动锁定随请求发 reasoning_effort）；ctx_k=0（默认 200K 口径）或
-        1-2048 KiB（前端据此调自动压缩阈值）。审计 op=model_prefs
+        32/128/256/300/1024K（其他合法输入收敛到最近低档）。审计 op=model_prefs
         （decision=save，设置类与其他保存同口径）。"""
         r = self._model_prefs.save(prefs_json)
         if r.get('error'):
@@ -530,10 +411,8 @@ class Api:
         状态记 harbor.log，为「页面被误判 hidden」提供证据）。高频轮询不落
         审计（search_status 同口径）。_V12_EXTRA 隐身。"""
         try:
-            win = getattr(self, '_win', None)
-            native = getattr(win, 'native', None) if win is not None else None
-            hwnd = getattr(native, 'Handle', None) if native is not None else None
-            if not hwnd:
+            win = getattr(self._runtime, 'win', None)
+            if win is None:
                 return ok({'nudged': False, 'reason': 'window-not-ready'})
             if visibility not in getattr(self, '_ui_vis_logged', set()):
                 try:
@@ -541,14 +420,12 @@ class Api:
                     self._log.warning('WebView2 visibilityState=%s（逼帧兜底激活）', visibility)
                 except Exception:
                     pass
-            import ctypes
-            u32 = ctypes.windll.user32
             RDW_INVALIDATE, RDW_ERASE = 0x1, 0x4
             RDW_ALLCHILDREN, RDW_UPDATENOW = 0x80, 0x100
-            u32.RedrawWindow(ctypes.c_void_p(int(hwnd)), None, None,
-                             RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW)
-            return ok({'nudged': True})
+            flags = RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW
+            return ok({'nudged': self._native_ui.redraw(win, flags)})
         except Exception as e:
+            self._log.warning('ui_nudge 失败: %r', e)
             return ok({'nudged': False, 'error': str(e)})
 
     def session_purge(self, sid, task_ids_json='[]'):
@@ -668,14 +545,9 @@ class Api:
         # 会话切换 TOCTOU 会使名单与目标脱钩）
         sid = self._runtime.get_current_sid()
         abs_p, _ = self._files.resolve_abs(sid, path)
-        reason, bx = self._guard.enforce_exec_ex('delete_path', {'path': path, 'abs_path': abs_p}, token)
-        if bx:
-            self._guard.audit('delete_path', {'path': path}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('delete_path', {'path': path}, 'block', 'backend-enforced')
-            return err(reason)
-        return self._files.delete_path(sid, path, recycle)
+        return self._execute_guarded(
+            'delete_path', {'path': path, 'abs_path': abs_p}, token,
+            lambda: self._files.delete_path(sid, path, recycle), denial='err')
 
     def move_path(self, path, new_path):
         return self._files.move_path(self._runtime.get_current_sid(), path, new_path)
@@ -689,41 +561,31 @@ class Api:
     # ============ 命令执行 ============
     def run_command(self, cmd, timeout=60, token=None):
         # 修复 S4②：命令执行纳入护栏后端强制（默认 off 档 → 行为不变）
-        reason, bx = self._guard.enforce_exec_ex('run_command', {'cmd': str(cmd or '')[:200]}, token)
-        if bx:
-            self._guard.audit('run_command', {'cmd': str(cmd or '')[:200]}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('run_command', {'cmd': str(cmd or '')[:200]}, 'block', 'backend-enforced')
-            return err(reason)
-        self._auto_checkpoint_before_shell('run_command')
-        return self._cmds.run_command(self._runtime.get_current_sid(), cmd, timeout,
-                                      sandbox=self._sandbox.limits_for('run_command'))
+        def execute():
+            self._auto_checkpoint_before_shell('run_command')
+            return self._cmds.run_command(
+                self._runtime.get_current_sid(), cmd, timeout,
+                sandbox=self._sandbox.limits_for('run_command'))
+        return self._execute_guarded(
+            'run_command', {'cmd': str(cmd or '')[:200]}, token, execute, denial='err')
 
     def run_powershell(self, cmd, timeout=60, token=None):
-        reason, bx = self._guard.enforce_exec_ex('run_powershell', {'cmd': str(cmd or '')[:200]}, token)
-        if bx:
-            self._guard.audit('run_powershell', {'cmd': str(cmd or '')[:200]}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('run_powershell', {'cmd': str(cmd or '')[:200]}, 'block', 'backend-enforced')
-            return err(reason)
-        self._auto_checkpoint_before_shell('run_powershell')
-        return self._cmds.run_powershell(self._runtime.get_current_sid(), cmd, timeout,
-                                         sandbox=self._sandbox.limits_for('run_powershell'))
+        def execute():
+            self._auto_checkpoint_before_shell('run_powershell')
+            return self._cmds.run_powershell(
+                self._runtime.get_current_sid(), cmd, timeout,
+                sandbox=self._sandbox.limits_for('run_powershell'))
+        return self._execute_guarded(
+            'run_powershell', {'cmd': str(cmd or '')[:200]}, token, execute, denial='err')
 
     def run_admin_command(self, cmd, token=None, timeout=None):
         # 修复 S5/W8（三轮）：timeout 尾参接线——原签名丢 timeout（W13 二轮的「可调」
         # 是死参数），前端 150s 固定桥接超时与后端人审/轮询口径脱节（二次提权根因之一）。
         # 尾参追加保持旧调用形态 run_admin_command(cmd[, token]) 兼容。
-        reason, bx = self._guard.enforce_exec_ex('run_admin_command', {'cmd': str(cmd or '')[:200]}, token)
-        if bx:
-            self._guard.audit('run_admin_command', {'cmd': str(cmd or '')[:200]}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('run_admin_command', {'cmd': str(cmd or '')[:200]}, 'block', 'backend-enforced')
-            return err(reason)
-        return self._cmds.run_admin_command(self._runtime.get_current_sid(), cmd, timeout)
+        return self._execute_guarded(
+            'run_admin_command', {'cmd': str(cmd or '')[:200]}, token,
+            lambda: self._cmds.run_admin_command(
+                self._runtime.get_current_sid(), cmd, timeout), denial='err')
 
     # ============ v1.6 沙箱（_V12_EXTRA 隐身）============
     def sandbox_get_config(self):
@@ -740,66 +602,41 @@ class Api:
     # ============ 剪贴板 ============
     def get_clipboard(self, token=None):
         # 修复 S4②：clipboard_read 补 enforce 挂点（原完全无后端校验）
-        reason, bx = self._guard.enforce_exec_ex('clipboard_read', {}, token)
-        if bx:
-            self._guard.audit('clipboard_read', {}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('clipboard_read', {}, 'block', 'backend-enforced')
-            return ok({'error': reason})
-        return self._clipboard.get_clipboard()
+        return self._execute_guarded(
+            'clipboard_read', {}, token,
+            lambda: self._clipboard.get_clipboard())
 
     def set_clipboard(self, text, token=None):
         # 修复 S4②：clipboard_write 补 enforce 挂点
         detail = {'len': len(str(text if text is not None else ''))}
-        reason, bx = self._guard.enforce_exec_ex('clipboard_write', detail, token)
-        if bx:
-            self._guard.audit('clipboard_write', detail, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('clipboard_write', detail, 'block', 'backend-enforced')
-            return ok({'error': reason})
-        return self._clipboard.set_clipboard(text)
+        return self._execute_guarded(
+            'clipboard_write', detail, token,
+            lambda: self._clipboard.set_clipboard(text))
 
     # ============ 进程 ============
     def list_processes(self, keyword=None):
         return self._process.list_processes(keyword)
 
     def kill_process(self, pid=None, name=None, token=None):
-        # 修复 C1：按 pid 调用时先反查进程名，名单校验对 pid 路径同样生效
         detail = {'pid': pid if pid is not None else '', 'name': name or ''}
-        if pid is not None:
-            # 修复 S2：pid 非空时反查结果为权威（原仅在 name 为空时反查——伪造 name
-            # 可完全架空名单：pid=<lsass>, name='notepad.exe' 即绕过）
-            resolved = self._process.resolve_name_by_pid(pid)
-            if resolved is None:
-                # 修复 W8：反查失败武装态 fail-closed（未武装=测试/嵌入环境保持 legacy 放行，
-                # 契约差分 kill_pid 用例依赖此口径）
-                if self._guard.armed:
-                    self._guard.audit('kill_process', detail, 'block', 'resolve-failed')
-                    return ok({'error': '无法确认 pid=%s 对应的进程名（tasklist 反查失败），'
-                                        '为防误杀系统进程已拒绝执行。' % pid})
-            elif name and str(resolved).strip().lower() != str(name).strip().lower():
-                self._guard.audit('kill_process', detail, 'block', 'name-spoofed')
-                return ok({'error': 'pid=%s 实际进程名为 %s，与传入 name=%s 不一致，'
-                                    '已拒绝（防伪造 name 绕过名单）' % (pid, resolved, name)})
-            if resolved:
-                detail['name'] = resolved
-        # v1.2 R2：用户保护名单叠加在内置名单之上（默认名单为空 → 行为与 legacy 一致）
-        # 修复 S4①：武装后 always/session 档强制一次性 token / 会话信任
-        reason, bx = self._guard.enforce_exec_ex('kill_process', detail, token)
-        if bx:
-            # P0 复核修正：16 处 enforce_exec_ex 挂点中此处唯一漏判预算超限——
-            # escalated 时 (reason=None, bx=payload) 直落 kill，审批预算对
-            # 「结束进程」完全失效（与 delete_path 等挂点同口径补齐）
-            self._guard.audit('kill_process', detail, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('kill_process', detail, 'block', 'backend-enforced')
-            # 修复 ③（二轮）：原此处对含「保护名单」的文案二次追加「（保护名单）」后缀，
-            # guard 理由文案已含名单说明，重复后缀删除
-            return ok({'error': reason})
-        return self._process.kill_process(pid, name)
+
+        def execute():
+            if pid is not None:
+                resolved = self._process.resolve_name_by_pid(pid)
+                if resolved is None:
+                    if self._guard.armed:
+                        self._guard.audit('kill_process', detail, 'block', 'resolve-failed')
+                        return ok({'error': '无法确认 pid=%s 对应的进程名（tasklist 反查失败），'
+                                            '为防误杀系统进程已拒绝执行。' % pid})
+                elif name and str(resolved).strip().lower() != str(name).strip().lower():
+                    self._guard.audit('kill_process', detail, 'block', 'name-spoofed')
+                    return ok({'error': 'pid=%s 实际进程名为 %s，与传入 name=%s 不一致，'
+                                        '已拒绝（防伪造 name 绕过名单）' % (pid, resolved, name)})
+                if resolved:
+                    detail['name'] = resolved
+            return self._process.kill_process(pid, name)
+
+        return self._execute_guarded('kill_process', detail, token, execute)
 
     # ============ 记忆 ============
     def get_memory(self):
@@ -826,46 +663,16 @@ class Api:
         return ok({'ok': True, 'remaining': r.get('remaining', 0)})
 
     def set_current_sid(self, sid):
-        prev = self._runtime.get_current_sid()
-        new_sid = sid or None
-        self._runtime.set_current_sid(sid)
-        if new_sid != prev:
-            # 修复 W26：切会话清空后端会话信任态（与前端文案「本会话内不再提示」对齐）
-            self._guard.clear_session_trust()
-            self._mcp.clear_session_trust()
-            # W1：切会话使旧 trace 失效（下次 current_trace 生成新的）
-            self._trace_id = None
+        self._session.set_current_sid(sid)
         return '{"ok":true}'
 
     # ============ W1 trace_id（审计全链路追踪）============
     def _current_trace(self):
-        """当前会话的 trace_id（懒生成 t_<ts36>_<rand4>；切会话后重新生成）。
-
-        供 guard audit 钩子读取——同一用户请求的 guard/plan/tool 审计行
-        带同一 trace，可按用户请求聚合检索。格式：36 位 base36 时间戳 +
-        4 位随机（总额定 41 字符，JSONL 友好）。
-        """
-        if not getattr(self, '_trace_id', None):
-            import random
-            import string
-            # 复核修正：懒生成加锁——原两线程并发首查会各生成不同 trace_id
-            # 互相覆盖，同一请求的审计行 trace 不一致
-            with self._trace_lock:
-                if not self._trace_id:
-                    ts36 = ''
-                    n = int(time.time() * 1000)
-                    alpha = string.digits + string.ascii_lowercase
-                    while n:
-                        n, r = divmod(n, 36)
-                        ts36 = alpha[r] + ts36
-                    rand4 = ''.join(random.choice(alpha) for _ in range(4))
-                    self._trace_id = 't_' + ts36 + '_' + rand4
-        return self._trace_id
+        return self._session.current_trace()
 
     def trace_new(self):
         """强制开启新 trace（js_api 隐身；前端发送入口可显式调用分界请求）。"""
-        self._trace_id = None
-        return ok({'ok': True, 'trace': self._current_trace()})
+        return ok({'ok': True, 'trace': self._session.trace_new()})
 
     # ============ 工作区 ============
     def set_session_ws(self, sid, path, enabled=True):
@@ -917,45 +724,39 @@ class Api:
         return '{"ok":true}'
 
     def open_app(self, path, token=None):
-        # 修复 W9（三轮）：open_app 纳入护栏（默认 off 档 → 行为不变，可在 guard.json
-        # 提档加固）与命令去重（原不在护栏矩阵、无去重，模型连调 open_app('x.bat')
-        # 即连开窗口——用户实测「反复打开 cmd 窗口」的弹窗面根因）
-        try:
-            path = str(path or '').strip()
-            # 修复 H7（四轮）：unmark 回滚键必须在 path 被重写（shutil.which/join）之前固化，
-            # 否则登记键（原始 path）与回滚键（重写后 path）不匹配，回滚成为 no-op。
+        path = str(path or '').strip()
+
+        def execute():
             dkey = 'open_app ' + path
-            reason, bx = self._guard.enforce_exec_ex('open_app', {'path': path[:200]}, token)
-            if bx:
-                self._guard.audit('open_app', {'path': path[:200]}, 'block', 'budget-exceeded')
-                return ok({'ok': False, 'error': bx})
-            if reason:
-                self._guard.audit('open_app', {'path': path[:200]}, 'block', 'backend-enforced')
-                return err(reason)
-            tip = self._cmds.cmd_deduper.check(dkey)
-            if tip:
-                return ok({'info': tip, 'skipped': True})
-            import re as _re
-            if _re.match(r'^https?://', path):
-                import webbrowser
-                webbrowser.open(path)
-                return ok({'ok': True, 'path': path})
-            if not os.path.isabs(path):
-                import shutil
-                found = shutil.which(path)
-                if found:
-                    path = found
-                else:
-                    path = os.path.join(self._workspace.effective_root(self._runtime.get_current_sid()), path)
-            os.startfile(path)
-            return ok({'ok': True, 'path': path})
-        except Exception as e:
-            # 修复 W1（三轮）：打开失败回滚登记（合法重试不被去重误拦）
             try:
-                self._cmds.cmd_deduper.unmark(dkey)
-            except Exception:
-                pass
-            return err(e)
+                tip = self._cmds.cmd_deduper.check(dkey)
+                if tip:
+                    return ok({'info': tip, 'skipped': True})
+                import re as _re
+                if _re.match(r'^https?://', path):
+                    import webbrowser
+                    webbrowser.open(path)
+                    return ok({'ok': True, 'path': path})
+                target = path
+                if not os.path.isabs(target):
+                    import shutil
+                    found = shutil.which(target)
+                    if found:
+                        target = found
+                    else:
+                        target = os.path.join(
+                            self._workspace.effective_root(self._runtime.get_current_sid()), target)
+                os.startfile(target)
+                return ok({'ok': True, 'path': target})
+            except Exception as e:
+                try:
+                    self._cmds.cmd_deduper.unmark(dkey)
+                except Exception:
+                    pass
+                return err(e)
+
+        return self._execute_guarded(
+            'open_app', {'path': path[:200]}, token, execute, denial='err')
 
     def open_url(self, url):
         """用默认浏览器打开网页"""
@@ -974,14 +775,9 @@ class Api:
 
     def take_screenshot(self, left=None, top=None, width=None, height=None, token=None):
         # 修复 S4②：take_screenshot 补 enforce 挂点（原完全无后端校验）
-        reason, bx = self._guard.enforce_exec_ex('take_screenshot', {}, token)
-        if bx:
-            self._guard.audit('take_screenshot', {}, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('take_screenshot', {}, 'block', 'backend-enforced')
-            return ok({'error': reason})
-        return self._screenshot.take_screenshot(left, top, width, height)
+        return self._execute_guarded(
+            'take_screenshot', {}, token,
+            lambda: self._screenshot.take_screenshot(left, top, width, height))
 
     # ============ toolcache ============
     def cache_tool_output(self, content):
@@ -1008,7 +804,7 @@ class Api:
         # W0 R19（2026-10-21）：静态段改读 backend/prompts/（版本化+sha256 可追溯），
         # 渲染输出与迁移前逐字节一致（文件内容即原文抽取）；动态段（ws_enabled/
         # local/沙箱尾注）保持代码注入。
-        from .services import prompt_loader
+        from .domains.providers import prompt_loader
         sandbox_notice = ''
         try:
             sandbox_notice = self._sandbox.prompt_notice() or ''
@@ -1046,8 +842,8 @@ class Api:
     def _memory_inject(self, query):
         """W11：系统提示词记忆注入段（'' = 无记忆/异常——不影响主流程）。"""
         try:
-            from .services.memory_service import (KINDS, inject_block,
-                                                  retrieve)
+            from .domains.settings.memory_service import (KINDS, inject_block,
+                                                         retrieve)
             items = self._config._memory().list()
             if not items:
                 return ''
@@ -1087,7 +883,7 @@ class Api:
 
         返回 {id, version, text}；未知 id → err（调用方回落内置默认）。
         """
-        from .services import prompt_loader
+        from .domains.providers import prompt_loader
         text, version = prompt_loader.load(str(prompt_id or ''))
         if not text:
             return err('未知提示词 id: %s' % str(prompt_id or '')[:40])
@@ -1353,19 +1149,11 @@ class Api:
         agentGuardCheck 确认框换取（guard_confirm_token）。
         """
         p = self._params_dict(params)
-        reason, bx = self._guard.enforce_exec_ex(
-            'web_search', {'query': str((p or {}).get('query') or '')[:120]}, token)
-        if bx:
-            self._guard.audit('web_search', {'query': str((p or {}).get('query') or '')[:120]},
-                              'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('web_search', {'query': str((p or {}).get('query') or '')[:120]},
-                              'block', reason)
-            return ok({'ok': False,
-                       'error': {'code': 'CONFIRM_REQUIRED', 'message': reason,
-                                 'op': 'web_search'}})
-        return ok(self._search.browser_search(p))
+        detail = {'query': str((p or {}).get('query') or '')[:120]}
+        return self._execute_guarded(
+            'web_search', detail, token,
+            lambda: ok(self._search.browser_search(p)),
+            denial='structured', rejection_reason=None)
 
     def browser_open(self, params=None):
         """B2：打开 URL 提取正文（selector 覆盖/密度提取；超长截断落 toolcache，
@@ -1421,16 +1209,10 @@ class Api:
         _risk = self._software.action_risk(_sw, _act)
         detail = {'software': _sw, 'action': _act,
                   'force_always': _risk == 'dangerous'}
-        reason, bx = self._guard.enforce_exec_ex('software_call', detail, token)
-        if bx:
-            self._guard.audit('software_call', detail, 'block', 'budget-exceeded')
-            return ok({'ok': False, 'error': bx})
-        if reason:
-            self._guard.audit('software_call', detail, 'block', reason)
-            return ok({'ok': False,
-                       'error': {'code': 'CONFIRM_REQUIRED', 'message': reason,
-                                 'op': 'software_call'}})
-        return ok(self._software.software_call(p))
+        return self._execute_guarded(
+            'software_call', detail, token,
+            lambda: ok(self._software.software_call(p)),
+            denial='structured', rejection_reason=None)
 
     def _software_save(self, name, entry=None):
         """S 域用户自定义条目 CRUD 之写（私有：经 rpc 通用分发通道暴露——
@@ -1598,6 +1380,28 @@ class Api:
         """M3-C1：批量澄清答案收集（缺项用默认值；返回 [{q, answer}]）。
         纯前端状态机的后端数据源（ux-flows 流程 9）。"""
         return ok(self._plan.clarify_collect(questions, answers))
+
+    # ============ W5A 专家包安全服务（仅包治理，_V12_EXTRA 隐身）============
+    def expert_list(self, query=''):
+        return ok(self._expert.list(query))
+
+    def expert_get(self, package_id, snapshot_id=''):
+        return ok(self._expert.get(package_id, snapshot_id))
+
+    def expert_import_directory(self, path):
+        return ok(self._expert.import_directory(path))
+
+    def expert_read_resource(self, snapshot_id, path):
+        return ok(self._expert.read_resource(snapshot_id, path))
+
+    def expert_save_preferences(self, prefs_json):
+        return ok(self._expert.save_preferences(prefs_json))
+
+    def expert_set_enabled(self, package_id, enabled, snapshot_id=''):
+        return ok(self._expert.set_enabled(package_id, enabled, snapshot_id))
+
+    def expert_delete_package(self, package_id):
+        return ok(self._expert.delete_package(package_id))
 
     # ============ v1.6 WebDAV 数据主权（预留接口，_V12_EXTRA 隐身）============
     def webdav_get_config(self):

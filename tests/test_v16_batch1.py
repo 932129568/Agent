@@ -25,23 +25,24 @@ import time
 import pytest
 
 from conftest import NewApi, reset_home
+from helpers.frontend import frontend_node_map, read_frontend_source
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 TPL = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
 
-from backend.services import mcp_pool
-from backend.services.mcp_pool import HttpConnectionPool
-from backend.services.mcp_service import McpService
-from backend.services import webdav_service as wds
-from backend.services.guard_service import GuardService
-from backend.services.toolcache_service import ToolcacheService
-from backend.services.mcp_config_service import McpConfigService
+from backend.domains.integrations.mcp import mcp_pool
+from backend.domains.integrations.mcp.mcp_pool import HttpConnectionPool
+from backend.domains.integrations.mcp.mcp_service import McpService
+from backend.domains.integrations import webdav_service as wds
+from backend.domains.security.guard_service import GuardService
+from backend.domains.workspace.toolcache_service import ToolcacheService
+from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _tpl():
@@ -167,8 +168,12 @@ function __ctx(extra) {
 }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 
 def _run_node(body, name):
@@ -264,10 +269,11 @@ async function __main() {
 
     def test_agent_loop_passes_headers(self):
         """错误路径把响应头快照传给 humanizeApiError（第三参接线）。"""
-        src = _fe('60-agent-loop.js')
-        assert 'hdrMap' in src
-        assert 'humanizeApiError(`HTTP ${resp.status}: ${errText}`, typeof localState' in src
-        assert ', hdrMap)' in src
+        executor = _fe('frontend/src/agent/model-executor.js')
+        controller = _fe('60-agent-loop.js')
+        assert 'hdrMap' in executor
+        assert 'httpError.headers = hdrMap' in executor
+        assert 'err.headers || null' in controller
 
 
 # ============================================================ T5 提示词体系

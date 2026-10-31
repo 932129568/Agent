@@ -20,18 +20,19 @@ import tempfile
 import pytest
 
 from conftest import NewApi, reset_home
+from helpers.frontend import frontend_node_map, read_frontend_source, resolve_script
 
-from backend.services import local_model_service as lms
+from backend.domains.providers import local_model_service as lms
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 TPL = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
 OUT = os.path.join(PROJECT_ROOT, 'harbor.html')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 _JS_PRELUDE = r"""
@@ -91,8 +92,12 @@ function __ctx(extra) {
 }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 _JS_MAIN = r"""
 (async () => {
@@ -163,6 +168,8 @@ EXPECT = {
     'deepseek':  (False, True,  False, True,  False, '↻ 识别模型'),
     'moonshot':  (False, True,  False, True,  False, '↻ 识别模型'),
     'qwen':      (False, True,  False, True,  False, '↻ 识别模型'),
+    # Nemotron 3 Ultra 550B：云端第三方语义（需 Key / 计费三价 / 无 GLM 推理力度）
+    'nemotron':  (False, True,  False, True,  False, '↻ 识别模型'),
     # 实现 v1.6 T1：GitHub Models 免费层（云端第三方语义：无推理力度、有三价置零、需 Key）
     # 实现 v1.6 T2：目录探测型端点 → 按钮文案「探测目录」
     'github-models': (False, True, False, True, False, '↻ 探测目录'),
@@ -186,10 +193,11 @@ class TestPresetTableAndVisibility:
         ids = [p['id'] for p in r['presets']]
         # 实现 v1.6 T1：v4 设计 10 项 → 新增 github-models（免费层）为 11 项
         # 实现 FreeToken preset：新增 freetoken（FreeToken Desktop 本地管理器）为 12 项
-        assert len(ids) == 12, ids
-        assert ids == ['glm', 'deepseek', 'moonshot', 'qwen', 'github-models',
-                       'ollama', 'lmstudio', 'vllm', 'llamacpp', 'localai',
-                       'freetoken', 'custom']
+        # 实现 Nemotron preset：新增 nemotron（legui.xyz 云端端点）为 13 项
+        assert len(ids) == 13, ids
+        assert ids == ['glm', 'deepseek', 'moonshot', 'qwen', 'nemotron',
+                       'github-models', 'ollama', 'lmstudio', 'vllm', 'llamacpp',
+                       'localai', 'freetoken', 'custom']
         assert r['order'] == ids
         for p in r['presets']:
             assert p['name'], p['id']
@@ -215,7 +223,7 @@ class TestPresetTableAndVisibility:
 
     def test_visibility_matrix_cell_by_cell(self):
         r = _run_node(_JS_APPLY_ALL, 'matrix')
-        assert len(r['matrix']) == 12   # 实现 v1.6 T1：10 → 11；实现 FreeToken preset：11 → 12
+        assert len(r['matrix']) == 13   # v4 10 → github 11 → freetoken 12 → nemotron 13
         for row in r['matrix']:
             exp = EXPECT[row['id']]
             assert row['reasoning'] is exp[0], '推理力度显隐错: %s' % row['id']
@@ -788,15 +796,17 @@ class TestTemplateMerge:
                      '>模型服务商（OpenAI 兼容端点）</div>',
                      '>本地模型（v1.5 · Ollama / LM Studio 等）</div>']:
             assert gone not in tpl, '合并后残留: %s' % gone
-        # 11 个预设全部在模板下拉里（实现 v1.6 T1：+github-models）
-        for pid in ('glm', 'deepseek', 'moonshot', 'qwen', 'github-models', 'ollama',
-                    'lmstudio', 'vllm', 'llamacpp', 'localai', 'custom'):
+        # 13 个预设全部在模板下拉里（+github-models / +freetoken / +nemotron）
+        for pid in ('glm', 'deepseek', 'moonshot', 'qwen', 'nemotron', 'github-models',
+                    'ollama', 'lmstudio', 'vllm', 'llamacpp', 'localai', 'freetoken',
+                    'custom'):
             assert '<option value="%s"' % pid in tpl, pid
 
     def test_built_artifact_contains_new_module(self):
         assert os.path.isfile(OUT), '先运行 node frontend/build.js'
         built = io.open(OUT, encoding='utf-8').read()
-        assert '/* ===== 36-connect.js ===== */' in built
+        module_path = resolve_script(PROJECT_ROOT, '36-connect.js')
+        assert ('/* ===== %s ===== */' % module_path) in built
         assert 'PROVIDER_HOT_MODELS' in built
         assert 'CONNECT_DEBOUNCE_MS = 800' in built
         assert 'id="cmBlock"' in built

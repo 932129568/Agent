@@ -1,0 +1,21 @@
+/* W4A base: warm surfaces, legible type and explicit accessibility fallbacks. */
+html,body{width:100%;max-width:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--font-sans);
+  font-size:var(--fs-body);line-height:1.65;letter-spacing:0}
+body::before{content:none}
+body.dark::before{content:none}
+button,input,textarea,select{font-family:var(--font-sans)}
+button{color:inherit}
+h1,h2,h3,.panel-title,.brand-name,.set-win-t{font-family:var(--font-display)}
+code,pre,kbd,.msg-time,.usage-info,.session-time,.audit-ts,.plan-eta,.ckpt-count,
+.stat-value,.chart-value{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
+input::placeholder,textarea::placeholder{color:var(--text-3);opacity:1}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+::selection{background:var(--primary-soft);color:var(--text)}
+#auroraBg{display:none}
+#chatContainer::before{display:none}
+body.fx-off *,body.reduced-motion *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}

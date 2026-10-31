@@ -9,10 +9,10 @@ from conftest import fresh_home  # noqa: E402
 
 
 def _mk_service():
-    from backend.services.mcp_service import McpService
-    from backend.services.guard_service import GuardService
-    from backend.services.mcp_config_service import McpConfigService
-    from backend.services.toolcache_service import ToolcacheService
+    from backend.domains.integrations.mcp.mcp_service import McpService
+    from backend.domains.security.guard_service import GuardService
+    from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+    from backend.domains.workspace.toolcache_service import ToolcacheService
     cfg = McpConfigService()
     guard = GuardService()
     return McpService(cfg, guard, ToolcacheService(do_cleanup=False))
@@ -101,30 +101,30 @@ class TestDangerFloorRule:
     """W10 楼层规则真意（deep-research #126）：危险工具名/描述 → always 档。"""
 
     def test_delete_prefix_always(self):
-        from backend.services.mcp_service import McpService
+        from backend.domains.integrations.mcp.mcp_service import McpService
         assert McpService.derive_tier({}, 'delete_file', '删除文件') == 'always'
         assert McpService.derive_tier({}, 'drop_table', '') == 'always'
         assert McpService.derive_tier({}, 'purge_cache', '') == 'always'
         assert McpService.derive_tier({}, 'wipe_disk', '') == 'always'
 
     def test_readonly_annotation_still_session(self):
-        from backend.services.mcp_service import McpService
+        from backend.domains.integrations.mcp.mcp_service import McpService
         assert McpService.derive_tier({'readOnlyHint': True}, 'get_status', '查询') == 'session'
 
     def test_danger_desc_even_if_name_innocent(self):
-        from backend.services.mcp_service import McpService
+        from backend.domains.integrations.mcp.mcp_service import McpService
         # 名字无害但描述含破坏性表述 → 楼层规则捕获
         assert McpService.derive_tier({}, 'run_action', '此操作会 delete 所有记录') == 'always'
 
     def test_no_annotation_default_always(self):
-        from backend.services.mcp_service import McpService
+        from backend.domains.integrations.mcp.mcp_service import McpService
         assert McpService.derive_tier({}, 'do_stuff', '做点事') == 'always'
 
     def test_resolve_tier_floor_source(self, fresh_home):
-        from backend.services.mcp_service import McpService
-        from backend.services.guard_service import GuardService
-        from backend.services.mcp_config_service import McpConfigService
-        from backend.services.toolcache_service import ToolcacheService
+        from backend.domains.integrations.mcp.mcp_service import McpService
+        from backend.domains.security.guard_service import GuardService
+        from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+        from backend.domains.workspace.toolcache_service import ToolcacheService
         svc = McpService(McpConfigService(), GuardService(),
                          ToolcacheService(do_cleanup=False))
         svc._cfg.save_server('srv', {'enabled': True, 'command': 'x'})
@@ -142,10 +142,10 @@ class TestTofuAndHealth:
     """W10 TOFU schema hash + 健康度三态（deep-research W10）。"""
 
     def _mk(self):
-        from backend.services.mcp_service import McpService
-        from backend.services.guard_service import GuardService
-        from backend.services.mcp_config_service import McpConfigService
-        from backend.services.toolcache_service import ToolcacheService
+        from backend.domains.integrations.mcp.mcp_service import McpService
+        from backend.domains.security.guard_service import GuardService
+        from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+        from backend.domains.workspace.toolcache_service import ToolcacheService
         svc = McpService(McpConfigService(), GuardService(),
                          ToolcacheService(do_cleanup=False))
         svc._cfg.save_server('srv', {'enabled': True, 'command': 'x'})

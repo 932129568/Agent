@@ -40,14 +40,18 @@ class TestKillProcessBudgetGate:
             return {'ok': True}
 
         orig = api._process.kill_process
+        orig_resolve = api._process.resolve_name_by_pid
         api._process.kill_process = _boom
+        api._process.resolve_name_by_pid = lambda pid: (_ for _ in ()).throw(
+            AssertionError('预算拒绝前不得反查进程'))
         try:
-            r = json.loads(api.kill_process(pid=None, name='notepad.exe', token=None))
+            r = json.loads(api.kill_process(pid=1234, name='notepad.exe', token=None))
             assert r.get('ok') is False, r
             assert r['error']['code'] == 'APPROVAL_BUDGET_EXCEEDED', r
-            assert called == []                     # 未执行
+            assert called == []                     # 未执行，也未做辅助进程查询
         finally:
             api._process.kill_process = orig
+            api._process.resolve_name_by_pid = orig_resolve
 
     def test_normal_confirm_path_intact(self):
         """非 escalated 武装态：仍走 CONFIRM_REQUIRED（预算修正不短路授权链）。"""
@@ -59,11 +63,29 @@ class TestKillProcessBudgetGate:
         assert r.get('error'), r                    # always 档无 token → 拒
 
 
+class TestRuntimeWindowNudge:
+    def test_ui_nudge_uses_runtime_window(self, monkeypatch):
+        """窗口唯一所有者是 RuntimeState.win；不得读取不存在的 Api._win。"""
+        import ctypes
+        import types
+        from backend.api import Api
+        api = Api()
+        api._runtime.win = types.SimpleNamespace(
+            native=types.SimpleNamespace(Handle=4567))
+        api._native_ui.register(api._runtime.win, 'main', lambda callback: callback())
+        calls = []
+        user32 = types.SimpleNamespace(
+            RedrawWindow=lambda hwnd, a, b, flags: calls.append((hwnd.value, flags)) or 1)
+        monkeypatch.setattr(ctypes, 'windll', types.SimpleNamespace(user32=user32))
+        r = json.loads(api.ui_nudge('visible'))
+        assert r['nudged'] is True and calls and calls[0][0] == 4567
+
+
 # ============================================================ P1：审计哈希链
 
 class TestAuditChainLinkage:
     def _chain(self, tmp_path):
-        from backend.services.audit_chain import AuditChain
+        from backend.domains.security.audit_chain import AuditChain
         return AuditChain(path=str(Path(tmp_path) / 'chain.json'))
 
     def test_verify_ok_forward_and_reversed(self, tmp_path):
@@ -94,7 +116,7 @@ class TestAuditChainLinkage:
         ch = self._chain(tmp_path)
         entries = [ch.append({'op': 'op%d' % i, 'detail': {'i': i}})
                    for i in range(3)]
-        from backend.services.audit_chain import entry_hash
+        from backend.domains.security.audit_chain import entry_hash
         forged = dict(entries[1])
         forged['detail'] = {'i': 999}                    # 攻击者改内容并重算自身 hash
         body = {k: v for k, v in forged.items() if k not in ('hash', 'prev_hash')}
@@ -105,7 +127,7 @@ class TestAuditChainLinkage:
     def test_audit_file_order_matches_chain_order(self, tmp_path):
         """挂链与落盘同一临界区：并发审计下文件序==链序（衔接校验不误报）。"""
         import threading
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         g = GuardService(audit_path=str(Path(tmp_path) / 'a.jsonl'))
         errs = []
 
@@ -134,7 +156,7 @@ class TestGuardReviewFixes:
     def test_fill_digest_dual_shape(self):
         """签发侧（text 原文）与执行侧（text_len）摘要必须一致——原执行侧
         恒 text_len:0，armed 态 token 永拒。"""
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         issue = GuardService._canonical_detail(
             'browser_fill', {'selector': '#pw', 'text': 'abcde'})
         exec_ = GuardService._canonical_detail(
@@ -144,7 +166,7 @@ class TestGuardReviewFixes:
 
     def test_fill_token_issue_consume_roundtrip(self, tmp_path):
         """端到端：前端 detail 签发 token → api.browser_fill detail 消费成功。"""
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         g = GuardService(guard_path=str(Path(tmp_path) / 'g.json'))
         g.arm()
         detail_issue = {'selector': '#pw', 'text': 'secret'}
@@ -155,7 +177,7 @@ class TestGuardReviewFixes:
 
     def test_path_protected_matches_plain_form_under_redirection(self, tmp_path, monkeypatch):
         """OneDrive/junction 重定向：realpath 偏移后字面登记仍命中（双形匹配）。"""
-        from backend.services import guard_service as gs
+        from backend.domains.security import guard_service as gs
         g = gs.GuardService(guard_path=str(Path(tmp_path) / 'g.json'))
         g._cfg['protect_paths'] = [gs._norm_pattern(r'C:\Users\x\Documents')]
         monkeypatch.setattr(gs.os.path, 'realpath',
@@ -167,7 +189,7 @@ class TestGuardReviewFixes:
 
     def test_corrupt_guard_json_leaves_bad_backup(self, tmp_path):
         """guard.json 损坏：留 .bad 备份再回落默认（原无声清零且无迹可寻）。"""
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         guard_json = Path(tmp_path) / 'g.json'
         guard_json.write_text('{corrupt!!!', encoding='utf-8')
         gs = GuardService(guard_path=str(guard_json))
@@ -184,14 +206,14 @@ class TestMiscReviewFixes:
         在未开 use_last_error 的 windll 下恒 0；既有 H6 helper 注释里也提
         该词，故断言精确到赋值语句）。"""
         import inspect
-        from backend.services import sandbox_service as ss
+        from backend.domains.workspace import sandbox_service as ss
         src = inspect.getsource(ss)
         assert 'code = ctypes.get_last_error()' not in src
         assert 'code = k32.GetLastError()' in src
 
     def test_checkpoint_partial_failure_not_ok(self, tmp_path):
         """快照恢复部分文件失败 → ok=False（与 git 路径口径一致）。"""
-        from backend.services.checkpoint_service import CheckpointService
+        from backend.domains.planning.checkpoint_service import CheckpointService
         svc = CheckpointService()
         ws = Path(tmp_path) / 'ws'
         ws.mkdir()
@@ -252,7 +274,7 @@ class TestDedupeZeroHitDrop:
     清空结果交由上层换引擎重试（原降级到尾部照常呈现垃圾）。"""
 
     def test_zero_hit_results_dropped(self):
-        from backend.services.browser.service import SearchService as SearchBrowser
+        from backend.domains.integrations.browser.service import SearchService as SearchBrowser
         garbage = [
             {'title': '谷歌浏览器如何更改默认显示比例_百度知道',
              'url': 'https://zhidao.baidu.com/question/1', 'snippet': '点击设置'},
@@ -263,7 +285,7 @@ class TestDedupeZeroHitDrop:
         assert out == []                              # 全零命中 → 清空
 
     def test_hit_results_kept_and_ranked(self):
-        from backend.services.browser.service import SearchService as SearchBrowser
+        from backend.domains.integrations.browser.service import SearchService as SearchBrowser
         items = [
             {'title': 'Jeff Dean 动态', 'url': 'https://x/1', 'snippet': '与查询无关'},
             {'title': '4399手机游戏网', 'url': 'https://x/2', 'snippet': '4399 官方'},
@@ -276,7 +298,7 @@ class TestDedupeZeroHitDrop:
 
     def test_cjk_query_bigram_match(self):
         """CJK 查询按二元组匹配（你好 → 你好 命中；无关结果清空）。"""
-        from backend.services.browser.service import SearchService as SearchBrowser
+        from backend.domains.integrations.browser.service import SearchService as SearchBrowser
         hit = [{'title': '你好，世界', 'url': 'https://x/1', 'snippet': ''}]
         miss = [{'title': '天气预报', 'url': 'https://x/2', 'snippet': ''}]
         assert len(SearchBrowser._dedupe_and_rank(hit, '你好')) == 1
@@ -288,7 +310,7 @@ class TestBaiduStubCaptcha:
     （~4KB、零解析结果）→ 按验证页处理交人工接管（原走「未找到相关内容」）。"""
 
     def test_captcha_signal_wappass(self):
-        from backend.services.browser.service import _captcha_signal
+        from backend.domains.integrations.browser.service import _captcha_signal
         stub = ('<html><head><title></title></head><body>'
                 '<script>location.replace("https://wappass.baidu.com/passport/'
                 '?login&u=...")</script></body></html>')
@@ -296,7 +318,7 @@ class TestBaiduStubCaptcha:
         assert _captcha_signal('<html><title>正常页</title></html>') is None
 
     def test_captcha_signal_title_match(self):
-        from backend.services.browser.service import _captcha_signal
+        from backend.domains.integrations.browser.service import _captcha_signal
         assert _captcha_signal('<title>百度安全验证</title>') is not None
 
     def test_baidu_tiny_stub_browser_search(self, tmp_path, fresh_home, monkeypatch):
@@ -305,7 +327,7 @@ class TestBaiduStubCaptcha:
         fresh_home 隔离（防读到真机缓存里的历史垃圾结果）；窗口通道无 GUI 自动
         回落 urllib，在传输缝打桩返回壳页（hermetic，不触真网）。"""
         from backend.api import Api
-        from backend.services.browser import session_win
+        from backend.domains.integrations.browser import service, session_base, session_win
         import io as _io
         stub_html = ('<html><head><title></title></head><body><div>x</div></body>'
                      '</html>' + '<!-- padding -->' * 10)
@@ -313,6 +335,11 @@ class TestBaiduStubCaptcha:
         def fake_fetch(req, timeout=None):
             return _io.BytesIO(stub_html.encode('utf-8'))   # urlopen 形状（.read()）
 
+        # 仅此 hermetic 用例跳过真实 DNS 的公网判定，避免测试机 DNS/代理影响；
+        # 不修改产品 SSRF 策略，也不放松其他用例或重定向安全测试。
+        monkeypatch.setattr(service, '_is_public_host', lambda host: True)
+        monkeypatch.setattr(session_base, '_is_public_host', lambda host: True)
+        monkeypatch.setattr(session_win, '_is_public_host', lambda host: True)
         monkeypatch.setattr(session_win, 'urlopen_follow_redirect_safe', fake_fetch)
         api = Api()
         r = json.loads(api.browser_search({'query': '4399', 'engine': 'baidu'}))
@@ -327,7 +354,7 @@ class TestFollowRedirectSafe:
 
     def _svc(self, monkeypatch, hops):
         """hops: [(status, location)] 依次弹出；返回 (helper, calls)。"""
-        from backend.services import mcp_transport_http as mth
+        from backend.domains.integrations.mcp import mcp_transport_http as mth
         calls = []
         idx = {'n': 0}
 
@@ -378,7 +405,7 @@ class TestFollowRedirectSafe:
         assert final.get('User-agent') == 'UA'                            # 非凭证保留
 
     def test_redirect_to_private_blocked(self, monkeypatch):
-        from backend.services.browser import session_base as sb
+        from backend.domains.integrations.browser import session_base as sb
         monkeypatch.setattr(sb, '_is_public_host',
                             lambda host: not str(host or '').startswith(('127.', '10.')))
         h, calls = self._svc(monkeypatch, [(302, 'http://10.0.0.9/admin')])
@@ -401,7 +428,7 @@ class TestFollowRedirectSafe:
 
     def test_non_get_stays_no_redirect(self, monkeypatch):
         """非 GET 不适用（保持 no-redirect 语义——调用方限定取数通道）。"""
-        from backend.services import mcp_transport_http as mth
+        from backend.domains.integrations.mcp import mcp_transport_http as mth
         seen = []
         monkeypatch.setattr(mth, 'urlopen_no_redirect',
                             lambda req, timeout=None: seen.append(req.get_full_url()) or 'ok')

@@ -66,7 +66,7 @@ def main():
                      % (v_file, expect))
 
     # R2 回退常量同步（读源码字面量，不 import——import 会读文件掩盖不同步）
-    src_path = os.path.join(ROOT, 'backend', 'services', 'update_service.py')
+    src_path = os.path.join(ROOT, 'backend', 'domains', 'integrations', 'update_service.py')
     src = open(src_path, encoding='utf-8').read()
     m = re.search(r"return '([0-9]+\.[0-9]+\.[0-9]+[^']*)'", src)
     fb = m.group(1) if m else ''
@@ -100,17 +100,28 @@ def main():
         fails.append('R4 API_VERSION=%r，契约红线 v1.0.0 被改动！' % API_VERSION)
 
     # R5 APP_VERSION 运行时值
-    from backend.services.update_service import APP_VERSION
+    from backend.domains.integrations.update_service import APP_VERSION
     if APP_VERSION != v_file:
         fails.append('R5 APP_VERSION 运行时加载为 %r，应为 %r' % (APP_VERSION, v_file))
 
     # R6 config.json 契约基线（版本相关零污染）
-    from backend.services.config_service import ConfigService
+    from backend.domains.settings.config_service import ConfigService
     cfg = json.loads(ConfigService().get_config())
     for k in ('version', 'app_version'):
         if k in cfg:
             fails.append('R6 config.json 出现 %r 键——版本是 VERSION 文件单一'
                          '数据源，禁入 config.json（契约比对会漂）' % k)
+
+    # R7 UiSchema 离线包：adapter 源映射、bundle、许可与 NOTICE 必须齐全。
+    for relative in ('frontend/vendor/ui-schema-entry.js', 'libs/ui-schema.bundle.js',
+                     'libs/ui-schema.LICENSE.txt', 'libs/ui-schema.NOTICE.txt'):
+        if not os.path.isfile(os.path.join(ROOT, relative)):
+            fails.append('R7 缺少 UiSchema 离线包文件：' + relative)
+    for spec_name in ('Harbor.spec', 'Harbor-mac.spec'):
+        spec_text = open(os.path.join(ROOT, spec_name), encoding='utf-8').read()
+        if 'node_modules' in spec_text and 'datas' in spec_text:
+            if re.search(r'datas[^\\n]*node_modules', spec_text):
+                fails.append('R7 ' + spec_name + ' 不得将 node_modules 收包')
 
     if fails:
         print('发布纪律断言失败 %d 项：' % len(fails))

@@ -1,0 +1,36 @@
+/* W4B plan, checkpoint and approval layout; shared card/button states live in components. */
+.plan-card,.ckpt-card,.clr-form,.pause-panel{min-width:0;overflow:hidden}
+.plan-head{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.plan-title{min-width:0;flex:1;font-family:var(--font-display);font-size:15px;font-weight:500;line-height:1.45}
+.plan-eta,.plan-ctx,.plan-tools,.ckpt-meta{color:var(--text-2);font-size:var(--fs-caption);font-variant-numeric:tabular-nums}
+.plan-scope{margin:12px 0;overflow-wrap:anywhere;word-break:break-word}
+.sc-head{font-size:var(--fs-caption);font-weight:500;color:var(--text-2);margin-bottom:4px}
+.sc-files{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.65}
+.plan-ctx{display:flex;align-items:center;gap:12px;margin:8px 0 12px}
+.ctx-bar{flex:1;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}
+.ctx-fill{display:block;height:100%;background:var(--primary);border-radius:2px;transition:width 180ms ease}
+.plan-steps{display:flex;flex-direction:column;gap:6px;min-width:0}
+.plan-step{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;align-items:start;gap:8px;
+  padding:9px 10px;border-radius:var(--radius-sm);background:var(--surface-2);line-height:1.55}
+.plan-step .txt{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+.plan-step .st{width:14px;height:14px;margin-top:3px;border:1px solid var(--border-strong);border-radius:50%}
+.plan-step.done .st{border-color:var(--ok);background:var(--ok)}
+.plan-step.doing .st{border-color:var(--primary);background:var(--primary-soft)}
+.plan-step.blocked .st{border-color:var(--err);background:var(--err-bg)}
+.plan-step.pending .st{border-color:var(--border-strong)}
+.plan-tools,.risk{white-space:nowrap;font-size:var(--fs-micro)}
+.risk.l2{color:var(--warn)}
+.plan-acts,.ckpt-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.plan-summary,.plan-deviation,.ckpt-verify{margin-top:12px;line-height:1.65;overflow-wrap:anywhere}
+.plan-deviation,.ckpt-verify.err{color:var(--err)}
+.ckpt-row{min-width:0;padding:10px 0;border-bottom:1px solid var(--border)}
+.ckpt-row:last-child{border-bottom:0}
+.ckpt-row .m,.ckpt-row .p,.ckpt-row .d{overflow-wrap:anywhere;word-break:break-word}
+.plan-ckpt-link,.plan-rollback{min-height:44px}
+@media (max-width:600px){
+  .plan-step{grid-template-columns:16px minmax(0,1fr);gap:6px 8px}
+  .plan-tools,.risk{grid-column:2;white-space:normal}
+  .plan-ctx{align-items:flex-start;flex-direction:column;gap:6px}
+  .ctx-bar{width:100%}
+  .plan-acts>*{flex:1;min-width:120px}
+}

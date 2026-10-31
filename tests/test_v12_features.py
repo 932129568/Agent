@@ -49,7 +49,7 @@ class FakeHttpError(Exception):
 
 @pytest.fixture
 def fresh_guard(tmp_path):
-    from backend.services.guard_service import GuardService
+    from backend.domains.security.guard_service import GuardService
     return GuardService(guard_path=str(tmp_path / 'guard.json'),
                         audit_path=str(tmp_path / 'audit.jsonl'))
 
@@ -148,7 +148,7 @@ class TestGuardService:
 # ---------------------------------------------------------------- RunDeduper rem 绕过修复
 class TestRunDeduperRemPrefix:
     def _mk(self):
-        from backend.services.cmd_service import RunDeduper
+        from backend.domains.workspace.cmd_service import RunDeduper
         return RunDeduper()
 
     def test_rem_prefix_variant_rejected(self):
@@ -184,7 +184,7 @@ class TestRunDeduperRemPrefix:
 # ---------------------------------------------------------------- R1 自动更新
 class TestUpdateService:
     def _mk(self):
-        from backend.services.update_service import UpdateService
+        from backend.domains.integrations.update_service import UpdateService
         return UpdateService()
 
     def _patch_urlopen(self, monkeypatch, body, headers=None, error=None):
@@ -198,7 +198,7 @@ class TestUpdateService:
                                 lambda req, timeout=None: FakeHttpResponse(body, headers or {}))
 
     def test_newer_version_available(self, monkeypatch):
-        from backend.services.update_service import APP_VERSION
+        from backend.domains.integrations.update_service import APP_VERSION
         manifest = json.dumps({'version': '9.9.9', 'url': 'https://x/glm.exe',
                                'sha256': 'abc', 'notes': '修复若干问题'}).encode()
         self._patch_urlopen(monkeypatch, manifest)
@@ -207,7 +207,7 @@ class TestUpdateService:
         assert r['latest'] == '9.9.9' and r['current'] == APP_VERSION
 
     def test_same_version_not_available(self, monkeypatch):
-        from backend.services.update_service import APP_VERSION
+        from backend.domains.integrations.update_service import APP_VERSION
         self._patch_urlopen(monkeypatch, json.dumps({'version': APP_VERSION}).encode())
         r = json.loads(self._mk().check('https://x/manifest.json'))
         assert r['update_available'] is False
@@ -227,7 +227,7 @@ class TestUpdateService:
         sha = hashlib.sha256(payload).hexdigest()
         self._patch_urlopen(monkeypatch, payload, {'Content-Length': str(len(payload))})
         svc = self._mk()
-        import backend.services.update_service as us_mod
+        import backend.domains.integrations.update_service as us_mod
         monkeypatch.setattr(us_mod, 'UPDATE_DIR', str(tmp_path))
         assert json.loads(svc.start_download('https://x/glm.exe', sha, '9.9.9')).get('ok')
         svc._thread.join(timeout=10)
@@ -240,7 +240,7 @@ class TestUpdateService:
         payload = b'TAMPERED'
         self._patch_urlopen(monkeypatch, payload, {'Content-Length': str(len(payload))})
         svc = self._mk()
-        import backend.services.update_service as us_mod
+        import backend.domains.integrations.update_service as us_mod
         monkeypatch.setattr(us_mod, 'UPDATE_DIR', str(tmp_path))
         svc.start_download('https://x/glm.exe', 'deadbeef' * 8, '9.9.9')
         svc._thread.join(timeout=10)
@@ -260,11 +260,11 @@ class TestUpdateService:
 # ---------------------------------------------------------------- R6 provider
 class TestProviderService:
     def _mk(self):
-        from backend.services.provider_service import ProviderService
+        from backend.domains.providers.provider_service import ProviderService
         return ProviderService()
 
     def test_url_normalization(self):
-        from backend.services.provider_service import chat_completions_url
+        from backend.domains.providers.provider_service import chat_completions_url
         assert chat_completions_url('https://api.x.com/v1/') == 'https://api.x.com/v1/chat/completions'
         assert chat_completions_url('https://api.x.com/v1/chat/completions') == 'https://api.x.com/v1/chat/completions'
         assert chat_completions_url('') == ''

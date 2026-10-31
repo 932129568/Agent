@@ -17,19 +17,19 @@ from conftest import fresh_home  # noqa: E402
 
 class TestClassify:
     def test_rule_patterns(self):
-        from backend.services.memory_service import classify
+        from backend.domains.settings.memory_service import classify
         assert classify('以后都先写测试') == 'rule'
         assert classify('每次都要跑 lint') == 'rule'
         assert classify('禁止直接提交到 main') == 'rule'
         assert classify('必须 UTF-8') == 'rule'
 
     def test_preference_patterns(self):
-        from backend.services.memory_service import classify
+        from backend.domains.settings.memory_service import classify
         assert classify('我喜欢暗色主题') == 'preference'
         assert classify('偏好简短的回复') == 'preference'
 
     def test_fact_default(self):
-        from backend.services.memory_service import classify
+        from backend.domains.settings.memory_service import classify
         assert classify('项目用 Vite 构建') == 'fact'
         assert classify('') == 'fact'
 
@@ -44,12 +44,12 @@ class TestRetrieve:
         ]
 
     def test_relevant_first(self):
-        from backend.services.memory_service import retrieve
+        from backend.domains.settings.memory_service import retrieve
         r = retrieve('写测试', self._items(), 3)
         assert r and '测试' in r[0]['text']
 
     def test_rule_boosted(self):
-        from backend.services.memory_service import retrieve
+        from backend.domains.settings.memory_service import retrieve
         # query 同时沾边 rule 与 fact 时，rule 加成后置顶
         items = self._items() + [{'text': '测试覆盖率要求', 'ts': '10-21 09:00',
                                   'kind': 'fact'}]
@@ -57,28 +57,28 @@ class TestRetrieve:
         assert r[0]['kind'] == 'rule'
 
     def test_no_overlap_empty(self):
-        from backend.services.memory_service import retrieve
+        from backend.domains.settings.memory_service import retrieve
         assert retrieve('量子计算', self._items(), 3) == []
 
     def test_limit_respected(self):
-        from backend.services.memory_service import retrieve
+        from backend.domains.settings.memory_service import retrieve
         assert len(retrieve('的', self._items(), 2)) <= 2
 
 
 class TestInjectBlock:
     def test_empty_items_no_block(self):
-        from backend.services.memory_service import inject_block
+        from backend.domains.settings.memory_service import inject_block
         assert inject_block([]) == ''
 
     def test_kind_labels_and_cap(self):
-        from backend.services.memory_service import inject_block
+        from backend.domains.settings.memory_service import inject_block
         items = [{'text': '以后都先写测试', 'ts': '10-21 09:00', 'kind': 'rule'},
                  {'text': '我喜欢简洁', 'ts': '10-21 09:00', 'kind': 'preference'}]
         b = inject_block(items)
         assert '[规则]' in b and '[偏好]' in b and '当前指令为准' in b
 
     def test_char_cap(self):
-        from backend.services.memory_service import inject_block
+        from backend.domains.settings.memory_service import inject_block
         items = [{'text': '长' * 500, 'ts': '10-21 09:00', 'kind': 'fact'}]
         b = inject_block(items, max_chars=100)
         assert len(b) <= 120          # 单条超限截断 + 总量封顶
@@ -86,7 +86,7 @@ class TestInjectBlock:
 
 class TestServiceCrud:
     def _svc(self):
-        from backend.services.memory_service import MemoryService
+        from backend.domains.settings.memory_service import MemoryService
         from backend import paths
         return MemoryService(paths.MEMORY_PATH)
 
@@ -186,7 +186,7 @@ class TestReflectLoop:
     """F1 自反思补做环（deep-research W7：reflect + verdict + 补做 ≤2）。"""
 
     def test_success_first_try(self):
-        from backend.services.tool_validator import ToolValidator
+        from backend.domains.security.tool_validator import ToolValidator
         r = ToolValidator.reflect_loop(
             'browser_search', {'query': 'python'},
             lambda p: {'ok': True, 'query': 'python',
@@ -196,7 +196,7 @@ class TestReflectLoop:
         assert r['ok'] and r['attempts'] == 1
 
     def test_retry_with_reformulate(self):
-        from backend.services.tool_validator import ToolValidator
+        from backend.domains.security.tool_validator import ToolValidator
         calls = []
 
         def exec_fn(p):
@@ -216,7 +216,7 @@ class TestReflectLoop:
         assert calls == ['bing', 'duckduckgo']
 
     def test_hard_cap_two(self):
-        from backend.services.tool_validator import ToolValidator
+        from backend.domains.security.tool_validator import ToolValidator
         n = []
 
         def exec_fn(p):
@@ -229,7 +229,7 @@ class TestReflectLoop:
         assert r['verdict'].get('retryable') is False or r['attempts'] == 2
 
     def test_exec_exception_short_circuit(self):
-        from backend.services.tool_validator import ToolValidator
+        from backend.domains.security.tool_validator import ToolValidator
 
         def boom(p):
             raise RuntimeError('网络炸了')
@@ -239,7 +239,7 @@ class TestReflectLoop:
         assert r['attempts'] == 1                    # 执行异常不重试（重试无益）
 
     def test_history_records_hints(self):
-        from backend.services.tool_validator import ToolValidator
+        from backend.domains.security.tool_validator import ToolValidator
         r = ToolValidator.reflect_loop(
             'browser_search', {'query': 'q'},
             lambda p: {'ok': True, 'results': [], 'query': 'q'},

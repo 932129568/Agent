@@ -1,0 +1,99 @@
+classDiagram
+    class DiffRunner {
+        +String runId
+        +run(familyFilter?) DiffReport
+        -spawnDrivers(fixture) DriverResult×2
+        -exitCode(report) 0|1|2
+    }
+    class PythonDriver {
+        +main(argv) int
+        -setup_home(root, fixture) Path
+        -install_fakes(mocks)
+        -run_calls(api, calls) CallResult[]
+        -snapshot(root, fixture) SideEffects
+    }
+    class NodeDriver {
+        +main(argv) int
+        -pushPrismaSchema()
+        -injectCall(method, args) Response
+        -mapKwargsToPositional(kwargs, signature) array
+        -snapshot(tmp, fixture) SideEffects
+    }
+    class PreloadMocks {
+        +patch child_process / dialog env
+        -readMockTable() MockTable
+    }
+    class Normalizer {
+        +normalize(value, sideMeta, rules) object
+        -regexRules 序贯替换
+        -maskKeys 键控掩码
+    }
+    class Comparator {
+        +compare(pyResult, nodeResult, deltas) CallVerdict[]
+        -classify(callDiff) match|intentional|suspect
+        -deepEqual(a, b) diffPath
+    }
+    class Reporter {
+        +emitJson(runDir)
+        +emitMarkdown(runDir)
+        +coverageReport() CoverageReport
+    }
+    class FixtureSpec {
+        +String id
+        +String family
+        +String mode
+        +List mocks
+        +Setup setup
+        +List~CallSpec~ calls
+        +SideEffectSpec sideEffects
+    }
+    class CallSpec {
+        +String id
+        +String method
+        +List args
+        +Map kwargs
+        +String mode
+        +Boolean unordered
+    }
+    class DriverResult {
+        +SideMeta meta
+        +List~CallResult~ calls
+        +SideEffects sideEffects
+    }
+    class CallResult {
+        +String id
+        +String method
+        +String raw
+        +Int status
+        +String exception
+    }
+    class IntentionalDelta {
+        +String id
+        +String fixture
+        +String callId
+        +String reason
+        +String approvedBy
+        +String expires
+        +String frontendCompat
+    }
+    class DiffReport {
+        +String runId
+        +Summary summary
+        +List families
+        +List details
+        +List uncovered
+    }
+
+    DiffRunner --> PythonDriver : spawn 子进程
+    DiffRunner --> NodeDriver : spawn 子进程（--import PreloadMocks）
+    DiffRunner --> Comparator
+    DiffRunner --> Reporter
+    Comparator --> Normalizer
+    Comparator --> IntentionalDelta : 三分类依据
+    PythonDriver ..> FixtureSpec : 读取（占位符替换）
+    NodeDriver ..> FixtureSpec : 读取（占位符替换）
+    PythonDriver ..> DriverResult : 产出 raw
+    NodeDriver ..> DriverResult : 产出 raw
+    DriverResult *-- CallResult
+    FixtureSpec *-- CallSpec
+    Reporter ..> DiffReport : 产出

@@ -22,15 +22,15 @@ import pytest
 
 from conftest import HOME, NewApi, reset_home
 
-from backend.services.mcp_pool import (HttpConnectionPool, WarmRegistry,
+from backend.domains.integrations.mcp.mcp_pool import (HttpConnectionPool, WarmRegistry,
                                        ConcurrencyLimiter, stale_needs_relist,
                                        reconnect_backoff_delays)
-from backend.services.mcp_transport_http import HttpTransport, HttpTransportError
-from backend.services.mcp_client import McpClient, MCP_PROTOCOL_VERSION
-from backend.services.local_model_service import (compact_threshold,
+from backend.domains.integrations.mcp.mcp_transport_http import HttpTransport, HttpTransportError
+from backend.domains.integrations.mcp.mcp_client import McpClient, MCP_PROTOCOL_VERSION
+from backend.domains.providers.local_model_service import (compact_threshold,
                                                   should_retry_without_tools,
                                                   classify_local_error)
-from backend.services import webdav_service as wd
+from backend.domains.integrations import webdav_service as wd
 
 
 # ============================================================ B1 阈值矩阵
@@ -80,7 +80,7 @@ class TestLocalMetaTags:
     """2026-10-17 实测驱动：qwen3.5-9b（Ollama /api/tags 声明 256k + tools）。"""
 
     def test_qwen35_prefix_and_exact(self):
-        from backend.services.local_model_service import model_meta
+        from backend.domains.providers.local_model_service import model_meta
         # 前缀规则（非 Ollama 端点回落）：qwen3.5 必须优先于泛指 qwen3
         m = model_meta('qwen3.5-9b:latest')
         assert m['ctx_window'] == 262144 and m['tool_capable'] is True and m['estimated'] is True
@@ -93,7 +93,7 @@ class TestLocalMetaTags:
 
     def test_tags_meta_priority(self):
         """服务器声明优先于前缀猜测，次于精确表。"""
-        from backend.services.local_model_service import model_meta
+        from backend.domains.providers.local_model_service import model_meta
         tags = {'custom-model-7b': {'ctx_window': 16384, 'tool_capable': True}}
         # 无精确表/前缀命中 → 用 tags 声明（estimated=False）
         m = model_meta('custom-model-7b:latest', tags)
@@ -109,7 +109,7 @@ class TestLocalMetaTags:
 
     def test_fetch_tags_real_ollama(self):
         """真机 Ollama（用户机器实跑 qwen3.5-9b）——连通则验真实声明，不通则跳过。"""
-        from backend.services.local_model_service import _fetch_tags_meta
+        from backend.domains.providers.local_model_service import _fetch_tags_meta
         tags = _fetch_tags_meta('http://127.0.0.1:11434/v1', timeout=3)
         if not tags:
             pytest.skip('本机 Ollama 不可达')
@@ -482,7 +482,7 @@ class TestWebdavExecutor:
 class TestWebdavConfigIO:
     def test_save_get_roundtrip(self):
         reset_home()
-        from backend.services.webdav_service import WebDAVService
+        from backend.domains.integrations.webdav_service import WebDAVService
         svc = WebDAVService(config_dir=os.path.join(HOME, '.glm-chat'))
         r = svc.save_config(json.dumps({'url': 'https://dav.example.com',
                                         'username': 'u', 'password': 'p'}))
@@ -497,7 +497,7 @@ class TestWebdavConfigIO:
         assert 'password' in raw
 
     def test_reject_bad_config(self):
-        from backend.services.webdav_service import WebDAVService
+        from backend.domains.integrations.webdav_service import WebDAVService
         svc = WebDAVService(config_dir=os.path.join(HOME, '.glm-chat'))
         r = svc.save_config(json.dumps({'url': 'http://evil.example.com',
                                         'username': 'u', 'password': 'p'}))

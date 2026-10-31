@@ -22,7 +22,7 @@ class TestLocalCorsProxyUnit:
     """代理单测：目标白名单校验（回环+云端）/URL 拼接/单例/幂等。"""
 
     def test_loopback_check(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         assert _is_allowed_target('http://127.0.0.1:1919/v1') is True
         assert _is_allowed_target('http://localhost:8080/v1') is True
         assert _is_allowed_target('http://[::1]:8080/v1') is True
@@ -33,14 +33,14 @@ class TestLocalCorsProxyUnit:
         assert _is_allowed_target('') is False
 
     def test_target_url(self):
-        from backend.services.local_proxy import _target_url
+        from backend.domains.providers.local_proxy import _target_url
         assert _target_url('http://127.0.0.1:1919/v1', '/chat/completions') == \
             'http://127.0.0.1:1919/v1/chat/completions'
         assert _target_url('http://127.0.0.1:1919/v1/', 'chat/completions') == \
             'http://127.0.0.1:1919/v1/chat/completions'
 
     def test_singleton_idempotent(self):
-        from backend.services import local_proxy as lp
+        from backend.domains.providers import local_proxy as lp
         p1 = lp.get_proxy()
         p2 = lp.get_proxy()
         assert p1 is p2
@@ -99,7 +99,7 @@ class TestLocalCorsProxyE2E:
         临时端口不在已知本地模型端口集——经「用户配置端口」通道放行（写
         local_base_url + 刷新动态缓存），验证中继/流式本体行为；端口收敛
         口径本身由 _is_allowed_target 单测（KNOWN_LOCAL_PORTS）覆盖。"""
-        from backend.services import local_proxy as lp
+        from backend.domains.providers import local_proxy as lp
         cfg_path = os.path.join(paths.CONFIG_DIR, 'config.json')
         os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
         with open(cfg_path, 'w', encoding='utf-8') as f:
@@ -116,7 +116,7 @@ class TestLocalCorsProxyE2E:
             return resp.status, dict(resp.headers), resp.read()
 
     def test_post_relay_with_cors(self):
-        from backend.services.local_proxy import get_proxy
+        from backend.domains.providers.local_proxy import get_proxy
         up_port = self._upstream.server_address[1]
         self._allow_upstream_port(up_port)
         proxy = get_proxy()
@@ -131,7 +131,7 @@ class TestLocalCorsProxyE2E:
         assert json.loads(body)['model'] == 'x'
 
     def test_options_preflight(self):
-        from backend.services.local_proxy import get_proxy
+        from backend.domains.providers.local_proxy import get_proxy
         proxy = get_proxy()
         proxy.ensure_running()
         req = urllib.request.Request('http://127.0.0.1:%d/v1/chat/completions' % proxy.port,
@@ -145,7 +145,7 @@ class TestLocalCorsProxyE2E:
         assert hd.get('Access-Control-Allow-Origin') == '*'
 
     def test_non_loopback_target_403(self):
-        from backend.services.local_proxy import get_proxy
+        from backend.domains.providers.local_proxy import get_proxy
         proxy = get_proxy()
         proxy.ensure_running()
         req = urllib.request.Request('http://127.0.0.1:%d/v1/chat/completions' % proxy.port,
@@ -160,7 +160,7 @@ class TestLocalCorsProxyE2E:
         assert st == 403
 
     def test_missing_target_400(self):
-        from backend.services.local_proxy import get_proxy
+        from backend.domains.providers.local_proxy import get_proxy
         proxy = get_proxy()
         proxy.ensure_running()
         req = urllib.request.Request('http://127.0.0.1:%d/v1/chat/completions' % proxy.port,
@@ -175,7 +175,7 @@ class TestLocalCorsProxyE2E:
 
     def test_stream_relay(self):
         """流式：上游分 3 chunk 延迟吐 → 客户端逐 chunk 实时收到（非整体完成后）。"""
-        from backend.services.local_proxy import get_proxy
+        from backend.domains.providers.local_proxy import get_proxy
         up_port = self._upstream.server_address[1]
         self._allow_upstream_port(up_port)
         proxy = get_proxy()
@@ -232,29 +232,29 @@ class TestCloudWhitelist:
     """2026-10-21 P0：GLM 云端经代理转发（绕开 EdgeWebView 系统代理栈）。"""
 
     def test_glm_allowed(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         assert _is_allowed_target('https://open.bigmodel.cn/api/paas/v4') is True
         assert _is_allowed_target('https://bigmodel.cn/api/paas/v4') is True
 
     def test_loopback_still_allowed(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         assert _is_allowed_target('http://127.0.0.1:1919/v1') is True
         assert _is_allowed_target('http://localhost:11434/v1') is True
 
     def test_other_cloud_rejected(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         # deepseek 已入静态白名单（全云端策略 2026-10-21）；用未收录域验证拒绝
         assert _is_allowed_target('https://api.unknown-llm.com/v1') is False
         assert _is_allowed_target('https://evil.com/v1') is False
 
     def test_subdomain_spoof_rejected(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         assert _is_allowed_target('https://open.bigmodel.cn.evil.com/v1') is False
         assert _is_allowed_target('https://localhost.evil.com/v1') is False
 
     def test_env_escape_hatch(self, monkeypatch):
         monkeypatch.setenv('HARBOR_PROXY_ALLOW_HOSTS', 'api.deepseek.com, foo.bar')
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         assert _is_allowed_target('https://api.deepseek.com/v1') is True
         assert _is_allowed_target('https://foo.bar/v1') is True
         assert _is_allowed_target('https://evil.com/v1') is False
@@ -264,7 +264,7 @@ class TestDynamicAndMoreCloud:
     """2026-10-21：动态白名单（用户配置端点）+ 更多云端域名。"""
 
     def test_more_cloud_hosts(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         for u in ('https://api.deepseek.com/v1', 'https://api.moonshot.cn/v1',
                   'https://dashscope.aliyuncs.com/compatible-mode/v1',
                   'https://models.github.ai/inference', 'https://api.openai.com/v1'):
@@ -272,7 +272,7 @@ class TestDynamicAndMoreCloud:
 
     def test_dynamic_hosts_from_config(self, monkeypatch, tmp_path):
         import json as _json
-        import backend.services.local_proxy as lp
+        import backend.domains.providers.local_proxy as lp
         from backend import paths
         cfg_path = os.path.join(paths.CONFIG_DIR, 'config.json')
         old = None
@@ -296,7 +296,7 @@ class TestDynamicAndMoreCloud:
     """2026-10-21：动态白名单（用户配置端点）+ 更多云端域名。"""
 
     def test_more_cloud_hosts(self):
-        from backend.services.local_proxy import _is_allowed_target
+        from backend.domains.providers.local_proxy import _is_allowed_target
         for u in ('https://api.deepseek.com/v1', 'https://api.moonshot.cn/v1',
                   'https://dashscope.aliyuncs.com/compatible-mode/v1',
                   'https://models.github.ai/inference', 'https://api.openai.com/v1'):
@@ -304,7 +304,7 @@ class TestDynamicAndMoreCloud:
 
     def test_dynamic_hosts_from_config(self, monkeypatch, tmp_path):
         import json as _json
-        import backend.services.local_proxy as lp
+        import backend.domains.providers.local_proxy as lp
         from backend import paths
         cfg_path = os.path.join(paths.CONFIG_DIR, 'config.json')
         old = None

@@ -30,26 +30,27 @@ from logging.handlers import RotatingFileHandler
 import pytest
 
 from conftest import HOME, NewApi, install_fake_windll, make_fake_subprocess_run, ws
+from helpers.frontend import frontend_node_map, read_frontend_source
 
 from backend import paths
 from backend.fio import atomic_write_json, atomic_write_text, atomic_write_text_mode
 from backend.logging_setup import setup_logging
-from backend.services.clipboard_service import ClipboardService, _apply_win32_signatures as _clip_sigs
-from backend.services.cmd_service import CmdService, _apply_win32_signatures as _cmd_sigs
-from backend.services.file_service import FileService
-from backend.services.guard_service import GuardService, GUARD_FILE
-from backend.services.mcp_client import McpClient, McpProtocolError
-from backend.services.mcp_config_service import McpConfigService
-from backend.services.mcp_service import McpService
-from backend.services.mcp_transport_http import (
+from backend.domains.workspace.clipboard_service import ClipboardService, _apply_win32_signatures as _clip_sigs
+from backend.domains.workspace.cmd_service import CmdService, _apply_win32_signatures as _cmd_sigs
+from backend.domains.workspace.file_service import FileService
+from backend.domains.security.guard_service import GuardService, GUARD_FILE
+from backend.domains.integrations.mcp.mcp_client import McpClient, McpProtocolError
+from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+from backend.domains.integrations.mcp.mcp_service import McpService
+from backend.domains.integrations.mcp.mcp_transport_http import (
     HttpTransport, HttpTransportError, _NoRedirectHandler, urlopen_no_redirect)
-from backend.services.mcp_transport_stdio import StdioTransport
-from backend.services.process_service import ProcessService, _decode_console
-from backend.services.toolcache_service import ToolcacheService
-from backend.services.update_service import UpdateService
+from backend.domains.integrations.mcp.mcp_transport_stdio import StdioTransport
+from backend.domains.workspace.process_service import ProcessService, _decode_console
+from backend.domains.workspace.toolcache_service import ToolcacheService
+from backend.domains.integrations.update_service import UpdateService
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 
@@ -68,7 +69,7 @@ def _src(rel):
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _arm(a):
@@ -143,8 +144,12 @@ function __ctx(extra) {
 }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 _JS_MAIN = r"""
 (async () => {
@@ -685,7 +690,7 @@ class TestS12S13McpClient:
         assert 'id' not in str(ei.value)                 # 不再误报「响应 id 不匹配」
 
     def test_s13_http_404_no_infinite_recursion(self):
-        from backend.services.mcp_transport_http import HttpTransportError
+        from backend.domains.integrations.mcp.mcp_transport_http import HttpTransportError
 
         class T404:
             def __init__(self):
@@ -803,7 +808,7 @@ class TestMcpHttpTransport:
         assert h.redirect_request(None, None, 302, 'Found', None, 'http://evil/x') is None
 
     def test_s15_provider_service_uses_safe_urlopen(self):
-        assert 'urlopen_no_redirect' in _src('backend/services/provider_service.py')
+        assert 'urlopen_no_redirect' in _src('backend/domains/providers/provider_service.py')
 
 
 # ============================================================ S16 / S17
@@ -920,7 +925,7 @@ class TestWarningItems:
         assert gs._path_protected(target) is not None              # 大小写/写法差异归一
 
     def test_w12_audit_rotation(self, monkeypatch, tmp_path):
-        import backend.services.guard_service as gmod
+        import backend.domains.security.guard_service as gmod
         monkeypatch.setattr(gmod, 'AUDIT_MAX_BYTES', 512)
         ap = str(tmp_path / 'audit_log.jsonl')
         gs = GuardService(guard_path=str(tmp_path / 'g.json'), audit_path=ap)
@@ -953,7 +958,7 @@ class TestWarningItems:
     def test_w23_apply_dev_mode_and_exit_chain(self, api):
         r = json.loads(api.apply_update())
         assert 'error' in r and '开发模式' in r['error']
-        src = _src('backend/services/update_service.py')
+        src = _src('backend/domains/integrations/update_service.py')
         assert 'echo ok> "{sentinel}"' in src                     # sentinel 标记
         assert '_force_exit_for_update' in src and 'os._exit(0)' in src   # 主动退出
         assert 'copy /y "{old}.bak"' in src                       # 备份回滚
@@ -1011,13 +1016,13 @@ class TestDeadCodeAtomicWriteBytes:
         """file_service._atomic_write_bytes 在 search_replace 改用
         fio.atomic_write_text_mode 后已无调用方（除定义本身全库零引用）→ 可删。"""
         total = 0
-        for rel in ['backend/services/file_service.py']:
+        for rel in ['backend/domains/workspace/file_service.py']:
             total += _src(rel).count('_atomic_write_bytes')
         for dirpath, dirs, fns in os.walk(os.path.join(PROJECT_ROOT, 'backend')):
             dirs[:] = [d for d in dirs if d != '__pycache__']
             for fn in fns:
                 if fn.endswith('.py') and os.path.join(dirpath, fn) != \
-                        os.path.join(PROJECT_ROOT, 'backend/services/file_service.py'):
+                        os.path.join(PROJECT_ROOT, 'backend/domains/workspace/file_service.py'):
                     total += io.open(os.path.join(dirpath, fn),
                                      encoding='utf-8').read().count('_atomic_write_bytes')
         for rel in ['main.py', 'main_v1.0.0_legacy.py']:
@@ -1034,7 +1039,7 @@ class TestSourceLevelFixes:
 
     def test_s11_kill_tree(self):
         import inspect
-        import backend.services.cmd_service as cmd_mod
+        import backend.domains.workspace.cmd_service as cmd_mod
         assert 'taskkill' in inspect.getsource(cmd_mod._kill_tree)   # 模块级函数（非 CmdService 方法）
         assert '_kill_tree' in inspect.getsource(CmdService._exec)
 
@@ -1043,7 +1048,7 @@ class TestSourceLevelFixes:
         assert 'send2trash' in src and 'PIL.ImageGrab' in src and 'hiddenimports' in src
 
     def test_w7_w14_screenshot_service(self):
-        src = _src('backend/services/screenshot_service.py')
+        src = _src('backend/domains/workspace/screenshot_service.py')
         assert '_MAX_SIDE = 1920' in src                          # W7 缩放
         assert '_KEEP_COUNT = 20' in src and '_KEEP_DAYS = 7' in src   # W14 留存清理
 
@@ -1052,12 +1057,12 @@ class TestSourceLevelFixes:
         assert 'expandvars' in inspect.getsource(McpService._spawn_client)
 
     def test_w21_w22_mcp_service(self):
-        src = _src('backend/services/mcp_service.py')
+        src = _src('backend/domains/integrations/mcp/mcp_service.py')
         assert '修复 W21' in src and 'dpapi:' in src              # 密文串不下发
         assert '修复 W22' in src and 'refreshing' in src          # 通知洪泛去抖
 
     def test_w18_stdio_limits(self):
-        src = _src('backend/services/mcp_transport_stdio.py')
+        src = _src('backend/domains/integrations/mcp/mcp_transport_stdio.py')
         assert '_MAX_LINE = 8 * 1024 * 1024' in src and '_QUEUE_MAX = 1024' in src
 
     def test_w4_w5_legacy(self):
@@ -1073,13 +1078,15 @@ class TestSourceLevelFixes:
 
     def test_w24_w25_w27_agent_loop(self):
         src = _fe('60-agent-loop.js')
-        assert '!resp.ok && resp.status === 400' in src           # W24 恒假分支
+        executor = _fe('frontend/src/agent/model-executor.js')
+        assert '!response.ok && response.status === 400' in executor  # W24 恒假分支
         assert "content: '[已向 AI 发送当前屏幕截图]'" in src      # W25 字段
         assert 'memFlushed' in src                                # W27 增量记忆
 
     def test_30_31_tool_stream_compat(self):
         src = _fe('60-agent-loop.js')
-        assert 'tc.index != null' in src                          # ㉚ 缺 index 兼容
+        parser = _fe('frontend/src/agent/sse-parser.js')
+        assert 'tc.index != null' in parser                       # ㉚ 缺 index 兼容
         assert 'Array.isArray(parsed.content)' in src             # ㉛ MCP 数组截断
 
     def test_41_build_syntax_check(self):
@@ -1483,6 +1490,139 @@ async function __main() {
         assert r['backendKeeps'] is True                      # 后端 config.json 保留密钥
         assert '"model":"m"' in r['local']                    # 非密钥配置照常本地缓存
 
+    def test_agent_run_owner_prevents_stale_finally(self):
+        r = _run_node(r"""
+async function __main() {
+  const ctx = __ctx({ currentSessionId: 'a', isStreaming: false,
+    sendMessage: function(){}, toast: function(){} });
+  __run(ctx, __fe('60-agent-loop.js'));
+  const first = __vm.runInContext(`(() => {
+    const r = { id: 1, sessionId: 'a', cancelled: false,
+      abortController: null, nudgeTimer: null, localWaitTimer: null };
+    __agentActiveRun = r; isStreaming = true; return r;
+  })()`, ctx);
+  __vm.runInContext(`currentSessionId = 'b'; cancelActiveAgentLoop();`, ctx);
+  const second = __vm.runInContext(`(() => {
+    const r = { id: 2, sessionId: 'b', cancelled: false,
+      abortController: null, nudgeTimer: null, localWaitTimer: null };
+    __agentActiveRun = r; isStreaming = true; return r;
+  })()`, ctx);
+  ctx.__firstRun = first;
+  ctx.__secondRun = second;
+  return {
+    cancelled: first.cancelled,
+    oldCanResetNew: __vm.runInContext(`__agentActiveRun === __firstRun`, ctx),
+    newOwned: __vm.runInContext(`agentRunCurrent(__secondRun)`, ctx),
+    streaming: ctx.isStreaming
+  };
+}
+""", 'agent_run_owner')
+        assert r['cancelled'] is True
+        assert r['oldCanResetNew'] is False
+        assert r['newOwned'] is True and r['streaming'] is True
+
+    def test_cancelled_run_balances_only_its_own_assistant(self):
+        r = _run_node(r"""
+async function __main() {
+  const ctx = __ctx({ currentSessionId: 'a', isStreaming: false,
+    sendMessage: function(){}, saveSessions: function(){} });
+  __run(ctx, __fe('60-agent-loop.js'));
+  return __vm.runInContext(`(() => {
+    const oldAssistant = { role: 'assistant', content: null,
+      tool_calls: [{id: 'old-1'}, {id: 'old-2'}] };
+    const newAssistant = { role: 'assistant', content: null,
+      tool_calls: [{id: 'new-1'}] };
+    const oldSession = { id: 'a', messages: [oldAssistant,
+      {role: 'tool', tool_call_id: 'old-1', content: 'done'}, newAssistant] };
+    const newSession = { id: 'b', messages: [newAssistant] };
+    fillMissingToolResults(oldSession, oldAssistant);
+    const beforeNewSession = JSON.stringify(newSession.messages);
+    fillMissingToolResults(newSession, oldAssistant);
+    const legacySession = { messages: [{role: 'assistant', content: null,
+      tool_calls: [{id: 'legacy-1'}]}] };
+    fillMissingToolResults(legacySession);
+    return {
+      oldRoles: oldSession.messages.map(m => m.role + ':' + (m.tool_call_id || '')),
+      oldNewAssistantUntouched: oldSession.messages[3] === newAssistant,
+      newSessionUntouched: JSON.stringify(newSession.messages) === beforeNewSession,
+      legacyDefaultWorks: legacySession.messages.length === 2 &&
+        legacySession.messages[1].tool_call_id === 'legacy-1'
+    };
+  })()`, ctx);
+}
+""", 'cancelled_run_tool_balance')
+        assert r['oldRoles'] == ['assistant:', 'tool:old-1', 'tool:old-2', 'assistant:']
+        assert r['oldNewAssistantUntouched'] is True
+        assert r['newSessionUntouched'] is True
+        assert r['legacyDefaultWorks'] is True
+
+    def test_cancelled_finally_uses_run_session_and_assistant(self):
+        src = _fe('60-agent-loop.js')
+        assert 'sessionId: s.id, session: s, cancelled: false,' in src
+        assert 'assistantMsg: null, abortController: null' in src
+        assert 'run.assistantMsg = assistantMsg;' in src
+        assert 'if (run.cancelled) {' in src
+        assert 'fillMissingToolResults(run.session, run.assistantMsg);' in src
+        finally_at = src.rindex('if (run.cancelled) {')
+        save_at = src.index('saveSessions();', finally_at)
+        assert save_at > finally_at
+
+    def test_attachment_permission_and_write_gate(self):
+        r = _run_node(r"""
+async function __main() {
+  const toasts = [], calls = [];
+  const s1 = { id: 's1', title: 't', createdAt: 1, updatedAt: 1,
+    worklogInjected: true, messages: [] };
+  const toolMode = { value: 'off', style: {} };
+  const input = { value: 'hello', style: {} };
+  const ctx = __ctx({
+    isStreaming: false, currentSessionId: 's1', sessions: [],
+    effectiveApiKey: function(){ return 'k'; }, localModeActive: function(){ return false; },
+    ensureSession: function(){}, getCurrentSession: function(){ return s1; },
+    historyTokens: function(){ return 0; }, recallMemory: function(){ return null; },
+    addMessage: function(){ return {}; }, addMsgActions: function(){},
+    updateSessionTitle: function(){}, saveSessions: function(){},
+    renderSessionList: function(){}, toast: function(m){ toasts.push(String(m)); },
+    runAgentLoop: function(){},
+    callApi: async function(name, args){ calls.push({ name, args }); return '{"ok":true}'; }
+  });
+  ctx.document.getElementById = function(id){
+    if (id === 'toolMode') return toolMode;
+    if (id === 'userInput') return input;
+    if (id === 'settingsPanel') return { classList: { add: function(){} } };
+    return { value: '', style: {} };
+  };
+  __run(ctx, __fe('00-state.js'));
+  __run(ctx, __fe('90-attachments.js'));
+  ctx.renderPreview = function(){};
+  __run(ctx, __fe('100-send.js'));
+  let reads = 0;
+  const file = { name: 'a.txt', size: 5,
+    arrayBuffer: async () => { reads++; return new TextEncoder().encode('hello').buffer; } };
+  await ctx.handleFiles([file], 'text');
+  const denied = { reads, count: __vm.runInContext('attachments.length', ctx), toasts: toasts.slice() };
+  toolMode.value = 'readonly';
+  const s1messagesBefore = s1.messages.length;
+  __vm.runInContext(`attachments = [{ type: 'text', name: 'a.txt', text: 'hello' }]`, ctx);
+  input.value = 'hello';
+  await ctx.sendMessage();
+  const readonlyCalls = calls.filter(c => c.name === 'save_workspace_file').length;
+  const readonlyText = JSON.stringify(s1.messages[s1.messages.length - 1]);
+  __vm.runInContext('isStreaming = false', ctx);
+  toolMode.value = 'full';
+  __vm.runInContext(`attachments = [{ type: 'text', name: 'a.txt', text: 'hello' }]`, ctx);
+  input.value = 'hello again';
+  await ctx.sendMessage();
+  const fullCalls = calls.filter(c => c.name === 'save_workspace_file').length;
+  return { denied, readonlyCalls, readonlyText, fullCalls,
+    messagesAdded: s1.messages.length - s1messagesBefore };
+}
+""", 'attachment_permission_gate')
+        assert r['denied']['reads'] == 0 and r['denied']['count'] == 0
+        assert any('纯聊天' in t for t in r['denied']['toasts'])
+        assert r['readonlyCalls'] == 0 and '未写入工作区' in r['readonlyText']
+        assert r['fullCalls'] == 1 and r['messagesAdded'] == 2
+
 
 # ============================================================ 标记完整性（78 项在盘核对）
 _CIRC = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟㊱㊲㊳㊴㊵㊶㊸'
@@ -1528,18 +1668,18 @@ class TestMergedMarkers:
     """5 处并标/误标取证：修复已落地但标记编号与报告不一致（维护性问题，非缺陷）。"""
 
     def test_15_merged_into_16_shlex(self):
-        assert 'shlex.split' in _src('backend/services/mcp_config_service.py')
+        assert 'shlex.split' in _src('backend/domains/integrations/mcp/mcp_config_service.py')
 
     def test_18_snapshot_lock_marked_as_26(self):
         # 报告⑱（无锁快照撕开）实际落在 ㉖ 标记下（mcp_service 多字段快照加锁）
-        src = _src('backend/services/mcp_service.py')
+        src = _src('backend/domains/integrations/mcp/mcp_service.py')
         assert '多字段快照' in src and "entry.get('lock'" in src
 
     def test_19_20_idle_clock_marked_as_35(self):
         # 报告⑲⑳（idle 扫描间隔/非单调时钟）实际落在 ㊉ 标记下
-        src = _src('backend/services/mcp_service.py')
+        src = _src('backend/domains/integrations/mcp/mcp_service.py')
         assert '修复 ㊉' in src and 'time.monotonic()' in src
         assert 'IDLE_SWEEP_INTERVAL' in src
 
     def test_23_merged_into_24_provider(self):
-        assert '修复 建议㉔' in _src('backend/services/provider_service.py')
+        assert '修复 建议㉔' in _src('backend/domains/providers/provider_service.py')

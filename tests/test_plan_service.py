@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from backend.services.plan_service import PlanService, CKPT_MAX_FILES
+from backend.domains.planning.plan_service import PlanService, CKPT_MAX_FILES
 
 
 @pytest.fixture
@@ -19,7 +19,9 @@ def svc(fresh_home):
 
 
 @pytest.fixture
-def ws(tmp_path):
+def ws(tmp_path, monkeypatch):
+    # Keep non-git workspace tests isolated when basetemp is inside this repo.
+    monkeypatch.setenv('GIT_CEILING_DIRECTORIES', str(tmp_path))
     d = tmp_path / 'ws'
     d.mkdir()
     (d / 'a.txt').write_text('A-original', encoding='utf-8')
@@ -156,6 +158,56 @@ def test_checkpoint_git_head_and_rollback(svc, ws):
         assert f.read() == 'A-original'
 
 
+def test_checkpoint_git_rollback_tracks_absent_and_preserves_current(svc, ws):
+    """回滚后新增修改与新建文件都不能无声丢失：先备份当前版；
+    创建时不存在的声明文件应回到“不存在”，未声明文件保持不动。"""
+    if subprocess.run(['git', '--version'], capture_output=True).returncode != 0:
+        pytest.skip('git 不可用')
+    _git_init(ws)
+    tid = svc.create('计划', ['s'])['task_id']
+    c = svc.checkpoint_create(tid, ['a.txt', 'new.txt'], ws)
+    assert c['ok'] and c['mode'] == 'git'
+    with open(os.path.join(ws, 'a.txt'), 'w', encoding='utf-8') as f:
+        f.write('A-after-commit')
+    with open(os.path.join(ws, 'new.txt'), 'w', encoding='utf-8') as f:
+        f.write('created-later')
+    with open(os.path.join(ws, 'other.txt'), 'w', encoding='utf-8') as f:
+        f.write('untouched')
+    rb = svc.checkpoint_rollback(tid, ws, confirm=True)
+    assert rb['ok'] and rb['mode'] == 'git', rb
+    assert open(os.path.join(ws, 'a.txt'), encoding='utf-8').read() == 'A-original'
+    assert not os.path.exists(os.path.join(ws, 'new.txt'))
+    assert open(os.path.join(ws, 'other.txt'), encoding='utf-8').read() == 'untouched'
+    assert open(os.path.join(ws, 'a.txt.rollback-bak'), encoding='utf-8').read() == 'A-after-commit'
+    assert open(os.path.join(ws, 'new.txt.rollback-bak'), encoding='utf-8').read() == 'created-later'
+
+
+def test_checkpoint_git_backup_failure_aborts_restore(svc, ws, monkeypatch):
+    """备份失败必须中止该文件恢复，禁止在无法保全当前版时继续 checkout。"""
+    if subprocess.run(['git', '--version'], capture_output=True).returncode != 0:
+        pytest.skip('git 不可用')
+    _git_init(ws)
+    tid = svc.create('计划', ['s'])['task_id']
+    assert svc.checkpoint_create(tid, ['a.txt'], ws)['ok']
+    with open(os.path.join(ws, 'a.txt'), 'w', encoding='utf-8') as f:
+        f.write('A-must-survive')
+    checkout_calls = []
+    real_run = subprocess.run
+
+    def _tracked_run(args, **kw):
+        if list(args)[:1] == ['git', 'checkout']:
+            checkout_calls.append(args)
+        return real_run(args, **kw)
+
+    monkeypatch.setattr(subprocess, 'run', _tracked_run)
+    monkeypatch.setattr('backend.domains.planning.checkpoint_service.shutil.copy2',
+                        lambda *a, **k: (_ for _ in ()).throw(OSError('backup denied')))
+    rb = svc.checkpoint_rollback(tid, ws, confirm=True)
+    assert rb['ok'] is False and rb['failed']
+    assert checkout_calls == []
+    assert open(os.path.join(ws, 'a.txt'), encoding='utf-8').read() == 'A-must-survive'
+
+
 # ---------------- 澄清 ----------------
 
 def test_clarify_collect_defaults_and_answers(svc):
@@ -181,7 +233,7 @@ def test_clarify_plain_string_questions(svc):
 # ---------------- 检查点保留策略（方案 §6.5：保留最近 3 份） ----------------
 
 def test_checkpoint_keeps_latest_three(svc, ws):
-    from backend.services.plan_service import _ckpts_dir
+    from backend.domains.planning.plan_service import _ckpts_dir
     import time as _t
     for i in range(5):
         r = svc.create('计划%d' % i, ['s'])

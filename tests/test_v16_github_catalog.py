@@ -21,8 +21,9 @@ import os
 import pytest
 
 from conftest import NewApi, reset_home
+from helpers.frontend import read_frontend_source
 
-from backend.services import local_model_service as lms
+from backend.domains.providers import local_model_service as lms
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
@@ -34,7 +35,7 @@ GH_BASE = 'https://models.github.ai/inference'
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 class _FakeResp:

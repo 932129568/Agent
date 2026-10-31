@@ -227,8 +227,16 @@ class InstallerBridge:
             need = os.path.getsize(payload_path()) // (1024 * 1024) + 10
         except OSError:
             need = 40
+        # 按用户选择的卷检测空间；目标尚未创建时向上定位最近已存在父目录。
+        # 不能退回 C 盘，否则 D 盘等目标的空间提示与实际安装位置不符。
+        space_anchor = os.path.abspath(path) if path else default_install_dir()
+        while not os.path.exists(space_anchor):
+            parent = os.path.dirname(space_anchor)
+            if parent == space_anchor:
+                break
+            space_anchor = parent
         return json.dumps({'ok': ok, 'warn': warn, 'need_admin': need_admin,
-                           'free_mb': free_space_mb(path or 'C:\\'),
+                           'free_mb': free_space_mb(space_anchor),
                            'need_mb': need}, ensure_ascii=False)
 
     def pick_dir(self, current):

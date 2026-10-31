@@ -30,7 +30,8 @@ import time
 
 import pytest
 
-from backend.services import sandbox_service as sb
+from backend.domains.workspace import sandbox_service as sb
+from helpers.frontend import read_frontend_source
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -254,7 +255,7 @@ def test_step6a_non_windows_degradation_code_path():
         "import ctypes, json, sys\n"
         "sys.path.insert(0, %r)\n"
         "del ctypes.windll\n"
-        "from backend.services import sandbox_service as sb\n"
+        "from backend.domains.workspace import sandbox_service as sb\n"
         "out = {}\n"
         "out['available'] = sb.SandboxService().available()\n"
         "try:\n"
@@ -284,9 +285,7 @@ def test_step6a_non_windows_degradation_code_path():
 
 # ---------------- 步骤 6b：前端非 Windows 明示（代码级） ----------------
 def test_step6b_frontend_non_windows_notice():
-    with open(os.path.join(PROJECT_ROOT, 'frontend', 'src', '39-sandbox.js'),
-              encoding='utf-8') as f:
-        src = f.read()
+    src = read_frontend_source(PROJECT_ROOT, '39-sandbox.js')
     # 非 Windows：明示不可用而非空白（status.available=false 分支）
     assert 'st.available' in src
     assert '不支持 Job Object 沙箱' in src

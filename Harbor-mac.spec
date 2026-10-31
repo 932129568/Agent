@@ -26,8 +26,7 @@ a = Analysis(
         # prompts 随目录声明（与 Windows Harbor.spec 同源）
         (os.path.join(ROOT, 'backend', 'prompts'), 'backend/prompts'),
         (os.path.join(ROOT, 'harbor.html'), '.'),
-        # 复核修正：harbor.html 依赖 libs/ 四个 JS（marked/purify/flate/
-        # highlight）——原缺失致 mac 包前端渲染/消毒/压缩链路 404 瘫痪
+        # libs 整目录包含既有4库及 ui-schema bundle/LICENSE/NOTICE；不收集 node_modules。
         (os.path.join(ROOT, 'libs'), 'libs'),
         # 复核修正：VERSION 随包（APP_VERSION 单一数据源查找链第一优先；
         # 原缺失时全靠回退常量兜底，bump 漏改即静默版本错报）
@@ -36,9 +35,9 @@ a = Analysis(
     ],
     hiddenimports=[
         'pywebview.platforms.cocoa',
-        'backend.services.browser.session_mac',   # M4 理论实现（PyObjC 桥）
-        'backend.services.browser.platform.mac',  # M6 平台服务
-        'backend.services.browser.driver',
+        'backend.domains.integrations.browser.session_mac',   # M4 理论实现（PyObjC 桥）
+        'backend.domains.integrations.browser.platform.mac',  # M6 平台服务
+        'backend.domains.integrations.browser.driver',
         'send2trash',
         'PIL.ImageGrab',
     ],

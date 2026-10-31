@@ -20,13 +20,15 @@ import tempfile
 
 import pytest
 
+from helpers.frontend import frontend_node_map, read_frontend_source, read_frontend_styles
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 _JS_PRELUDE = r"""
@@ -84,8 +86,12 @@ function __ctx(extra) {
 }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 _JS_MAIN = r"""
 (async () => {
@@ -338,8 +344,7 @@ class TestV4PortInPlace:
                 assert k in src, '%s 缺少 v4 改造标记: %s' % (fn, k)
 
     def test_template_v4_rules(self):
-        tpl = io.open(os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html'),
-                      encoding='utf-8').read()
+        tpl = read_frontend_styles(PROJECT_ROOT)
         for k in ['v4AuroraA', 'v4AuroraB', 'v4Stream', 'v4PanelInFwd', 'v4PanelOutBack',
                   'v4MsgIn', 'v4ToastIn', 'v4ModalIn', 'v4ModalOut', 'v4CtxIn',
                   'v4CsIn', 'v4CsOut', 'v4SetIn', 'v4SetOut', 'v4AttachIn',

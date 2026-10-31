@@ -39,16 +39,17 @@ import tempfile
 import pytest
 
 from backend import paths
-from backend.services import sandbox_service
-from backend.services.guard_service import GuardService
-from backend.services.hybrid_router import (CLOUD_PRICE_PER_1K, HybridRouter,
+from helpers.frontend import read_frontend_source
+from backend.domains.workspace import sandbox_service
+from backend.domains.security.guard_service import GuardService
+from backend.domains.providers.hybrid_router import (CLOUD_PRICE_PER_1K, HybridRouter,
                                             classify_task)
-from backend.services.software_service import (SoftwareService, gen_example,
+from backend.domains.integrations.software_service import (SoftwareService, gen_example,
                                                validate_args)
-from backend.services.toolcache_service import ToolcacheService
+from backend.domains.workspace.toolcache_service import ToolcacheService
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 FRONTEND_SRC = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 
@@ -1138,8 +1139,7 @@ __PANEL__
     def test_harness(self):
         if not os.path.exists(NODE):
             pytest.skip('node 不可用: %s' % NODE)
-        src = io.open(os.path.join(FRONTEND_SRC, '64-software-panel.js'),
-                      encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '64-software-panel.js')
         self._run(src, 11, 'qa_sw_')
 
 
@@ -1237,8 +1237,7 @@ __PANEL__
     def test_harness(self):
         if not os.path.exists(NODE):
             pytest.skip('node 不可用: %s' % NODE)
-        src = io.open(os.path.join(FRONTEND_SRC, '65-hybrid.js'),
-                      encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '65-hybrid.js')
         self._run(src, 7, 'qa_hy_')
 
 
@@ -1345,16 +1344,15 @@ __PANEL__
     def test_harness(self):
         if not os.path.exists(NODE):
             pytest.skip('node 不可用: %s' % NODE)
-        src = io.open(os.path.join(FRONTEND_SRC, '66-guard-grant.js'),
-                      encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '66-guard-grant.js')
         self._run(src, 8, 'qa_gg_')
 class TestNewApiAssembly:
     """11 个新 js_api 经 Api 实例可调（返回合法 JSON 字符串）。"""
 
     def test_software_and_hybrid_apis(self, tmp_path, monkeypatch):
         from backend.api import Api
-        from backend.services import software_service as sw_mod
-        from backend.services import hybrid_router as hy_mod
+        from backend.domains.integrations import software_service as sw_mod
+        from backend.domains.providers import hybrid_router as hy_mod
         monkeypatch.setattr(sw_mod, 'SOFTWARE_FILE',
                             str(tmp_path / 'software.json'))
         monkeypatch.setattr(hy_mod, 'HYBRID_FILE',
@@ -1377,7 +1375,7 @@ class TestNewApiAssembly:
 
     def test_guard_grant_rule_apis(self, tmp_path, monkeypatch):
         from backend.api import Api
-        from backend.services import guard_service as g_mod
+        from backend.domains.security import guard_service as g_mod
         monkeypatch.setattr(g_mod, 'GUARD_FILE',
                             str(tmp_path / 'guard.json'))
         monkeypatch.setattr(g_mod, 'AUDIT_LOG',
@@ -1408,9 +1406,9 @@ class TestNewApiAssembly:
     def test_config_json_not_polluted(self, tmp_path, monkeypatch):
         """software.json/hybrid.json 独立；guard.json 仅追加 allow_rules 键。"""
         from backend.api import Api
-        from backend.services import software_service as sw_mod
-        from backend.services import hybrid_router as hy_mod
-        from backend.services import guard_service as g_mod
+        from backend.domains.integrations import software_service as sw_mod
+        from backend.domains.providers import hybrid_router as hy_mod
+        from backend.domains.security import guard_service as g_mod
         monkeypatch.setattr(sw_mod, 'SOFTWARE_FILE',
                             str(tmp_path / 'software.json'))
         monkeypatch.setattr(hy_mod, 'HYBRID_FILE',

@@ -1,0 +1,149 @@
+/* W4A shared controls. Legacy remains only a compatibility layer below these rules. */
+:root{
+  --bg:var(--w4-bg);--sidebar-bg:var(--w4-sidebar);--main-bg:var(--bg);
+  --header-bg:var(--w4-surface);--card-bg:var(--w4-surface);--text:var(--w4-text);
+  --text-2:var(--muted);--text-3:var(--muted);--primary:var(--accent);
+  --user-bubble:var(--w4-user);--user-bubble-text:var(--text);
+  --surface-2:#F0F1F3;--border:#DFE1E5;--border-strong:#C7CBD2;
+  --primary-hover:#1D4ED8;--primary-soft:#E8EEFC;--ai-bubble:transparent;
+  --hover:#ECEDEF;--active:#E3E9F6;--chip-bg:#EFF0F2;
+  --shadow-sm:0 2px 2px rgba(29,29,31,.035);--shadow-md:0 8px 24px rgba(29,29,31,.075);
+  --shadow-lg:0 24px 48px rgba(29,29,31,.10);
+  --radius-xs:8px;--radius-sm:12px;--radius-md:16px;--radius-lg:20px;--radius-xl:24px;
+  --font-sans:Aptos,"Microsoft YaHei UI",sans-serif;
+  --font-display:"Aptos Display","Microsoft YaHei UI",sans-serif;
+  --font-mono:"Cascadia Code",Consolas,monospace;
+  --content-w:880px;--rail-w:64px;--panel-pad:24px;
+  --fs-display:20px;--fs-title:15px;--fs-body:14px;--fs-caption:12px;--fs-micro:11px;
+  --glass-bg:var(--card-bg);--glass-bg-2:var(--card-bg);--glass-border:var(--border);
+  --glass-blur:0px;--glass-fallback:var(--bg);--glass-saturate:1;
+  --main-veil:var(--bg);--brand-gradient:none;--brand-glow:none;
+  --glow:none;--glow-strong:none;--glow-focus:0 0 0 3px rgba(37,99,235,.16);
+  --on-accent:#FFFFFF;--focus-ring:var(--accent);--control-h:44px;
+}
+body.dark{
+  --bg:var(--w4-bg);--sidebar-bg:var(--w4-sidebar);--main-bg:var(--bg);
+  --header-bg:var(--w4-surface);--card-bg:var(--w4-surface);--text:var(--w4-text);
+  --text-2:var(--muted);--text-3:var(--muted);--primary:var(--accent);
+  --user-bubble:var(--w4-user);--user-bubble-text:var(--text);
+  --surface-2:#1E2024;--border:#303238;--border-strong:#494D56;
+  --primary-hover:#93C5FD;--primary-soft:#1E2D45;--ai-bubble:transparent;
+  --hover:#222429;--active:#22324A;--chip-bg:#222429;
+  --shadow-sm:0 2px 2px rgba(0,0,0,.18);--shadow-md:0 8px 24px rgba(0,0,0,.26);
+  --shadow-lg:0 24px 48px rgba(0,0,0,.32);--main-veil:var(--bg);
+  --glow-focus:0 0 0 3px rgba(96,165,250,.20);--on-accent:#101114;
+}
+button,[role="button"]{transition:transform var(--dur-fast) var(--ease),
+  opacity var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease),
+  border-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+button:active,[role="button"]:active{transform:translateY(1px)}
+.ui-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;
+  stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;pointer-events:none;vertical-align:-3px}
+.ui-icon-16{width:16px;height:16px}.ui-icon-20{width:20px;height:20px}
+button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
+button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.icon-btn,.tool-btn,.send-btn,.cm-back,.set-win-close,.sp-fold,.sp-close{
+  width:44px;min-width:44px;height:44px;min-height:44px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card-bg);box-shadow:none}
+.icon-btn:hover,.tool-btn:hover,.cm-back:hover,.set-win-close:hover{background:var(--hover);border-color:var(--border-strong)}
+.new-chat-btn,.ghost-btn,.pill-btn,.ws-btn,.modal-btn,.pause-btn,.audit-chip,.seg-btn,
+.sp-btn,.sp-search-btn,.history-dir-btn,.hd-btn,.cm-save-btn,.model-chip,.mc-config,
+.mcp-tab,.plan-ckpt-link,.cn-cont,.toast-more,.toast-close,.copy-btn,.err-detail-btn,
+.sw-test-btn,.sw-del-btn,.tm-rb,.gg-rule-del,.brw-act,.mm-del,.gg-btn,.mc-pref-select{
+  min-height:44px;border-radius:10px;box-shadow:none}
+.new-chat-btn,.sp-search-btn,.cm-save-btn,.send-btn,.modal-btn.primary,.pause-btn.primary,
+.sp-btn-primary,.hd-btn.hd-primary,.audit-chip.on{background:var(--primary);color:var(--on-accent);
+  border-color:var(--primary);box-shadow:none}
+.new-chat-btn:hover,.sp-search-btn:hover,.cm-save-btn:hover,.send-btn:hover,
+.modal-btn.primary:hover,.pause-btn.primary:hover,.sp-btn-primary:hover,.hd-btn.hd-primary:hover{
+  background:var(--primary-hover);color:var(--on-accent);box-shadow:none}
+.pill-btn,.ghost-btn,.ws-btn,.modal-btn,.pause-btn,.sp-btn,.history-dir-btn,.hd-btn,
+.cm-back,.mc-pref-select{background:var(--card-bg);border-color:var(--border)}
+.new-chat-btn::after,.send-btn::after,.sp-search-btn::after,.sp-btn-primary::after,
+.pill-btn.primary::after,.cm-save-btn::after{display:none}
+input[type=text],input[type=password],input[type=number],select,
+.settings-panel input[type=text],.settings-panel input[type=password],.settings-panel input[type=number],
+.sp-input,.mm-input,.sw-input,.hy-input,.ob-input,.hd-input,.brw-input,.mc-pref-select{
+  min-height:44px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--card-bg);color:var(--text);box-shadow:none}
+textarea,.settings-panel textarea,.guard-txt,.mcp-kv,textarea.mm-input{
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card-bg);
+  color:var(--text);line-height:1.65;overflow-wrap:anywhere}
+input:focus,textarea:focus,select:focus,.settings-panel input:focus,.settings-panel textarea:focus,
+.sp-input:focus,.mm-input:focus,.sw-input:focus,.hy-input:focus,.ob-input:focus,.hd-input:focus{
+  border-color:var(--primary);box-shadow:var(--glow-focus);outline:none}
+input[type=checkbox],input[type=radio]{width:18px;height:18px;accent-color:var(--primary)}
+input[type=range]{min-height:44px}
+label,.check-row,.modal-check,.hd-chk,.wsq-ind{min-height:44px}
+select{max-width:100%;padding:6px 30px 6px 10px}
+.cs-trigger{height:44px;border-radius:var(--radius-sm);background:var(--card-bg);box-shadow:none}
+.cs-menu,.wsq-menu,.at-pop,.mc-pop,.cn-pop,.history-dir-panel,.chart-tip,.ctx-menu,.notify-pop,.sp-root,
+.modal-card,.set-window{background:var(--card-bg);border:1px solid var(--border);
+  box-shadow:var(--shadow-lg);backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:var(--radius-lg)}
+.cs-opt,.wsq-opt,.at-item,.mc-item,.ctx-menu-item,.cn-row{min-height:44px}
+.field,.set-block,.g-card,.stat-card,.chart-card,.ws-card,.plan-card,.clr-form,
+.mm-row,.sw-row,.tm-row,.gg-rule-row,.rd-row,.mcp-row,.brw-row,.eff-row,.tool-call-item{
+  background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-md);
+  box-shadow:var(--shadow-sm);backdrop-filter:none;-webkit-backdrop-filter:none}
+.set-block,.g-card,.chart-card,.ws-card,.plan-card{padding:var(--space-4)}
+.g-card:hover,.stat-card:hover,.chart-card:hover,.ws-card:hover,.plan-card:hover,.set-block:hover,
+.mm-row:hover,.sw-row:hover,.tm-row:hover,.gg-rule-row:hover,.mcp-row:hover,.eff-row:hover{
+  box-shadow:var(--shadow-sm);transform:none}
+.header-badge,.hs-chip,.local-badge,.sp-pill,.sp-src,.cs-badge,.eff-tag,.plan-badge,.badge{
+  border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--chip-bg);
+  color:var(--text-2);font-size:var(--fs-micro);font-weight:500}
+.message .content.error,.error-state{background:var(--err-bg);border:1px solid var(--err);
+  border-left-width:3px;border-radius:var(--radius-sm);color:var(--text)}
+.loading,.is-loading{cursor:progress;opacity:.72}
+.loading::after,.is-loading::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;
+  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:w4aSpin 700ms linear infinite}
+@keyframes w4aSpin{to{transform:rotate(360deg)}}
+.empty-state{max-width:520px;color:var(--text-2)}
+.empty-state h2{color:var(--text);font-size:24px;font-weight:500;letter-spacing:-.02em}
+.empty-state .empty-icon,.empty-icon{width:56px;height:56px;border-radius:var(--radius-lg);
+  background:var(--primary-soft);color:var(--primary);box-shadow:none}
+.empty-guide{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--card-bg)}
+.typing-dots span{background:var(--primary);animation:w4aDot 1.2s ease-in-out infinite}
+.typing-dots span:nth-child(2){animation-delay:120ms}.typing-dots span:nth-child(3){animation-delay:240ms}
+@keyframes w4aDot{0%,100%{opacity:.3}50%{opacity:1}}
+body.fx-off .loading::after,body.fx-off .is-loading::after{animation:none}
+
+/* W4B quiet controls: 1px 始终占位，但默认不显现边框；主操作不在此列。 */
+.icon-btn,.tool-btn,.cm-back,.set-win-close,.sp-fold,.sp-close,.ghost-btn,
+.pill-btn:not(.primary),.code-copy,.copy-btn,.toast-close,.toast-more,
+.attach-item .remove,.session-exp,.session-del,.mm-del,.plan-rollback,.plan-ckpt-link,
+.tm-rb,.gg-rule-del,.brw-act,.sw-del-btn,.history-dir-btn,.hd-btn:not(.hd-primary),
+.mcp-tab,.cn-cont,.msg-ic,.err-detail-btn{
+  border:1px solid transparent;background:transparent;box-shadow:none;transform:none;
+  transition:border-color 180ms ease,background-color 180ms ease,
+    color 180ms ease,box-shadow 180ms ease,opacity 120ms ease}
+.icon-btn:hover,.tool-btn:hover,.cm-back:hover,.set-win-close:hover,.sp-fold:hover,.sp-close:hover,
+.ghost-btn:hover,.pill-btn:not(.primary):hover,.code-copy:hover,.copy-btn:hover,
+.toast-close:hover,.toast-more:hover,.attach-item .remove:hover,.session-exp:hover,
+.session-del:hover,.mm-del:hover,.plan-rollback:hover,.plan-ckpt-link:hover,.tm-rb:hover,
+.gg-rule-del:hover,.brw-act:hover,.sw-del-btn:hover,.history-dir-btn:hover,
+.hd-btn:not(.hd-primary):hover,.mcp-tab:hover,.cn-cont:hover,.msg-ic:hover,.err-detail-btn:hover{
+  border-color:var(--border);background:var(--hover);transform:none}
+.icon-btn:focus-visible,.tool-btn:focus-visible,.cm-back:focus-visible,.set-win-close:focus-visible,
+.sp-fold:focus-visible,.sp-close:focus-visible,.ghost-btn:focus-visible,
+.pill-btn:not(.primary):focus-visible,.code-copy:focus-visible,.copy-btn:focus-visible,
+.toast-close:focus-visible,.toast-more:focus-visible,.attach-item .remove:focus-visible,
+.session-exp:focus-visible,.session-del:focus-visible,.mm-del:focus-visible,
+.plan-rollback:focus-visible,.plan-ckpt-link:focus-visible,.tm-rb:focus-visible,
+.gg-rule-del:focus-visible,.brw-act:focus-visible,.sw-del-btn:focus-visible,
+.history-dir-btn:focus-visible,.hd-btn:not(.hd-primary):focus-visible,.mcp-tab:focus-visible,
+.cn-cont:focus-visible,.msg-ic:focus-visible,.err-detail-btn:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;border-color:var(--border)}
+.mcp-tab.on,.seg-btn.on,.history-dir-btn.on,.hd-btn.on{border-color:transparent;
+  background:var(--primary-soft);color:var(--primary)}
+.mcp-tab.on:hover,.mcp-tab.on:focus-visible{border-color:var(--border)}
+.attach-item .remove{width:44px;min-width:44px;height:44px;min-height:44px}
+#continueNewBtn{min-height:44px;border:1px solid transparent;background:transparent;box-shadow:none}
+#continueNewBtn:hover{border-color:var(--border);background:var(--hover)}
+#continueNewBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:var(--border)}
+.session-acts{transform:none}
+.input-row .tool-btn{border-color:transparent;background:transparent}
+.input-row .tool-btn:hover{border-color:var(--border);background:var(--hover)}
+body.fx-off .icon-btn,body.fx-off .tool-btn,body.fx-off .ghost-btn,body.fx-off .pill-btn,
+body.fx-off .copy-btn,body.fx-off .toast-close,body.fx-off .toast-more,body.fx-off .mcp-tab,
+body.fx-off .session-exp,body.fx-off .session-del,body.fx-off .mm-del{transition:none}

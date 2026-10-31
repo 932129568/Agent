@@ -1,0 +1,2016 @@
+{
+  "schemaVersion": 1,
+  "template": "frontend/index.template.html",
+  "output": "harbor.html",
+  "prebuilt": [
+    {
+      "path": "frontend/react/dist/harbor-island.iife.js",
+      "provides": [
+        "HarborIsland"
+      ]
+    }
+  ],
+  "styles": [
+    "frontend/styles/tokens.css",
+    "frontend/styles/base.css",
+    "frontend/styles/legacy.css",
+    "frontend/styles/components.css",
+    "frontend/styles/shell.css",
+    "frontend/styles/features/chat.css",
+    "frontend/styles/features/plan.css",
+    "frontend/styles/features/mcp.css",
+    "frontend/styles/features/memory.css",
+    "frontend/styles/features/overlays.css",
+    "frontend/styles/features/generative.css",
+    "frontend/styles/features/expert.css",
+    "frontend/styles/features/collaboration.css",
+    "frontend/styles/responsive.css"
+  ],
+  "scripts": [
+    {
+      "path": "frontend/src/core/motion.js",
+      "provides": [
+        "MOTION"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/core/state.js",
+      "provides": [
+        "API_URL",
+        "abortController",
+        "attachments",
+        "backendWarning",
+        "currentSessionId",
+        "guardConfig",
+        "guardTrusted",
+        "isStreaming",
+        "lastReqAt",
+        "lastShotHash",
+        "mcpLoadFailed",
+        "mcpServers",
+        "mcpTrusted",
+        "pendingShots",
+        "providerState",
+        "sessions",
+        "shotState",
+        "uiGenerative"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/core/app-state.js",
+      "provides": [
+        "AppState"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId",
+        "isStreaming",
+        "attachments",
+        "providerState",
+        "mcpServers",
+        "abortController",
+        "lastReqAt",
+        "pendingShots",
+        "shotState",
+        "lastShotHash",
+        "backendWarning",
+        "mcpLoadFailed"
+      ]
+    },
+    {
+      "path": "frontend/src/core/bridge.js",
+      "provides": [
+        "callApi",
+        "harborApiBase",
+        "harborHttpAvailable",
+        "callApiHttp"
+      ],
+      "requires": [
+        "backendWarning"
+      ]
+    },
+    {
+      "path": "frontend/src/components/select.js",
+      "provides": [
+        "CS",
+        "closeAllCS",
+        "initCustomSelect"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/shell/theme.js",
+      "provides": [
+        "THEME_ICON_MOON",
+        "THEME_ICON_SUN",
+        "applyTheme",
+        "toggleTheme"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/shell/panels.js",
+      "provides": [
+        "PANELS",
+        "PANEL_ORDER",
+        "_panelLeaving",
+        "applyFx",
+        "currentPanel",
+        "initFx",
+        "switchPanel",
+        "toggleFx"
+      ],
+      "requires": [
+        "MOTION"
+      ]
+    },
+    {
+      "path": "frontend/src/components/overlays.js",
+      "provides": [
+        "DND_SUPPRESS_TYPES",
+        "_closeModal",
+        "_modalRoot",
+        "_notifyItems",
+        "_settlePendingModal",
+        "_toastBox",
+        "_uiConfirmQueue",
+        "_uiConfirmResolve",
+        "_uiPromptResolve",
+        "dndEnabled",
+        "dndSuppressActive",
+        "loadDndSetting",
+        "notifyPush",
+        "saveDndSetting",
+        "toast",
+        "uiConfirm",
+        "uiPrompt",
+        "_overlayFocusables",
+        "_bindOverlayKeyboard",
+        "_unbindOverlayKeyboard"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/chat/screenshot.js",
+      "provides": [
+        "dHashOfDataUrl",
+        "hammingDist",
+        "shotDedup"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/agent/tool-executor.js",
+      "provides": [
+        "V1_STOPWORDS",
+        "_v1Relevance",
+        "_v1Tokens",
+        "_v1Verdict",
+        "agentGuardCheck",
+        "agentTrusted",
+        "browserToolWrapCaptcha",
+        "executeTool",
+        "executeToolRaw",
+        "harborRenderValidation",
+        "toolValidateResult"
+      ],
+      "requires": [
+        "callApi",
+        "toast",
+        "uiConfirm"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/guard.js",
+      "provides": [
+        "GUARD_OP_LABEL",
+        "GUARD_OP_MAP",
+        "GUARD_RUN_OPS",
+        "_guardDescribe",
+        "_guardDetailOf",
+        "_trustPersistently",
+        "guardCheckTool",
+        "loadGuardConfig",
+        "maybeBudgetInvite",
+        "renderGrantBudgetBar",
+        "renderGuardSettings",
+        "resetAllGuardTrust",
+        "saveGuardSettings"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/settings/update.js",
+      "provides": [
+        "_updateInfo",
+        "_updatePill",
+        "checkForUpdate",
+        "showUpdateDialog",
+        "startUpdateFlow"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/audit.js",
+      "provides": [
+        "AUDIT_STATUS",
+        "_auditDetailText",
+        "_auditFilter",
+        "_auditStatusKey",
+        "_auditVerifyAll",
+        "openAuditViewer",
+        "renderAuditList"
+      ],
+      "requires": [
+        "callApi",
+        "_modalRoot"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/schemas.js",
+      "provides": [
+        "UI_LIMITS",
+        "UI_LAYOUTS",
+        "UI_COMPONENTS",
+        "UI_DATA_REF_SCHEMA",
+        "UI_ACTION_REF_SCHEMA",
+        "UI_BLOCK_SCHEMA",
+        "UI_SPEC_SCHEMA",
+        "uiValidationError",
+        "uiCheckJson",
+        "uiInspectBlocks",
+        "validateUiSpec"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/generative/settings.js",
+      "provides": [
+        "UI_GENERATIVE_SETTING_KEYS",
+        "uiGenerativeSettingRead",
+        "UiGenerativeSettings",
+        "uiGenerativeSettingsInit"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/generative/state.js",
+      "provides": [
+        "uiGenerativeStore",
+        "uiGenerativeAttr",
+        "uiGenerativeEntities",
+        "uiGenerativeEntityState",
+        "uiGenerativeViewOwner",
+        "UiGenerativeState",
+        "uiGenerativeIsTransientSpec"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/generative/registry.js",
+      "provides": [
+        "UI_COMPONENT_DESCRIPTORS",
+        "registerUiComponent",
+        "renderUiComponent",
+        "UiComponentRegistry",
+        "uiText",
+        "uiScalar",
+        "uiLabelValue",
+        "uiStatus",
+        "uiAria",
+        "uiFallback"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/generative/data-ref.js",
+      "provides": [
+        "UI_DATA_REF_SELECTORS",
+        "uiDataRefError",
+        "uiDataRefHash",
+        "uiMemoryText",
+        "uiMemoryEntityId",
+        "uiRedactFields",
+        "registerDataRefSelector",
+        "uiDataRefProvenance",
+        "resolveDataRef",
+        "injectDataRef",
+        "DataRefResolver",
+        "UI_TOOL_RESULT_READERS",
+        "uiToolResultEntry",
+        "registerUiToolResult",
+        "UI_TOOL_RESULT_LIMITS",
+        "uiToolContentBytes",
+        "uiToolPayloadWithin"
+      ],
+      "requires": [
+        "UiComponentRegistry"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/fixtures.js",
+      "provides": [
+        "uiFixtureId",
+        "uiFixtureContext",
+        "createUiDataRefHost",
+        "uiFixtureBase",
+        "UiSpecFixtures",
+        "uiActiveRunContext"
+      ],
+      "requires": [
+        "uiMemoryEntityId"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/actions.js",
+      "provides": [
+        "UI_ACTION_NAMES",
+        "UiActionRegistry",
+        "registerUiAction",
+        "uiActionsEnabled",
+        "uiActionResult",
+        "executeUiAction",
+        "uiActionSanitizeBlock",
+        "uiActionPermission",
+        "uiActionAfterRender",
+        "UiGenerativeActions"
+      ],
+      "requires": [
+        "UiGenerativeSettings"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/projection.js",
+      "provides": [
+        "UiProjectionSession",
+        "UiProjection"
+      ],
+      "requires": [
+        "validateUiSpec",
+        "UiComponentRegistry",
+        "DataRefResolver",
+        "UiGenerativeState",
+        "UiGenerativeActions"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/artifact.js",
+      "provides": [
+        "UI_ARTIFACT_LIMITS",
+        "UI_ARTIFACT_ENVELOPE_SCHEMA",
+        "uiArtifactError",
+        "uiArtifactUtf8Length",
+        "uiArtifactValidateEnvelope",
+        "UiArtifactStream",
+        "uiArtifactValidateSemantics",
+        "uiArtifactValidateCandidate",
+        "uiArtifactFeedback",
+        "UI_STRICT_JSON_SCHEMA"
+      ],
+      "requires": [
+        "validateUiSpec",
+        "UiComponentRegistry",
+        "DataRefResolver",
+        "UI_LAYOUTS",
+        "UI_COMPONENTS",
+        "UI_DATA_REF_SCHEMA",
+        "UI_ACTION_REF_SCHEMA",
+        "UI_LIMITS"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/context.js",
+      "provides": [
+        "SHRINK",
+        "SHRINK_LEN",
+        "_stripToolTags",
+        "applyShrinkMarkers",
+        "normalizeSystemMessages",
+        "shrinkAiCopy",
+        "shrinkHistoryForApi",
+        "shrinkToolCopy"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/sessions/search.js",
+      "provides": [
+        "_markSnippet",
+        "_msgSearchText",
+        "jumpToSearchHit",
+        "openSessionSearch",
+        "runSessionSearch"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId"
+      ]
+    },
+    {
+      "path": "frontend/src/settings/navigation.js",
+      "provides": [
+        "SET_GROUP_MAP",
+        "SET_GROUP_ORDER",
+        "SET_NAV_ICONS",
+        "_groupOf",
+        "_highlightSetNav",
+        "_iconOf",
+        "_showSetBlock",
+        "buildSetNav"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/settings/local-model.js",
+      "provides": [
+        "COMPACT_LEVEL_RATIO",
+        "LOCAL_UI_PRESETS",
+        "_localLoadSeq",
+        "_localProbeBusy",
+        "applyLocalConfig",
+        "applyLocalMetaBadge",
+        "collectLocalConfig",
+        "compactThresholdLocal",
+        "connectCtxBadgeSafe",
+        "connectCtxWindowSafe",
+        "loadLocalUI",
+        "localBillingLabel",
+        "localCompactThreshold",
+        "localEl",
+        "localLoadModels",
+        "localMetaCache",
+        "localProbeNow",
+        "localRestoreIdentifyBtn",
+        "localState",
+        "localTestNow",
+        "onLocalPresetChange",
+        "refreshLocalModelOptions",
+        "refreshReaderBadge",
+        "syncLocalUiState"
+      ],
+      "requires": [
+        "callApi",
+        "providerState",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/context-freeze.js",
+      "provides": [
+        "buildMessagesForAPI",
+        "ensureMsgId",
+        "freezeBeforeCurrentTask",
+        "frozenForm"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/settings/connection.js",
+      "provides": [
+        "CONNECT_AUTO_IDENTIFY",
+        "CONNECT_DEBOUNCE_MS",
+        "CONNECT_GROUP_VALUE",
+        "CONNECT_LOCAL_IDS",
+        "CONNECT_MANUAL_VALUE",
+        "CONNECT_PRESET_ORDER",
+        "PRESETS",
+        "PRESET_BASE_MEMO",
+        "PROVIDER_HOT_MODELS",
+        "applyProviderConfig",
+        "collectProviderConfig",
+        "connectApiKeyInput",
+        "connectApplyPreset",
+        "connectApplyPresetNow",
+        "connectBaseUrl",
+        "connectCancelIdentify",
+        "connectCollectConfig",
+        "connectCtxBadge",
+        "connectCtxWindow",
+        "connectCurrentPreset",
+        "connectEnterManual",
+        "connectExitManual",
+        "connectFillModels",
+        "connectGlmCapable",
+        "connectHostOf",
+        "connectHotModels",
+        "connectIdentifyLabel",
+        "connectIdentifyNow",
+        "connectIdentifySeq",
+        "connectIdentifyTimer",
+        "connectInit",
+        "connectIsLocalPreset",
+        "connectLoadFromConfig",
+        "connectModelValue",
+        "connectOnModelChange",
+        "connectPreset",
+        "connectPresetByLocalUrl",
+        "connectPresetByUrl",
+        "connectPresetGridInit",
+        "connectPresetIds",
+        "connectPresetMeta",
+        "connectPresetModels",
+        "connectPrices",
+        "connectSaveAndTest",
+        "connectScheduleIdentify",
+        "connectSetButtonLoading",
+        "connectSetPickManual",
+        "connectSyncAfterModelFill",
+        "connectSyncState",
+        "connectTestNow",
+        "connectToolCapable",
+        "connectUpdateAdvanced",
+        "loadProviderUI",
+        "onProviderPresetChange",
+        "syncProviderUiState",
+        "testProviderNow"
+      ],
+      "requires": [
+        "callApi",
+        "providerState",
+        "toast",
+        "localState"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/budget.js",
+      "provides": [
+        "_cd",
+        "checkBudgetHardStop",
+        "registerProgress",
+        "registerToolSig",
+        "resetCostDefense",
+        "showPausePanel"
+      ],
+      "requires": [
+        "toast",
+        "uiConfirm",
+        "sessions"
+      ]
+    },
+    {
+      "path": "frontend/src/settings/webdav.js",
+      "provides": [
+        "_webdavSnapshot",
+        "loadWebdavConfigNow",
+        "saveWebdavConfigNow",
+        "webdavCollectConfig",
+        "webdavExportNow",
+        "webdavFormDirty",
+        "webdavMarkSnapshot",
+        "webdavRestoreNow",
+        "webdavSetStatus",
+        "webdavTestNow"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/workspace/quick.js",
+      "provides": [
+        "_wsqOpen",
+        "_wsqSeq",
+        "accessToggleInit",
+        "accessToggleSync",
+        "accessToggleToggle",
+        "wsQuickBrowse",
+        "wsQuickClose",
+        "wsQuickEnable",
+        "wsQuickInd",
+        "wsQuickMenu",
+        "wsQuickOpenToolMode",
+        "wsQuickPick",
+        "wsQuickRefresh",
+        "wsQuickToggle",
+        "wsQuickUnbind",
+        "wsSectionShow"
+      ],
+      "requires": [
+        "callApi",
+        "currentSessionId",
+        "sessions"
+      ]
+    },
+    {
+      "path": "frontend/src/settings/sandbox.js",
+      "provides": [
+        "SANDBOX_CLASSES",
+        "SANDBOX_DEFAULT",
+        "SANDBOX_LIMIT_PROFILES",
+        "SANDBOX_PROFILES",
+        "SANDBOX_UI_LEVELS",
+        "_sbEl",
+        "_sbNum",
+        "_sbPick",
+        "_sbSet",
+        "_sbShow",
+        "loadSandboxPanel",
+        "refreshSandboxStatus",
+        "renderSandboxSettings",
+        "sandboxCfg",
+        "sandboxResetDefaults",
+        "saveSandboxSettings"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/compaction.js",
+      "provides": [
+        "CACHE_HIT_PAUSE",
+        "CACHE_HIT_RELAX",
+        "CJK_PER_TOK",
+        "EST_CALIB_KEY",
+        "SAVER_LEVELS",
+        "__lastAutoCompact",
+        "__lastSkipTip",
+        "_contentFp",
+        "_estCalib",
+        "_estMsgCache",
+        "autoCompactThreshold",
+        "estTokens",
+        "estTokensCalibrate",
+        "estTokensCalibrated",
+        "estTokensMsg",
+        "historyTokens",
+        "maybeAutoCompact"
+      ],
+      "requires": [
+        "providerState",
+        "sessions",
+        "currentSessionId",
+        "callApi"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/navigation.js",
+      "provides": [
+        "NAV_ZONES",
+        "_navEsc",
+        "navClearNotify",
+        "navClearNotifyBadge",
+        "navFirstRunGuide",
+        "navGuideFillKey",
+        "navGuidePickSource",
+        "navHideNotify",
+        "navHighlight",
+        "navInit",
+        "navNotifyTime",
+        "navRenderHeaderStatus",
+        "navRenderNotify",
+        "navSwitch",
+        "navToggleNotify",
+        "navUpdateEmptyGuide",
+        "navZone"
+      ],
+      "requires": [
+        "currentPanel"
+      ]
+    },
+    {
+      "path": "frontend/src/providers/request.js",
+      "provides": [
+        "fetchGLMStream",
+        "sleep",
+        "modelTransportStream",
+        "ModelTransport"
+      ],
+      "requires": [
+        "lastReqAt"
+      ]
+    },
+    {
+      "path": "frontend/src/components/markdown.js",
+      "provides": [
+        "MSG_ICONS",
+        "_rafPendingMap",
+        "addMessage",
+        "addMsgActions",
+        "enhanceCodeBlocks",
+        "escapeHtml",
+        "fillErrorBubble",
+        "flushRender",
+        "msgRecall",
+        "renderMd",
+        "scheduleRender",
+        "viewImage"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/router.js",
+      "provides": [
+        "EFFICIENCY_PROMPT",
+        "ROUTE_ADJACENT",
+        "ROUTE_ALWAYS",
+        "ROUTE_HINTS",
+        "TOOL_DOMAINS",
+        "routeTools"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/agent/request-builder.js",
+      "provides": [
+        "buildChatRequestBody",
+        "degradeChatBodyFor400"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/agent/sse-parser.js",
+      "provides": [
+        "parseSseStream"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/agent/tool-runtime.js",
+      "provides": [
+        "WRITE_SEQ_TOOLS",
+        "createToolRuntime"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/agent/model-executor.js",
+      "provides": [
+        "modelExecutorExecute",
+        "ModelExecutor"
+      ],
+      "requires": [
+        "ModelTransport",
+        "parseSseStream",
+        "degradeChatBodyFor400"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/controller.js",
+      "provides": [
+        "uiGenerationMessages",
+        "uiGenerationModel",
+        "createUiGenerationBody",
+        "createUiEndpointSnapshot",
+        "uiStrictSchemaUnsupported",
+        "productionUiGenerate",
+        "generateUiSpec",
+        "uiGenerationToast",
+        "createUiGenerationController",
+        "uiGenerationErrorCode"
+      ],
+      "requires": [
+        "UiProjection",
+        "UiArtifactStream",
+        "uiArtifactValidateCandidate",
+        "uiArtifactFeedback",
+        "ModelExecutor",
+        "buildChatRequestBody",
+        "createUiDataRefHost",
+        "UiGenerativeSettings"
+      ]
+    },
+    {
+      "path": "frontend/src/integrations/mcp-panel.js",
+      "provides": [
+        "MCP_PANEL_TIMEOUT_MS",
+        "MCP_RES_PREVIEW_MAX",
+        "MCP_STATUS_NAMES",
+        "MCP_TIERS",
+        "MCP_TIER_NAMES",
+        "loadMcpServers",
+        "mcpDeleteServer",
+        "mcpMappingToText",
+        "mcpOpenDetail",
+        "mcpOpenEditor",
+        "mcpOpenImport",
+        "mcpResBusyUri",
+        "mcpResEl",
+        "mcpResFindOut",
+        "mcpResOpen",
+        "mcpResOpenToolcache",
+        "mcpResRead",
+        "mcpResRenderSubCount",
+        "mcpResRow",
+        "mcpResSubs",
+        "mcpResToggleSub",
+        "mcpServerRow",
+        "mcpSetToolTier",
+        "mcpStatusDotCls",
+        "mcpTestServer",
+        "mcpTextToMapping",
+        "mcpToggleServer",
+        "renderMcpServerList",
+        "mcpServersRevision",
+        "mcpGenerativeState",
+        "mcpGenerativeRender",
+        "mcpGenerativeShow",
+        "mcpGenerativeHide",
+        "mcpGenerativeEnsure"
+      ],
+      "requires": [
+        "callApi",
+        "toast",
+        "uiConfirm",
+        "UiSpecFixtures",
+        "createUiDataRefHost",
+        "UiProjection",
+        "createUiGenerationController"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/run-controller.js",
+      "provides": [
+        "__agentActiveRun",
+        "__agentRunSeq",
+        "agentRunCurrent",
+        "agentRunVisible",
+        "runAddMessage",
+        "syncAgentRunUiForSession",
+        "cancelActiveAgentLoop",
+        "fillMissingToolResults",
+        "harborMaybeAwaitTakeover",
+        "harborTakeoverAwaitTerminal",
+        "harborTakeoverNotify",
+        "harborTakeoverStopPoll",
+        "harborTakeoverWaitResolve",
+        "planFinishIfNatural",
+        "runAgentLoop",
+        "streamSpeedText",
+        "setSendButtonVisual"
+      ],
+      "requires": [
+        "isStreaming",
+        "sessions",
+        "currentSessionId",
+        "callApi",
+        "executeTool",
+        "routeTools",
+        "fetchGLMStream",
+        "scheduleRender",
+        "AppState",
+        "buildChatRequestBody",
+        "degradeChatBodyFor400",
+        "parseSseStream",
+        "ModelTransport",
+        "ModelExecutor",
+        "createToolRuntime",
+        "registerUiToolResult"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/run-registry.js",
+      "provides": [
+        "RunRegistry"
+      ],
+      "requires": [
+        "AppState",
+        "__agentActiveRun",
+        "__agentRunSeq",
+        "currentSessionId"
+      ]
+    },
+    {
+      "path": "frontend/src/integrations/mcp-exec.js",
+      "provides": [
+        "MCP_CALL_TIMEOUT_MAX_MS",
+        "MCP_CALL_TIMEOUT_MS",
+        "MCP_LOCAL_CAUTION",
+        "mcpCallTimeoutMs",
+        "mcpExecTool",
+        "mcpGuardCheck",
+        "mcpParseName"
+      ],
+      "requires": [
+        "callApi",
+        "mcpServers",
+        "agentGuardCheck"
+      ]
+    },
+    {
+      "path": "frontend/src/search/panel.js",
+      "provides": [
+        "SP_FEATURE_KEY",
+        "SP_PHASE_TEXT",
+        "SP_POLL_INTERVAL_MS",
+        "SP_SEARCH_TIMEOUT_MS",
+        "SP_STATS_TIMEOUT_MS",
+        "SP_STATUS_TIMEOUT_MS",
+        "SP_TAKEOVER_TIMEOUT_MS",
+        "SP_TAKEOVER_TTL_S",
+        "SP_TAKEOVER_WARN_LEAD_S",
+        "searchLastPayload",
+        "searchPanelClose",
+        "searchPanelEl",
+        "searchPanelHideTakeover",
+        "searchPanelInit",
+        "searchPanelOpen",
+        "searchPanelPollOnce",
+        "searchPanelRefreshStats",
+        "searchPanelRenderError",
+        "searchPanelRenderResults",
+        "searchPanelRunSearch",
+        "searchPanelSetPhase",
+        "searchPanelSetState",
+        "searchPanelShowTakeover",
+        "searchPanelStartPolling",
+        "searchPanelState",
+        "searchPanelStopPolling",
+        "searchPanelTakeoverAction",
+        "searchPanelToggleFold",
+        "searchPanelWire",
+        "searchPollTimer",
+        "searchReqSeq",
+        "searchTakeoverId",
+        "spCallApi",
+        "spEl",
+        "spEsc",
+        "spFeatureEnabled",
+        "spManualOpen",
+        "spStatsSeq",
+        "spTakeoverWarned",
+        "spToast"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/integrations/software.js",
+      "provides": [
+        "SW_CALL_TIMEOUT_MS",
+        "SW_FEATURE_KEY",
+        "SW_LIGHT_CLASS",
+        "SW_LIST_TIMEOUT_MS",
+        "SW_PROBE_TIMEOUT_MS",
+        "SW_STATUS_POLL_MS",
+        "SW_STATUS_TEXT",
+        "softwarePanelInit",
+        "softwarePanelOpenTest",
+        "softwarePanelProbe",
+        "softwarePanelRefresh",
+        "softwarePanelRenderError",
+        "softwarePanelRenderList",
+        "softwarePanelRenderTestOut",
+        "softwarePanelRunTest",
+        "softwarePanelSaveCustom",
+        "softwarePanelSetState",
+        "softwarePanelState",
+        "softwarePanelWire",
+        "softwareReqSeq",
+        "swCallApi",
+        "swCallElapsed",
+        "swCallTimer",
+        "swEl",
+        "swEsc",
+        "swFeatureEnabled",
+        "swLastList",
+        "swProbing",
+        "swTestSeq",
+        "swTesting",
+        "swToast"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/providers/hybrid.js",
+      "provides": [
+        "HY_CFG_TIMEOUT_MS",
+        "HY_CLOUD_PRICE_PER_1K",
+        "HY_FEATURE_KEY",
+        "HY_SAVER_HINT_KEY",
+        "HY_STRATEGY_TEXT",
+        "_hyChipAnim",
+        "hyCallApi",
+        "hyCountUpChip",
+        "hyEl",
+        "hyEsc",
+        "hyFeatureEnabled",
+        "hyFmtInt",
+        "hyFmtMoney",
+        "hyRdEl",
+        "hyRdSeq",
+        "hyRevertField",
+        "hyToast",
+        "hybridCfg",
+        "hybridInit",
+        "hybridOnUsage",
+        "hybridReadinessRun",
+        "hybridRefresh",
+        "hybridRenderConfig",
+        "hybridRenderError",
+        "hybridRenderSplit",
+        "hybridRenderStrategyDesc",
+        "hybridReqSeq",
+        "hybridResetSplit",
+        "hybridSave",
+        "hybridSplit",
+        "hybridState",
+        "hybridWire",
+        "collaborationHybridSave"
+      ],
+      "requires": [
+        "callApi",
+        "providerState"
+      ]
+    },
+    {
+      "path": "frontend/src/sessions/store.js",
+      "provides": [
+        "SAVE_THROTTLE_MS",
+        "SAVE_THROTTLE_BUSY_MS",
+        "LOCAL_MIRROR_MAX_SESSIONS",
+        "LOCAL_MIRROR_MAX_CHARS",
+        "_enqueueSave",
+        "_saveChain",
+        "_saveLastRun",
+        "_saveTrailer",
+        "_savedSignatures",
+        "_sessionSaveSignature",
+        "_sessionSignatures",
+        "_allSignaturesEqual",
+        "_sessionsPersistReplacer",
+        "_sessionsMirrorProjection",
+        "getCurrentSession",
+        "loadSessions",
+        "normalizeSessions",
+        "rememberDeletedSession",
+        "saveSessions",
+        "_sessionStateRead",
+        "_sessionStateWrite",
+        "_sessionStateCurrentId"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId",
+        "callApi",
+        "toast",
+        "AppState"
+      ]
+    },
+    {
+      "path": "frontend/src/sessions/store-api.js",
+      "provides": [
+        "SessionStore"
+      ],
+      "requires": [
+        "normalizeSessions",
+        "loadSessions",
+        "saveSessions",
+        "getCurrentSession",
+        "rememberDeletedSession"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/grants.js",
+      "provides": [
+        "GG_CALIBRATE_MS",
+        "GG_COUNTDOWN_MS",
+        "GG_EXPIRING_SOON_S",
+        "GG_SCOPES",
+        "GG_STATUS_TIMEOUT_MS",
+        "GG_TTL_OPTIONS",
+        "ggActive",
+        "ggCalibrateTimer",
+        "ggCallApi",
+        "ggCountdownTimer",
+        "ggEl",
+        "ggEsc",
+        "ggExpiringSoon",
+        "ggFailStreak",
+        "ggFmtRemain",
+        "ggGrantId",
+        "ggRemaining",
+        "ggRules",
+        "ggState",
+        "ggStatusSeq",
+        "ggToast",
+        "ggTtlTotal",
+        "grantReqSeq",
+        "guardGrantCreate",
+        "guardGrantInit",
+        "guardGrantRefreshStatus",
+        "guardGrantRenderIndicator",
+        "guardGrantRenderRules",
+        "guardGrantRevoke",
+        "guardGrantRuleAdd",
+        "guardGrantRuleRemove",
+        "guardGrantRulesRefresh",
+        "guardGrantStartTimers",
+        "guardGrantStopTimers",
+        "guardGrantTick",
+        "guardGrantWire"
+      ],
+      "requires": [
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/planning/card.js",
+      "provides": [
+        "ckptBusy",
+        "ckptDoRollback",
+        "ckptOpenList",
+        "ckptRenderEntry",
+        "ckptRollbackFlow",
+        "ckptShow",
+        "clarifyShow",
+        "pcCall",
+        "pcCompOutMs",
+        "pcEl",
+        "pcEsc",
+        "pcScrollChat",
+        "pcToast",
+        "planCardApprove",
+        "planCardEl",
+        "planCardReject",
+        "planCardRender",
+        "planCurrent",
+        "planDeviationShow",
+        "planFinish",
+        "planResolveApprove",
+        "planResolveClarify",
+        "planResolveDev",
+        "planRunning",
+        "planShow",
+        "planStepStatus",
+        "rbTwice",
+        "planUiRevision",
+        "planGenerativeRender",
+        "planGenerativeShow",
+        "planGenerativeHide",
+        "planGenerativeRefresh"
+      ],
+      "requires": [
+        "callApi",
+        "addMessage",
+        "renderMd",
+        "currentSessionId",
+        "sessions",
+        "UiSpecFixtures",
+        "createUiDataRefHost",
+        "UiProjection",
+        "createUiGenerationController"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/onboarding.js",
+      "provides": [
+        "OB_DONE_KEY",
+        "OB_STEPS",
+        "_obTestBusy",
+        "obBack",
+        "obDone",
+        "obEsc",
+        "obFinish",
+        "obMarkDone",
+        "obNext",
+        "obRender",
+        "obRoot",
+        "obShouldShow",
+        "obSkip",
+        "obStepHtml",
+        "obStepIdx",
+        "obTestKey",
+        "obWireStep",
+        "onboardingInit"
+      ],
+      "requires": [
+        "connectTestNow",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/settings/memory.js",
+      "provides": [
+        "MM_FEATURE_KEY",
+        "MM_LIST_TIMEOUT_MS",
+        "MM_TEXT_MAX",
+        "MM_WRITE_TIMEOUT_MS",
+        "memoryPanelAdd",
+        "memoryPanelDelete",
+        "memoryPanelInit",
+        "memoryPanelRefresh",
+        "memoryPanelRenderError",
+        "memoryPanelRenderList",
+        "memoryPanelSetState",
+        "memoryPanelState",
+        "memoryPanelWire",
+        "memoryReqSeq",
+        "mmBusy",
+        "mmCallApi",
+        "mmEl",
+        "mmEntryText",
+        "mmEntryTs",
+        "mmEsc",
+        "mmFeatureEnabled",
+        "mmLastItems",
+        "mmToast",
+        "mmLastError",
+        "mmGenerativeState",
+        "memoryGenerativeRender",
+        "memoryGenerativeShow",
+        "memoryGenerativeHide",
+        "memoryGenerativeEnsure"
+      ],
+      "requires": [
+        "callApi",
+        "toast",
+        "UiSpecFixtures",
+        "createUiDataRefHost",
+        "UiProjection",
+        "createUiGenerationController"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/platform.js",
+      "provides": [],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/settings/store.js",
+      "provides": [
+        "HEAVY_HINTS",
+        "collectConfig",
+        "queueSaveConfig",
+        "resolveModelEffort",
+        "saveCfgTimer",
+        "saveConfig",
+        "sessionBudget"
+      ],
+      "requires": [
+        "providerState",
+        "callApi",
+        "collectProviderConfig",
+        "collectLocalConfig"
+      ]
+    },
+    {
+      "path": "frontend/src/integrations/browser-driver.js",
+      "provides": [],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/planning/checkpoints.js",
+      "provides": [
+        "TM_STATUS_BADGE",
+        "checkpointMgrInit",
+        "checkpointMgrRefresh",
+        "tmCall",
+        "tmEl",
+        "tmEsc"
+      ],
+      "requires": [
+        "callApi",
+        "planCurrent",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/providers/provider.js",
+      "provides": [
+        "chatCompletionsOf",
+        "currentEndpointName",
+        "effectiveApiKey",
+        "isGlmBaseUrl",
+        "isGlmEndpoint",
+        "localModeActive",
+        "localProxyBase",
+        "localProxyHeaders",
+        "providerPriceFor",
+        "resolveApiEndpoint",
+        "updateBrandModel"
+      ],
+      "requires": [
+        "providerState",
+        "localState"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/shortcuts.js",
+      "provides": [
+        "SC_COMMANDS",
+        "SC_MOUSE",
+        "SC_SHORTCUTS",
+        "_scBound",
+        "_scEsc",
+        "scClose",
+        "scEsc",
+        "scOpen",
+        "shortcutsInit"
+      ],
+      "requires": [
+        "_modalRoot"
+      ]
+    },
+    {
+      "path": "frontend/src/chat/navigation.js",
+      "provides": [
+        "CN_MAX_ITEMS",
+        "CN_SUMMARY_LEN",
+        "chatNavInit",
+        "cnClose",
+        "cnCollect",
+        "cnEl",
+        "cnMarkCurrent",
+        "cnRender",
+        "cnToggle"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId"
+      ]
+    },
+    {
+      "path": "frontend/src/chat/composer.js",
+      "provides": [
+        "CN_MODELS_KEY",
+        "IP_CTX_LABELS",
+        "IP_CTX_ORDER",
+        "IP_THINKING_LABELS",
+        "IP_THINKING_ORDER",
+        "PLUS_ITEMS",
+        "__modelPrefs",
+        "getModelPrefs",
+        "inputPlusInit",
+        "ipCustomAdd",
+        "ipCustomModels",
+        "ipCustomRemove",
+        "ipCustomSave",
+        "ipEl",
+        "ipGotoModelSettings",
+        "ipModelCurrentName",
+        "ipModelRefresh",
+        "ipModelRender",
+        "ipModelToggle",
+        "ipPlusRender",
+        "ipPlusToggle",
+        "modelPrefsRefresh",
+        "modelPrefsSave"
+      ],
+      "requires": [
+        "providerState",
+        "callApi",
+        "connectCurrentPreset"
+      ]
+    },
+    {
+      "path": "frontend/src/analytics/tokens.js",
+      "provides": [
+        "MODEL_PRICE",
+        "accumulateUsage",
+        "cacheFoldText",
+        "calcUsage",
+        "lastCacheHitRate",
+        "openBilling",
+        "sessionSpent",
+        "updateLiveTokenStat",
+        "updateTokenStat"
+      ],
+      "requires": [
+        "sessions",
+        "providerState"
+      ]
+    },
+    {
+      "path": "frontend/src/analytics/cost.js",
+      "provides": [
+        "ERROR_HUMANIZE",
+        "ERROR_HUMANIZE_LOCAL",
+        "GITHUB_429_RPD_TEXT",
+        "GITHUB_429_RPM_TEXT",
+        "_costEstTimer",
+        "_updateCostEstimateNow",
+        "estimateNextCost",
+        "humanizeApiError",
+        "humanizeAuthError",
+        "humanizeGithub429",
+        "updateCostEstimate"
+      ],
+      "requires": [
+        "providerState",
+        "providerPriceFor",
+        "historyTokens"
+      ]
+    },
+    {
+      "path": "frontend/src/analytics/panel.js",
+      "provides": [
+        "__clear",
+        "__fmtCost",
+        "__fmtNum",
+        "__svgEl",
+        "__trendMetric",
+        "aggregateSessions",
+        "aggregateTools",
+        "buildAnalyticsSnapshot",
+        "countUpText",
+        "renderAnalytics",
+        "renderStatCards",
+        "renderToolBars",
+        "renderToolRingAndMs",
+        "renderTrendChart",
+        "setTrendMetric"
+      ],
+      "requires": [
+        "sessions",
+        "providerPriceFor",
+        "escapeHtml"
+      ]
+    },
+    {
+      "path": "frontend/src/core/utils.js",
+      "provides": [
+        "addSysTip",
+        "browseWs",
+        "buildToolLabel",
+        "formatCtx",
+        "onFolderEnabled",
+        "onIndToggle",
+        "onWsSelect",
+        "refreshEffectiveWs",
+        "refreshWsCard",
+        "smartCmd",
+        "unbindSession",
+        "wsShort"
+      ],
+      "requires": [
+        "callApi",
+        "currentSessionId",
+        "sessions"
+      ]
+    },
+    {
+      "path": "frontend/src/sessions/controller.js",
+      "provides": [
+        "PROJECTS_KEY",
+        "RUN_STATUS_META",
+        "_bindSessionGroups",
+        "_collapsedProjects",
+        "_dayGroup",
+        "_escId",
+        "_hdBusy",
+        "_hdLingerMs",
+        "_newChatGroupsData",
+        "_projectError",
+        "_projectSessionCount",
+        "_renderHistoryRoot",
+        "_runStatusHtml",
+        "_sessionGroupsHtml",
+        "_sessionItemHtml",
+        "_setNewChatScreenVisible",
+        "_shortDir",
+        "_taskGroupCollapsed",
+        "closeProjectModal",
+        "continueInNewSession",
+        "createProjectFromModal",
+        "createProjectSession",
+        "deleteSession",
+        "ensureHistoryFoot",
+        "ensureSession",
+        "exportSessionMd",
+        "formatTime",
+        "loadProjects",
+        "migrateWorkingRunStatuses",
+        "newSession",
+        "normalizeProjects",
+        "openNewChatScreen",
+        "openProjectModal",
+        "pickProjectFolder",
+        "projectById",
+        "projectUiInit",
+        "projects",
+        "refreshHistoryFoot",
+        "renderChatHistory",
+        "renderNewChatHistory",
+        "renderSessionList",
+        "saveProjects",
+        "setSessionRunStatus",
+        "showHistoryDirPanel",
+        "switchSession",
+        "toggleProjectGroup",
+        "toggleTaskGroup",
+        "updateSessionTitle"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId",
+        "saveSessions",
+        "addMessage",
+        "callApi",
+        "toast",
+        "AppState"
+      ]
+    },
+    {
+      "path": "frontend/src/chat/attachments.js",
+      "provides": [
+        "_attachCount",
+        "_concatU8",
+        "attachmentsAllowed",
+        "attachmentsDeniedText",
+        "fileToDataURL",
+        "handleFiles",
+        "readAttachmentText",
+        "removeAttachment",
+        "renderPreview"
+      ],
+      "requires": [
+        "attachments",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/text-compress.js",
+      "provides": [
+        "COMPRESS_IMG_TIMEOUT_MS",
+        "SHOT_PRESETS",
+        "autoCropCanvas",
+        "compressCliOutput",
+        "compressImage",
+        "compressScreenshot",
+        "shotPreset",
+        "sumSessionTokens"
+      ],
+      "requires": [
+        "shotState"
+      ]
+    },
+    {
+      "path": "frontend/src/agent/compact-command.js",
+      "provides": [
+        "COMPACT_BACKUP_CAP",
+        "MAX_DONE_TASKS",
+        "_liveCompactCard",
+        "archiveOldTasks",
+        "compactHistory",
+        "compactNow",
+        "recallMemory",
+        "renderCompactCard",
+        "restoreCompactBackup",
+        "saveCompactBackup",
+        "summarizeToolResult"
+      ],
+      "requires": [
+        "sessions",
+        "currentSessionId",
+        "estTokens",
+        "historyTokens",
+        "callApi",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/chat/send.js",
+      "provides": [
+        "_planGenSeq",
+        "closeSidebarDrawer",
+        "continueLastGeneration",
+        "exportChat",
+        "planGenerate",
+        "planGenerateFallback",
+        "planModeRun",
+        "regenerate",
+        "sendMessage",
+        "toggleSettings",
+        "toggleSidebar"
+      ],
+      "requires": [
+        "isStreaming",
+        "attachments",
+        "currentSessionId",
+        "sessions",
+        "getCurrentSession",
+        "ensureSession",
+        "saveSessions",
+        "callApi",
+        "AppState",
+        "_bindOverlayKeyboard",
+        "_unbindOverlayKeyboard"
+      ]
+    },
+    {
+      "path": "frontend/src/components/context-menu.js",
+      "provides": [
+        "setupContextMenu"
+      ],
+      "requires": [
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/schemas.js",
+      "provides": [
+        "EXPERT_ID_RE",
+        "EXPERT_DIGEST_RE",
+        "expertFail",
+        "expertClone",
+        "expertFreeze",
+        "expertResourcePath",
+        "expertSelection",
+        "expertDraft",
+        "expertApiPayload",
+        "expertSnapshot",
+        "expertMessage",
+        "expertToolArgs",
+        "expertTeamSchemas"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/expert/package-store.js",
+      "provides": [
+        "ExpertPackageStore"
+      ],
+      "requires": [
+        "expertApiPayload",
+        "expertSnapshot",
+        "expertResourcePath"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/context.js",
+      "provides": [
+        "expertToolName",
+        "expertPackageTools",
+        "expertApiMessages",
+        "ActorContext",
+        "MemberContext"
+      ],
+      "requires": [
+        "expertMessage"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/events.js",
+      "provides": [
+        "ExpertEventJournal"
+      ],
+      "requires": [
+        "saveSessions"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/recovery.js",
+      "provides": [
+        "expertRecoveryCheckpoint",
+        "ExpertRecovery"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/expert/mailbox.js",
+      "provides": [
+        "ExpertMailbox"
+      ],
+      "requires": [
+        "ExpertEventJournal"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/orchestrator.js",
+      "provides": [
+        "TeamOrchestrator"
+      ],
+      "requires": [
+        "ActorContext",
+        "MemberContext",
+        "ExpertMailbox",
+        "ExpertEventJournal",
+        "expertTeamSchemas",
+        "expertToolArgs",
+        "expertApiMessages",
+        "expertRecoveryCheckpoint",
+        "RunRegistry",
+        "ModelExecutor",
+        "ModelTransport",
+        "buildChatRequestBody",
+        "expertMessage"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/controller.js",
+      "provides": [
+        "ExpertUsageLedger",
+        "createExpertEndpointSnapshot",
+        "expertSessionForRun",
+        "ExpertRunController"
+      ],
+      "requires": [
+        "ExpertPackageStore",
+        "ActorContext",
+        "ExpertEventJournal",
+        "expertSelection",
+        "expertDraft",
+        "expertClone",
+        "RunRegistry",
+        "ModelExecutor",
+        "ModelTransport",
+        "buildChatRequestBody",
+        "expertApiMessages",
+        "TeamOrchestrator"
+      ]
+    },
+    {
+      "path": "frontend/src/analytics/expert.js",
+      "provides": [
+        "expertUsageTotals",
+        "selectExpertUsage",
+        "selectExpertEventUsage"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/collaboration/endpoint.js",
+      "provides": [
+        "COLLABORATION_SHA_K",
+        "collaborationCanonical",
+        "collaborationSha256",
+"collaborationAssertNoSecret",
+      "collaborationValidateCredentialRef",
+      "EndpointRef",
+        "collaborationEndpointSnapshot",
+        "createCollaborationEndpoints"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/collaboration/schemas.js",
+      "provides": [
+        "COLLABORATION_SCHEMA_VERSION",
+        "collaborationSchemaError",
+        "collaborationFields",
+        "collaborationText",
+        "collaborationAttempt",
+        "collaborationOutputSchema",
+        "collaborationTask",
+        "collaborationPlanDigest",
+        "collaborationValidatePlan",
+        "collaborationResultRef",
+        "collaborationValidateResult",
+        "collaborationReviewDigest",
+        "collaborationValidateReview",
+        "collaborationValidateFinal",
+        "collaborationValidateAction"
+      ],
+      "requires": [
+        "collaborationCanonical",
+        "collaborationSha256"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/config.js",
+      "provides": [
+        "COLLABORATION_DEFAULTS",
+        "collaborationConfigError",
+        "collaborationEndpointCacheValid",
+        "normalizeCollaborationConfig",
+        "collaborationConfigFromHybrid",
+        "collaborationConfigDigest"
+      ],
+      "requires": [
+        "collaborationAssertNoSecret",
+        "collaborationCanonical",
+        "collaborationSha256"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/router.js",
+      "provides": [
+        "COLLABORATION_ROLE_CHANNELS",
+        "CollaborationRouter"
+      ],
+      "requires": [
+        "normalizeCollaborationConfig"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/plan.js",
+      "provides": [
+        "collaborationJson",
+        "collaborationPreparePlan",
+        "collaborationTaskOrder",
+        "collaborationPrepareResult",
+        "collaborationPrepareReview",
+        "collaborationPrepareFinal",
+        "collaborationCheckpoint"
+      ],
+      "requires": [
+        "collaborationSchemaError",
+        "collaborationPlanDigest",
+        "collaborationValidatePlan",
+        "collaborationResultRef",
+        "collaborationValidateResult",
+        "collaborationReviewDigest",
+        "collaborationValidateReview",
+        "collaborationValidateFinal",
+        "collaborationCanonical",
+        "collaborationSha256"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/budget.js",
+      "provides": [
+        "CollaborationBudget"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/collaboration/privacy.js",
+      "provides": [
+        "collaborationRedact",
+        "collaborationPrivacyPreview",
+        "CollaborationPrivacy"
+      ],
+      "requires": [
+        "collaborationSha256"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/recovery.js",
+      "provides": [
+        "collaborationRecoveryFromResult",
+        "collaborationRebaseLatest",
+        "CollaborationRecovery"
+      ],
+      "requires": [
+        "collaborationSha256",
+        "collaborationResultRef",
+        "collaborationValidateResult",
+        "collaborationReviewDigest",
+        "collaborationValidateReview",
+        "collaborationPlanDigest",
+        "collaborationValidatePlan",
+        "ExpertEventJournal"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/controller.js",
+      "provides": [
+        "CollaborationController"
+      ],
+      "requires": [
+        "ModelExecutor",
+        "ModelTransport",
+        "RunRegistry",
+        "buildChatRequestBody",
+        "CollaborationBudget",
+        "CollaborationPrivacy",
+        "collaborationPreparePlan",
+        "collaborationTaskOrder",
+        "collaborationPrepareResult",
+        "collaborationPrepareReview",
+        "collaborationPrepareFinal",
+        "collaborationCheckpoint",
+        "collaborationRebaseLatest"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/projection.js",
+      "provides": [
+        "projectExpertSessionEvents",
+        "ExpertProjection"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/expert/timeline.js",
+      "provides": [
+        "expertTimelineProjection",
+        "ExpertTimeline"
+      ],
+      "requires": [
+        "selectExpertEventUsage"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/timeline.js",
+      "provides": [
+        "collaborationTimelineProjection",
+        "CollaborationTimeline"
+      ],
+      "requires": [
+        "ExpertTimeline"
+      ]
+    },
+    {
+      "path": "frontend/src/collaboration/ui.js",
+      "provides": [
+        "collaborationUiState",
+        "collaborationUiEl",
+        "collaborationUiStatus",
+        "collaborationUiRenderEndpoints",
+        "collaborationUiRenderConfig",
+        "collaborationUiPatch",
+        "collaborationUiSave",
+        "collaborationUiPreview",
+        "collaborationUiEndpoints",
+        "collaborationRun",
+        "collaborationStop",
+        "collaborationRecover",
+        "collaborationUiInit"
+      ],
+      "requires": [
+        "normalizeCollaborationConfig",
+        "CollaborationPrivacy",
+        "CollaborationController",
+        "CollaborationTimeline",
+        "CollaborationRecovery",
+        "collaborationRecoveryFromResult",
+        "collaborationEndpointSnapshot",
+        "collaborationHybridSave",
+        "RunRegistry"
+      ]
+    },
+    {
+      "path": "frontend/src/expert/center.js",
+      "provides": [
+        "expertNextSelection",
+        "expertSelectionSessionId",
+        "expertSelectionLabelText",
+        "expertCenterState",
+        "expertChipLabel",
+        "expertDescriptionText",
+        "expertDisplayName",
+        "expertKindLabel",
+        "expertRenderSelectionChip",
+        "expertSession",
+        "expertCurrentSessionId",
+        "expertCenterStatus",
+        "expertCenterRenderList",
+        "loadExpertPackages",
+        "expertCenterRenderDetail",
+        "expertSelectPackage",
+        "openExpertCenter",
+        "closeExpertCenter",
+        "openExpertPicker",
+        "toggleExpertCenter",
+        "clearExpertSelection",
+        "expertSelectForNextRun",
+        "expertToggleEnabled",
+        "expertImportDirectory",
+        "expertTimelineRefresh",
+        "runExpertSelection",
+        "stopExpertRun",
+        "recoverExpertRun",
+        "expertCenterKeydown",
+        "expertCenterInit"
+      ],
+      "requires": [
+        "expertApiPayload",
+        "ExpertRunController",
+        "ExpertTimeline",
+        "ExpertRecovery",
+        "RunRegistry"
+      ]
+    },
+    {
+      "path": "frontend/src/shell/island-host.js",
+      "provides": [
+        "harborIslandAvailable",
+        "harborIslandSidebarActive",
+        "harborIslandSyncSidebar",
+        "harborIslandMountSidebar"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/core/bootstrap.js",
+      "provides": [
+        "bridgeDependentInit",
+        "bridgeLateReady",
+        "loadAll"
+      ],
+      "requires": [
+        "loadSessions",
+        "initCustomSelect",
+        "initFx",
+        "connectInit",
+        "navInit",
+        "inputPlusInit",
+        "onboardingInit",
+        "AppState",
+        "uiGenerativeSettingsInit",
+        "harborIslandMountSidebar"
+      ]
+    }
+  ]
+}

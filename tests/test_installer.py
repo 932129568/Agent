@@ -69,6 +69,20 @@ class TestCheckTarget:
         assert warn
 
 
+class TestInstallerBridge:
+    def test_check_dir_uses_nearest_existing_selected_parent(self, tmp_path, monkeypatch):
+        """未创建的多级目标按所选路径向上锚定，不退回 C 盘。"""
+        import installer_gui as gui
+        selected = tmp_path / 'missing' / 'nested' / 'Harbor'
+        anchors = []
+        monkeypatch.setattr(gui, 'check_target', lambda path: (True, None, False))
+        monkeypatch.setattr(gui, 'free_space_mb',
+                            lambda path: anchors.append(path) or 1234)
+        result = json.loads(gui.InstallerBridge().check_dir(str(selected)))
+        assert result['free_mb'] == 1234
+        assert anchors == [str(tmp_path)]
+
+
 # ---------------- 安装 ----------------
 class TestInstall:
     def _fake_payload(self, tmp_path, monkeypatch):

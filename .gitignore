@@ -1,4 +1,5 @@
 # 构建产物（源码构建生成）
+node_modules/
 build/
 *.pyc
 __pycache__/
@@ -35,3 +36,13 @@ push_exe_tmp.py
 # 发行分发走 GitHub Release assets，git 不跟踪 exe（2026-10-21 用户要求）
 dist/*.exe
 build/
+
+# 测试/QA 临时产物（2026-10-30 快照决策：outputs/ 下新增文件不入库；历史已跟踪文件不受影响）
+outputs/
+
+# 历史波次备份目录（git 自身即版本控制，备份冗余不入库）
+deliverables/wave-backups/
+
+# AI 工具本机状态目录
+.ai-memory/
+.mimosa/

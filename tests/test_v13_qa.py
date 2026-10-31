@@ -32,15 +32,16 @@ import time
 import pytest
 
 from conftest import HOME, NewApi, legacy
+from helpers.frontend import read_frontend_source
 
 from backend import paths
-from backend.services import mcp_dpapi
-from backend.services.mcp_client import McpClient, McpTimeoutError
-from backend.services.mcp_config_service import McpConfigService
-from backend.services.mcp_service import McpService
-from backend.services.mcp_transport_stdio import StdioTransport
+from backend.domains.integrations.mcp import mcp_dpapi
+from backend.domains.integrations.mcp.mcp_client import McpClient, McpTimeoutError
+from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+from backend.domains.integrations.mcp.mcp_service import McpService
+from backend.domains.integrations.mcp.mcp_transport_stdio import StdioTransport
 
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_SRC = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
@@ -328,7 +329,7 @@ class TestPrdR1VersionMismatchText:
 
     def test_call_timeout_human_text(self, monkeypatch):
         """R1：调用超时 → 发送取消并返回人话错误（service 层出口）。"""
-        from backend.services.mcp_client import McpTimeoutError
+        from backend.domains.integrations.mcp.mcp_client import McpTimeoutError
         cfg = McpConfigService()
         svc = McpService(cfg, _mk_guard(), _mk_toolcache())
         try:
@@ -448,7 +449,29 @@ class TestPrdR6Lifecycle:
 
     def test_atexit_registered_in_main(self):
         src = open(os.path.join(PROJECT_ROOT, 'main.py'), encoding='utf-8').read()
-        assert 'atexit.register(api.mcp_shutdown)' in src
+        assert 'atexit.register(api._shutdown)' in src
+        container_src = open(os.path.join(
+            PROJECT_ROOT, 'backend', 'bootstrap', 'container.py'), encoding='utf-8').read()
+        assert "'mcp', self.mcp.shutdown" in container_src
+
+    def test_container_shutdown_reverse_order_and_idempotent(self, monkeypatch):
+        from backend.application.native_ui import NativeUiDispatcher
+        from backend.application.registry import TaskRegistry
+        from backend.application.scheduler import DomainScheduler
+        from backend.bootstrap.container import ServiceContainer
+        container = ServiceContainer()
+        container.scheduler = DomainScheduler(TaskRegistry())
+        container.native_ui = NativeUiDispatcher.inline()
+        events = []
+        for name in ('search', 'driver', 'mcp'):
+            setattr(container, name, type('Closer', (), {
+                'shutdown': lambda self, name=name: events.append(name)})())
+        monkeypatch.setattr('backend.bootstrap.container.shutdown_proxy',
+                            lambda: events.append('local_proxy'))
+        assert container.shutdown()['ok'] is True
+        assert events == ['search', 'local_proxy', 'driver', 'mcp']
+        assert container.shutdown()['ok'] is True
+        assert events == ['search', 'local_proxy', 'driver', 'mcp']
 
     def test_shutdown_kills_real_subprocess_no_residue(self, qa_stub):
         api = NewApi()
@@ -764,12 +787,12 @@ class TestAdversarialEnforceBypass:
 # ================================================================ 前端 node 实测
 
 def _mk_guard():
-    from backend.services.guard_service import GuardService
+    from backend.domains.security.guard_service import GuardService
     return GuardService()
 
 
 def _mk_toolcache():
-    from backend.services.toolcache_service import ToolcacheService
+    from backend.domains.workspace.toolcache_service import ToolcacheService
     return ToolcacheService()
 
 
@@ -801,8 +824,7 @@ def _extract_fn(src, pattern):
 
 
 def _read(p):
-    with open(os.path.join(FRONTEND_SRC, p), encoding='utf-8') as f:
-        return f.read()
+    return read_frontend_source(PROJECT_ROOT, p)
 
 
 def _run_node(js, name):
@@ -1098,6 +1120,8 @@ const MCP_TIER_NAMES = { always: '每次确认', session: '会话内首次确认
 const MCP_STATUS_NAMES = {
   ok: '已连接', error: '错误', stale: '待刷新', disabled: '未启用', untested: '未测试'
 };
+let mcpServersRevision = 0;
+const mcpGenerativeState = { show: false, projection: null, box: null, host: null, generate: null, raw: null };
 // ---- module under test ----
 __PANEL__
 // 屏蔽真实列表渲染依赖（只测状态灯与 toast 语义）
@@ -1163,6 +1187,7 @@ let __loads = 0;
             + _extract_fn(_read('29-mcp.js'), r'async function mcpToggleServer') + '\n'
             + _extract_fn(_read('29-mcp.js'), r'async function mcpTestServer') + '\n'
             + _extract_fn(_read('29-mcp.js'), r'async function loadMcpServers') + '\n'
+            + _extract_fn(_read('29-mcp.js'), r'function mcpGenerativeEnsure') + '\n'
             + _extract_fn(_read('29-mcp.js'), r'function renderMcpServerList'))
         out = _run_node(js, 'panel')
         assert 'fatal' not in out, out

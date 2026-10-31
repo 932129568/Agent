@@ -21,7 +21,7 @@ GOOD_DIGEST = {'title': 'Python 教程', 'summary': '一份教程',
 
 
 def _mk_reader(home, transport=None, router=None):
-    from backend.services.search_reader import SearchReader
+    from backend.domains.providers.search_reader import SearchReader
     from backend import paths
     return SearchReader(config_path=paths.READER_FILE, router=router,
                         transport=transport)
@@ -29,8 +29,8 @@ def _mk_reader(home, transport=None, router=None):
 
 def _cfg_dir(home, **kw):
     from backend import paths
-    from backend.services.config_service import atomic_write_json
-    from backend.services.search_reader import DEFAULTS
+    from backend.domains.settings.config_service import atomic_write_json
+    from backend.domains.providers.search_reader import DEFAULTS
     d = dict(DEFAULTS)
     d.update(kw)
     os.makedirs(os.path.dirname(paths.READER_FILE), exist_ok=True)
@@ -65,7 +65,7 @@ class TestReaderSuccessPath:
         assert 'https://x.com' in out['text']
 
     def test_reader_reports_local_ok(self, fresh_home):
-        from backend.services.hybrid_router import HybridRouter
+        from backend.domains.providers.hybrid_router import HybridRouter
         _cfg_dir(os.environ['HOME'], base_url='http://127.0.0.1:11434/v1')
         hr = HybridRouter()
         r = _mk_reader(os.environ['HOME'], transport=_ok_transport(
@@ -125,7 +125,7 @@ class TestReaderDegradePath:
 
     def test_three_fail_streak_skips(self, fresh_home):
         """3 连败 → local_unavailable → route skip（raw）。"""
-        from backend.services.hybrid_router import HybridRouter
+        from backend.domains.providers.hybrid_router import HybridRouter
         _cfg_dir(os.environ['HOME'], base_url='http://127.0.0.1:1/v1')
         hr = HybridRouter()
         r = _mk_reader(os.environ['HOME'],
@@ -141,7 +141,7 @@ class TestReaderDegradePath:
 
 class TestParseStrict:
     def test_three_levels(self):
-        from backend.services.search_reader import SearchReader
+        from backend.domains.providers.search_reader import SearchReader
         # ① 严格
         assert SearchReader._parse_json_strict(json.dumps(GOOD_DIGEST)) == GOOD_DIGEST
         # ② 提取块（前后有散文）
@@ -153,13 +153,13 @@ class TestParseStrict:
         assert SearchReader._parse_json_strict('完全不是JSON') is None
 
     def test_entities_type_checked(self):
-        from backend.services.search_reader import SearchReader
+        from backend.domains.providers.search_reader import SearchReader
         bad = dict(GOOD_DIGEST)
         bad['entities'] = [{'name': 'x'}]        # 缺 type
         assert SearchReader._parse_json_strict(json.dumps(bad)) is None
 
     def test_extra_keys_kept(self):
-        from backend.services.search_reader import SearchReader
+        from backend.domains.providers.search_reader import SearchReader
         d = dict(GOOD_DIGEST)
         d['extra'] = '前向兼容保留'
         out = SearchReader._parse_json_strict(json.dumps(d))
@@ -186,13 +186,13 @@ class TestResponseFormatDowngrade:
 
 class TestReaderConfig:
     def test_defaults(self, fresh_home):
-        from backend.services.search_reader import load_reader_config
+        from backend.domains.providers.search_reader import load_reader_config
         c = load_reader_config()
         assert c['budget_s'] == 10 and c['schema_mode'] == 'auto'
         assert c['allow_cloud_fallback'] is False
 
     def test_validate_budget_bounds(self):
-        from backend.services.search_reader import validate_reader_config
+        from backend.domains.providers.search_reader import validate_reader_config
         assert validate_reader_config({'budget_s': 1})[0]
         assert validate_reader_config({'budget_s': 60})[0]
         assert not validate_reader_config({'budget_s': 0})[0]
@@ -200,14 +200,14 @@ class TestReaderConfig:
         assert not validate_reader_config({'budget_s': True})[0]   # bool 拒
 
     def test_validate_schema_mode(self):
-        from backend.services.search_reader import validate_reader_config
+        from backend.domains.providers.search_reader import validate_reader_config
         for m in ('auto', 'json_object', 'prompt'):
             assert validate_reader_config({'schema_mode': m})[0], m
         assert not validate_reader_config({'schema_mode': 'yaml'})[0]
 
     def test_corrupt_file_falls_back(self, fresh_home):
         from backend import paths
-        from backend.services.search_reader import load_reader_config
+        from backend.domains.providers.search_reader import load_reader_config
         os.makedirs(os.path.dirname(paths.READER_FILE), exist_ok=True)
         with open(paths.READER_FILE, 'w') as f:
             f.write('{bad json')
@@ -216,38 +216,38 @@ class TestReaderConfig:
 
 class TestRouteReader:
     def test_quality_still_local(self):
-        from backend.services.hybrid_router import HybridRouter
+        from backend.domains.providers.hybrid_router import HybridRouter
         hr = HybridRouter()
         hr.save_config(json.dumps({'strategy': 'quality'}))
         r = hr.route_reader(True, 10)
         assert r['channel'] == 'local'      # 读取器永不升云（隐私前处理）
 
     def test_local_down_skip(self):
-        from backend.services.hybrid_router import HybridRouter
+        from backend.domains.providers.hybrid_router import HybridRouter
         hr = HybridRouter()
         r = hr.route_reader(False, 10)
         assert r['channel'] == 'skip' and r['degraded'] is True
 
     def test_stage_max_tokens_reader(self):
-        from backend.services.hybrid_router import HybridRouter
+        from backend.domains.providers.hybrid_router import HybridRouter
         assert HybridRouter.STAGE_MAX_TOKENS['reader'] == 512
 
 
 class TestProvenance:
     def test_wrap_untrusted(self):
-        from backend.services.provenance import wrap_untrusted
+        from backend.domains.providers.provenance import wrap_untrusted
         t = wrap_untrusted('正文', 'https://x.com', 'window', '2026-10-23T00:00:00Z')
         assert t.startswith('[UNTRUSTED DATA — 来源: https://x.com')
         assert t.endswith('[END UNTRUSTED DATA]')
         assert '\n正文\n' in t
 
     def test_wrap_default_ts(self):
-        from backend.services.provenance import wrap_untrusted
+        from backend.domains.providers.provenance import wrap_untrusted
         t = wrap_untrusted('x', 'u')
         assert 'T' in t and t.count('Z') >= 1
 
     def test_tag_payload_pure_add(self):
-        from backend.services.provenance import tag_payload
+        from backend.domains.providers.provenance import tag_payload
         p = {'ok': True, 'results': [1, 2]}
         out = tag_payload(p, '', 'search', source={'engine': 'bing',
                                                    'query_sha256': 'abcd1234'})
@@ -256,7 +256,7 @@ class TestProvenance:
         assert out['source']['engine'] == 'bing'
 
     def test_tag_non_dict_passthrough(self):
-        from backend.services.provenance import tag_payload
+        from backend.domains.providers.provenance import tag_payload
         assert tag_payload('not dict') == 'not dict'
 
 

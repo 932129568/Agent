@@ -16,7 +16,7 @@ from conftest import fresh_home  # noqa: E402
 
 class TestChainCore:
     def _chain(self):
-        from backend.services.audit_chain import AuditChain
+        from backend.domains.security.audit_chain import AuditChain
         from backend import paths
         return AuditChain(path=paths.AUDIT_CHAIN_FILE)
 
@@ -45,7 +45,7 @@ class TestChainCore:
         assert r['broken_at']['op'] == '篡改'
 
     def test_head_persisted(self, fresh_home):
-        from backend.services.audit_chain import AuditChain
+        from backend.domains.security.audit_chain import AuditChain
         from backend import paths
         c1 = AuditChain(path=paths.AUDIT_CHAIN_FILE)
         e = c1.append({'op': 'x'})
@@ -63,14 +63,14 @@ class TestChainCore:
         assert r['ok'] and r['checked'] == 2
 
     def test_canonical_stable(self):
-        from backend.services.audit_chain import entry_hash, canonical_json
+        from backend.domains.security.audit_chain import entry_hash, canonical_json
         a = {'b': 1, 'a': 2}
         b = {'a': 2, 'b': 1}
         assert canonical_json(a) == canonical_json(b)      # 键序不影响
         assert entry_hash('p', a) == entry_hash('p', b)
 
     def test_hash_order_sensitive(self):
-        from backend.services.audit_chain import entry_hash
+        from backend.domains.security.audit_chain import entry_hash
         e1 = {'op': 'a', 'ts': 't1'}
         e2 = {'op': 'b', 'ts': 't2'}
         # 防重排：prev+条目顺序敏感
@@ -79,7 +79,7 @@ class TestChainCore:
 
 class TestGuardAuditFiveDims:
     def _guard(self):
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         return GuardService()
 
     def test_five_dimensions_present(self, fresh_home):
@@ -137,7 +137,7 @@ class TestGuardAuditFiveDims:
 
 class TestApprovalBudget:
     def _guard(self):
-        from backend.services.guard_service import GuardService
+        from backend.domains.security.guard_service import GuardService
         return GuardService()
 
     def test_default_merged(self, fresh_home):
@@ -242,7 +242,7 @@ class TestApprovalBudget:
 
 class TestPlanIntentFields:
     def test_create_optional_eta_scope(self, fresh_home):
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ps = PlanService()
         r = ps.create('T', [{'text': 'a', 'risk': 'l2'},
                             {'text': 'b', 'risk': 'l0'}],
@@ -253,26 +253,26 @@ class TestPlanIntentFields:
         assert p['scope']['no_access'] == ['.git']
 
     def test_create_preserves_tools(self, fresh_home):
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ps = PlanService()
         r = ps.create('T', [{'text': 'a', 'tools': ['write_file', 'run_command']}])
         assert r['plan']['steps'][0]['tools'] == ['write_file', 'run_command']
 
     def test_risk_max_derived(self, fresh_home):
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ps = PlanService()
         r = ps.create('T', [{'text': 'a', 'risk': 'l2'},
                             {'text': 'b', 'risk': 'l0'}])
         assert r['plan']['risk_max'] == 'l0'
 
     def test_eta_heuristic(self, fresh_home):
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ps = PlanService()
         r = ps.create('T', [{'text': 'a'}, {'text': 'b'}, {'text': 'c'}])
         assert r['plan']['eta_seconds'] == 120        # 3 步 × 40s 启发
 
     def test_approve_sets_approved_at(self, fresh_home):
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ps = PlanService()
         r = ps.create('T', [{'text': 'a'}])
         u = ps.update(r['task_id'], status='approved')
@@ -281,7 +281,7 @@ class TestPlanIntentFields:
 
     def test_old_call_shape_unchanged(self, fresh_home):
         """旧三方调用（无尾参）零改。"""
-        from backend.services.plan_service import PlanService
+        from backend.domains.planning.plan_service import PlanService
         ps = PlanService()
         r = ps.create('T', ['步骤一', '步骤二'])
         assert r['ok'] and len(r['plan']['steps']) == 2

@@ -14,11 +14,11 @@ import time
 
 import pytest
 
-from backend.services import sandbox_service as sb
-from backend.services.cmd_service import CmdService
-from backend.services.sandbox_service import (
+from backend.domains.workspace import sandbox_service as sb
+from backend.domains.workspace.cmd_service import CmdService
+from backend.domains.workspace.sandbox_service import (
     SandboxService, SandboxUnavailable, create_job, run_in_sandbox)
-from backend.services.toolcache_service import ToolcacheService
+from backend.domains.workspace.toolcache_service import ToolcacheService
 
 pytestmark = pytest.mark.skipif(not hasattr(ctypes, 'windll'),
                                 reason='沙箱仅支持 Windows（Job Object）')

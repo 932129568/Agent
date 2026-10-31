@@ -1,0 +1,23 @@
+/* W4B memory search, editing, details and empty/error states. */
+#memoryBlock{min-width:0}
+#memoryBlock .provider-row{min-width:0}
+.mm-input{max-width:100%;min-height:44px;background:var(--card-bg);color:var(--text);line-height:1.65}
+textarea.mm-input{min-height:84px;resize:vertical}
+.mm-list{min-width:0}
+.mm-row{min-width:0;padding:10px 12px!important;background:var(--card-bg)!important;border-radius:var(--radius-sm)!important}
+.mm-text{line-height:1.65;white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+.mm-ts,.mm-idx{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.mm-empty{padding:20px 14px!important;border:1px dashed var(--border)!important;border-radius:var(--radius-sm)!important;
+  color:var(--text-2)!important;background:var(--surface-2)}
+.mm-error{padding:10px 12px;border:1px solid var(--err);border-radius:var(--radius-sm);
+  color:var(--err);background:var(--err-bg);overflow-wrap:anywhere}
+#memoryBlock[data-state="pending"] .mm-list{opacity:.64}
+#mmCount{color:var(--text-2);font-size:var(--fs-caption);white-space:nowrap}
+@media (max-width:600px){
+  #memoryBlock .provider-row{align-items:stretch;flex-direction:column}
+  #memoryBlock .mm-input,#memoryBlock .modal-btn{width:100%!important;max-width:none}
+  .mm-row{flex-wrap:wrap}
+  .mm-text{flex-basis:100%;order:3}
+  .mm-ts{margin-left:auto}
+  .mm-del{flex:0 0 auto}
+}

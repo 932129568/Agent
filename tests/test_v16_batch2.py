@@ -23,13 +23,14 @@ import tempfile
 import pytest
 
 from conftest import NewApi, reset_home
+from helpers.frontend import read_frontend_source
 
-from backend.services import mcp_pool
-from backend.services.mcp_service import McpService
-from backend.services.guard_service import GuardService
-from backend.services.toolcache_service import ToolcacheService
-from backend.services.mcp_config_service import McpConfigService
-from backend.services.mcp_client import McpProtocolError
+from backend.domains.integrations.mcp import mcp_pool
+from backend.domains.integrations.mcp.mcp_service import McpService
+from backend.domains.security.guard_service import GuardService
+from backend.domains.workspace.toolcache_service import ToolcacheService
+from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+from backend.domains.integrations.mcp.mcp_client import McpProtocolError
 
 # 复用批次 1 的 vm harness 与 MCP 桩（同 tests 目录，pytest prepend 导入模式可达）
 from test_v16_batch1 import _FakeClient, _FakeCfg, _mk_service, _run_node
@@ -40,7 +41,7 @@ TPL = os.path.join(PROJECT_ROOT, 'frontend', 'index.template.html')
 
 
 def _fe(name):
-    return io.open(os.path.join(SRC_DIR, name), encoding='utf-8').read()
+    return read_frontend_source(PROJECT_ROOT, name)
 
 
 def _tpl():
@@ -467,7 +468,7 @@ class TestT12McpResourcesClient:
     """T12 client 层：resources/list 游标分页 + resources/read 参数形状。"""
 
     def test_client_list_resources_pagination(self):
-        from backend.services.mcp_client import McpClient
+        from backend.domains.integrations.mcp.mcp_client import McpClient
         c = McpClient.__new__(McpClient)   # 绕过 __init__（无传输）
         pages = [{'resources': [{'uri': 'u1'}], 'nextCursor': 'c1'},
                  {'resources': [{'uri': 'u2'}], 'nextCursor': None}]
@@ -484,7 +485,7 @@ class TestT12McpResourcesClient:
         assert calls[1][1] == {'cursor': 'c1'}, '第二页必须带 nextCursor'
 
     def test_client_read_resource_shape(self):
-        from backend.services.mcp_client import McpClient
+        from backend.domains.integrations.mcp.mcp_client import McpClient
         c = McpClient.__new__(McpClient)
         seen = {}
 
@@ -614,7 +615,7 @@ class TestT9StatsGapFix:
     异常照常上抛（阻断语义不变）+ 统计 +1。"""
 
     def test_create_job_failure_counts_failed_closed(self, monkeypatch):
-        from backend.services import sandbox_service as sb
+        from backend.domains.workspace import sandbox_service as sb
         # _STATS 为模块级跨测试累积 → 用增量断言（不用绝对值）
         before_failed = sb._STATS['runs_failed_closed']
         before_jobs = sb._STATS['jobs_created']

@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.services.tool_validator import ToolValidator, get_validator, _relevance  # noqa: E402
+from backend.domains.security.tool_validator import ToolValidator, get_validator, _relevance  # noqa: E402
 
 
 class TestSearchValidator:

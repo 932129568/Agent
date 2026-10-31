@@ -32,13 +32,13 @@ class TestFallbackConstant:
         import re
         with open(os.path.join(ROOT, 'VERSION'), encoding='utf-8') as f:
             v_file = f.read().strip()
-        src = open(os.path.join(ROOT, 'backend', 'services', 'update_service.py'),
+        src = open(os.path.join(ROOT, 'backend', 'domains', 'integrations', 'update_service.py'),
                    encoding='utf-8').read()
         m = re.search(r"return '([0-9]+\.[0-9]+\.[0-9]+[^']*)'", src)
         assert m and m.group(1) == v_file
 
     def test_app_version_runtime(self):
-        from backend.services.update_service import APP_VERSION
+        from backend.domains.integrations.update_service import APP_VERSION
         with open(os.path.join(ROOT, 'VERSION'), encoding='utf-8') as f:
             assert APP_VERSION == f.read().strip()
 
@@ -90,7 +90,7 @@ class TestCheckReleaseTool:
 
     def test_config_json_no_version_key(self):
         """R6：config.json 无版本键（版本单一数据源纪律）。"""
-        from backend.services.config_service import ConfigService
+        from backend.domains.settings.config_service import ConfigService
         cfg = json.loads(ConfigService().get_config())
         assert 'version' not in cfg and 'app_version' not in cfg
 

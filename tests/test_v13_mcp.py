@@ -26,13 +26,13 @@ import pytest
 from conftest import HOME, NewApi
 
 from backend import paths
-from backend.services import mcp_dpapi
-from backend.services.mcp_client import (
+from backend.domains.integrations.mcp import mcp_dpapi
+from backend.domains.integrations.mcp.mcp_client import (
     CALL_TIMEOUT, CONNECT_TIMEOUT, LIST_TIMEOUT, MCP_PROTOCOL_VERSION,
     McpClient, McpProtocolError, McpTimeoutError, McpVersionError)
-from backend.services.mcp_config_service import McpConfigService
-from backend.services.mcp_transport_http import HttpTransport, HttpTransportError
-from backend.services.mcp_transport_stdio import StdioTransport
+from backend.domains.integrations.mcp.mcp_config_service import McpConfigService
+from backend.domains.integrations.mcp.mcp_transport_http import HttpTransport, HttpTransportError
+from backend.domains.integrations.mcp.mcp_transport_stdio import StdioTransport
 
 
 # ---------------------------------------------------------------- T1 DPAPI
@@ -700,10 +700,10 @@ class TestHttpProtocol:
 
 
 # ---------------------------------------------------------------- T3 服务层与护栏
-from backend.services import mcp_service as mcp_service_mod
-from backend.services.guard_service import GuardService
-from backend.services.mcp_service import McpService
-from backend.services.toolcache_service import ToolcacheService
+from backend.domains.integrations.mcp import mcp_service as mcp_service_mod
+from backend.domains.security.guard_service import GuardService
+from backend.domains.integrations.mcp.mcp_service import McpService
+from backend.domains.workspace.toolcache_service import ToolcacheService
 
 
 class _FakeClient:

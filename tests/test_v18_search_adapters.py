@@ -18,8 +18,8 @@ import urllib.parse
 
 import pytest
 
-from backend.services.browser import adapters as sa
-from backend.services.browser import extract as se
+from backend.domains.integrations.browser import adapters as sa
+from backend.domains.integrations.browser import extract as se
 
 FIXTURE_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), 'fixtures', 'v18')

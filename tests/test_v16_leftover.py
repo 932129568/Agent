@@ -16,8 +16,10 @@ import tempfile
 
 import pytest
 
+from helpers.frontend import frontend_node_map, read_frontend_source
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\22.22.2-6\node.exe'
+NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
 
 DS_401_BODY = ('HTTP 401: {"error": {"message": "Authentication Fails, Your api key: '
@@ -35,8 +37,12 @@ __sand.window = __sand;
 function __ctx() { return __vm.createContext(__sand); }
 function __run(ctx, code) { __vm.runInContext(code, ctx, { timeout: 30000 }); }
 const __SRC = %r;
-function __fe(name){ return __fs.readFileSync(__SRC + '/' + name, 'utf8'); }
-""" % (SRC_DIR.replace(os.sep, '/'),)
+const __MANIFEST = %r;
+function __fe(name){
+  const relative = __MANIFEST[name] || name;
+  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+}
+""" % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 
 
 def _run_node(body, name):
@@ -100,7 +106,7 @@ async function __main() {
         assert '端点地址不存在' in self._humanize('HTTP 404: not found', False)
 
     def test_source_has_l1_marker(self):
-        src = io.open(os.path.join(SRC_DIR, '76-cost-estimate.js'), encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, '76-cost-estimate.js')
         assert '实现 v1.6 遗留 L1' in src and 'humanizeAuthError' in src
 
 
@@ -109,7 +115,7 @@ class TestL2CatalogFallback:
 
     @staticmethod
     def _svc():
-        from backend.services import local_model_service as svc
+        from backend.domains.providers import local_model_service as svc
         return svc
 
     def test_catalog_primary_ok(self, monkeypatch):
