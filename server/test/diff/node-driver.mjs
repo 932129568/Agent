@@ -45,7 +45,8 @@ if (!fixturePath || !resultPath) {
 const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'))
 
 /* ---------- 1. 临时环境（子进程内设置；先于任何 src import 生效） ---------- */
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-diff-node-'))
+const tempTag = String(process.env.HARBOR_DIFF_TEMP_TAG || 'harbor-diff-node')
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `${tempTag}-n-`))
 process.env.HARBOR_CONFIG_DIR = path.join(tmp, 'config')
 process.env.DATABASE_URL = `file:${path.join(tmp, 'diff.db').replaceAll('\\', '/')}`
 process.env.LOG_LEVEL = 'silent'
@@ -179,6 +180,12 @@ fs.mkdirSync(path.dirname(path.resolve(resultPath)), { recursive: true })
 fs.writeFileSync(resultPath, JSON.stringify(result, null, 1), 'utf8')
 
 if (process.env.HARBOR_DIFF_KEEP_TEMP !== '1') {
-  try { fs.rmSync(tmp, { recursive: true, force: true }) } catch { /* 句柄未释放时容忍残留 */ }
+  // 先把 CWD 移出临时根（Windows 不允许删除进程工作目录），再整树清理。
+  // libsql 的 WAL/SHM 句柄可能延迟释放：重试三拍，仍失败则容忍残留（不入比对面）。
+  try { process.chdir(os.tmpdir()) } catch { /* already gone */ }
+  for (let i = 0; i < 3; i += 1) {
+    try { fs.rmSync(tmp, { recursive: true, force: true, retryDelay: 200, maxRetries: 5 }); break } catch { /* 下一拍再试 */ }
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
 }
 process.exit(0)

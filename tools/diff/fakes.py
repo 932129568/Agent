@@ -419,5 +419,16 @@ def snapshot(root, fixture):
 
 
 def cleanup(root):
+    """零残留清理：先关日志句柄、把 CWD 移出临时根（Windows 不允许删除进程
+    工作目录与被占用文件），再整树删除。"""
     if root and os.environ.get('HARBOR_DIFF_KEEP_TEMP') != '1':
+        try:
+            import logging
+            logging.shutdown()
+        except Exception:
+            pass
+        try:
+            os.chdir(tempfile.gettempdir())
+        except Exception:
+            pass
         shutil.rmtree(str(root), ignore_errors=True)

@@ -107,22 +107,27 @@ def main():
     with open(args.fixture, encoding='utf-8') as f:
         fixture = json.load(f)
 
-    root = tempfile.mkdtemp(prefix='glm-diff-py-')
+    root = tempfile.mkdtemp(prefix='%s-p-' % os.environ.get(
+        'HARBOR_DIFF_TEMP_TAG', 'glm-diff-py'))
     api = None
     try:
         p = fakes.setup_home(root, fixture)
         mocks = list(fixture.get('mocks') or [])
+        # webview/PIL 在 import 前装：backend 模块运行期 import 时从 sys.modules 取
         fakes.install_fake_webview()
         fakes.install_fake_pil()
-        if 'subprocess' in mocks:
-            fakes.install_subprocess_mock()
-        if 'windll' in mocks:
-            fakes.install_fake_windll()
 
         # backend 必须在 HOME/USERPROFILE 重定向之后 import（paths.py import 期取 expanduser）
         from backend.api import Api
         api = Api()
 
+        # subprocess/windll 桩在 Api() 之后装：cmd_service/software_service 在
+        # import 期捕获 _STDLIB_RUN = subprocess.run，桩必须在其后替换（与
+        # conftest「测试期打桩」语义一致，stub 判定路径才会生效）
+        if 'subprocess' in mocks:
+            fakes.install_subprocess_mock()
+        if 'windll' in mocks:
+            fakes.install_fake_windll()
         if 'dialog' in mocks:
             # 对话框路径与生产窗口等价（不经 _set_window：不 arm 护栏，保持未武装语义）
             api._runtime.win = fakes._FakeDiffWindow()
