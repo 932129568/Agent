@@ -80,7 +80,7 @@ export function normalizeString(text, side, rules) {
   return out
 }
 
-/** 结构归一：键控掩码 + 字符串归一，递归。 */
+/** 结构归一：键控掩码 + 数值量化 + 字符串归一，递归。 */
 export function normalizeValue(value, side, rules) {
   if (typeof value === 'string') return normalizeString(value, side, rules)
   if (Array.isArray(value)) return value.map(item => normalizeValue(item, side, rules))
@@ -88,7 +88,16 @@ export function normalizeValue(value, side, rules) {
     const out = {}
     for (const [key, val] of Object.entries(value)) {
       const mask = rules.maskIndex.get(key)
-      out[key] = mask ? mask : normalizeValue(val, side, rules)
+      if (mask) {
+        out[key] = mask
+        continue
+      }
+      const bucket = (rules.raw.quantizeKeys || {})[key]
+      if (bucket && typeof val === 'number' && Number.isFinite(val)) {
+        out[key] = Math.floor(val / bucket) * bucket  // 时间抖动容差（如 remaining_s ±10s 量化）
+        continue
+      }
+      out[key] = normalizeValue(val, side, rules)
     }
     return out
   }

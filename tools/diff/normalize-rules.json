@@ -24,7 +24,10 @@
     "epoch": ["ts", "updatedAt", "createdAt", "mtime", "timestamp", "expires_at", "lastUsed", "last_used", "probed_at", "granted_at", "updated_at"],
     "milliseconds": ["duration_ms", "elapsed", "elapsed_ms", "timeout_used", "costMs", "preheat_ms"],
     "pid": ["pid"],
-    "identifier": ["sessionId", "session_id", "grantId", "grant_id", "taskId", "task_id", "takeoverId", "takeover_id", "runId", "snapshotId", "rule_id", "token", "trace"]
+    "identifier": ["sessionId", "session_id", "grantId", "grant_id", "taskId", "task_id", "takeoverId", "takeover_id", "runId", "snapshotId", "rule_id", "token", "trace", "head"]
+  },
+  "quantizeKeys": {
+    "remaining_s": 10
   },
   "maskValues": {
     "epoch": "<EPOCH>",

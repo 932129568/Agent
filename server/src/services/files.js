@@ -118,9 +118,13 @@ export async function readFile(input, offset = 0, limit = 0, force = false) {
   return okJson(payload)
 }
 
-/** cache_tool_output 与 read_more 共用同一缓存，不再维护互不认识的内存副本。 */
+/** cache_tool_output 与 read_more 共用同一缓存，不再维护互不认识的内存副本。
+ * id 口径对齐 legacy toolcache_service：tc<seq>_<epoch秒>（截断续读引用同键）。 */
+let toolcacheSeq = 0
+const nextToolcacheId = () => `tc${(toolcacheSeq += 1)}_${Math.floor(Date.now() / 1000)}`
+
 export async function cacheToolOutput(content) {
-  const id = crypto.randomUUID()
+  const id = nextToolcacheId()
   textCache.set(id, { path: null, lines: String(content ?? '').split(/\r?\n/), encoding: 'utf-8', generic: true })
   if (textCache.size > 200) textCache.delete(textCache.keys().next().value)
   return id

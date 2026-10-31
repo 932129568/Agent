@@ -158,14 +158,18 @@ register('checkpoint_create', async (task_id, files, ws_dir) => plans.checkpoint
 register('checkpoint_list', async task_id => plans.checkpointList(task_id))
 register('checkpoint_rollback', async (task_id, ws_dir, confirm) => plans.checkpointRollback(task_id, ws_dir, confirm))
 
-/* 独立 JSON 配置族（config.json 零污染，各自独立文件） */
+/* 独立 JSON 配置族（config.json 零污染，各自独立文件）。
+ * guard 走归一化配置面（P0-1b G9/G12：读归一全量、写校验+整写）——不能套用
+ * 下面的裸文本模板（形状与 legacy guard_get_config 对齐）。 */
 for (const [name, file] of [
-  ['guard', 'guard.json'], ['sandbox', 'sandbox.json'], ['hybrid', 'hybrid.json'],
+  ['sandbox', 'sandbox.json'], ['hybrid', 'hybrid.json'],
   ['webdav', 'webdav.json'],
 ]) {
   register(`${name}_get_config`, async () => readConfigText(file))
   register(`${name}_save_config`, async cfg_json => mergeConfig(file, cfg_json))
 }
+register('guard_get_config', async () => guard.guardGetConfig())
+register('guard_save_config', async cfg_json => guard.guardSaveConfig(cfg_json))
 // 注意：model_prefs 与 reader 在 legacy 中就是 get/save 而非 get_config/save_config，
 // 不能套用上面的命名模板（否则与 43 个契约方法名不一致）。
 register('model_prefs_get', async () => readConfigText('model_prefs.json'))
@@ -228,8 +232,8 @@ register('rpc', async (name, payload_json = '{}') => {
   return handler(...names.map(key => payload[key]))
 })
 
-/* 护栏判定链 */
-register('guard_check', async (op, detail_json) => guard.guardCheck(op, asDetail(detail_json)))
+/* 护栏判定链（P0-1b T01：guard_get/save_config 走归一化配置面；guard_check 落 action 审计） */
+register('guard_check', async (op, detail_json) => guard.guardCheckApi(op, detail_json))
 register('guard_confirm_token', async (op, detail_json) => guard.guardConfirmToken(op, asDetail(detail_json)))
 register('guard_session_trust', async op => guard.guardSessionTrust(op))
 register('guard_rule_add', async (op_pattern, detail_pattern, note) => guard.guardRuleAdd(op_pattern, detail_pattern, note))

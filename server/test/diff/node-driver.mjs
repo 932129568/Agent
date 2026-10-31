@@ -50,6 +50,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `${tempTag}-n-`))
 process.env.HARBOR_CONFIG_DIR = path.join(tmp, 'config')
 process.env.DATABASE_URL = `file:${path.join(tmp, 'diff.db').replaceAll('\\', '/')}`
 process.env.LOG_LEVEL = 'silent'
+// P0-1b B1：差分环境对齐 Python 未武装语义（生产缺省武装，入口永不设置本变量）
+process.env.HARBOR_GUARD_ARMED = 'false'
 const wsDir = path.join(tmp, 'ws')
 const configDir = process.env.HARBOR_CONFIG_DIR
 
