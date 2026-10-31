@@ -71,6 +71,21 @@ check('WD1 保存后回读 → config 键白名单视图', () => {
   assert.equal(reread.config.url, config.url)
   assert.equal(reread.config.remote_path, '/backup')
 })
+
+/* P0-2 T03：DPAPI 字段级加密（Password 密文落盘 / 读取解密 / IO 前解密） */
+const onDisk = JSON.parse(fs.readFileSync(path.join(process.env.HARBOR_CONFIG_DIR, 'webdav.json'), 'utf8'))
+check('T03 password 以 dpapi: 前缀密文落盘（文件无明文）', () => {
+  assert.ok(onDisk.password.startsWith('dpapi:'))
+  assert.ok(!onDisk.password.includes('pass'))
+})
+check('T03 get_config 解密回显明文 password', () => {
+  assert.equal(reread.config.password, 'pass')
+})
+const savedAgain = JSON.parse(await webdav.webdavSaveConfig(JSON.stringify(config)))
+check('T03 DPAPI 可用时无 W17 warning；重复保存幂等', () => {
+  assert.equal(savedAgain.ok, true)
+  assert.equal(savedAgain.warning, undefined)
+})
 const tested = JSON.parse(await webdav.webdavTest(JSON.stringify(config)))
 check('OPTIONS + PROPFIND 连通性与 Basic Auth', () => assert.equal(tested.ok, true))
 const exported = JSON.parse(await webdav.webdavExport())

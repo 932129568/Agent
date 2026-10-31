@@ -29,16 +29,21 @@ try {
   process.exit(1)
 }
 
-// P0-2：生产启动一次性后台迁移任务（listen 成功后、不阻塞服务）——
-// legacy sessions.json → DB 增量导入（幂等可重入；原文件永不删除不改写）。
+// P0-2：生产启动一次性后台迁移任务链（listen 成功后、不阻塞服务）——
+// ① legacy sessions.json → DB 增量导入；② 存量明文密钥 DPAPI 迁移。
 // 纪律（staging 9c6fa8c 教训）：仅本生产入口触发；buildServer 测试入口与
 // run-diff / contract-* / node-driver 永不触发迁移（隔离 CONFIG_DIR 为唯一范式）。
 try {
   const { bootstrapLegacyImport } = await import('./services/session-migrate.js')
-  bootstrapLegacyImport().then(result => {
+  const { migratePlaintextSecrets } = await import('./services/dpapi-migrate.js')
+  ;(async () => {
+    const result = await bootstrapLegacyImport()
     if (result.error) logger.error({ err: result.error }, 'legacy sessions 迁移失败（下回启动重试）')
     else logger.info({ imported: result.imported, skipped: result.skipped }, 'legacy sessions 迁移完成')
-  }).catch(error => logger.error({ err: error }, 'legacy sessions 迁移异常（下回启动重试）'))
+    const secrets = await migratePlaintextSecrets()
+    if (secrets.error) logger.warn({ err: secrets.error, pending: secrets.pending }, '存量明文密钥迁移延后（W17）')
+    else logger.info({ migrated: secrets.migrated }, '存量明文密钥 DPAPI 迁移完成')
+  })().catch(error => logger.error({ err: error }, '存储迁移后台任务异常（下回启动重试）'))
 } catch (error) {
-  logger.error({ err: error }, 'legacy sessions 迁移挂接失败（不影响服务）')
+  logger.error({ err: error }, '存储迁移挂接失败（不影响服务）')
 }

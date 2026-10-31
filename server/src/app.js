@@ -8,6 +8,7 @@ import { logger } from './logger.js'
 import { listMethods } from './registry.js'
 import { jsapiRoutes } from './routes/jsapi.js'
 import { authRoutes } from './routes/auth.js'
+import { storageStatusRoutes } from './routes/storage-status.js'
 import { sessionCount } from './services/sessions.js'
 import { mcpShutdown } from './services/mcp.js'
 import { browserShutdown } from './services/browser.js'
@@ -59,6 +60,8 @@ export async function buildServer() {
   // better-auth 已挂载（/api/auth/*）。注意：业务路由默认**不**加鉴权，
   // 保持单机单用户语义；启用强制鉴权属于独立变更，需先评估对桌面前端的影响。
   await app.register(authRoutes)
+  // P0-2：存储安全诊断（非 js_api 普通路由，不占 145 契约面）
+  await app.register(storageStatusRoutes)
 
   // 服务退出必须关闭 MCP 子进程与浏览器，避免桌面壳重启后遗留孤儿进程。
   app.addHook('onClose', async () => {

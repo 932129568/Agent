@@ -44,4 +44,40 @@ const shutdown = JSON.parse(await mcp.mcpShutdown())
 check('shutdown 关闭全部传输', () => { assert.equal(shutdown.ok, true); assert.ok(shutdown.closed >= 1) })
 const removed = JSON.parse(await mcp.mcpDeleteServer('other'))
 check('删除服务器配置', () => assert.equal(removed.ok, true))
+
+/* P0-2 T03：MCP env/headers 字段级加密（保存加密 / 详情解密 / 幂等透传） */
+const encConfig = { command: process.execPath, args: [fixture], enabled: false,
+  env: { API_TOKEN: 'secret-token-🚀', PLAIN: 'x' } }
+const encSaved = JSON.parse(await mcp.mcpSaveServer('enc-test', JSON.stringify(encConfig)))
+check('T03 加密保存成功', () => assert.equal(encSaved.ok, true))
+check('T03 stdio env 以 {__enc__:dpapi:...} 落盘（文件无明文）', () => {
+  const file = JSON.parse(fs.readFileSync(path.join(process.env.HARBOR_CONFIG_DIR, 'mcp_servers.json'), 'utf8'))
+  const rec = file.mcpServers['enc-test']
+  assert.ok(rec.env.API_TOKEN.__enc__.startsWith('dpapi:'))
+  assert.ok(rec.env.PLAIN.__enc__.startsWith('dpapi:'))
+  assert.ok(!JSON.stringify(rec).includes('secret-token-🚀'))
+})
+const encDetail = JSON.parse(await mcp.mcpGetServerDetail('enc-test'))
+check('T03 详情解密回显明文、decrypt_failed 为空', () => {
+  assert.equal(encDetail.config.env.API_TOKEN, 'secret-token-🚀')
+  assert.deepEqual(encDetail.decrypt_failed, [])
+})
+// HTTP 服务器的 headers 字段（url 形态才保留 headers——stdio 仅 env，与 Python 同款）
+const httpSaved = JSON.parse(await mcp.mcpSaveServer('enc-http', JSON.stringify({
+  url: 'http://127.0.0.1:65535/mcp', enabled: false, headers: { 'X-Key': 'hdr-secret' },
+})))
+check('T03 HTTP headers 以 {__enc__:dpapi:...} 落盘', () => {
+  const file = JSON.parse(fs.readFileSync(path.join(process.env.HARBOR_CONFIG_DIR, 'mcp_servers.json'), 'utf8'))
+  const rec = file.mcpServers['enc-http']
+  assert.ok(rec.headers['X-Key'].__enc__.startsWith('dpapi:'))
+  assert.ok(!JSON.stringify(rec).includes('hdr-secret'))
+})
+const httpDetail = JSON.parse(await mcp.mcpGetServerDetail('enc-http'))
+check('T03 HTTP headers 详情解密回显明文', () => {
+  assert.equal(httpDetail.config.headers['X-Key'], 'hdr-secret')
+})
+const again = JSON.parse(await mcp.mcpSaveServer('enc-test', JSON.stringify(encConfig)))
+check('T03 同值再保存幂等（密文透传不重复加密）', () => assert.equal(again.ok, true))
+await mcp.mcpDeleteServer('enc-test')
+await mcp.mcpDeleteServer('enc-http')
 console.log(JSON.stringify({ ok: true, checks: results.length, results }, null, 2))

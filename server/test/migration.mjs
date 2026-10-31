@@ -159,5 +159,28 @@ await check('import 期零副作用：无新增迁移产物文件', () => {
   assert.deepEqual(after.sort(), [...before].sort())
 })
 
+// ---- P0-2 T03：存量明文 DPAPI 迁移（幂等 + 备份 + 标记 + 解密回读）----
+const { migratePlaintextSecrets, DPAPI_META_KEY, DPAPI_BACKUP_SUFFIX } = await import('../src/services/dpapi-migrate.js')
+fs.writeFileSync(path.join(cfgDir, 'webdav.json'),
+  JSON.stringify({ url: 'https://dav.example.com', username: 'u', password: 'plain-secret' }))
+const m1 = await migratePlaintextSecrets()
+await check('T03 存量明文迁移：password 转 dpapi:、备份生成、标记写入', async () => {
+  assert.equal(m1.ok, true)
+  const cfg = JSON.parse(fs.readFileSync(path.join(cfgDir, 'webdav.json'), 'utf8'))
+  assert.ok(cfg.password.startsWith('dpapi:'))
+  assert.ok(fs.existsSync(path.join(cfgDir, `webdav.json${DPAPI_BACKUP_SUFFIX}`)))
+  const meta = await prisma.meta.findUnique({ where: { key: DPAPI_META_KEY } })
+  assert.ok(meta)
+})
+const m2 = await migratePlaintextSecrets()
+await check('T03 迁移幂等：重跑 already=true、备份不覆盖', async () => {
+  assert.equal(m2.already, true)
+})
+const wd = await import('../src/services/webdav.js')
+await check('T03 迁移后 get_config 解密回读明文', async () => {
+  const got = JSON.parse(await wd.webdavGetConfig())
+  assert.equal(got.config.password, 'plain-secret')
+})
+
 await disconnectDb()
 console.log(JSON.stringify({ ok: true, node: process.version, checks: results.length, results }, null, 2))

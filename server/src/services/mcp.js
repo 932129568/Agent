@@ -5,6 +5,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { CONFIG_DIR, atomicWriteJson, readJsonIfExists } from '../paths.js'
 import { consumeToken } from './guard.js'
+import { ENC_PREFIX, encryptField, decryptMapping } from './dpapi.js'
 
 const FILE = () => path.join(CONFIG_DIR, 'mcp_servers.json')
 const json = value => JSON.stringify(value)
@@ -14,13 +15,10 @@ const parse = value => { if (value && typeof value === 'object') return value; t
 function data() { const value = readJsonIfExists(FILE(), { mcpServers: {} }); return value && value.mcpServers ? value : { mcpServers: {} } }
 function save(value) { atomicWriteJson(FILE(), value) }
 function serverConfig(name) { return data().mcpServers[name] || null }
-function plainMapping(mapping = {}) {
-  const out = {}; const failed = []
-  for (const [key, value] of Object.entries(mapping || {})) {
-    if (value && typeof value === 'object' && value.__enc__) { failed.push(key); out[key] = '' }
-    else out[key] = String(value ?? '')
-  }
-  return { values: out, failed }
+async function plainMapping(mapping = {}) {
+  // P0-2 T03：DPAPI 解密（mcp_dpapi.decrypt_mapping 同构）——失败键保持内层
+  // 标记串（W21 编辑器回显契约），并记入 decrypt_failed 面板告警
+  return decryptMapping(mapping)
 }
 function normalized(name, input) {
   const cfg = parse(input)
@@ -63,10 +61,18 @@ async function connect(name, configOverride) {
   const client = new Client({ name: 'harbor-node', version: '1.0.0' }, { capabilities: {} })
   let transport
   if (cfg.url) {
-    const headers = plainMapping(cfg.headers).values
+    const { values: headers } = await plainMapping(cfg.headers)
+    // 安全边界（_spawn_client 同款）：解密失败的密文串永不下发 HTTP 头
+    for (const [key, value] of Object.entries(headers)) {
+      if (typeof value === 'string' && value.startsWith(ENC_PREFIX)) headers[key] = ''
+    }
     transport = new StreamableHTTPClientTransport(new URL(cfg.url), { requestInit: { headers, redirect: 'error' }, redirectPolicy: 'same-origin' })
   } else {
-    const env = { ...process.env, ...plainMapping(cfg.env).values }
+    const { values: plainEnv } = await plainMapping(cfg.env)
+    for (const [key, value] of Object.entries(plainEnv)) {
+      if (typeof value === 'string' && value.startsWith(ENC_PREFIX)) plainEnv[key] = ''
+    }
+    const env = { ...process.env, ...plainEnv }
     transport = new StdioClientTransport({ command: cfg.command, args: cfg.args || [], env, cwd: cfg.cwd || process.cwd(), stderr: 'pipe' })
   }
   try {
@@ -109,6 +115,20 @@ export async function mcpSaveServer(name, configJson) {
   const previous = serverConfig(cleanName)
   if (!Object.hasOwn(cfg, 'enabled')) record.enabled = !!(previous && previous.enabled)
   if (previous && parse(configJson)?.tierOverrides == null) record.tierOverrides = previous.tierOverrides || {}
+  // P0-2 T03：env/headers 字段级加密（_encrypt_field 同构——已是标记的原样透传、
+  // 不可解按内层串重加；明文兜底键入 encrypt_plain（W21 面板提示）。
+  // import_claude 路径不加密（Python 同款——由启动迁移补齐）
+  let plainKeys = []
+  if (record.env) {
+    const encrypted = await encryptField(record.env)
+    record.env = encrypted.values
+    plainKeys = [...plainKeys, ...encrypted.plainKeys]
+  }
+  if (record.headers) {
+    const encrypted = await encryptField(record.headers)
+    record.headers = encrypted.values
+    plainKeys = [...plainKeys, ...encrypted.plainKeys]
+  }
   const wantEnable = !!record.enabled
   if (wantEnable) {
     try {
@@ -139,7 +159,7 @@ export async function mcpTestServer(name) {
 }
 export async function mcpGetServerDetail(name) {
   const cfg = serverConfig(name); if (!cfg) return json({ error: `服务器不存在: ${name}` })
-  const entry = runtime.get(name); const env = plainMapping(cfg.env); const headers = plainMapping(cfg.headers)
+  const entry = runtime.get(name); const env = await plainMapping(cfg.env); const headers = await plainMapping(cfg.headers)
   // P0-1c MC3（mcp_config_service.get_server:139-158 + mcp_service.get_server_detail:328-353）：
   // config 视图 = 存储副本 + name + env/headers 解密视图 + decrypt_failed；
   // headers 仅在存储携带时透出（stdio 服务器无 headers 键——Python 同款）

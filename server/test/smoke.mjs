@@ -296,8 +296,20 @@ try {
     assert.deepEqual(JSON.parse(rpcJson.body), { enabled: true })
   })
 
-  /* ---------- 降级与错误面 ---------- */
-  const missing = await app.inject({ method: 'POST', url: '/jsapi/__definitely_unknown__', payload: { args: [] } })
+  /* ---------- 存储安全诊断（P0-2 T03，非 js_api 面） ---------- */
+  const storage = await app.inject({ method: 'GET', url: '/storage/security' })
+  check('T03 /storage/security 仅状态计数不回显明文', () => {
+    const body = JSON.parse(storage.body)
+    assert.equal(body.dpapi_available, true)
+    assert.equal(body.webdav.plaintext_password, false)
+    assert.equal(body.mcp.plaintext_fields, 0)
+    assert.equal(typeof body.migration.pending, 'number')
+    assert.equal(typeof body.migration.done, 'boolean')
+    // 绝不出现明文密码值字段（plaintext_password 键名属状态计数非回显）
+    assert.ok(!/"(password|secret|token)"\s*:/.test(storage.body))
+  })
+
+  /* ---------- 降级与错误面 ---------- */  const missing = await app.inject({ method: 'POST', url: '/jsapi/__definitely_unknown__', payload: { args: [] } })
   check('未注册方法返回 NOT_MIGRATED（不打 500）', () => {
     assert.equal(missing.statusCode, 200)
     assert.equal(JSON.parse(missing.body).error.code, 'NOT_MIGRATED')
