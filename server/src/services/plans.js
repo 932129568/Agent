@@ -21,12 +21,21 @@ const error = message => json({ ok: false, error: String(message) })
 const now = () => new Date().toISOString()
 
 function safeTid(taskId) {
+  // plan_create 口径（P0-1b P4 修正：plan_service._safe_tid 用 _TID_RE 严格
+  // 校验 ^[A-Za-z0-9_-]{1,64}$——'bad id!' 非法）
   const tid = String(taskId || '').trim()
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(tid)) throw new Error(TID_ERROR)
   return tid
 }
+function safeCkptTid(taskId) {
+  // checkpoint 口径（P0-1b P3：checkpoint_service._safe_tid——仅拒路径逃逸
+  // 字符 / \ . 与超长；空格/!/等合法——'bad id!' 是有效 tid）
+  const tid = String(taskId || '')
+  if (!tid || tid.length > 64 || /[\\/\\.]/.test(tid)) throw new Error(TID_ERROR)
+  return tid
+}
 function planPath(taskId) { return path.join(PLANS_DIR, `${safeTid(taskId)}.json`) }
-function checkpointDir(taskId) { return path.join(CHECKPOINTS_DIR, safeTid(taskId)) }
+function checkpointDir(taskId) { return path.join(CHECKPOINTS_DIR, safeCkptTid(taskId)) }
 function parseJson(value, fallback) {
   if (value == null) return fallback
   if (typeof value !== 'string') return value
@@ -72,12 +81,13 @@ export async function planCreate(title, steps, taskId = '') {
 }
 
 export async function planGet(taskId) {
+  // P0-1b P4：错误拍平 {error:文本}（legacy api.py:1317 err() 包装语义）
   try {
     const plan = readJsonIfExists(planPath(taskId), null)
-    if (!plan) return error(`计划不存在: ${taskId}`)
-    if (typeof plan !== 'object' || !Array.isArray(plan.steps)) return error('计划文件损坏')
+    if (!plan) return JSON.stringify({ error: `计划不存在: ${taskId}` })
+    if (typeof plan !== 'object' || !Array.isArray(plan.steps)) return JSON.stringify({ error: '计划文件损坏' })
     return json({ ok: true, plan })
-  } catch (err) { return error(err.message === TID_ERROR ? TID_ERROR : `计划读取失败: ${err.message}`) }
+  } catch (err) { return JSON.stringify({ error: err.message === TID_ERROR ? TID_ERROR : `计划读取失败: ${err.message}` }) }
 }
 
 export async function planList(limit = 20) {
@@ -91,19 +101,20 @@ export async function planList(limit = 20) {
 }
 
 export async function planUpdate(taskId, status = '', stepIndex = null, stepStatus = '') {
+  // P0-1b P4：错误拍平（api.py:1325 同款；plan_get 拍平形直接透传）
   const got = JSON.parse(await planGet(taskId))
   if (!got.ok) return json(got)
   const plan = got.plan
   if (status) {
-    if (!PLAN_STATUSES.has(String(status))) return error(`status 非法（合法值: ${[...PLAN_STATUSES].join('/')}）`)
+    if (!PLAN_STATUSES.has(String(status))) return JSON.stringify({ error: `status 非法（合法值: ${[...PLAN_STATUSES].join('/')}）` })
     plan.status = String(status)
     if (plan.status === 'approved' && !plan.approved_at) plan.approved_at = now()
   }
   if (stepIndex !== null && stepIndex !== undefined && stepStatus) {
     const index = Number(stepIndex)
-    if (!Number.isInteger(index)) return error('step_index 必须是整数')
-    if (index < 0 || index >= plan.steps.length) return error('step_index 越界')
-    if (!STEP_STATUSES.has(String(stepStatus))) return error(`step_status 非法（合法值: ${[...STEP_STATUSES].join('/')}）`)
+    if (!Number.isInteger(index)) return JSON.stringify({ error: 'step_index 必须是整数' })
+    if (index < 0 || index >= plan.steps.length) return JSON.stringify({ error: 'step_index 越界' })
+    if (!STEP_STATUSES.has(String(stepStatus))) return JSON.stringify({ error: `step_status 非法（合法值: ${[...STEP_STATUSES].join('/')}）` })
     plan.steps[index].status = String(stepStatus)
   }
   plan.updated_at = now()
@@ -151,9 +162,10 @@ function pruneCheckpoints() {
 
 export async function checkpointCreate(taskId, files, wsDir = '') {
   let tid
-  try { tid = safeTid(taskId) } catch { return json({ ok: false, error: { code: 'BAD_PARAMS', message: 'task_id 非法（防路径逃逸）' } }) }
+  try { tid = safeCkptTid(taskId) } catch { return json({ ok: false, error: { code: 'BAD_PARAMS', message: 'task_id 非法（防路径逃逸）' } }) }
   const ws = path.resolve(String(wsDir || effectiveRoot(runtime.currentSid)))
-  let list = parseJson(files, files)
+  // P0-1b P3：对齐 legacy create(files)——字符串按 CSV 拆（'[]' 是文件名而非 JSON 数组）
+  let list = files
   if (typeof list === 'string') list = list.split(',').map(x => x.trim()).filter(Boolean)
   if (!Array.isArray(list)) list = []
   const head = await gitHead(ws)
@@ -236,13 +248,14 @@ export async function checkpointRollback(taskId, wsDir = '', confirm = false) {
   let dest
   try { dest = checkpointDir(taskId) } catch { return json({ ok: false, error: { code: 'BAD_PARAMS', message: 'task_id 非法（防路径逃逸）' } }) }
   const manifest = readJsonIfExists(path.join(dest, 'manifest.json'), null)
-  if (!manifest) return error(`未找到检查点: ${taskId}（可能创建时超限降级为仅记录）`)
+  if (!manifest) return json({ ok: false, error: { code: 'ROLLBACK_FAILED', message: `未找到检查点: ${taskId}（可能创建时超限降级为仅记录）` } })
   const ws = path.resolve(String(wsDir || manifest.ws_dir || effectiveRoot(runtime.currentSid)))
-  const restored = []; const deleted = []; const failed = []
+  const restored = []; const failed = []
   if (manifest.git_head && !(manifest.files || []).length) {
     return json({ ok: true, mode: 'git', restored, deleted, failed, verified: true,
       note: `锚点检查点（无声明文件），git HEAD=${manifest.git_head.slice(0, 8)}` })
   }
+  const deleted = []
   for (const item of manifest.files || []) {
     const rel = item.path; const full = safeJoin(ws, rel)
     if (!full) { failed.push(rel); continue }
@@ -266,5 +279,7 @@ export async function checkpointRollback(taskId, wsDir = '', confirm = false) {
   }
   const byPath = Object.fromEntries((manifest.files || []).map(x => [x.path, x]))
   const verified = restored.every(rel => !byPath[rel]?.sha256 || sha256File(path.join(ws, rel)) === byPath[rel].sha256)
-  return json({ ok: failed.length === 0, mode: manifest.git_head ? 'git' : 'snapshot', restored, deleted, failed, verified })
+  const payload = { ok: failed.length === 0, mode: manifest.git_head ? 'git' : 'snapshot', restored, failed, verified }
+  if (manifest.git_head) payload.deleted = deleted  // P1：仅 git 模式（Python _rollback_snapshot 无此键）
+  return json(payload)
 }

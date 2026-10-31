@@ -110,7 +110,7 @@ register('get_cwd', async () => getCwd())
 register('set_workspace', async path => setWorkspace(path))
 
 /* 会话身份与工作日志 */
-register('set_current_sid', async sid => String(setCurrentSid(sid) || ''))
+register('set_current_sid', async sid => { setCurrentSid(sid); return '{"ok":true}' })
 register('get_worklog', async () => getWorklog())
 register('append_worklog', async text => appendWorklog(text))
 

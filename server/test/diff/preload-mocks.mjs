@@ -96,12 +96,18 @@ function patchedExecFile(file, ...rest) {
   return setTimeout(() => callback(null, stdout, stderr), 10)
 }
 
-// promisify(execFile) 走 custom 符号时必须仍进入本桩：自定义实现直接以
-// error-first 三参回调调用 patchedExecFile，保持 {stdout, stderr} 解构语义。
+// promisify(execFile) 走 custom 符号时必须仍进入本桩：自定义实现以
+// error-first 三参回调调用 patchedExecFile，并复刻 execFile 内置 custom 的
+// Buffer→String 转换（保持 {stdout, stderr} 解构语义）。
 patchedExecFile[promisifySymbol] = (file, ...rest) => new Promise((resolve, reject) => {
   patchedExecFile(file, ...rest, (err, stdout, stderr) => {
-    if (err) { Object.assign(err, { stdout, stderr }); reject(err) }
-    else resolve({ stdout, stderr })
+    const text = value => (Buffer.isBuffer(value) ? value.toString() : value)
+    if (err) {
+      if (stdout !== undefined) err.stdout = text(stdout)
+      if (stderr !== undefined) err.stderr = text(stderr)
+      reject(err)
+    }
+    else resolve({ stdout: text(stdout), stderr: text(stderr) })
   })
 })
 

@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { prisma } from '../db.js'
 
 const SessionEntry = z.object({
-  id: z.union([z.string(), z.number()]).transform(String),
+  id: z.union([z.string(), z.number()]),   // P0-1b S4：id 原文类型保真（DB 主键另用 String(id) 索引）
   title: z.any().optional(),
   createdAt: z.any().optional(),
   updatedAt: z.any().optional(),
@@ -36,8 +36,24 @@ export async function getSessions() {
 }
 
 export async function saveSessions(data) {
-  const parsed = typeof data === 'string' ? JSON.parse(data) : data
-  const entries = SessionList.parse(parsed)
+  // P0-1b S3：legacy 校验方言——非法 JSON / 非数组 → 200 + {error:文本}
+  // （CPython vs V8 解析器文案天然不同 → ID-104 登记；数组条目校验失败
+  // 同走 200+{error}（存储分叉 → ID-101/102 登记 P0-2 复评））
+  let parsed
+  try {
+    parsed = typeof data === 'string' ? JSON.parse(data) : data
+  } catch (error) {
+    return JSON.stringify({ error: String(error && error.message ? error.message : error) })
+  }
+  if (!Array.isArray(parsed)) {
+    return JSON.stringify({ error: 'sessions 必须是 JSON 数组，未写入' })
+  }
+  let entries
+  try {
+    entries = SessionList.parse(parsed)
+  } catch (error) {
+    return JSON.stringify({ error: String(error && error.message ? error.message : error).slice(0, 400) })
+  }
   const keep = entries.map(entry => String(entry.id))
 
   await prisma.$transaction(async tx => {

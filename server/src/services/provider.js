@@ -313,5 +313,5 @@ export async function sessionPurge(sid, taskIdsJson = '[]') {
     const cpDir = path.join(CONFIG_DIR, 'checkpoints', String(id).replace(/[^\w.-]/g, '_'))
     if (fs.existsSync(cpDir)) { fs.rmSync(cpDir, { recursive: true, force: true }); removed.checkpoints += 1 }
   }
-  return okJson({ ok: true, removed })
+  return okJson({ ok: true, sid: String(sid ?? ''), removed })
 }

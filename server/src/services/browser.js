@@ -37,11 +37,16 @@ function privateIp(ip) {
     (a === 198 && (b === 18 || b === 19))
 }
 async function validateUrl(raw) {
+  // 文案/判定逐字对齐 legacy session_win.navigate（P0-1b B7）：
+  // 协议 → NAV_BLOCKED；字面 IP 私网/环回 → SSRF_BLOCKED；DNS 失败放行
+  // （legacy 2026-10-21 修订：fetch 经同一解析器自然失败，fail-closed 无增益）
   const text = String(raw || '').trim()
   if (!text || text.length > 2048) throw { code: 'BAD_PARAMS', message: 'url 为空或超过 2048 字符' }
   let url
   try { url = new URL(text) } catch { throw { code: 'BAD_PARAMS', message: 'url 格式无效' } }
-  if (!['http:', 'https:'].includes(url.protocol)) throw { code: 'NAV_BLOCKED', message: '仅允许 http/https URL' }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw { code: 'NAV_BLOCKED', message: `已阻止非 http(s) 导航: ${text.slice(0, 80)}`, hint: '浏览器仅支持 http/https 链接' }
+  }
   if (url.username || url.password || !url.hostname) throw { code: 'BAD_PARAMS', message: 'url 不得包含凭证且必须有主机名' }
   const loopbackAllowed = process.env.HARBOR_BROWSER_ALLOW_LOOPBACK === 'true'
   const cacheKey = `${loopbackAllowed}:${url.href}`
@@ -53,8 +58,10 @@ async function validateUrl(raw) {
   let addresses = []
   try {
     addresses = net.isIP(hostname) ? [hostname] : (await dns.lookup(hostname, { all: true, verbatim: true })).map(x => x.address)
-  } catch { throw { code: 'SSRF_BLOCKED', message: `主机解析失败，按 fail-closed 拒绝导航: ${hostname}` } }
-  if (!addresses.length || addresses.some(privateIp)) throw { code: 'SSRF_BLOCKED', message: `目标解析到内网/环回/保留地址，已拒绝: ${hostname}` }
+  } catch { addresses = [] } // DNS 失败放行（legacy 口径）
+  if (addresses.length && addresses.some(privateIp)) {
+    throw { code: 'SSRF_BLOCKED', message: `已阻止访问内网/环回地址: ${text.slice(0, 80)}`, hint: '禁止访问内网/环回地址' }
+  }
   const result = { url: url.href }
   if (urlCache.size > 500) urlCache.clear()
   urlCache.set(cacheKey, result)
@@ -110,8 +117,11 @@ async function newSession(url, mode = 'hidden', timeout = 60, waitSelector = '')
   } catch (error) { await closeOne(id); throw error }
 }
 function current(sessionId = '', exclusive = true) {
+  // legacy _prim 口径（P0-1b B8）：无会话 → BAD_PARAMS + 人话 hint
   const entry = sessions.get(sessionId || cursor)
-  if (!entry) throw { code: 'SESSION_CLOSED', message: '没有可用的浏览器会话，请先 browser_navigate' }
+  if (!entry) {
+    throw { code: 'BAD_PARAMS', message: '没有可用浏览器会话（先 browser_navigate）', hint: '会话可能已被回收，请重新导航' }
+  }
   if (exclusive && entry.busy) throw { code: 'SESSION_BUSY', message: '会话忙：原语执行中（单会话串行，重入被拒）' }
   if (exclusive) entry.busy = true
   entry.last_used = Date.now()
@@ -227,9 +237,20 @@ export async function browserScreenshot(fullPage = false, token = null) {
 export async function browserClose(sessionId = '', token = null) {
   const refusal = await guard('browser_close', { session_id: String(sessionId || '') }, token)
   if (refusal) return refusal
-  let closed = 0
-  if (sessionId) closed = await closeOne(sessionId)
-  else for (const id of [...sessions.keys()]) closed += await closeOne(id)
+  // legacy driver.close 口径（P0-1b B4）：closed 为已关会话 id 列表；
+  // 指定 id 不存在 → 空列表 + note；缺省关全部（空池无 note）
+  let closed = []
+  if (sessionId) {
+    if (sessions.has(sessionId)) {
+      closed = [sessionId]
+      await closeOne(sessionId)
+    }
+    if (!closed.length) {
+      return json({ ok: true, closed, note: '会话不存在或已关闭' })
+    }
+  } else {
+    for (const id of [...sessions.keys()]) closed.push(...(await closeOne(id) ? [id] : []))
+  }
   return json({ ok: true, closed })
 }
 export async function browserShutdown() {
@@ -238,14 +259,22 @@ export async function browserShutdown() {
   takeovers.clear(); return closed
 }
 export async function browserSessions() {
-  return json({ version: 1, sessions: [...sessions.values()].map(x => ({ session_id: x.id,
+  // legacy driver.sessions 口径（P0-1b B2）：{ok:true, version, sessions}
+  return json({ ok: true, version: 1, sessions: [...sessions.values()].map(x => ({ session_id: x.id,
     url: x.page.url(), title: x.title, mode: x.mode, state: x.busy ? 'busy' : 'ready',
     created_at: x.created_at, last_used: x.last_used })) })
 }
 export async function browserSetMode(mode, sessionId = '') {
+  // legacy driver.set_mode 口径（P0-1b B3）：会话存在性先于 mode 合法性；
+  // 无会话 → BAD_PARAMS '没有可用浏览器会话'（无 hint）
+  if (sessionId) {
+    if (!sessions.has(sessionId)) return fail('BAD_PARAMS', '没有可用浏览器会话')
+  } else if (!sessions.size) {
+    return fail('BAD_PARAMS', '没有可用浏览器会话')
+  }
   if (!['hidden', 'visible'].includes(mode)) return fail('BAD_PARAMS', 'mode 仅支持 hidden/visible')
   try {
-    const targets = sessionId ? [current(sessionId, false)] : [...sessions.values()]
+    const targets = sessionId ? [sessions.get(sessionId)] : [...sessions.values()]
     for (const entry of targets) entry.mode = mode
     return json({ ok: true, mode, sessions: targets.map(x => x.id), note: '模式已记录；新建导航按该模式创建，已有窗口切换由桌面壳接管。' })
   } catch (error) { return asError(error) }
@@ -274,7 +303,8 @@ async function searchResults(page) {
 }
 export async function browserSearch(params, token = null) {
   const input = parse(params); const query = String(input.query || '').trim()
-  if (!query) return fail('BAD_PARAMS', '缺少 query')
+  // legacy service 校验口径（P0-1b B5）：文案+hint 逐字
+  if (!query) return fail('BAD_PARAMS', 'query 不能为空（1-500 字符的检索词）', '例如 {"query": "python 教程"}')
   const refusal = await guard('web_search', { query: query.slice(0, 120) }, token)
   if (refusal) return refusal
   const url = input.search_url || `https://www.bing.com/search?q=${encodeURIComponent(query)}`
@@ -301,8 +331,13 @@ export async function searchStatus(taskId = '') {
   return json({ ok: true, active: false, state: 'idle', task_id: id || null })
 }
 export async function browserTakeover(takeoverId, action) {
-  const pending = takeovers.get(takeoverId)
-  if (!pending) return fail('SESSION_CLOSED', '接管任务不存在或已结束')
+  // legacy service.browser_takeover 口径（P0-1b B6）：空 id → action → 查找
+  const tk = String(takeoverId || '').trim()
+  if (!tk) return fail('BAD_PARAMS', 'takeover_id 不能为空')
+  const act = String(action || '').trim().toLowerCase()
+  if (act !== 'continue' && act !== 'abort') return fail('BAD_PARAMS', 'action 仅支持 continue/abort')
+  const pending = takeovers.get(tk)
+  if (!pending) return fail('TAKEOVER_NOT_FOUND', '接管会话不存在或已被清理', '请重新发起搜索')
   if (action === 'abort') {
     await closeOne(pending.sessionId); takeovers.delete(takeoverId)
     return fail('CAPTCHA_ABORTED', '用户放弃了本次人工验证')

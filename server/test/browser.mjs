@@ -71,6 +71,11 @@ await browser.browserNavigate(`${base}/pool-3`, '', 15, 'hidden')
 const capped = JSON.parse(await browser.browserSessions())
 check('会话池最多保留 3 个并自动驱逐最旧空闲项', () => assert.ok(capped.sessions.length <= 3))
 const closed = JSON.parse(await browser.browserClose(''))
-check('关闭全部浏览器会话', () => { assert.equal(closed.ok, true); assert.ok(closed.closed >= 1) })
+// P0-1b B4：closed 为已关会话 id 列表（legacy driver.close 口径），不再是计数
+check('关闭全部浏览器会话（closed 为 id 列表）', () => {
+  assert.equal(closed.ok, true)
+  assert.ok(Array.isArray(closed.closed))
+  assert.ok(closed.closed.length >= 1)
+})
 await new Promise(resolve => server.close(resolve))
 console.log(JSON.stringify({ ok: true, checks: results.length, results }, null, 2))

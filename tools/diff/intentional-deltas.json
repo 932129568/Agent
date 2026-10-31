@@ -14,6 +14,50 @@
       "date": "2026-10-31",
       "expires": "2026-12-31",
       "frontendCompat": "前端不依据 exe 字段做分支；P0-4 桌面切换前需复核前端对 exe 字段的消费点；契约面（version/methods）任何漂移都会让本 call 回到 suspect"
+    },
+    {
+      "id": "ID-101",
+      "fixture": "sessions-validation",
+      "callId": "c03",
+      "method": "save_sessions",
+      "reason": "存储实现分叉：Python sessions.json 原文保底写入任意数组条目（[1,2] 原样落盘）；Node Prisma 结构化校验拒绝非对象条目。Node 拒绝路径更严格（fail-closed 增强），P0-2 存储语义定案时复评",
+      "approvedBy": "pending",
+      "date": "2026-10-30",
+      "expires": null,
+      "frontendCompat": "前端 save_sessions 调用方恒发合法会话对象数组；对抗性输入在 Node 得到更显式拒绝（200 + {error}，S3 修复后形状同构）"
+    },
+    {
+      "id": "ID-102",
+      "fixture": "sessions-validation",
+      "callId": "c04",
+      "method": "get_sessions",
+      "reason": "ID-101 的回读级联：Python 回读原文 [1,2]；Node 拒绝写入后空库 []",
+      "approvedBy": "pending",
+      "date": "2026-10-30",
+      "expires": null,
+      "frontendCompat": "同 ID-101——合法数组条目双侧回读一致；仅对抗性输入的持久化语义分叉"
+    },
+    {
+      "id": "ID-103",
+      "fixture": "history-dir-basic",
+      "callId": "c05",
+      "method": "history_dir_set",
+      "reason": "DB 存储无 sessions.json 文件可搬：Python migrate=true 复制 sessions.json 到新目录（migrated:true）；Node 会话在 Prisma DB，migrate 语义需 P0-2 重定义（导出/导入等价语义）",
+      "approvedBy": "pending",
+      "date": "2026-10-30",
+      "expires": null,
+      "frontendCompat": "前端仅在显式勾选「迁移历史」时读 migrated 字段展示 toast；P0-2 补齐前该路径恒 false（不误报迁移成功）"
+    },
+    {
+      "id": "ID-104",
+      "fixture": "sessions-validation",
+      "callId": "c01",
+      "method": "save_sessions",
+      "reason": "JSON 解析器错误文案天然不同（CPython 'Expecting property name enclosed in double quotes: line 1 column 2 (char 1)' vs V8 \"Expected property name or '}' in JSON at position 1 (line 1 column 2)\"）——解析器实现细节，形状同构 {error:string} + HTTP 200",
+      "approvedBy": "pending",
+      "date": "2026-10-30",
+      "expires": "2099-12-31",
+      "frontendCompat": "前端仅将 error 字符串原样展示给用户（toast），无文案分支逻辑；永久 intentional（主理人 Q3 裁定）"
     }
   ]
 }
