@@ -126,7 +126,7 @@
       "name": "admin-start-process",
       "kind": "powershell",
       "contains": ["Start-Process", "-Verb RunAs"],
-      "stdout": "",
+      "stdout": "hello \r\n",
       "exitCode": 0
     }
   ]

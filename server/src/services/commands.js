@@ -114,26 +114,31 @@ async function truncateOutput(output, maxBytes = MAX_OUTPUT) {
   return `${text.slice(0, 1500)}\n…[输出共 ${text.length} 字已截断;${tip}]…\n${text.slice(-800)}`
 }
 
-export async function execute(command, timeout, token, shell = 'cmd', guardOp = null, guardCommand = null, skipGuard = false) {
+export async function execute(command, timeout, token, shell = 'cmd', guardOp = null, guardCommand = null, skipGuard = false, skipDedup = false) {
   const cmd = String(command || '').trim()
   if (!cmd) return errJson('缺少 command')
 
   const op = guardOp || (shell === 'powershell' ? 'run_powershell' : 'run_command')
   if (!skipGuard) {
-    // 与前端 _guardDetailOf 及 legacy 执行点同源：命令摘要是 {cmd}（提权时保留用户原命令）
+    // 与前端 _guardDetailOf 及 legacy 执行点同源：命令摘要人是 {cmd}（提权时保留用户原命令）
     const refusal = await enforceExec(op, { cmd: String(guardCommand ?? command ?? '').trim() }, token)
     if (refusal) return errJson(refusal)
+  }
+  // 去重域 = 用户原命令（admin 路径由 runAdminCommand 自行管理去重——W5 单域原则）
+  const dedupKey = String(guardCommand ?? command ?? cmd)
+  if (!skipDedup) {
+    const dedupTip = checkDedup(dedupKey)
+    if (dedupTip) {
+      return okJson({ info: dedupTip, skipped: true })
+    }
+    markDedup(dedupKey)
   }
 
   const hit = blacklistHit(cmd)
   if (hit) {
+    if (!skipDedup) unmarkDedup(dedupKey)  // 拒绝不占去重域（W1 同口径）
     return errJson(`命令命中沙箱黑名单（${hit}），已拒绝执行。请改用更窄、可逆的操作。`)
   }
-
-  if (checkDedup(guardCommand ?? command ?? cmd)) {
-    return okJson({ info: '与上一条命令完全相同，已拒绝；如需刷新结果请加参数或说明目的。', skipped: true })
-  }
-  markDedup(guardCommand ?? command ?? cmd)
 
   const cwd = effectiveRoot(runtime.currentSid)
   const timeoutSeconds = Math.max(5, Math.min(Number(timeout) || 60, 600))
@@ -161,7 +166,7 @@ export async function execute(command, timeout, token, shell = 'cmd', guardOp = 
     return okJson(info)
   } catch (error) {
     // 超时/执行级失败：回滚去重登记（W1）——合法重试不被误拦
-    unmarkDedup(guardCommand ?? command ?? cmd)
+    if (!skipDedup) unmarkDedup(guardCommand ?? command ?? cmd)
     const timedOut = !!(error.killed || error.signal) || /timed out/i.test(error.message || '')
     if (timedOut) return errJson(`命令执行超时(${timeoutSeconds}s)`)
     const errText = String(error.stderr || '').trim()
@@ -212,9 +217,9 @@ export async function runAdminCommand(command, token, timeout) {
   }
 
   markDedup(cmd)
-  // admin 路径的 run_admin_command token 已在人审门前消费（execute 跳过二次校验）
+  // admin 路径：token 已在人审前消费、去重已在用户命令域登记——execute 全跳过
   const script = `Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/s','/c',${JSON.stringify(cmd)} -Verb RunAs -Wait`
-  const raw = await execute(script, timeout, null, 'powershell', 'run_admin_command', cmd, true)
+  const raw = await execute(script, timeout, null, 'powershell', 'run_admin_command', cmd, true, true)
   let payload
   try { payload = JSON.parse(raw) } catch { return raw }
   // 响应折叠为 legacy admin 方言：{exit_code, output, note:'已通过管理员权限执行'}

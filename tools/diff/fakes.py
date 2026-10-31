@@ -188,6 +188,11 @@ _CLIP_NEXT_HANDLE = [4242]
 class _FakeUser32:
     @staticmethod
     def MessageBoxW(*a):
+        # fixture env GLM_TEST_MSGBOX 优先（admin approve/deny fixture 按侧注入 6/7），
+        # 缺省回落共享 mock 表 msgbox.ret
+        env_ret = os.environ.get('GLM_TEST_MSGBOX')
+        if env_ret:
+            return int(env_ret)
         table = load_mock_table()
         return int((table.get('msgbox') or {}).get('ret', 6))
 
@@ -254,8 +259,25 @@ class _FakeKernel32:
 
 class _FakeShell32:
     @staticmethod
-    def ShellExecuteW(*a):
-        return 42
+    def ShellExecuteW(hwnd=None, lp_operation=None, lp_file=None,
+                      lp_parameters=None, lp_directory=None, n_show_cmd=0):
+        """admin 提权通道桩（主理人批准的 fakes.py 小改，控制在 mock 语义内）：
+        识别 runas+cmd 包装形态，同步真跑临时 bat（_STDLIB_RUN 绕开 subprocess
+        桩——bat 内的 echo 重定向需要真实文件副作用供轮询环读到 exit/output）。
+        bat 由 Python run_admin_command 在系统临时目录创建并于 finally 清理。"""
+        try:
+            if str(lp_operation or '').lower() == 'runas' and lp_file in ('cmd', 'cmd.exe'):
+                params = str(lp_parameters or '')
+                # '/c "C:\\...\\glm_admin_xxx.bat"'
+                if params.startswith('/c ') and '"' in params:
+                    bat = params.split('"')[1]
+                    if os.path.isfile(bat):
+                        _STDLIB_RUN(['cmd', '/c', bat], capture_output=True,
+                                    timeout=30, creationflags=getattr(
+                                        subprocess, 'CREATE_NO_WINDOW', 0))
+            return 42
+        except Exception:
+            return 42
 
 
 class _FakeWindll:

@@ -44,6 +44,11 @@ if (!fixturePath || !resultPath) {
 }
 const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'))
 
+/* ---------- 0. fixture env 字段（方案 §6 修复T02）：按侧注入进程环境 ---------- */
+for (const [key, value] of Object.entries(fixture.env?.node || {})) {
+  process.env[String(key)] = String(value)
+}
+
 /* ---------- 1. 临时环境（子进程内设置；先于任何 src import 生效） ---------- */
 const tempTag = String(process.env.HARBOR_DIFF_TEMP_TAG || 'harbor-diff-node')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `${tempTag}-n-`))

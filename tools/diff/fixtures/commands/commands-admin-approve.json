@@ -1,0 +1,30 @@
+{
+  "id": "commands-admin-approve",
+  "family": "commands",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "admin 提权通道放行路径（方案 C4②）：双侧 msgbox=6（人审放行）→ Python 真跑临时 bat / Node 走 mock Start-Process → {exit_code, output, note:'已通过管理员权限执行'}（legacy admin 方言）",
+  "mocks": ["subprocess", "windll"],
+  "env": {
+    "python": { "GLM_TEST_MSGBOX": "6" },
+    "node": { "HARBOR_TEST_MSGBOX": "6" }
+  },
+  "setup": {
+    "workspaceFiles": [
+      { "path": "seed.txt", "content": "admin approve 工作区种子\n", "encoding": "utf-8" }
+    ],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "run_admin_command",
+      "args": ["echo hello"],
+      "note": "人审放行 → 提权执行（Python：fake ShellExecuteW 同步真跑 bat 写 tmp_out/tmp_exit；Node：mock Start-Process 输出 hello）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

@@ -112,6 +112,15 @@ def main():
     api = None
     try:
         p = fakes.setup_home(root, fixture)
+        # admin 提权通道的 tempfile.mkstemp（bat/out/exit 三件套）收进临时根：
+        # 双侧临时根内、随根清理（主理人批准的红线口径）
+        _tmpdir = os.path.join(root, 'tmp')
+        os.makedirs(_tmpdir, exist_ok=True)
+        tempfile.tempdir = _tmpdir
+        # fixture env 字段（方案 §6 修复T02）：按侧注入进程环境（admin approve/deny
+        # 的 GLM_TEST_MSGBOX 等），先于 fakes 安装生效
+        for key, value in (fixture.get('env') or {}).get('python', {}).items():
+            os.environ[str(key)] = str(value)
         mocks = list(fixture.get('mocks') or [])
         # webview/PIL 在 import 前装：backend 模块运行期 import 时从 sys.modules 取
         fakes.install_fake_webview()
