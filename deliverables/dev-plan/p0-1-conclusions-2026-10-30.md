@@ -10,7 +10,7 @@
 | 分类 | 数量 | 方法 |
 |---|---|---|
 | **match**（双侧行为等价） | 70 | meta：—；sessions 族：set_current_sid、session_purge；plans：plan_create/get/list/update、checkpoint_create/list/rollback、begin_task；guard 全 14（check/confirm_token/session_trust/rule_add/list/remove/task_grant/revoke/status/approval_budget/audit/get_audit_log/get_config/save_config）；commands：run_command、run_powershell、run_admin_command；export：pick_save_path、save_export_file；browser 全 10 错误路径（navigate/extract/click/fill/screenshot/close/sessions/set_mode/search/takeover）；software：software_list/call/probe；files：list_dir、search_replace、write_file；workspace：set_workspace、get_cwd、pick_folder、append_worklog、get_worklog；memory：append_memory；misc-config：sandbox_save_config、clear_caches；provider：cache_tool_output、trace_new、clarify_collect、check_update、get_update_progress、start_update_download、apply_update；experts：expert_get/save_preferences/set_enabled/delete_package；mcp：mcp_delete_server、mcp_save_subscriptions、mcp_shutdown；rpc：save_config、get_config；selftest 3（分类器自检已随修复收敛为回归金丝雀） |
-| **intentional**（已登记差异，ID-001 已签核 / ID-101..104 待签核） | 4 方法（5 登记） | get_api_info（ID-001 exe）；save_sessions（ID-101 存储分叉 + ID-104 解析器文案）；get_sessions（ID-102 回读级联）；history_dir_set（ID-103 migrate 语义） |
+| **intentional**（已登记差异，5 项登记已全部签核：ID-001 与 ID-101..104 均经 team-lead 于 2026-10-30 b219fcb 签核生效） | 4 方法（5 登记） | get_api_info（ID-001 exe）；save_sessions（ID-101 存储分叉 + ID-104 解析器文案）；get_sessions（ID-102 回读级联）；history_dir_set（ID-103 migrate 语义） |
 | **suspect**（疑似缺陷——只登记不修，P0-1c 评审输入） | 65 | 见 §二 分类明细 |
 | **uncovered**（环境绑定，登记豁免） | 6 方法（13 登记） | 正向路径未差分：browser_open、take_screenshot、open_app、open_url、open_billing（真实本机副作用/非确定输出）；list_processes（宿主机瞬时态）。另 7 项登记（browser 六原语+search 正向）已有错误路径 fixture 覆盖，登记仅覆盖其正向分支 |
 
@@ -51,7 +51,7 @@
 ## 四、残留与交接
 
 1. **P0-1c（建议立项）**：65 项新 suspect——39 形状分叉（多为 Node 简化实现的补齐）+ 19 文案/内容 + 安全类 4（kill_process 反查、expert 内置包、read_file 消费面、工具面）。数量与 P0-1b 相当，建议按同一模式（架构师方案→修复→差分收敛）排期
-2. **ID-101..104 签核**：intentional-deltas.json 已预登记（approvedBy="pending"），待 team-lead 签核生效
+2. **ID-101..104 签核**：~~已预登记待签核~~ **已完成**——team-lead 于 2026-10-30 签核（提交 b219fcb），登记簿 5 项 approvedBy 全部生效；P0-1 总收官终验（QA，2026-10-30）复跑证实签核状态在报告中正确展示
 3. **P0-2**：存储语义定案（ID-101/102/103 的 DB 侧等价语义）
 4. **P0-3/P0-4**：browser 六原语正向路径（真机验收 P1-2）；admin Electron 对话框接线；React 侧 browser_set_mode 收紧确认
 5. **门禁常规化**：`npm run diff:coverage` exit 0 已纳入常规验证口径（未进 test:all——主理人批准后纳入）
