@@ -65,7 +65,7 @@
       "callId": "c01",
       "method": "build_system_prompt",
       "reason": "沙箱尾注缺失：Python 尾注声明命令在受限 Job 内执行（内存/进程数/CPU 上限），Node 未迁移沙箱设施（无 Job 对象/资源上限），照抄=向模型与用户做虚假安全声明（比缺文案更危险）。编码形态（JSON 字符串）已修复对齐（PR1），仅尾注内容差异登记",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q1 裁定）。诚实优于表面一致——不注入虚假沙箱声明是正确处置；P0-2 沙箱服务迁移后注入真实尾注并撤销本登记（撤销条件明确）",
       "date": "2026-10-31",
       "expires": null,
       "frontendCompat": "尾注是安全告知非功能契约；模型行为影响=Node 侧更保守（无沙箱声明→模型对命令副作用更谨慎，敏感操作仍走 guard 确认链）；P0-2 沙箱服务迁移后注入真实尾注并撤销登记"
@@ -76,7 +76,7 @@
       "callId": "c08",
       "method": "get_platform_info",
       "reason": "python 键值披露实现宿主（Python 侧 '3.13.14' vs Node 侧 '27.0.0-alpha.0.0.0'）；键集是前端契约（window.__platformInfo 消费）须保留，值为运行时身份披露。其余结构（os:'win'/machine:'AMD64' 映射/services 七接口就绪度/browser_backend 含冻结文案）全部字节级对齐",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q2 裁定）。键冻结、值披露实际宿主——与 ID-001 exe 字段同构；前端展示的即真实运行时（Node）",
       "date": "2026-10-31",
       "expires": "2099-12-31",
       "frontendCompat": "与 ID-001 exe 字段完全同构：键冻结、值披露实际宿主——前端若展示运行时版本，展示的即真实宿主（Node）；data-platform 根类与 Cmd 键位映射不依赖该值"
@@ -87,7 +87,7 @@
       "callId": "c11",
       "method": "test_provider_endpoint",
       "reason": "网络库错误文本内嵌片段天然不同（urllib '<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>' vs undici 'fetch failed Error: connect ECONNREFUSED 127.0.0.1:59998'）；键集与外层文案 '连接失败: ' 已对齐（PR5），仅库文本片段差异登记",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。网络库异常文本是运行时实现细节（同 ID-104 先例），键集与外层文案已对齐",
       "date": "2026-10-31",
       "expires": "2099-12-31",
       "frontendCompat": "前端仅展示 error 字符串（toast）；库文本是运行时实现细节（同 ID-104 解析器文案先例），无文案分支逻辑"
