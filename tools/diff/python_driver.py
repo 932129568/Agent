@@ -112,6 +112,12 @@ def main():
     api = None
     try:
         p = fakes.setup_home(root, fixture)
+        # P0-1c T02：清除会话继承的代理 env（http_proxy/https_proxy 等）——Python
+        # urllib 尊重代理 env 而 Node fetch（undici）默认直连，代理介入使双侧
+        # 网络现实不对称（探测错误分类分叉的共因）。差分环境必须直连。
+        for key in ('http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
+                    'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'):
+            os.environ.pop(key, None)
         # admin 提权通道的 tempfile.mkstemp（bat/out/exit 三件套）收进临时根：
         # 双侧临时根内、随根清理（主理人批准的红线口径）
         _tmpdir = os.path.join(root, 'tmp')

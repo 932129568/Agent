@@ -129,31 +129,63 @@ export async function copyIntoWs(src, dstName) {
   return okJson({ ok: true, path: shortPath(target) })
 }
 
-export async function copyPath(src, dst) {
-  const from = resolveWs(src)
-  const to = resolveWs(dst)
-  fs.mkdirSync(path.dirname(to), { recursive: true })
-  fs.cpSync(from, to, { recursive: true })
-  return okJson({ ok: true, src: shortPath(from), dst: shortPath(to) })
+/* copy_path/move_path 已迁移至 files.js（P0-1c F4：绝对路径口径 + 存在性校验） */
+
+async function powerShellRecycle(target, isDir) {
+  // Microsoft.VisualBasic.FileIO SendToRecycleBin（与 legacy send2trash 同因同果：
+  // 真实 OS 回收站副作用；差分环境该命令不在 mock 表 → 放行真实执行）
+  const method = isDir ? 'DeleteDirectory' : 'DeleteFile'
+  const script = `Add-Type -AssemblyName Microsoft.VisualBasic; `
+    + `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}(${JSON.stringify(target)}, `
+    + `'OnlyErrorDialogs', 'SendToRecycleBin')`
+  const { execFile } = await import('node:child_process')
+  const { promisify } = await import('node:util')
+  const run = promisify(execFile)
+  await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+    { timeout: 30000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 })
 }
 
-export async function movePath(src, dst) {
-  const from = resolveWs(src)
-  const to = resolveWs(dst)
-  fs.mkdirSync(path.dirname(to), { recursive: true })
-  fs.renameSync(from, to)
-  return okJson({ ok: true, src: shortPath(from), dst: shortPath(to) })
-}
-
+/** P0-1c F6：delete_path 与 file_service.py:372-420 同构。
+ * cwd/生效根/驱动器根拒绝 → 回收站（PowerShell VB；失败以文件是否仍在磁盘为准）→
+ * 永久删除两条降级文案。响应 {ok, path(绝对), mode}。 */
 export async function deletePath(input, recycle = true, token = null) {
   // 危险操作接入护栏：always/session 档需要一次性 token 或会话信任
   const refusal = await enforceExec('delete_path', { path: input }, token)
   if (refusal) return errJson(refusal)
 
   const target = resolveWs(input)
-  if (!fs.existsSync(target)) return errJson('目标不存在')
-  // 桌面端的回收站能力依赖 OS API；Node 侧当前直接删除并显式回报 recycle=false，
-  // 不伪称「已入回收站」。
-  fs.rmSync(target, { recursive: true, force: true })
-  return okJson({ ok: true, path: shortPath(target), recycled: false, requested_recycle: !!recycle })
+  try {
+    const normCase = value => path.normalize(path.resolve(value)).toLowerCase()
+    const cwdN = normCase(runtime.cwd || process.cwd())
+    const rootN = normCase(effectiveRoot(runtime.currentSid))
+    if (normCase(target) === cwdN || normCase(target) === rootN
+        || path.dirname(target) === target) {
+      return errJson('拒绝删除：工作目录本身或驱动器根目录')
+    }
+    if (!fs.existsSync(target)) return errJson(`路径不存在: ${target}`)
+    let recycleUnavailable = false
+    let recycleBroken = false
+    if (recycle) {
+      try {
+        await powerShellRecycle(target, fs.statSync(target).isDirectory())
+        return okJson({ ok: true, path: target, mode: '回收站' })
+      } catch (error) {
+        if (error && (error.code === 'ENOENT' || /powershell/i.test(String(error.message || '')))) {
+          recycleUnavailable = true
+        }
+        // 以文件是否仍在磁盘为准（send2trash 同款「先移动成功后抛错」防御）
+        if (!fs.existsSync(target)) return okJson({ ok: true, path: target, mode: '回收站' })
+        recycleBroken = true
+      }
+    }
+    fs.rmSync(target, { recursive: true, force: true })
+    const mode = recycleUnavailable
+      ? '永久删除(未装 send2trash，未进回收站)⚠️不可恢复，请谨慎'
+      : recycleBroken
+        ? '永久删除(回收站暂不可用，未进回收站)⚠️不可恢复，请谨慎'
+        : '永久删除'
+    return okJson({ ok: true, path: target, mode })
+  } catch (error) {
+    return errJson(error.message || String(error))
+  }
 }

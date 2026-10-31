@@ -54,6 +54,12 @@
       "id": "N14",
       "pattern": "(\\.rollback-bak\\.)\\d{10,14}$",
       "replace": "$1<TSMS>"
+    },
+    {
+      "id": "N10",
+      "pattern": "http://127\\.0\\.0\\.1:\\d+",
+      "replace": "<PROXY>",
+      "note": "P0-1c PR6：本地 CORS 代理基址（端口随机）"
     }
   ],
   "separatorRule": {
@@ -73,7 +79,8 @@
       "last_used",
       "probed_at",
       "granted_at",
-      "updated_at"
+      "updated_at",
+      "since"
     ],
     "milliseconds": [
       "duration_ms",
@@ -101,7 +108,8 @@
       "rule_id",
       "token",
       "trace",
-      "head"
+      "head",
+      "port"
     ]
   },
   "quantizeKeys": {

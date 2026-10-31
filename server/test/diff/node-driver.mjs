@@ -141,15 +141,16 @@ function sha256File(file) {
  * CRLF→LF（文本模式换行翻译是平台产物）+ _glm_worklog.md 的 [MM-DD HH:MM]
  * 行级掩蔽 [TS]（分钟级运行时刻）+ 含 NUL 的二进制不归一（字节即语义）。 */
 function stripCrLf(raw) {
-  const marker = Buffer.from([0x0d, 0x0a])
+  // CRLF → LF：只剥 \r（保留 \n）——与 fakes.py 的 raw.replace(b'\r\n', b'\n') 同构
   const parts = []
   let start = 0
-  for (;;) {
-    const idx = raw.indexOf(marker, start)
-    if (idx === -1) { parts.push(raw.subarray(start)); break }
-    parts.push(raw.subarray(start, idx))
-    start = idx + 2
+  for (let i = 0; i < raw.length; i += 1) {
+    if (raw[i] === 0x0d && raw[i + 1] === 0x0a) {
+      parts.push(raw.subarray(start, i))
+      start = i + 1
+    }
   }
+  parts.push(raw.subarray(start))
   return Buffer.concat(parts)
 }
 function sha256FileNormalized(file) {

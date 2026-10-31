@@ -31,19 +31,33 @@ const loopback = hostname => ['localhost', '127.0.0.1', '::1'].includes(String(h
 
 async function request(target, { method = 'GET', headers = {}, body = null, timeout = 15 } = {}) {
   let url
-  try { url = new URL(String(target || '')) } catch { return { ok: false, error: '端点 URL 无效' } }
-  if (!['http:', 'https:'].includes(url.protocol)) return { ok: false, error: '仅支持 http(s) 端点' }
-  if (url.protocol === 'http:' && !loopback(url.hostname)) return { ok: false, error: '明文 http 仅允许回环地址' }
+  try { url = new URL(String(target || '')) } catch { return { ok: false, error: '端点 URL 无效', kind: 'other' } }
+  if (!['http:', 'https:'].includes(url.protocol)) return { ok: false, error: '仅支持 http(s) 端点', kind: 'other' }
+  if (url.protocol === 'http:' && !loopback(url.hostname)) return { ok: false, error: '明文 http 仅允许回环地址', kind: 'other' }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeout) || 15) * 1000)
   const started = Date.now()
   try {
     const response = await fetch(url, { method, headers, body, signal: controller.signal, redirect: 'error' })
     const text = await response.text()
-    return { ok: response.ok, status: response.status, body: text.slice(0, 2 * 1024 * 1024), ms: Date.now() - started }
+    return { ok: response.ok, status: response.status, body: text.slice(0, 2 * 1024 * 1024),
+      ms: Date.now() - started, kind: response.ok ? 'ok' : 'http' }
   } catch (error) {
-    return { ok: false, error: String(error?.message || error), ms: Date.now() - started }
+    // 错误分类（P0-1c PR5：local_model_service._probe_error_text 同构口径）
+    const aborted = error?.name === 'AbortError' || /aborted|timed? ?out/i.test(String(error?.message || ''))
+    const causeCode = error?.cause?.code || ''
+    const refused = causeCode === 'ECONNREFUSED' || /ECONNREFUSED|10061/i.test(String(error?.cause || error))
+    const kind = aborted ? 'timeout' : refused ? 'refused' : 'other'
+    return { ok: false, error: String(error?.message || error), cause: String(error?.cause || ''), ms: Date.now() - started, kind }
   } finally { clearTimeout(timer) }
+}
+
+/** 探测失败原因人话（_probe_error_text 同构）。 */
+function probeErrorText(result) {
+  if (result.kind === 'http') return `HTTP ${result.status}（端口有服务但非预期响应）`
+  if (result.kind === 'timeout') return '连接超时（端口无响应）'
+  if (result.kind === 'refused') return '端口未监听（服务未启动）'
+  return (result.error || result.cause || '').slice(0, 120) || '连接失败'
 }
 function parseJson(text) { try { return JSON.parse(text) } catch { return null } }
 function modelIds(payload) {
@@ -62,72 +76,174 @@ function modelMeta(id) {
     : { ctx_window: 8192, tool_capable: false, estimated: true }
 }
 
-export async function getLocalProxy() { return okJson({ ok: true, base_url: localBase() }) }
+export async function getLocalProxy() {
+  // PR6：{ok, port, base_url}（base_url=http://127.0.0.1:<port>，无 /v1 后缀——
+  // legacy get_proxy().info() 口径；端口随机 → 差分经 N10/<PROXY> 与 port 键掩蔽）
+  const base = localBase().replace(/\/v1$/, '')
+  const port = Number(new URL(base).port) || 80
+  return okJson({ ok: true, port, base_url: `http://127.0.0.1:${port}` })
+}
 
 export async function localModels(baseUrl, apiKey = '') {
+  // PR5：错误分类人话（local_model_service.models 口径——'获取模型清单失败: <分类>'）
   const base = normalizeBase(baseUrl)
   if (!base) return okJson({ ok: false, error: 'base_url 不能为空', models: [] })
   const result = await request(modelsUrl(base), { headers: { Accept: 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) } })
-  if (!result.ok) return okJson({ ok: false, base_url: base, models: [], error: result.error || `HTTP ${result.status}` })
+  if (!result.ok) {
+    const classified = result.kind === 'refused' ? '端口未监听（服务未启动）'
+      : result.kind === 'timeout' ? '连接超时（端口无响应）'
+        : result.kind === 'http' ? `HTTP ${result.status}（端口有服务但非预期响应）`
+          : (result.error || '').slice(0, 120) || '连接失败'
+    return okJson({ ok: false, error: `获取模型清单失败: ${classified}` })
+  }
   const payload = parseJson(result.body)
   const models = modelIds(payload).map(id => ({ id, ...modelMeta(id) }))
   return okJson({ ok: true, base_url: base, models })
 }
 
-export async function localProbe(ports = null) {
-  let input = ports
+export async function localProbe(portsInput = null) {
+  let input = portsInput
   if (typeof input === 'string' && input.trim()) {
     try { input = JSON.parse(input) } catch { return okJson({ error: 'ports 需要是 JSON 数组，如 [11434,1234]' }) }
   }
   const values = Array.isArray(input) && input.length ? input : [11434, 1234, 8000, 8080, 1919]
-  const clean = [...new Set(values.map(Number).filter(x => Number.isInteger(x) && x >= 1 && x <= 65535))].slice(0, 16)
+  const seen = new Set()
+  const clean = []
+  for (const value of values) {
+    const num = Number(value)
+    if (Number.isInteger(num) && num >= 1 && num <= 65535 && !seen.has(num)) { seen.add(num); clean.push(num) }
+  }
+  const ports = clean.slice(0, 16).length ? clean.slice(0, 16) : [11434, 1234, 8000, 8080, 1919]
   const kinds = { 11434: 'ollama', 1234: 'lmstudio', 8000: 'vllm', 8080: 'llamacpp', 1919: 'freetoken' }
   const started = Date.now()
-  const results = await Promise.all(clean.map(async port => {
+  const results = await Promise.all(ports.map(async port => {
     const base = `http://127.0.0.1:${port}/v1`
     const one = await request(modelsUrl(base), { timeout: 2, headers: { Accept: 'application/json' } })
     const reachable = !!one.ok
     return { base_url: base, kind: kinds[port] || 'custom', reachable,
       models: reachable ? modelIds(parseJson(one.body)) : [], latency_ms: one.ms || 0,
-      ...(reachable ? {} : { error: one.error || `HTTP ${one.status}（端口有服务但非预期响应）` }) }
+      ...(reachable ? {} : { error: probeErrorText(one) }) }
   }))
   return okJson({ ok: true, reachable: results.filter(x => x.reachable),
     unreachable: results.filter(x => !x.reachable), elapsed_ms: Date.now() - started })
 }
 
+/** PR4：readiness 纯函数评分（local_model_service.readiness:877-972 全量表移植）。
+ * 8 项 {name, score, max:2, ok, detail}、总分 16、verdict full(≥12)/partial(≥8)/cloud。 */
+export function readinessScore(modelMeta = {}, cfg = {}, info = {}) {
+  const items = []
+  const unreachable = info.reachable === false
+  const add = (name, score, detail) => items.push({ name, score, max: 2, ok: score === 2, detail })
+
+  // ① tag 固定
+  if (modelMeta.estimated === false && modelMeta.id) {
+    add('model_tagged', 2, `模型 ${modelMeta.id} 元数据已识别（ctx=${modelMeta.ctx_window}）`)
+  } else if (modelMeta.id) {
+    add('model_tagged', 1, `模型 ${modelMeta.id} 为保守估计值（ctx/工具能力按默认推）`)
+  } else {
+    add('model_tagged', 0, '未获取到模型元数据（探测失败或清单为空）')
+  }
+  // ② 工具能力
+  if (modelMeta.tool_capable === true) add('tool_capable', 2, '模型支持工具调用')
+  else if (modelMeta.tool_capable === false) add('tool_capable', 0, '模型无工具调用能力（本地仅可做纯文本草稿）')
+  else add('tool_capable', 1, '工具能力未知（按不可用保守处理）')
+  // ③ schema 输出
+  add('schema_json', info.schema_json ? 2 : 1,
+    info.schema_json ? '本地支持 JSON 约束输出（grammar/json mode）'
+      : '未确认 JSON 约束能力（提示词约束可达标，幻觉参数风险略高）')
+  // ④ 迭代上限
+  const iters = cfg.local_max_iter
+  if (Number.isInteger(iters) && iters >= 1 && iters <= 3) add('iteration_headroom', 2, `迭代上限 ${iters}（本地预算内可完成）`)
+  else if (Number.isInteger(iters) && iters > 3) add('iteration_headroom', 1, `迭代上限 ${iters} 偏大（本地 5s/3s 预算内可能超时降级）`)
+  else add('iteration_headroom', 1, '迭代上限未配置（按默认 1 次）')
+  // ⑤ 路径护栏（不可达时收 0——「不知道」而非「配了」）
+  add('path_guard', unreachable ? 0 : (info.path_guard !== false ? 2 : 0),
+    info.path_guard !== false ? '本地产出路径经工作区门禁归一' : '本地产出未过路径门禁（幻觉路径有越界风险）')
+  // ⑥ 结构化错误
+  if (info.error_kind) add('structured_errors', 2, `错误已分类：${info.error_kind}`)
+  else if (info.reachable === false) add('structured_errors', 0, '端点不可达（连接层错误未分类）')
+  else add('structured_errors', 1, '错误分类能力未确认')
+  // ⑦ 日志可见
+  add('logging_visible', unreachable ? 0 : (info.logging_visible !== false ? 2 : 0),
+    info.logging_visible !== false ? '路由日志落盘（hybrid-route.jsonl）' : '路由日志未启用（降级不可追溯）')
+  // ⑧ keep_alive 提示
+  if (unreachable) add('keep_alive_hint', 0, '端点不可达，无法确认 keep_alive 配置')
+  else if (info.keep_alive) add('keep_alive_hint', 2, 'keep_alive 已配置（防冷启时延）')
+  else add('keep_alive_hint', 1, '未配置 keep_alive（本地阶段可能偶发冷启时延）')
+
+  const score = items.reduce((acc, item) => acc + item.score, 0)
+  const verdict = score >= 12 ? 'full' : score >= 8 ? 'partial' : 'cloud'
+  const suggestions = []
+  if (verdict !== 'full') {
+    for (const item of items) {
+      if (item.score < 2) suggestions.push(`${item.name}：${item.detail}`)
+    }
+  }
+  return { ok: true, score, max: 16, verdict, items, suggestions }
+}
+
 export async function localReadiness(baseUrl, model = '', apiKey = '') {
-  const result = JSON.parse(await localModels(baseUrl, apiKey))
-  const selected = result.models?.find(x => x.id === model) || result.models?.[0]
-  const checks = [
-    ['endpoint', !!result.ok, '本地端点可连接'], ['models', (result.models || []).length > 0, '可读取模型清单'],
-    ['selected', !!selected, '存在可用模型'], ['context', !!selected?.ctx_window, '具备上下文窗口元数据'],
-    ['tools', !!selected?.tool_capable, '工具调用能力'], ['schema', true, 'OpenAI 兼容 schema'],
-    ['guard', true, '工作区路径护栏'], ['errors', true, '结构化错误返回'],
-  ]
-  const score = checks.filter(x => x[1]).length
-  const verdict = score >= 7 ? 'full' : score >= 4 ? 'partial' : 'cloud'
-  return okJson({ ok: true, score, max: checks.length, verdict,
-    items: checks.map(([id, pass, label]) => ({ id, ok: pass, label })),
-    suggestions: checks.filter(x => !x[1]).map(x => `未完成：${x[2]}`), model: selected?.id || model || '' })
+  // api.py:1069-1105 同构：models 拉元数据 → 评分 → model 字段回填
+  const cfg = {}
+  try {
+    const c = readConfigJson('config.json', {})
+    cfg.local_model = c.local_model
+    cfg.local_ctx_window = c.local_ctx_window
+    cfg.local_max_iter = c.local_max_iter
+  } catch { /* 配置读取失败按空 cfg 保守评分 */ }
+  let meta = {}
+  let reachable = null
+  try {
+    const lst = JSON.parse(await localModels(baseUrl, apiKey))
+    reachable = !!lst.ok
+    const want = String(model || cfg.local_model || '')
+    const models = lst.models || []
+    meta = models.find(m => m.id === want) || {}
+    if (!meta.id && models.length) meta = models[0]
+  } catch { reachable = false }
+  const info = {
+    reachable: reachable === null ? false : reachable,
+    keep_alive: true, path_guard: true, logging_visible: true, schema_json: true,
+  }
+  const result = readinessScore(meta, cfg, info)
+  result.model = meta.id || String(model || cfg.local_model || '')
+  return okJson(result)
 }
 
 export async function testProviderEndpoint(baseUrl, apiKey, model, timeout = 15, local = false) {
-  if (!local && !String(apiKey || '')) return okJson({ ok: false, error: 'API Key 不能为空' })
+  // PR5：provider_service.test_endpoint 口径——前置校验文案、错误路径不回显
+  // url/model/state（库文本片段 → ID-203 登记）；成功 {ok, url, model, reply}
   const target = chatUrl(baseUrl)
+  if (!target) return okJson({ ok: false, error: '缺少 Base URL' })
+  if (!local && !String(apiKey || '').trim()) return okJson({ ok: false, error: '缺少 API Key' })
+  if (!String(model || '').trim()) return okJson({ ok: false, error: '缺少模型名' })
   const result = await request(target, { method: 'POST', timeout: timeout || (local ? 30 : 15),
     headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-    body: JSON.stringify({ model: String(model || ''), messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false }) })
+    body: JSON.stringify({ model: String(model).trim(), messages: [{ role: 'user', content: 'ping' }], max_tokens: 5, stream: false }) })
   const payload = parseJson(result.body)
-  if (result.ok) return okJson({ ok: true, url: target, model, state: 'ready',
-    reply: payload?.choices?.[0]?.message?.content || payload?.choices?.[0]?.text || '' })
-  return okJson({ ok: false, url: target, model, state: local && result.status === 503 ? 'loading' : 'error',
-    status: result.status, error: result.error || payload?.error?.message || `HTTP ${result.status}` })
+  if (result.ok) {
+    if (!payload || typeof payload !== 'object' || !('choices' in payload)) {
+      return okJson({ ok: false, error: `HTTP 200 但响应结构异常（非 OpenAI 兼容格式）: ${JSON.stringify(payload).slice(0, 120)}` })
+    }
+    const reply = String(payload.choices?.[0]?.message?.content || '')
+    return okJson({ ok: true, url: target, model, reply: reply.slice(0, 80) })
+  }
+  if (result.kind === 'http') {
+    const snippet = String(result.body || '').slice(0, 300)
+    return okJson({ ok: false, error: `HTTP ${result.status}: ${snippet}`, status: result.status })
+  }
+  // 连接层失败：库文本片段（urlopen/undici 实现差异 → ID-203）
+  return okJson({ ok: false, error: `连接失败: ${result.error}${result.cause && result.cause !== result.error ? ` ${result.cause}` : ''}`.trim() })
 }
 
 /** 面向模型的工具清单：与 legacy tools_schema.build 同数据源/同顺序。 */
-const tool = (name, description, properties = {}, required = [], strict = false) => ({
+const tool = (name, description, properties = {}, required = null, strict = false) => ({
+  // PR2：required=null 省略键（take_screenshot/clipboard_read 等 Python 字面量无此键）；
+  // required=[] 显式保留（list_processes/kill_process/browser_extract 等字面量为空数组）
   type: 'function', function: { name, description,
-    parameters: { type: 'object', properties, required, ...(strict ? { additionalProperties: false } : {}) } },
+    parameters: { type: 'object', properties,
+      ...(required ? { required } : {}),
+      ...(strict ? { additionalProperties: false } : {}) } },
 })
 const PATH = { path: { type: 'string' } }
 const CMD = { cmd: { type: 'string' }, timeout: { type: 'integer' } }
@@ -157,8 +273,8 @@ const FULL_TOOLS = [
   tool('take_screenshot', '截取当前屏幕; 可选区域参数 left/top/width/height',
     { left: { type: 'integer' }, top: { type: 'integer' }, width: { type: 'integer' }, height: { type: 'integer' } }),
   tool('clipboard_read', '读取系统剪贴板文本'), tool('clipboard_write', '写入系统剪贴板文本', { text: { type: 'string' } }, ['text']),
-  tool('list_processes', '列出进程(按内存降序, 可关键字过滤), 配合 kill_process', { keyword: { type: 'string' } }),
-  tool('kill_process', '结束进程(按 pid 或进程名), 请先 list_processes 确认再杀', { pid: { type: 'integer' }, name: { type: 'string' } }),
+  tool('list_processes', '列出进程(按内存降序, 可关键字过滤), 配合 kill_process', { keyword: { type: 'string' } }, []),
+  tool('kill_process', '结束进程(按 pid 或进程名), 请先 list_processes 确认再杀', { pid: { type: 'integer' }, name: { type: 'string' } }, []),
   tool('append_memory', '写入跨会话长期记忆', MEMORY, ['content']),
 ]
 const AGENT_TOOLS = [
@@ -209,7 +325,9 @@ function loadPrompt(promptId) {
     if (!entry) return null
     let file = String(entry.file || `${promptId}.md`)
     if (path.basename(file) !== file || file.includes('..')) file = `${promptId}.md`
-    const text = fs.readFileSync(path.join(PROMPTS_DIR, file), 'utf8')
+    // PR3：读入 LF 归一（Windows checkout CRLF 是环境产物；Python 侧读用
+    // newline='' 语义——文件本身 LF，双侧字节对齐）
+    const text = fs.readFileSync(path.join(PROMPTS_DIR, file), 'utf8').replace(/\r\n/g, '\n')
     return { text, version: String(entry.version || '1.0.0') }
   } catch { return null }
 }
@@ -234,14 +352,16 @@ async function memoryTail(query) {
 }
 
 export async function buildSystemPrompt(query = '') {
+  // PR1：编码形态对齐——legacy ok(text)=json.dumps(text)（HTTP body 是 JSON
+  // 编码字符串）。沙箱尾注不注入（Node 无 Job 沙箱，不伪造安全声明 → ID-201）。
   const { getWsEnabled } = await import('./workspace.js')
   const enabled = JSON.parse(await getWsEnabled(runtime.currentSid)).enabled !== false
   const root = effectiveRoot(runtime.currentSid)
   const tail = await memoryTail(String(query || ''))
   const rendered = renderPrompt(enabled ? 'system-base' : 'system-ws-off', { ws_root: root })
-  if (rendered) return rendered + tail
-  if (!enabled) return '你是 Harbor 内置编程助手。当前**未启用工作区**：不要假设或猜测任何工作区路径，不要主动列出/创建/修改文件或文件夹；用户要求文件操作时，先请其启用工作区。' + tail
-  return `你是 Harbor 内置编程助手。当前工作区: ${root}\n硬规则:\n1. 文件操作只用工具, 禁止用 Get-Content/Set-Content(后端已强制 UTF-8)。\n2. 写文件串行: 一次一个 write_file/append_file/search_replace, 等返回成功再写下一个。\n3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。${tail}`
+  if (rendered) return okJson(rendered + tail)
+  if (!enabled) return okJson('你是 Harbor 内置编程助手。当前**未启用工作区**：不要假设或猜测任何工作区路径，不要主动列出/创建/修改文件或文件夹；用户要求文件操作时，先请其启用工作区。' + tail)
+  return okJson(`你是 Harbor 内置编程助手。当前工作区: ${root}\n硬规则:\n1. 文件操作只用工具, 禁止用 Get-Content/Set-Content(后端已强制 UTF-8)。\n2. 写文件串行: 一次一个 write_file/append_file/search_replace, 等返回成功再写下一个。\n3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。${tail}`)
 }
 
 export async function promptGet(promptId) {
@@ -263,8 +383,9 @@ export async function traceNew() {
 }
 
 export async function uiNudge(visibility = 'visible') {
-  // Node 服务没有 pywebview 原生窗口；明确报告未逼帧，不能返回伪成功。
-  return okJson({ nudged: false, reason: 'window-not-ready', visibility: String(visibility || 'visible') })
+  // PR7：{nudged, reason}（无 visibility 键——api.py:405-416 口径；Node 服务
+  // 无原生窗口，如实报告未逼帧；visibility 诊断日志 P0-4 桌面壳接入）
+  return okJson({ nudged: false, reason: 'window-not-ready' })
 }
 
 export async function clarifyCollect(questions, answers) {

@@ -10,6 +10,7 @@ import { getConfig, saveConfig } from './services/config.js'
 import { getCwd, setWorkspace, getWorklog, appendWorklog } from './services/worklog.js'
 import {
   listDir, readFile, readMore, writeFile, appendFile, searchReplace, makeDir, getFileInfo,
+  movePath, copyPath,
 } from './services/files.js'
 import { setCurrentSid } from './runtime.js'
 import { readConfigText, readConfigJson, mergeConfig } from './services/jsonstore.js'
@@ -137,8 +138,8 @@ register('set_ws_dir', async path => workspace.setWsDir(path))
 register('list_recent_ws', async () => workspace.listRecentWs())
 register('save_workspace_file', async (name, text) => workspace.saveWorkspaceFile(name, text))
 register('copy_into_ws', async (src, name) => workspace.copyIntoWs(src, name))
-register('copy_path', async (path, new_path) => workspace.copyPath(path, new_path))
-register('move_path', async (path, new_path) => workspace.movePath(path, new_path))
+register('copy_path', async (path, new_path) => copyPath(path, new_path))
+register('move_path', async (path, new_path) => movePath(path, new_path))
 register('delete_path', async (path, recycle, token) => workspace.deletePath(path, recycle, token))
 
 /* 记忆 */
