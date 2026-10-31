@@ -5,6 +5,9 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { CONFIG_DIR, ensureDir, atomicWriteJson, readJsonIfExists } from '../paths.js'
 import { ENC_PREFIX, W17_WARNING, encryptValue, decryptValue } from './dpapi.js'
+import { materializeSessions, importLegacySessions } from './session-migrate.js'
+import { currentDbPath } from '../db.js'
+import os from 'node:os'
 
 const SCOPE = ['config.json', 'sessions.json', 'audit_log.jsonl']
 const POLICIES = new Set(['ask', 'local_wins', 'remote_wins', 'keep_both'])
@@ -139,15 +142,18 @@ function davError(status, data) {
     404: '路径不存在（404）', 405: '方法不被允许（405）', 409: '冲突（409）：父目录不存在', 507: '服务端存储不足（507）' })[status] || `HTTP ${status}`
   return text + (detail ? `：${detail}` : '')
 }
-async function plan() {
+async function plan(sessionsSource = null) {
+  // P0-2 T04（§4.3）：sessions.json 由 materializeSessions 在暂存区生成
+  // （sessionsSource=暂存绝对路径）；未配置错误路径不传 → 维持 missing:true
+  // 原形状（webdav-offline fixture 契约面零变化）
   const out = []
   for (const rel of SCOPE) {
-    const file = path.join(CONFIG_DIR, rel)
+    const file = sessionsSource && rel === 'sessions.json' ? sessionsSource : path.join(CONFIG_DIR, rel)
     if (!fs.existsSync(file)) out.push({ path: rel, missing: true })
     else {
       const stat = await fsp.stat(file)
       if (stat.size > MAX_BYTES) throw new Error(`${rel} 超过 256 MB 上限，备份已中止`)
-      out.push({ path: rel, sha256: fileSha(file), bytes: stat.size })
+      out.push({ path: rel, sha256: fileSha(file), bytes: stat.size, sourceFile: file })
     }
   }
   return out
@@ -167,24 +173,37 @@ export async function webdavTest(cfgJson = '{}') {
 }
 export async function webdavExport() {
   const { record, error } = await storedRecord()
-  const items = await plan().catch(e => [{ error: e.message }])
-  if (error) return json({ ok: false, error, plan: items })
-  if (items.some(x => x.error)) return json({ ok: false, error: items[0].error })
-  const uploaded = []
+  if (error) {
+    // 未配置错误路径：不物化（维持原 plan 形状——missing 标记契约面）
+    const items = await plan().catch(e => [{ error: e.message }])
+    return json({ ok: false, error, plan: items })
+  }
+  // P0-2 T04（§4.3 export）：sessions.json 由 materializeSessions 在暂存区生成
+  // （DB 当前态内容；sha256 入 manifest——与 Python 文件直读语义等价）
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-dav-export-'))
   try {
-    const mkcol = await dav(record, 'MKCOL')
-    if (![200, 201, 204, 405, 409].includes(mkcol.status)) return json({ ok: false, error: `远端目录创建失败: ${davError(mkcol.status, mkcol.data)}` })
-    for (const item of items.filter(x => !x.missing)) {
-      const response = await dav(record, 'PUT', item.path, await fsp.readFile(path.join(CONFIG_DIR, item.path)),
-        { 'Content-Type': 'application/octet-stream' }, 120000)
-      if (![200, 201, 204].includes(response.status)) return json({ ok: false, error: `上传 ${item.path} 失败: ${davError(response.status, response.data)}`, uploaded })
-      uploaded.push(item.path)
-    }
-    const manifest = { version: 1, created_at: new Date().toISOString(), items: items.filter(x => !x.missing) }
-    const response = await dav(record, 'PUT', 'manifest.json', JSON.stringify(manifest, null, 1), { 'Content-Type': 'application/json' }, 60000)
-    if (![200, 201, 204].includes(response.status)) return json({ ok: false, error: `manifest 上传失败: ${davError(response.status, response.data)}`, uploaded })
-    return json({ ok: true, uploaded, manifest })
-  } catch (error) { return json({ ok: false, error: `WebDAV 备份失败: ${error.message}`, uploaded }) }
+    await materializeSessions(path.join(staging, 'sessions.json'))
+    const items = await plan(path.join(staging, 'sessions.json')).catch(e => [{ error: e.message }])
+    if (items.some(x => x.error)) return json({ ok: false, error: items[0].error })
+    const uploaded = []
+    try {
+      const mkcol = await dav(record, 'MKCOL')
+      if (![200, 201, 204, 405, 409].includes(mkcol.status)) return json({ ok: false, error: `远端目录创建失败: ${davError(mkcol.status, mkcol.data)}` })
+      for (const item of items.filter(x => !x.missing)) {
+        const response = await dav(record, 'PUT', item.path, await fsp.readFile(item.sourceFile || path.join(CONFIG_DIR, item.path)),
+          { 'Content-Type': 'application/octet-stream' }, 120000)
+        if (![200, 201, 204].includes(response.status)) return json({ ok: false, error: `上传 ${item.path} 失败: ${davError(response.status, response.data)}`, uploaded })
+        uploaded.push(item.path)
+      }
+      const manifest = { version: 1, created_at: new Date().toISOString(), items: items.filter(x => !x.missing) }
+      const response = await dav(record, 'PUT', 'manifest.json', JSON.stringify(manifest, null, 1), { 'Content-Type': 'application/json' }, 60000)
+      if (![200, 201, 204].includes(response.status)) return json({ ok: false, error: `manifest 上传失败: ${davError(response.status, response.data)}`, uploaded })
+      return json({ ok: true, uploaded, manifest })
+    } catch (error) { return json({ ok: false, error: `WebDAV 备份失败: ${error.message}`, uploaded }) }
+  } finally {
+    // 暂存区是本次导出的临时产物（非用户数据）——用完即清理
+    fs.rmSync(staging, { recursive: true, force: true })
+  }
 }
 function classify(local, remote, baseline) {
   const out = { unchanged: [], only_local: [], only_remote: [], conflicts: [] }
@@ -213,6 +232,13 @@ export async function webdavRestore(payloadJson) {
   const baseline = parse(payloadJson || '{}')
   if (!baseline || !Array.isArray(baseline.items)) return json({ ok: false, error: 'manifest 结构异常（缺 items 数组）' })
   if (baseline.items.some(x => !x || !x.path || !x.sha256)) return json({ ok: false, error: 'manifest items 每项需含 path 与 sha256' })
+  // P0-2 T04（§4.3 restore）：恢复前自动备份当前 DB（harbor.db.pre-restore.bak
+  // 于 CONFIG_DIR，回滚保险；已存在不覆盖——保留最早证据）
+  const activeDb = currentDbPath()
+  if (fs.existsSync(activeDb)) {
+    const preRestoreBackup = path.join(CONFIG_DIR, 'harbor.db.pre-restore.bak')
+    if (!fs.existsSync(preRestoreBackup)) fs.copyFileSync(activeDb, preRestoreBackup)
+  }
   try {
     const downloaded = {}; const localSha = {}; const remoteSha = {}; const baselineSha = {}
     for (const item of baseline.items) {
@@ -233,6 +259,20 @@ export async function webdavRestore(payloadJson) {
     const applied = []; const kept = []
     for (const item of restorePlan) {
       if (item.action === 'download') {
+        if (item.path === 'sessions.json') {
+          // P0-2 T04（§4.3 restore）：sessions.json 不再写文件——
+          // importLegacySessions({mode:'replace'}) 事务内全量替换（Python 文件级
+          // 替换语义）；暂存文件仅作中转，不写 CONFIG_DIR
+          const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-dav-restore-'))
+          try {
+            const stagingFile = path.join(staging, 'sessions.json')
+            await fsp.writeFile(stagingFile, downloaded['sessions.json'])
+            const imported = await importLegacySessions(stagingFile, { mode: 'replace' })
+            if (imported.error) return json({ ok: false, error: `sessions 恢复导入失败: ${imported.error}`, applied })
+            applied.push('sessions.json')
+          } finally { fs.rmSync(staging, { recursive: true, force: true }) }
+          continue
+        }
         const target = path.join(CONFIG_DIR, item.path); ensureDir(path.dirname(target))
         const tmp = `${target}.${process.pid}.restore.tmp`; await fsp.writeFile(tmp, downloaded[item.path]); await fsp.rename(tmp, target)
         if (fileSha(target) !== remoteSha[item.path]) return json({ ok: false, error: `落盘校验失败：${item.path}` })
