@@ -88,20 +88,29 @@ export async function openBilling() {
 }
 
 export async function getClipboard(token = null) {
+  // P0-1c CL2：{ok, text, len}（clipboard_service.get_clipboard 口径）
   const refusal = await enforceExec('clipboard_read', {}, token)
   if (refusal) return errJson(refusal)
   if (!IS_WIN) return errJson('当前平台暂未实现剪贴板读取')
   const { stdout } = await ps('Get-Clipboard -Raw')
-  return stdout.replace(/\r?\n$/, '')
+  const text = stdout.replace(/\r?\n$/, '')
+  return okJson({ ok: true, text, len: text.length })
 }
 
 export async function setClipboard(text, token = null) {
+  // P0-1c CL1：{ok, len, verified}——写后回读校验（与 legacy 同语义；
+  // 差分 mock 环境回读即共享槽位值）
   const value = String(text ?? '')
   const refusal = await enforceExec('clipboard_write', { len: value.length }, token)
   if (refusal) return errJson(refusal)
   if (!IS_WIN) return errJson('当前平台暂未实现剪贴板写入')
   await ps('Set-Clipboard -Value $args[0]', [value])
-  return '{"ok":true}'
+  let verified = false
+  try {
+    const { stdout } = await ps('Get-Clipboard -Raw')
+    verified = stdout.replace(/\r?\n$/, '') === value
+  } catch { verified = false }
+  return okJson({ ok: true, len: value.length, verified })
 }
 
 export async function pickFolder(sid = null) { // sid 保留 legacy 参数面；原生对话框不依赖会话状态

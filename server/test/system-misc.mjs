@@ -51,10 +51,15 @@ check('list_processes 返回带 pid 的数组', () => {
 
 // 剪贴板：先备份原文，测试后恢复（不污染用户状态）
 let clipboardBackup = null
-try { clipboardBackup = await system.getClipboard() } catch (error) { clipboardBackup = null }
-await system.setClipboard('harbor-clipboard-test')
-const clip = await system.getClipboard()
-check('set/get_clipboard 回环', () => assert.equal(clip, 'harbor-clipboard-test'))
+try { clipboardBackup = JSON.parse(await system.getClipboard()).text } catch (error) { clipboardBackup = null }
+const clipSet = JSON.parse(await system.setClipboard('harbor-clipboard-test'))
+const clip = JSON.parse(await system.getClipboard())
+check('set/get_clipboard 回环（P0-1c CL1/CL2：{ok,len,verified}/{ok,text,len}）', () => {
+  assert.equal(clipSet.verified, true)
+  assert.equal(clipSet.len, 21)
+  assert.equal(clip.text, 'harbor-clipboard-test')
+  assert.equal(clip.len, 21)
+})
 if (clipboardBackup !== null) await system.setClipboard(clipboardBackup)
 
 const tools = JSON.parse(await provider.buildTools('full', false, false))
