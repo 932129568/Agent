@@ -81,7 +81,7 @@ function brief(value, limit = 400) {
 
 function verdictFrom(delta, extra) {
   if (delta && !delta.expired) {
-    return { verdict: 'intentional', deltaId: delta.id, approval: delta.approvedBy || 'pending', ...extra }
+    return { verdict: 'intentional', deltaId: delta.id, approval: delta.approvedBy || 'pending', expires: delta.expires || '—', ...extra }
   }
   if (delta && delta.expired) {
     return { verdict: 'suspect', note: `登记 ${delta.id} 已过期（expires=${delta.expires}），回到 suspect 强制复审`, ...extra }

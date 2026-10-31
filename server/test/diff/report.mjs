@@ -90,7 +90,7 @@ export function renderMarkdown(report, uncoveredEntries) {
   lines.push('|---|---|---|---|---|')
   for (const item of intentionals) {
     lines.push(`| ${item.deltaId} | ${item.fixture} / ${item.callId} | ${item.method} | `
-      + `${item.approval === 'pending' || !item.approval ? '**待签核**' : item.approval} | — |`)
+      + `${item.approval === 'pending' || !item.approval ? '**待签核**' : item.approval} | ${item.expires || '—'} |`)
   }
   lines.push('')
 
