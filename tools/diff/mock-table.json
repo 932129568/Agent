@@ -173,7 +173,8 @@
       "file": "taskkill.exe",
       "argvContains": [],
       "stdout": "成功: 已终止 PID 为 12345 的进程。\r\n",
-      "exitCode": 0
+      "exitCode": 0,
+      "encoding": "gbk"
     },
     {
       "name": "ps-set-clipboard",

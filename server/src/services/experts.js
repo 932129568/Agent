@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { CONFIG_DIR, atomicWriteJson, readJsonIfExists } from '../paths.js'
+import { importBuiltinExperts } from './expert-builtin.js'
 
 const REGISTRY = () => path.join(CONFIG_DIR, 'experts.json')
 const ROOT = () => path.join(CONFIG_DIR, 'experts')
@@ -13,12 +14,20 @@ const VERSION_RE = /^\d+\.\d+\.\d+(?:-[A-Za-z0-9][A-Za-z0-9.-]{0,31})?$/
 const TEXT_EXT = new Set(['.md', '.txt', '.json', '.csv', '.yaml', '.yml'])
 const SECRETS = new Set(['.env', 'credentials.json', 'secrets.json', 'id_rsa', 'id_dsa'])
 const DEFAULT_LIMITS = { maxPackageBytes: 33554432, maxFileBytes: 1048576, maxFiles: 512, maxDepth: 8,
-  maxAgents: 64, maxSkills: 64, maxResources: 256, maxResourceBytes: 262144, maxPromptBytes: 262144,
-  maxMembers: 12, memberCalls: 8, maxTurns: 40, maxActorTurns: 12, maxToolCalls: 120, runTokens: 200000 }
+  maxAgents: 64, maxSkills: 64, maxResources: 256, maxMetadataBytes: 65536, maxResourceBytes: 262144,
+  maxPromptBytes: 262144, maxMembers: 12, memberCalls: 8, maxTurns: 40, maxActorTurns: 12,
+  maxToolCalls: 120, mailboxMessages: 64, mailboxMessageBytes: 16384, mailboxBytes: 262144,
+  runEvents: 1000, sessionEvents: 4000, eventRate: 20, runDeadlineSec: 1800,
+  memberDeadlineSec: 480, mailboxWaitSec: 600, runTokens: 200000 }
 const RANGES = { maxPackageBytes: [1048576, 33554432], maxFileBytes: [65536, 1048576], maxFiles: [16, 512],
-  maxDepth: [2, 8], maxAgents: [1, 64], maxSkills: [0, 64], maxResources: [0, 256], maxResourceBytes: [4096, 262144],
+  maxDepth: [2, 8], maxAgents: [1, 64], maxSkills: [0, 64], maxResources: [0, 256],
+  maxMetadataBytes: [4096, 65536], maxResourceBytes: [4096, 262144],
   maxPromptBytes: [1024, 262144], maxMembers: [2, 12], memberCalls: [0, 8], maxTurns: [1, 40],
-  maxActorTurns: [1, 12], maxToolCalls: [1, 120], runTokens: [1000, 200000] }
+  maxActorTurns: [1, 12], maxToolCalls: [1, 120], mailboxMessages: [1, 64],
+  mailboxMessageBytes: [1024, 16384], mailboxBytes: [16384, 262144],
+  runEvents: [100, 1000], sessionEvents: [400, 4000], eventRate: [1, 20],
+  runDeadlineSec: [60, 1800], memberDeadlineSec: [60, 480], mailboxWaitSec: [60, 600],
+  runTokens: [1000, 200000] }
 const json = value => JSON.stringify(value)
 const fail = (code, message, extra = {}) => ({ ok: false, error: { code, message, ...extra } })
 const sha = data => crypto.createHash('sha256').update(data).digest('hex')
@@ -65,6 +74,17 @@ function digest(records) {
   for (const rel of Object.keys(records).sort()) { hash.update(rel, 'utf8'); hash.update(Buffer.from([0])); hash.update(records[rel].data) }
   return hash.digest('hex')
 }
+/** frontmatter maxTurns 提取（AGENT_LIMIT_INTERSECTED 警告用，validator.py:235-239）。 */
+function agentMaxTurns(data) {
+  const text = data.toString('utf8')
+  if (!text.startsWith('---')) return null
+  const end = text.indexOf('\n---', 3)
+  if (end === -1) return null
+  const front = text.slice(4, end)
+  const match = front.match(/^maxTurns:\s*(-?\d+)\s*$/m)
+  return match ? parseInt(match[1], 10) : null
+}
+
 function manifestFor(records) {
   const metaRel = ['.codebuddy-plugin/plugin.json', '.workbuddy-plugin/plugin.json', 'plugin.json'].find(x => records[x])
   if (!metaRel) throw new Error('缺少 .codebuddy-plugin/plugin.json（或兼容路径）')
@@ -73,22 +93,56 @@ function manifestFor(records) {
   const packageId = String(metadata.name || '').toLowerCase()
   if (!ID_RE.test(packageId)) throw new Error('专家包 name 非法')
   if (!VERSION_RE.test(String(metadata.version || ''))) throw new Error('专家包 version 必须是 semver')
-  const agents = (metadata.agents || []).map(x => String(x).replace(/^\.\//, ''))
-  const skills = (metadata.skills || []).map(x => String(x).replace(/^\.\//, '').replace(/\/$/, ''))
+  // agents 解析（validator._agent_paths：声明为文件或目录前缀 → 直接 .md 扫描，排序去重）
+  const declared = metadata.agents === undefined ? './agents/' : metadata.agents
+  const declaredItems = typeof declared === 'string' ? [declared] : declared
+  if (!Array.isArray(declaredItems)) throw new Error('agents 必须是目录字符串或文件数组')
+  const selected = []
+  for (const item of declaredItems) {
+    let rel = String(item).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (rel.includes('..') || rel.startsWith('/')) throw new Error('声明的 agents 路径越界')
+    if (records[rel] && rel.endsWith('.md')) { selected.push(rel); continue }
+    const prefix = rel.replace(/\/$/, '') + '/'
+    for (const key of Object.keys(records)) {
+      if (key.startsWith(prefix) && key.endsWith('.md') && !key.slice(prefix.length).includes('/')) selected.push(key)
+    }
+  }
+  const agents = [...new Set(selected)].sort()
+  if (!agents.length) throw new Error('未找到任何 Agent Markdown')
+  const skills = (typeof metadata.skills === 'string' ? [metadata.skills] : (metadata.skills || []))
+    .map(x => String(x).replace(/^\.\//, '').replace(/\/$/, ''))
   for (const rel of agents) if (!records[rel]) throw new Error(`声明的 agent 不存在: ${rel}`)
   if (agents.length > 64 || skills.length > 64) throw new Error('agents/skills 数量超限')
+  // AGENT_LIMIT_INTERSECTED 警告（validator.py:238-239：maxTurns > maxActorTurns）
+  const warnings = []
+  for (const rel of agents) {
+    const turns = agentMaxTurns(records[rel].data)
+    if (turns !== null && turns > DEFAULT_LIMITS.maxActorTurns) warnings.push(`AGENT_LIMIT_INTERSECTED:${rel}`)
+  }
   const resources = Object.keys(records).filter(rel => TEXT_EXT.has(path.extname(rel).toLowerCase()) && rel !== metaRel)
   return { schema_version: 1, package_id: packageId, kind: metadata.expertType === 'team' ? 'team' : 'agent',
     version: String(metadata.version), metadata, agents, team: metadata.teamInfo || null, skills, resources,
-    scripts: [], limits: { ...DEFAULT_LIMITS }, validation: { valid: true, warnings: [] },
-    readable_paths: resources, metadata_path: metaRel }
+    scripts: [], limits: { ...DEFAULT_LIMITS }, validation: { valid: true, warnings },
+    readable_paths: [...new Set([...resources, ...agents])].sort(), metadata_path: metaRel }
 }
 
-export async function expertImportDirectory(directory) {
+export async function expertImportDirectory(directory, sourceKind = 'directory') {
   try {
+    if (sourceKind !== 'directory' && sourceKind !== 'builtin') {
+      return json(fail('INVALID_IMPORT_SOURCE', '导入来源只允许 directory/builtin'))
+    }
     const source = String(directory || '').trim()
-    if (!source || !fs.statSync(source).isDirectory()) return json(fail('INVALID_IMPORT_SOURCE', '导入路径必须是已存在目录'))
+    // P0-1c E2：目录不可读类 → PATH_UNAVAILABLE + 绝对路径 + 稳定类名映射（Python 口径）
+    if (!source) return json(fail('PATH_UNAVAILABLE', '路径无法读取', { path: '', details: 'FileNotFoundError' }))
+    let stat
+    try { stat = fs.statSync(source) } catch (error) {
+      const kindName = error.code === 'ENOENT' ? 'FileNotFoundError'
+        : error.code === 'EACCES' || error.code === 'EPERM' ? 'PermissionError' : 'OSError'
+      return json(fail('PATH_UNAVAILABLE', '路径无法读取', { path: path.resolve(source), details: kindName }))
+    }
+    if (!stat.isDirectory()) return json(fail('PATH_UNAVAILABLE', '路径无法读取', { path: path.resolve(source), details: 'NotADirectoryError' }))
     const records = scan(source); const manifest = manifestFor(records); const snapshotId = digest(records)
+    const warnings = manifest.validation.warnings
     const finalDir = path.join(ROOT(), 'snapshots', manifest.package_id, snapshotId)
     const staging = path.join(ROOT(), 'staging', `${process.pid}-${crypto.randomUUID()}`)
     await fsp.mkdir(staging, { recursive: true })
@@ -105,12 +159,24 @@ export async function expertImportDirectory(directory) {
       const data = registry(); const record = data.packages[manifest.package_id] ||= { enabled: false, active_snapshot: '', snapshots: [] }
       if (!record.snapshots.some(x => x.digest === snapshotId)) record.snapshots.push({ digest: snapshotId,
         version: manifest.version, kind: manifest.kind, name: manifest.package_id, registered_at: new Date().toISOString(),
-        source: { kind: 'directory', name: path.basename(source) }, warnings: [], valid: true })
+        source: { kind: sourceKind, name: sourceKind === 'builtin' ? manifest.package_id : path.basename(source) },
+        warnings, valid: true })
       commit(data)
-      return json({ ok: true, package_id: manifest.package_id, snapshot_id: snapshotId, version: manifest.version, activated: false, warnings: [] })
+      return json({ ok: true, package_id: manifest.package_id, snapshot_id: snapshotId, version: manifest.version, activated: false, warnings })
     } catch (error) { await fsp.rm(staging, { recursive: true, force: true }).catch(() => {}); throw error }
   } catch (error) { return json(fail('EXPERT_IMPORT_INVALID', error.message)) }
 }
+
+/** 内置专家包导入（P0-1c E1）：容器构造期一次（Python container.py:120-127 同构）。
+ * once 标志防重复；失败 warning 不中断 registry 初始化。 */
+let builtinReady = false
+export async function ensureBuiltinExperts() {
+  if (builtinReady) return
+  builtinReady = true
+  try { await importBuiltinExperts(expertImportDirectory) }
+  catch { /* registry 初始化不因 builtin 失败而崩溃（Python 同口径） */ }
+}
+await ensureBuiltinExperts()
 export async function expertList(query = '') {
   const q = String(query || '').toLowerCase(); const packages = []
   for (const [id, record] of Object.entries(registry().packages).sort(([a], [b]) => a.localeCompare(b))) {
@@ -158,7 +224,8 @@ export async function expertSetEnabled(packageId, enabled, snapshotId = '') {
 }
 export async function expertReadResource(snapshotId, relative) {
   try {
-    if (!DIGEST_RE.test(String(snapshotId))) throw new Error('snapshot ID 非法')
+    // P0-1c E3：非法 snapshot id → INVALID_SNAPSHOT_ID（分类对齐 Python；无 path 键）
+    if (!DIGEST_RE.test(String(snapshotId))) return json(fail('INVALID_SNAPSHOT_ID', 'snapshot ID 非法'))
     const base = path.join(ROOT(), 'snapshots'); let found
     for (const id of fs.existsSync(base) ? fs.readdirSync(base) : []) {
       const candidate = path.join(base, id, snapshotId); if (fs.existsSync(candidate)) { found = loadSnapshot(id, snapshotId); break }

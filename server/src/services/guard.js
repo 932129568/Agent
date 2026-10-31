@@ -217,6 +217,14 @@ function fnmatch(text, pattern) {
   return new RegExp(`^${escaped}$`, 'i').test(text)
 }
 
+/** Python _BUILTIN_PROTECTED_PROCESSES（guard_service.py:120-125）：内置进程保护名单。 */
+const BUILTIN_PROTECTED_PROCESSES = new Set([
+  'system', 'system idle process', 'idle',
+  'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe',
+  'services.exe', 'lsass.exe', 'svchost.exe', 'explorer.exe',
+  'dwm.exe', 'sihost.exe', 'taskhostw.exe', 'ctfmon.exe',
+])
+
 function matchProtect(detail) {
   const cfg = loadCfg()
   for (const p of detailPaths(detail)) {
@@ -225,6 +233,14 @@ function matchProtect(detail) {
       fnmatch(lower, x) || fnmatch(lower, `${x}\\*`) || fnmatch(lower, `${x}/*`))
     if (hit) return { pattern: hit, path: p }
   }
+  return null
+}
+
+function processProtected(name) {
+  const normalized = String(name || '').trim().toLowerCase()
+  if (!normalized) return null
+  if (BUILTIN_PROTECTED_PROCESSES.has(normalized)) return normalized
+  if (loadCfg().protect_processes.includes(normalized)) return normalized
   return null
 }
 
@@ -247,13 +263,24 @@ export async function guardCheck(op, detail = {}) {
   if (!GUARD_OPS.includes(op)) return JSON.stringify({ action: 'allow' })
   const tier = tierOf(op)
 
-  // ① 保护名单优先于一切（Python：仅 delete_path/kill_process 有名单判定）
+  // ① 保护名单优先于一切（名单命中 = 无条件阻断；deny 先于 grant/rules）
   if (op === 'delete_path') {
     const hit = matchProtect(detail)
     if (hit) {
       return JSON.stringify({
         action: 'block',
         reason: `路径 ${detail.path} 命中保护名单（${hit.pattern}），已拒绝删除。如确需删除请用户手动操作或在设置中调整保护名单。`,
+      })
+    }
+  }
+  if (op === 'kill_process') {
+    // 修复 ⑦（并入 C1）：pid 不当进程名做 fnmatch；pid→进程名反查在 Api 层
+    // 完成后随 detail.name 传入（guard_service.py:381-389 逐字）
+    const hit = processProtected(detail.name)
+    if (hit) {
+      return JSON.stringify({
+        action: 'block',
+        reason: `进程 ${hit} 属于保护名单，已拒绝结束。如确需结束请用户手动操作或在设置中调整保护名单。`,
       })
     }
   }

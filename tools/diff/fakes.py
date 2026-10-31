@@ -353,8 +353,8 @@ def make_fake_subprocess_run(table):
             if entry.get('timeout'):
                 raise subprocess.TimeoutExpired(
                     cmd=args, timeout=kw.get('timeout', 60))
-            stdout = _expand_stdout(entry).encode('utf-8')
-            stderr = str(entry.get('stderr') or '').encode('utf-8')
+            stdout = _expand_stdout(entry).encode(entry.get('encoding') or 'utf-8')
+            stderr = str(entry.get('stderr') or '').encode(entry.get('encoding') or 'utf-8')
             return subprocess.CompletedProcess(
                 args, int(entry.get('exitCode') or 0), stdout=stdout, stderr=stderr)
         # 未命中：放行真实子进程（如 prisma/git 等基础设施调用）

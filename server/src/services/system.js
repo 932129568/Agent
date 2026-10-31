@@ -6,7 +6,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { enforceExec } from './guard.js'
+import iconv from 'iconv-lite'
+import { enforceExec, ARMED } from './guard.js'
+import { guardAudit } from './misc.js'
 
 const run = promisify(execFile)
 const okJson = value => JSON.stringify(value)
@@ -178,17 +180,130 @@ $g.Dispose(); $bmp.Dispose(); $ms.Dispose()`
   } catch (error) { return errJson(`截图失败: ${error.message}`) }
 }
 
-export async function killProcess(pid = null, name = null, token = null) {
-  const refusal = await enforceExec('kill_process', { pid: pid || '', name: name || '' }, token)
-  if (refusal) return errJson(refusal)
-  if (IS_WIN) {
-    if (pid) await run('taskkill', ['/PID', String(pid), '/F'])
-    else if (name) await run('taskkill', ['/IM', String(name), '/F'])
-    else return errJson('需要 pid 或 name')
-    return okJson({ ok: true, pid: pid || null, name: name || null })
+/* ---------------- 进程（P0-1c K1：四层防线，对齐 process_service.py:126-164） ---------------- */
+
+// 关键进程保护名单（小写比较）：强杀可致系统不稳定/会话丢失（逐字迁移）
+const PROTECTED_NAMES = new Set(['system', 'system idle process', 'idle',
+  'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe',
+  'services.exe', 'lsass.exe', 'svchost.exe', 'explorer.exe',
+  'dwm.exe', 'sihost.exe', 'taskhostw.exe', 'ctfmon.exe'])
+// pid 保护：Idle(0)/System(4)/自身
+const PROTECTED_PIDS = new Set([0, 4])
+
+/** Python %r 语义（str repr 单引号口径）。 */
+const pyRepr = value => `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+
+/** 控制台解码（W13：OEM/GBK 优先 + 替换符最少启发；process_service._decode_console）。 */
+function decodeConsole(buf) {
+  if (!buf || !buf.length) return ''
+  let best = null
+  let bestBad = null
+  for (const encoding of ['gbk', 'utf8']) {
+    const text = iconv.decode(buf, encoding)
+    const bad = (text.match(/\uFFFD/g) || []).length
+    if (best === null || bad < bestBad) { best = text; bestBad = bad }
+    if (bad === 0) break
   }
-  if (pid) await run('kill', ['-9', String(pid)])
-  else if (name) await run('pkill', ['-9', '-f', String(name)])
-  else return errJson('需要 pid 或 name')
-  return okJson({ ok: true, pid: pid || null, name: name || null })
+  return best
+}
+
+/** S2：pid → 进程名反查（tasklist /fi CSV；OEM 优先解码口径同 legacy W13）。 */
+async function resolveNameByPid(pid) {
+  try {
+    const { stdout } = await run('tasklist', ['/fi', `PID eq ${Number(pid)}`, '/fo', 'csv', '/nh'],
+      { timeout: 15000, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer' })
+    const raw = decodeConsole(stdout)
+    for (const line of raw.split(/\r?\n/)) {
+      const parts = line.split('","').map(col => col.replace(/^"|"$/g, '').trim())
+      if (parts.length >= 2 && parts[1] === String(Number(pid))) return parts[0]
+    }
+  } catch { /* 反查失败 → None（调用方降级处理，与 Python 同款不额外收紧） */ }
+  return null
+}
+
+/** P4：保护名单判定（process_service._protection_reason 逐字）。 */
+function protectionReason(pid, name) {
+  if (pid !== null && pid !== undefined) {
+    const pidNum = Number(pid)
+    if (Number.isInteger(pidNum) && (PROTECTED_PIDS.has(pidNum) || pidNum === process.pid)) {
+      return `pid=${pidNum} 是系统关键进程或 Harbor 自身，已拒绝强杀`
+    }
+  }
+  if (name && PROTECTED_NAMES.has(String(name).trim().toLowerCase())) {
+    return `进程 ${name} 属于系统关键进程，已拒绝强杀`
+  }
+  return null
+}
+
+export async function killProcess(pid = null, name = null, token = null) {
+  const detail = { pid: pid !== null && pid !== undefined ? pid : '', name: name || '' }
+  const refusal = await enforceExec('kill_process', detail, token)
+  if (refusal) return errJson(refusal)
+
+  try {
+    // ---- api 层（api.py:620-639）：反查前置 + 伪造名拒绝 ----
+    if (pid !== null && pid !== undefined) {
+      const resolved = await resolveNameByPid(pid)
+      if (resolved === null) {
+        // 未武装差分环境放行到服务层；生产武装态此处 block（api.py resolve-failed）
+        if (ARMED) {
+          await guardAudit('kill_process', detail, 'block', 'resolve-failed')
+          return okJson({ error: `无法确认 pid=${pid} 对应的进程名（tasklist 反查失败），为防误杀系统进程已拒绝执行。` })
+        }
+      } else if (name && String(resolved).trim().toLowerCase() !== String(name).trim().toLowerCase()) {
+        await guardAudit('kill_process', detail, 'block', 'name-spoofed')
+        return okJson({ error: `pid=${pid} 实际进程名为 ${resolved}，与传入 name=${name} 不一致，已拒绝（防伪造 name 绕过名单）` })
+      }
+      if (resolved) detail.name = resolved
+    }
+
+    // ---- 服务层四层防线（顺序即安全语义，不得调换） ----
+    // C1：pid 非数字直接报错
+    if (pid !== null && pid !== undefined) {
+      const pidText = String(pid).trim()
+      if (!/^-?\d+$/.test(pidText)) {
+        return okJson({ error: `pid 必须是数字: ${pyRepr(pid)}` })
+      }
+      // S2（二轮）：反查结果权威——伪造 name 不再架空名单
+      const resolved = await resolveNameByPid(pid)
+      if (resolved) {
+        if (name && String(name).trim().toLowerCase() !== resolved.trim().toLowerCase()) {
+          return okJson({ error: `pid=${pid} 实际进程名为 ${resolved}，与传入 name=${name} 不一致，已拒绝` })
+        }
+        name = resolved
+      }
+    }
+    // S3（二轮）：taskkill /IM 通配符可批量强杀（'*' 杀当前用户一切进程）——直接拒绝
+    if (name && (String(name).includes('*') || String(name).includes('?'))) {
+      return okJson({ error: '进程名不支持通配符（* / ?），请先用 list_processes 确认确切进程名后按名/按 pid 结束' })
+    }
+    // P4：保护名单（token 之后仍生效的硬防线）
+    const reason = protectionReason(pid, name)
+    if (reason) return okJson({ error: `${reason}（保护名单）` })
+
+    // X5：执行（/T 树杀 + /F 强杀；输出 GBK 解码——legacy OEM 口径，截 2000）
+    let result
+    if (pid !== null && pid !== undefined) {
+      result = await run('taskkill', ['/PID', String(pid), '/T', '/F'],
+        { timeout: 20000, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer' })
+    } else if (name) {
+      result = await run('taskkill', ['/IM', String(name), '/T', '/F'],
+        { timeout: 20000, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer' })
+    } else {
+      return okJson({ error: '需要 pid 或 name 参数' })
+    }
+    const stdoutText = iconv.decode(result.stdout || Buffer.alloc(0), 'gbk').trim()
+    const stderrText = iconv.decode(result.stderr || Buffer.alloc(0), 'gbk').trim()
+    const output = (stdoutText || stderrText).slice(0, 2000)
+    await guardAudit('kill_process', { ...detail, killed: true }, 'decision', 'ok')
+    return okJson({ ok: true, exit_code: 0, output })
+  } catch (error) {
+    // taskkill 非零退出（进程不存在等）：保持成功形状 + exit_code（Agent 判断力）
+    if (error && typeof error.code === 'number' && (error.stdout !== undefined || error.stderr !== undefined)) {
+      const stdoutText = iconv.decode(error.stdout || Buffer.alloc(0), 'gbk').trim()
+      const stderrText = iconv.decode(error.stderr || Buffer.alloc(0), 'gbk').trim()
+      return okJson({ ok: false, exit_code: error.code, output: (stdoutText || stderrText).slice(0, 2000) })
+    }
+    return okJson({ error: String(error && error.message ? error.message : error) })
+  }
 }

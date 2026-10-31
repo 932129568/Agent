@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import iconv from 'iconv-lite'
 
 const MOCKS = String(process.env.HARBOR_DIFF_MOCKS || '')
   .split(',').map(x => x.trim()).filter(Boolean)
@@ -84,8 +85,14 @@ function patchedExecFile(file, ...rest) {
     })
     return setTimeout(() => callback(err), 10)
   }
-  const stdout = Buffer.from(expandStdout(entry), 'utf8')
-  const stderr = Buffer.from(String(entry.stderr || ''), 'utf8')
+  // entry.encoding（如 gbk）：按业务解码口径供字节（P0-1c K1 taskkill GBK 口径）
+  const outEnc = entry.encoding || 'utf8'
+  const stdout = outEnc === 'utf8'
+    ? Buffer.from(expandStdout(entry), 'utf8')
+    : iconv.encode(expandStdout(entry), outEnc)
+  const stderr = outEnc === 'utf8'
+    ? Buffer.from(String(entry.stderr || ''), 'utf8')
+    : iconv.encode(String(entry.stderr || ''), outEnc)
   const code = Number(entry.exitCode || 0)
   if (code !== 0) {
     const err = Object.assign(new Error(`Command failed with exit code ${code}`), {
@@ -98,13 +105,20 @@ function patchedExecFile(file, ...rest) {
 
 // promisify(execFile) 走 custom 符号时必须仍进入本桩：自定义实现以
 // error-first 三参回调调用 patchedExecFile，并复刻 execFile 内置 custom 的
-// Buffer→String 转换（保持 {stdout, stderr} 解构语义）。
+// 语义——options.encoding='buffer' 时保持 Buffer 透传（P0-1c K1 GBK 解码依赖），
+// 其余按 Buffer→String（utf8）转换（保持 {stdout, stderr} 解构语义）。
 patchedExecFile[promisifySymbol] = (file, ...rest) => new Promise((resolve, reject) => {
-  patchedExecFile(file, ...rest, (err, stdout, stderr) => {
-    const text = value => (Buffer.isBuffer(value) ? value.toString() : value)
+  let args = []
+  if (Array.isArray(rest[0])) args = rest.shift()
+  const options = rest[0] && typeof rest[0] === 'object' ? rest[0] : {}
+  const keepBuffer = options.encoding === 'buffer'
+  patchedExecFile(file, args, options, (err, stdout, stderr) => {
+    const text = value => (keepBuffer || !Buffer.isBuffer(value) ? value : value.toString())
     if (err) {
-      if (stdout !== undefined) err.stdout = text(stdout)
-      if (stderr !== undefined) err.stderr = text(stderr)
+      if (stdout !== undefined && !keepBuffer) err.stdout = text(stdout)
+      else if (stdout !== undefined) err.stdout = stdout
+      if (stderr !== undefined && !keepBuffer) err.stderr = text(stderr)
+      else if (stderr !== undefined) err.stderr = stderr
       reject(err)
     }
     else resolve({ stdout: text(stdout), stderr: text(stderr) })

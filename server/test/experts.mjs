@@ -23,6 +23,17 @@ check('目录导入生成内容寻址快照', () => {
 })
 const listed = JSON.parse(await experts.expertList('demo'))
 check('列表检索返回版本与启停状态', () => { assert.equal(listed.packages.length, 1); assert.equal(listed.packages[0].enabled, false) })
+// P0-1c E1：内置专家包导入（backend/experts_builtin/ 8 包，source.builtin 标记）
+const allPackages = JSON.parse(await experts.expertList(''))
+check('内置包导入 8 个（design-engine 等，source=builtin）', () => {
+  const builtins = allPackages.packages.filter(p => p.source && p.source.kind === 'builtin')
+  assert.equal(builtins.length, 8)
+  assert.ok(builtins.some(p => p.id === 'design-engine'))
+})
+check('内置 team 包带 AGENT_LIMIT_INTERSECTED 警告（validator maxTurns 超限）', () => {
+  const design = allPackages.packages.find(p => p.id === 'design-engine')
+  assert.ok(design.warnings.some(w => w.startsWith('AGENT_LIMIT_INTERSECTED:agents/')))
+})
 const got = JSON.parse(await experts.expertGet('demo-expert'))
 check('读取快照元数据与 agents', () => { assert.equal(got.package.version, '1.2.3'); assert.deepEqual(got.package.agents, ['agents/main.md']) })
 const enabled = JSON.parse(await experts.expertSetEnabled('demo-expert', true, imported.snapshot_id))

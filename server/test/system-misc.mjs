@@ -13,6 +13,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-sys-'))
 process.env.HARBOR_CONFIG_DIR = path.join(tmp, 'config')
 process.env.DATABASE_URL = `file:${path.join(tmp, 'app.db')}`
 process.env.LOG_LEVEL = 'silent'
+// K1 四层防线用未武装路径（与差分环境同构；武装态 resolve-failed 阻断由 guard 面覆盖）
+process.env.HARBOR_GUARD_ARMED = 'false'
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 await promisify(execFile)(process.execPath,
@@ -133,9 +135,29 @@ check('local_probe 返回 reachable/unreachable 分组', () => {
 })
 
 const killRefused = JSON.parse(await system.killProcess(999999, null, null))
-check('kill_process 已注册但无 token 时拒绝执行', () => {
+check('kill_process 进程不存在 → 成功形状 + 非零 exit_code（Agent 判断力）', () => {
   assert.ok(listMethods().includes('kill_process'))
-  assert.ok(killRefused.error && killRefused.error.includes('确认'))
+  assert.equal(killRefused.ok, false)
+  assert.equal(typeof killRefused.exit_code, 'number')
+  assert.ok(killRefused.exit_code !== 0)
+})
+
+// P0-1c K1 四层防线（未武装路径——与差分环境同构；process_service.py:126-164 逐层对照）
+const fakeKill = JSON.parse(await system.killProcess('abc', null, null))
+check('K1-C1 非数字 pid 拒绝（%r 单引号）', () => {
+  assert.ok(fakeKill.error && fakeKill.error.includes("pid 必须是数字: 'abc'"))
+})
+const wildcard = JSON.parse(await system.killProcess(null, '*', null))
+check('K1-S3 通配符进程名拒绝（taskkill /IM 批量强杀面）', () => {
+  assert.ok(wildcard.error && wildcard.error.includes('不支持通配符'))
+})
+const protectedName = JSON.parse(await system.killProcess(null, 'lsass.exe', null))
+check('K1-P4 保护名单拒绝（guard ①层内置名单，token 后仍生效）', () => {
+  assert.ok(protectedName.error && protectedName.error.includes('属于保护名单'))
+})
+const selfPid = JSON.parse(await system.killProcess(process.pid, null, null))
+check('K1-P4 自身 pid 拒绝（Harbor 自身）', () => {
+  assert.ok(selfPid.error && selfPid.error.includes('Harbor 自身'))
 })
 
 console.log(JSON.stringify({

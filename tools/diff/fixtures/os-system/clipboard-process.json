@@ -3,7 +3,7 @@
   "family": "os-system",
   "priority": "P1",
   "mode": "strict",
-  "description": "OS 原生族（B 类 mock）：剪贴板读写（mock Get/Set-Clipboard + Python 忠实内存剪贴板）/kill_process（mock tasklist+taskkill）/平台信息",
+  "description": "OS 原生族（B 类 mock）：剪贴板读写（mock Get/Set-Clipboard + Python 忠实内存剪贴板）/kill_process 四层防线五路径（K1：一致执行/伪造名拒绝/通配符拒绝/保护名单/非数字 pid）/平台信息",
   "mocks": ["subprocess", "windll"],
   "setup": {
     "workspaceFiles": [],
@@ -12,8 +12,12 @@
   "calls": [
     { "id": "c01", "method": "set_clipboard", "args": ["差分剪贴板"], "note": "剪贴板写入（回读校验语义）" },
     { "id": "c02", "method": "get_clipboard", "args": [], "note": "剪贴板读取" },
-    { "id": "c03", "method": "kill_process", "args": [12345, "notepad.exe"], "note": "结束进程（pid→名称反查 + taskkill mock；未武装放行）" },
-    { "id": "c04", "method": "get_platform_info", "args": [], "note": "平台信息（形状差异预期 suspect）" }
+    { "id": "c03", "method": "kill_process", "args": [12345, "notepad.exe"], "note": "K1 正路径：反查 12345=notepad.exe 一致 → taskkill /T /F → {ok,exit_code,output}（GBK 解码）" },
+    { "id": "c04", "method": "kill_process", "args": [12345, "chrome.exe"], "note": "K1 S2 伪造名拒绝：反查 notepad.exe ≠ chrome.exe → api 层 name-spoofed 文案" },
+    { "id": "c05", "method": "kill_process", "args": [null, "*"], "note": "K1 S3 通配符拒绝（taskkill /IM '*' 可批量强杀）" },
+    { "id": "c06", "method": "kill_process", "args": [null, "lsass.exe"], "note": "K1 P4 保护名单拒绝（系统关键进程）" },
+    { "id": "c07", "method": "kill_process", "args": ["abc", null], "note": "K1 C1 非数字 pid 拒绝（%r 单引号）" },
+    { "id": "c08", "method": "get_platform_info", "args": [], "note": "平台信息（ID-202 python 键值登记）" }
   ],
   "sideEffects": {
     "snapshotWorkspace": true,
