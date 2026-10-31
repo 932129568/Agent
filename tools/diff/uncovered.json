@@ -82,6 +82,13 @@
       "plannedPhase": "T05"
     },
     {
+      "method": "open_billing",
+      "aspect": "positive-launch",
+      "reason": "真实打开系统浏览器访问计费页（webbrowser.open）——本机副作用类，与 open_url 同口径；T05 处理（错误路径无意义：该方法无参数无错误分支）",
+      "tracking": "T05",
+      "plannedPhase": "T05"
+    },
+    {
       "method": "list_processes",
       "aspect": "positive-list",
       "reason": "真实进程清单随宿主机瞬时变化（非确定输出）；B 类 mock 表在 T05 评估是否纳入",

@@ -1,0 +1,26 @@
+{
+  "id": "memory-basic",
+  "family": "memory",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "记忆族：空起步→追加（合法/非法 JSON）→回读→检索→删除（正常/越界）→回读（memory.json 独立文件）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "get_memory", "args": [], "note": "空起步 []" },
+    { "id": "c02", "method": "append_memory", "args": ["{\"text\": \"常驻规则：提交前跑测试\", \"kind\": \"rule\"}"], "note": "追加规则类记忆" },
+    { "id": "c03", "method": "append_memory", "args": ["{\"text\": \"偏好：简洁回复\", \"kind\": \"preference\"}"], "note": "追加偏好类记忆" },
+    { "id": "c04", "method": "get_memory", "args": [], "note": "回读两条（时间戳掩蔽）" },
+    { "id": "c05", "method": "memory_retrieve", "args": ["规则", 5], "note": "关键词检索" },
+    { "id": "c06", "method": "memory_delete", "args": [0], "note": "删除第 0 条" },
+    { "id": "c07", "method": "get_memory", "args": [], "note": "回读剩余一条" },
+    { "id": "c08", "method": "memory_delete", "args": [99], "note": "越界删除 → BAD_PARAMS" },
+    { "id": "c09", "method": "append_memory", "args": ["not-json"], "note": "非法 JSON 入参错误路径" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["memory.json"]
+  }
+}

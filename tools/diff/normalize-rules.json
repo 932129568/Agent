@@ -9,22 +9,100 @@
     ]
   },
   "regexRules": [
-    { "id": "N03", "pattern": "(?i)^[a-z]:", "replace": "UPPER_DRIVE", "note": "replace=UPPER_DRIVE 为引擎特殊约定：盘符字母统一大写" },
-    { "id": "N04", "pattern": "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:?\\d{2})?", "replace": "<TS>" },
-    { "id": "N05", "pattern": "\\d{8}_\\d{6}(_\\d{3})?", "replace": "<TSFN>" },
-    { "id": "N06", "pattern": "\\d{2}-\\d{2} \\d{2}:\\d{2}", "replace": "<DTS>" },
-    { "id": "N08", "pattern": "\\btc\\d+_\\d+\\b", "replace": "<CID>" },
-    { "id": "N09a", "pattern": "\\b[0-9a-f]{32,64}\\b", "replace": "<TOKEN>" },
-    { "id": "N09b", "pattern": "\\b(?:tok_|tk_|bs_|brw_)[0-9a-z]{2,}\\b", "replace": "<TOKEN>" },
-    { "id": "N09c", "pattern": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b", "replace": "<TOKEN>" },
-    { "id": "N14", "pattern": "(\\.rollback-bak\\.)\\d{10,14}$", "replace": "$1<TSMS>" }
+    {
+      "id": "N03",
+      "pattern": "(?i)^[a-z]:",
+      "replace": "UPPER_DRIVE",
+      "note": "replace=UPPER_DRIVE 为引擎特殊约定：盘符字母统一大写"
+    },
+    {
+      "id": "N04",
+      "pattern": "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:?\\d{2})?",
+      "replace": "<TS>"
+    },
+    {
+      "id": "N05",
+      "pattern": "\\d{8}_\\d{6}(_\\d{3})?",
+      "replace": "<TSFN>"
+    },
+    {
+      "id": "N06",
+      "pattern": "\\d{2}-\\d{2} \\d{2}:\\d{2}",
+      "replace": "<DTS>"
+    },
+    {
+      "id": "N08",
+      "pattern": "\\btc\\d+_\\d+\\b",
+      "replace": "<CID>"
+    },
+    {
+      "id": "N09a",
+      "pattern": "\\b[0-9a-f]{32,64}\\b",
+      "replace": "<TOKEN>"
+    },
+    {
+      "id": "N09b",
+      "pattern": "\\b(?:tok_|tk_|bs_|brw_)[0-9a-z]{2,}\\b",
+      "replace": "<TOKEN>"
+    },
+    {
+      "id": "N09c",
+      "pattern": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b",
+      "replace": "<TOKEN>"
+    },
+    {
+      "id": "N14",
+      "pattern": "(\\.rollback-bak\\.)\\d{10,14}$",
+      "replace": "$1<TSMS>"
+    }
   ],
-  "separatorRule": { "id": "N01", "from": "\\\\", "to": "/" },
+  "separatorRule": {
+    "id": "N01",
+    "from": "\\\\",
+    "to": "/"
+  },
   "maskKeys": {
-    "epoch": ["ts", "updatedAt", "createdAt", "mtime", "timestamp", "expires_at", "lastUsed", "last_used", "probed_at", "granted_at", "updated_at"],
-    "milliseconds": ["duration_ms", "elapsed", "elapsed_ms", "timeout_used", "costMs", "preheat_ms"],
-    "pid": ["pid"],
-    "identifier": ["sessionId", "session_id", "grantId", "grant_id", "taskId", "task_id", "takeoverId", "takeover_id", "runId", "snapshotId", "rule_id", "token", "trace", "head"]
+    "epoch": [
+      "ts",
+      "updatedAt",
+      "createdAt",
+      "mtime",
+      "timestamp",
+      "expires_at",
+      "lastUsed",
+      "last_used",
+      "probed_at",
+      "granted_at",
+      "updated_at"
+    ],
+    "milliseconds": [
+      "duration_ms",
+      "elapsed",
+      "elapsed_ms",
+      "timeout_used",
+      "costMs",
+      "preheat_ms",
+      "latency_ms"
+    ],
+    "pid": [
+      "pid"
+    ],
+    "identifier": [
+      "sessionId",
+      "session_id",
+      "grantId",
+      "grant_id",
+      "taskId",
+      "task_id",
+      "takeoverId",
+      "takeover_id",
+      "runId",
+      "snapshotId",
+      "rule_id",
+      "token",
+      "trace",
+      "head"
+    ]
   },
   "quantizeKeys": {
     "remaining_s": 10

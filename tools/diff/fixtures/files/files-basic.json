@@ -1,0 +1,36 @@
+{
+  "id": "files-basic",
+  "family": "files",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "文件工具族：读（UTF-8/GBK/二进制/缺文件/分页）/写/追加/局部替换/建目录/信息/移动/复制/删除/read_more 缓存未命中（路径监狱内全链路）",
+  "setup": {
+    "workspaceFiles": [
+      { "path": "a.txt", "content": "hello old world\nsecond line\n", "encoding": "utf-8" },
+      { "path": "gbk.txt", "content": "中文gbk内容\n", "encoding": "gbk" },
+      { "path": "bin.dat", "content": "0001020e1f", "encoding": "binary-hex" }
+    ],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "list_dir", "args": ["{WS}"], "note": "列目录（种子 3 文件）" },
+    { "id": "c02", "method": "read_file", "args": ["a.txt", 0, 800, false], "note": "UTF-8 全文读取（行号）" },
+    { "id": "c03", "method": "read_file", "args": ["a.txt", 2, 2, false], "note": "分页读取 offset=2 limit=2" },
+    { "id": "c04", "method": "read_file", "args": ["gbk.txt", 0, 800, false], "note": "GBK 自动识别" },
+    { "id": "c05", "method": "read_file", "args": ["bin.dat", 0, 800, false], "note": "二进制文件读取路径" },
+    { "id": "c06", "method": "read_file", "args": ["missing.txt", 0, 800, false], "note": "缺文件错误" },
+    { "id": "c07", "method": "write_file", "args": ["new.txt", "新文件内容\n"], "note": "整文件写入" },
+    { "id": "c08", "method": "append_file", "args": ["new.txt", "追加一行\n"], "note": "追加写入" },
+    { "id": "c09", "method": "search_replace", "args": ["a.txt", "old", "new", false], "note": "局部替换（首处）" },
+    { "id": "c10", "method": "make_dir", "args": ["sub/deep"], "note": "嵌套建目录" },
+    { "id": "c11", "method": "get_file_info", "args": ["a.txt"], "note": "文件信息（mtime 掩蔽）" },
+    { "id": "c12", "method": "move_path", "args": ["new.txt", "moved.txt"], "note": "移动/重命名" },
+    { "id": "c13", "method": "copy_path", "args": ["moved.txt", "copied.txt"], "note": "复制" },
+    { "id": "c14", "method": "delete_path", "args": ["copied.txt", true], "note": "删除（未武装放行；快照验证副作用）" },
+    { "id": "c15", "method": "read_more", "args": ["tc999_999", 0, 10], "note": "缓存未命中错误路径" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

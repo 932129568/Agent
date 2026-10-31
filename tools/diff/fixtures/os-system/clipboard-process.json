@@ -1,0 +1,22 @@
+{
+  "id": "clipboard-process",
+  "family": "os-system",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "OS 原生族（B 类 mock）：剪贴板读写（mock Get/Set-Clipboard + Python 忠实内存剪贴板）/kill_process（mock tasklist+taskkill）/平台信息",
+  "mocks": ["subprocess", "windll"],
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "set_clipboard", "args": ["差分剪贴板"], "note": "剪贴板写入（回读校验语义）" },
+    { "id": "c02", "method": "get_clipboard", "args": [], "note": "剪贴板读取" },
+    { "id": "c03", "method": "kill_process", "args": [12345, "notepad.exe"], "note": "结束进程（pid→名称反查 + taskkill mock；未武装放行）" },
+    { "id": "c04", "method": "get_platform_info", "args": [], "note": "平台信息（形状差异预期 suspect）" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

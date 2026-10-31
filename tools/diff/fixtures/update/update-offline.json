@@ -1,0 +1,22 @@
+{
+  "id": "update-offline",
+  "family": "update",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "自动更新族（离线错误路径）：清单检查（回环拒绝）/初始进度/开发态拒绝 apply/下载启动（连接拒绝 → 失败态）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "check_update", "args": ["http://127.0.0.1:9/manifest.json"], "note": "清单检查（离线错误路径）" },
+    { "id": "c02", "method": "get_update_progress", "args": [], "note": "初始进度（未启动下载）" },
+    { "id": "c03", "method": "apply_update", "args": [], "note": "开发态 apply 拒绝" },
+    { "id": "c04", "method": "start_update_download", "args": ["http://127.0.0.1:9/x.exe", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "9.9.9"], "note": "下载启动（回环拒绝 → 立败）" },
+    { "id": "c05", "method": "get_update_progress", "args": [], "note": "下载后进度（失败态；连接拒绝即时完成）" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

@@ -180,18 +180,22 @@ async function runFixture(spec, rawDir, tempTag) {
   return { fixture, error: null, verdicts, pyResult, nodeResult }
 }
 
-async function computeCoverage(fixtureReports) {
+async function computeCoverage() {
   const nodeMethodSet = new Set(listMethods())
   const pythonMethods = await runPythonListMethods()
   const pythonSet = new Set(pythonMethods)
   const uncovered = JSON.parse(fs.readFileSync(path.join(DIFF_DIR, 'uncovered.json'), 'utf8'))
   const uncoveredMethods = new Set((uncovered.entries || []).map(e => e.method))
   const coveredByFixtures = new Set()
-  for (const report of fixtureReports) {
-    const fixture = report.fixture
-    for (const call of [...(fixture.setup?.callsBefore || []), ...(fixture.calls || [])]) {
-      coveredByFixtures.add(call.method)
-    }
+  // T05 门禁常规化：静态口径——扫描全部 fixture 文件（不依赖本轮实际跑了哪些族），
+  // 与「fixture 覆盖 ∪ uncovered 登记 = 145」的验收定义一致
+  for (const spec of discoverFixtures([])) {
+    try {
+      const fixture = JSON.parse(fs.readFileSync(spec.file, 'utf8'))
+      for (const call of [...(fixture.setup?.callsBefore || []), ...(fixture.calls || [])]) {
+        coveredByFixtures.add(call.method)
+      }
+    } catch { /* 坏 fixture 由差分运行期报 error，这里跳过 */ }
   }
   const universe = new Set([...nodeMethodSet, ...pythonSet])
   const covered = new Set([...coveredByFixtures].filter(m => universe.has(m)))
@@ -242,7 +246,7 @@ for (const spec of fixtureSpecs) {
 let coverage = null
 if (args.coverage) {
   try {
-    coverage = await computeCoverage(results)
+    coverage = await computeCoverage()
   } catch (error) {
     console.error(`[diff] 覆盖率计算失败: ${error.message}`)
     infraErrors += 1

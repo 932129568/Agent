@@ -1,0 +1,33 @@
+{
+  "id": "config-family",
+  "family": "misc-config",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "独立配置族：hybrid/model_prefs/reader/sandbox 的 get/save（合法+越界）+ sandbox_status + 搜索统计 + clear_caches（config.json 零污染面）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "hybrid_get_config", "args": [], "note": "混合路由默认配置" },
+    { "id": "c02", "method": "hybrid_save_config", "args": ["{\"strategy\": \"auto\"}"], "note": "合法保存" },
+    { "id": "c03", "method": "hybrid_save_config", "args": ["{\"strategy\": \"bogus\"}"], "note": "非法 strategy → BAD_PARAMS + hint" },
+    { "id": "c04", "method": "model_prefs_get", "args": [], "note": "推理偏好默认" },
+    { "id": "c05", "method": "model_prefs_save", "args": ["{\"thinking\": \"high\", \"ctx_k\": 128}"], "note": "合法保存" },
+    { "id": "c06", "method": "model_prefs_save", "args": ["{\"thinking\": \"bogus\"}"], "note": "非法 thinking 错误" },
+    { "id": "c07", "method": "reader_config_get", "args": [], "note": "读取器默认配置" },
+    { "id": "c08", "method": "reader_config_save", "args": ["{\"budget_s\": 30}"], "note": "合法保存" },
+    { "id": "c09", "method": "reader_config_save", "args": ["{\"budget_s\": 999}"], "note": "越界 budget 错误" },
+    { "id": "c10", "method": "sandbox_get_config", "args": [], "note": "沙箱默认配置" },
+    { "id": "c11", "method": "sandbox_save_config", "args": ["{\"enabled\": true}"], "note": "启用沙箱（下一 call 状态可见）" },
+    { "id": "c12", "method": "sandbox_status", "args": [], "note": "沙箱状态" },
+    { "id": "c13", "method": "search_cache_stats", "args": [], "note": "搜索缓存统计（空起步）" },
+    { "id": "c14", "method": "search_reader_stats", "args": [], "note": "读取器统计" },
+    { "id": "c15", "method": "search_status", "args": [""], "note": "搜索状态（无活跃任务）" },
+    { "id": "c16", "method": "clear_caches", "args": [], "note": "清缓存（裸 'ok'）" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["hybrid.json", "model_prefs.json", "reader.json", "sandbox.json"]
+  }
+}

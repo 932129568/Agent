@@ -36,97 +36,161 @@
     {
       "name": "where-git",
       "file": "where.exe",
-      "argvContains": ["git"],
+      "argvContains": [
+        "git"
+      ],
       "stdout": "C:\\mockbin\\git.exe\r\n",
       "exitCode": 0
     },
     {
       "name": "where-python",
       "file": "where.exe",
-      "argvContains": ["python"],
+      "argvContains": [
+        "python"
+      ],
       "stdout": "C:\\mockbin\\python.exe\r\n",
       "exitCode": 0
     },
     {
       "name": "where-node",
       "file": "where.exe",
-      "argvContains": ["node"],
+      "argvContains": [
+        "node"
+      ],
       "stdout": "C:\\mockbin\\node.exe\r\n",
       "exitCode": 0
     },
     {
       "name": "git-version",
       "file": "git.exe",
-      "argvContains": ["--version"],
+      "argvContains": [
+        "--version"
+      ],
       "stdout": "git version 2.50.1.windows.1\r\n",
       "exitCode": 0
     },
     {
       "name": "git-commit",
       "file": "git.exe",
-      "argvContains": ["commit"],
+      "argvContains": [
+        "commit"
+      ],
       "stdout": "",
       "exitCode": 0
     },
     {
       "name": "python-version",
       "file": "python.exe",
-      "argvContains": ["--version"],
+      "argvContains": [
+        "--version"
+      ],
       "stdout": "Python 3.13.14\r\n",
       "exitCode": 0
     },
     {
       "name": "node-version",
       "file": "node.exe",
-      "argvContains": ["--version"],
+      "argvContains": [
+        "--version"
+      ],
       "stdout": "v27.0.0\r\n",
       "exitCode": 0
     },
     {
       "name": "python-run-seed",
       "file": "python.exe",
-      "argvContains": ["seed.py"],
+      "argvContains": [
+        "seed.py"
+      ],
       "stdout": "seed-ok\r\n",
       "exitCode": 0
     },
     {
       "name": "echo-hello",
       "kind": "cmd",
-      "contains": ["echo hello"],
+      "contains": [
+        "echo hello"
+      ],
       "stdout": "hello\r\n",
       "exitCode": 0
     },
     {
       "name": "echo-big",
       "kind": "cmd",
-      "contains": ["echo BIG"],
-      "stdoutRepeat": { "char": "X", "count": 8000 },
+      "contains": [
+        "echo BIG"
+      ],
+      "stdoutRepeat": {
+        "char": "X",
+        "count": 8000
+      },
       "exitCode": 0
     },
     {
       "name": "cmd-timeout",
       "kind": "cmd",
-      "contains": ["raise-timeout"],
+      "contains": [
+        "raise-timeout"
+      ],
       "timeout": true
     },
     {
       "name": "ps-timeout",
       "kind": "powershell",
-      "contains": ["raise-timeout"],
+      "contains": [
+        "raise-timeout"
+      ],
       "timeout": true
     },
     {
       "name": "ps-getdate",
       "kind": "powershell",
-      "contains": ["Get-Date"],
+      "contains": [
+        "Get-Date"
+      ],
       "stdout": "ps-out",
       "exitCode": 0
     },
     {
       "name": "admin-start-process",
       "kind": "powershell",
-      "contains": ["Start-Process", "-Verb RunAs"],
+      "contains": [
+        "Start-Process",
+        "-Verb RunAs"
+      ],
       "stdout": "hello \r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tasklist",
+      "file": "tasklist.exe",
+      "argvContains": [],
+      "stdout": "\"Image Name\",\"PID\",\"Session Name\",\"Session#\",\"Mem Usage\"\r\n\"notepad.exe\",\"12345\",\"Console\",\"1\",\"10,000 K\"\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "taskkill",
+      "file": "taskkill.exe",
+      "argvContains": [],
+      "stdout": "成功: 已终止 PID 为 12345 的进程。\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "ps-set-clipboard",
+      "kind": "powershell",
+      "contains": [
+        "Set-Clipboard"
+      ],
+      "stdout": "",
+      "exitCode": 0
+    },
+    {
+      "name": "ps-get-clipboard",
+      "kind": "powershell",
+      "contains": [
+        "Get-Clipboard"
+      ],
+      "stdout": "差分剪贴板",
       "exitCode": 0
     }
   ]

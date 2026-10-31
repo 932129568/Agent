@@ -1,0 +1,31 @@
+{
+  "id": "prompts-tools",
+  "family": "provider",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "提示词/工具族：system prompt 渲染（同一 prompts 目录源）/工具清单（chat+full）/版本化提示词/工具缓存/trace/ui_nudge/澄清收集/CORS 代理基址/端点连通性（离线错误路径）/本地模型探测与就绪度",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "build_system_prompt", "args": [""], "note": "系统提示词（工作区路径归一 <WS>）" },
+    { "id": "c02", "method": "build_tools", "args": ["chat", false, false, false], "note": "chat 档工具清单（空数组）" },
+    { "id": "c03", "method": "build_tools", "args": ["full", false, false, false], "note": "full 档工具清单（工具描述对齐性）" },
+    { "id": "c04", "method": "prompt_get", "args": ["efficiency"], "note": "版本化提示词读取" },
+    { "id": "c05", "method": "prompt_get", "args": ["no-such-prompt"], "note": "未知提示词错误" },
+    { "id": "c06", "method": "cache_tool_output", "args": ["超长输出内容"], "note": "工具缓存登记（id 掩蔽 <CID>）" },
+    { "id": "c07", "method": "trace_new", "args": [], "note": "新 trace（id 掩蔽）" },
+    { "id": "c08", "method": "ui_nudge", "args": ["visible"], "note": "逼帧兜底（无窗口环境）" },
+    { "id": "c09", "method": "clarify_collect", "args": [["问题一", "问题二"], {"0": 1}], "note": "澄清答案收集（纯函数）" },
+    { "id": "c10", "method": "get_local_proxy", "args": [], "note": "本地 CORS 代理基址" },
+    { "id": "c11", "method": "test_provider_endpoint", "args": ["http://127.0.0.1:9/v1", "sk-test", "m1", 5], "note": "端点连通性（回环拒绝 → 离线错误路径）" },
+    { "id": "c12", "method": "local_models", "args": ["http://127.0.0.1:9/v1"], "note": "本地模型清单（不可达）" },
+    { "id": "c13", "method": "local_probe", "args": ["[19999]"], "note": "端口探测（19999 不可达，latency 掩蔽）" },
+    { "id": "c14", "method": "local_readiness", "args": ["http://127.0.0.1:9/v1", "m1"], "note": "本地就绪度评分（不可达保守评分）" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

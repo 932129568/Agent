@@ -1,0 +1,36 @@
+{
+  "id": "workspace-basic",
+  "family": "workspace",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "工作区族：全局目录切换/回读/生效根/会话绑定/启用开关/状态/最近列表/受控写/工作日志/解绑/pick_folder（对话框 seam）",
+  "mocks": ["dialog"],
+  "setup": {
+    "workspaceFiles": [
+      { "path": "a.txt", "content": "工作区种子\n", "encoding": "utf-8" }
+    ],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "set_workspace", "args": ["{WS}"], "note": "切换全局工作区（存在目录）" },
+    { "id": "c02", "method": "get_cwd", "args": [], "note": "回读当前目录（裸文本协议）" },
+    { "id": "c03", "method": "get_effective_ws", "args": [], "note": "生效根（无会话绑定 → 全局）" },
+    { "id": "c04", "method": "set_session_ws", "args": ["s1", "{WS}", true], "note": "会话绑定工作区" },
+    { "id": "c05", "method": "get_session_ws", "args": ["s1"], "note": "读会话绑定" },
+    { "id": "c06", "method": "set_ws_enabled", "args": ["s1", false], "note": "关闭会话工作区" },
+    { "id": "c07", "method": "get_ws_enabled", "args": ["s1"], "note": "读启用开关" },
+    { "id": "c08", "method": "get_ws_state", "args": ["s1"], "note": "工作区状态" },
+    { "id": "c09", "method": "list_recent_ws", "args": [], "note": "最近目录列表" },
+    { "id": "c10", "method": "save_workspace_file", "args": ["note.md", "受控写入内容\n"], "note": "受控文件写（attachments/）" },
+    { "id": "c11", "method": "append_worklog", "args": ["工作日志条目"], "note": "工作日志追加" },
+    { "id": "c12", "method": "get_worklog", "args": [], "note": "工作日志回读（时间戳掩蔽）" },
+    { "id": "c13", "method": "delete_session_ws", "args": ["s1"], "note": "解绑会话工作区" },
+    { "id": "c14", "method": "set_ws_dir", "args": ["{WS}"], "note": "set_ws_dir 目录切换" },
+    { "id": "c15", "method": "pick_folder", "args": ["s1"], "note": "目录对话框（seam 返回登记路径）" },
+    { "id": "c16", "method": "copy_into_ws", "args": ["{WS}/a.txt", "copy.txt"], "note": "附件导入（Python 时间戳前缀 → 预期 suspect）" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}
