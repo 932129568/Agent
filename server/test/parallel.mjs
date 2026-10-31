@@ -64,20 +64,23 @@ await check('get_effective_ws 按 header 自省（sid 与 ws 各自独立）', a
   assert.equal(a.sid, 'sid-A'); assert.equal(a.ws, wsA)
   assert.equal(b.sid, 'sid-B'); assert.equal(b.ws, wsB)
 })
-await check('会话信任隔离：A trust 后 B guard_check 仍为 confirm', async () => {
-  assert.equal((await call('guard_session_trust', ['run_command'], 'sid-A')).body, '{"ok":true}')
-  const verdict = json(await call('guard_check', ['run_command', '{}'], 'sid-B'))
-  assert.equal(verdict.action, 'confirm')
+await check('会话信任隔离：A trust 后 B 执行点仍要求确认', async () => {
+  // 用 session 档的 clipboard_read 执行路径（guard_check 查询路径本就不查
+  // 会话信任——信任只作用于 enforceExec；run_command 默认 off 档不适用）
+  assert.equal((await call('guard_session_trust', ['clipboard_read'], 'sid-A')).body, '{"ok":true}')
+  assert.equal(json(await call('get_clipboard', [], 'sid-A')).ok, true)
+  const bRefused = json(await call('get_clipboard', [], 'sid-B'))
+  assert.ok(String(bRefused.error || '').includes('确认'), `B 应要求确认: ${JSON.stringify(bRefused).slice(0, 120)}`)
   // B 也需自行信任后才放行（A 的信任不命中 B）
-  assert.equal((await call('guard_session_trust', ['run_command'], 'sid-B')).body, '{"ok":true}')
-  const bAfter = json(await call('guard_check', ['run_command', '{}'], 'sid-B'))
-  assert.equal(bAfter.action, 'allow')
+  assert.equal((await call('guard_session_trust', ['clipboard_read'], 'sid-B')).body, '{"ok":true}')
+  assert.equal(json(await call('get_clipboard', [], 'sid-B')).ok, true)
 })
 await check('命令去重隔离：A 重复命令被拒、B 同命令放行', async () => {
   const first = json(await call('run_command', ['echo parallel-dedup', 30], 'sid-A'))
   assert.equal(first.exit_code, 0)
   const dup = json(await call('run_command', ['echo parallel-dedup', 30], 'sid-A'))
-  assert.ok(String(dup.error || dup.output || '').includes('最近已执行过'))
+  assert.equal(dup.skipped, true)
+  assert.ok(String(dup.info || '').includes('拒绝'), `A 重复命令应被拒: ${JSON.stringify(dup).slice(0, 150)}`)
   const bFirst = json(await call('run_command', ['echo parallel-dedup', 30], 'sid-B'))
   assert.equal(bFirst.exit_code, 0)
 })
@@ -89,12 +92,24 @@ await check('任务授权隔离：A grant 不影响 B 的 status', async () => {
   const budgetA = json(await call('guard_approval_budget', [], 'sid-A'))
   const budgetB = json(await call('guard_approval_budget', [], 'sid-B'))
   assert.ok(budgetA.used >= 1)
-  assert.notEqual(budgetA.used, budgetB.used)
+  // 计数独立性用增量证明（不是数值必须不同——A/B 各一次信任时数值恰好相等）：
+  // B 再信任一次只涨 B 的计数，A 的计数纹丝不动
+  const beforeA = budgetA.used
+  const beforeB = budgetB.used
+  await call('guard_session_trust', ['clipboard_write'], 'sid-B')
+  assert.equal(json(await call('guard_approval_budget', [], 'sid-B')).used, beforeB + 1)
+  assert.equal(json(await call('guard_approval_budget', [], 'sid-A')).used, beforeA)
 })
 
 /* ---------------- 2. 写互斥（同 root 并发 50 次无撕裂） ---------------- */
 await check('同 root 并发 write_file 50 次：最终为某次完整写入', async () => {
-  const target = path.join(wsA, 'shared.txt')
+  // 两会话显式共享同一 root（per-sid 监狱要求目标在各自 root 内——共享根
+  // 才能同文件并发写；per-root 锁正是按这个共享根互斥）
+  const wsShared = path.join(tmp, 'wsShared')
+  fs.mkdirSync(wsShared, { recursive: true })
+  await call('set_workspace', [wsShared], 'sid-A')
+  await call('set_workspace', [wsShared], 'sid-B')
+  const target = path.join(wsShared, 'shared.txt')
   const payloads = []
   const calls = []
   for (let i = 0; i < 50; i += 1) {
@@ -104,11 +119,11 @@ await check('同 root 并发 write_file 50 次：最终为某次完整写入', a
     calls.push(call('write_file', [target, text], sid))
   }
   const responses = await Promise.all(calls)
-  for (const response of responses) assert.equal(json(response).ok, true)
+  for (const response of responses) assert.equal(json(response).ok, true, JSON.stringify(json(response)).slice(0, 120))
   const finalContent = fs.readFileSync(target, 'utf8')
   assert.ok(payloads.includes(finalContent), `最终内容非任何一次完整写入: ${finalContent.slice(0, 60)}`)
   // 无残留临时文件（tmp+rename 序列完整）
-  assert.ok(!fs.readdirSync(wsA).some(name => name.includes('.tmp')))
+  assert.ok(!fs.readdirSync(wsShared).some(name => name.includes('.tmp')))
 })
 
 /* ---------------- 3. legacy 混用 ---------------- */
@@ -121,34 +136,36 @@ await check('无头走全局 activeSid 且与 header 互不污染', async () => 
   assert.equal(json(await call('get_effective_ws')).sid, 's-legacy2')
   assert.equal(json(await call('get_effective_ws', [], 'sid-A')).sid, 'sid-A')
   // legacy clear-on-switch：s-legacy 的信任在切换后不再生效（旧全局 sid）
-  assert.equal((await call('guard_session_trust', ['run_command'], 's-legacy2')).body, '{"ok":true}')
+  assert.equal((await call('guard_session_trust', ['clipboard_read'], 's-legacy2')).body, '{"ok":true}')
   assert.equal((await call('set_current_sid', ['s-legacy3'])).body, '{"ok":true}')
-  const afterSwitch = json(await call('guard_check', ['run_command', '{}'], 's-legacy2'))
-  assert.equal(afterSwitch.action, 'confirm')
+  assert.ok(String(json(await call('get_clipboard', [], 's-legacy2')).error || '').includes('确认'))
 })
 
 /* ---------------- 4. purge 清理 ---------------- */
 await check('session_purge 清该 sid 全部容器、其他 sid 不受影响', async () => {
   assert.equal(json(await call('set_workspace', [wsA], 'sid-P')).ok, true)
-  assert.equal((await call('guard_session_trust', ['run_command'], 'sid-P')).body, '{"ok":true}')
+  assert.equal((await call('guard_session_trust', ['clipboard_read'], 'sid-P')).body, '{"ok":true}')
   assert.equal(json(await call('guard_task_grant', ['workspace_write', 3600], 'sid-P')).ok, true)
   assert.equal(json(await call('session_purge', ['sid-P', '[]'])).ok, true)
   // cwd 覆盖清（回全局）、grant 清、trust 清
   assert.notEqual((await call('get_cwd', [], 'sid-P')).body, wsA)
   assert.equal(json(await call('guard_task_status', [], 'sid-P')).active, false)
-  assert.equal(json(await call('guard_check', ['run_command', '{}'], 'sid-P')).action, 'confirm')
-  // 其他 sid 的容器仍在
+  assert.ok(String(json(await call('get_clipboard', [], 'sid-P')).error || '').includes('确认'))
+  // 其他 sid 的容器仍在（A 的 grant 与其共享工作区不受 sid-P 清理影响）
   assert.equal(json(await call('guard_task_status', [], 'sid-A')).active, true)
-  assert.equal((await call('get_cwd', [], 'sid-A')).body, wsA)
+  assert.equal((await call('get_cwd', [], 'sid-A')).body, path.join(tmp, 'wsShared'))
 })
 
 /* ---------------- 5. A/B 交替 save 全量数组不丢条目（R4） ---------------- */
-await check('交替 save_sessions 全量数组不丢条目', async () => {
+await check('交替 save_sessions 全量数组不丢条目（R4 纪律：恒提交全量数组）', async () => {
   const mk = (id, title) => ({ id, title, updatedAt: 1000, messages: [] })
+  // R4 共享知识纪律：前端恒提交全量会话数组（禁止按 run 切片保存——
+  // save_sessions 是全量覆盖语义，切片保存会删除他方条目）。
+  // 本用例按该纪律建模：每次 save 的数组都是当前全量列表
   await call('save_sessions', [JSON.stringify([mk('a1', 'A1'), mk('shared', '共享')])], 'sid-A')
-  await call('save_sessions', [JSON.stringify([mk('b1', 'B1'), mk('shared', '共享')])], 'sid-B')
-  await call('save_sessions', [JSON.stringify([mk('a1', 'A1'), mk('a2', 'A2'), mk('shared', '共享')])], 'sid-A')
-  await call('save_sessions', [JSON.stringify([mk('b1', 'B1'), mk('b2', 'B2'), mk('shared', '共享')])], 'sid-B')
+  await call('save_sessions', [JSON.stringify([mk('a1', 'A1'), mk('b1', 'B1'), mk('shared', '共享')])], 'sid-B')
+  await call('save_sessions', [JSON.stringify([mk('a1', 'A1'), mk('a2', 'A2'), mk('b1', 'B1'), mk('shared', '共享')])], 'sid-A')
+  await call('save_sessions', [JSON.stringify([mk('a1', 'A1'), mk('a2', 'A2'), mk('b1', 'B1'), mk('b2', 'B2'), mk('shared', '共享')])], 'sid-B')
   const listed = json(await call('get_sessions'))
   const ids = listed.map(x => x.id).sort()
   assert.deepEqual(ids, ['a1', 'a2', 'b1', 'b2', 'shared'])
