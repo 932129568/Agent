@@ -16,6 +16,8 @@ import { CONFIG_DIR, atomicWriteJson, readTextIfExists } from '../paths.js'
 import { readConfigJson, mergeConfig, readConfigNormalized } from './jsonstore.js'
 import { CONFIG_SPECS } from './config-specs.js'
 import { runtime } from '../runtime.js'
+import { currentDbPath, switchDatabaseCore, withDbSwitchLock } from '../db.js'
+import { materializeSessions } from './session-migrate.js'
 
 const AUDIT_FILE = path.join(CONFIG_DIR, 'audit_log.jsonl')
 const AUDIT_CHAIN_FILE = path.join(CONFIG_DIR, 'audit_chain.json')
@@ -218,13 +220,20 @@ export async function searchStatus(taskId = '') {
 export async function historyDirGet() {
   const cfg = readConfigJson('history.json', {})
   const dir = cfg.dir || ''
-  const effective = dir && fs.existsSync(dir) ? dir : CONFIG_DIR
-  return okJson({ ok: true, dir, default_dir: CONFIG_DIR, sessions_file: path.join(effective, 'sessions.json') })
+  // P0-2（ID-103 新口径）：sessions_file 披露当前生效 DB 文件路径——
+  // 介质披露（Python 为 sessions.json、Node 为 Prisma 库文件），与 ID-001/202 同构
+  return okJson({ ok: true, dir, default_dir: CONFIG_DIR, sessions_file: currentDbPath() })
 }
 
 export async function historyDirSet(dirPath, migrate = false) {
+  // P0-2 T02（ID-103 落地）：history_dir_set = 历史 DB 存放位置切换 + 数据搬移
+  // （config_service.history_dir_set:243-287 等价语义）——非仅物化静态副本：
+  // 切换后新会话写入跟随新目录（用户意图的忠实实现）。
   const input = String(dirPath || '').trim()
   if (!input) {
+    // 恢复默认：切回默认库并写空 dir（migrate 语义在恢复路径不触发，同 Python）
+    const switched = await withDbSwitchLock(() => switchDatabaseCore(path.join(CONFIG_DIR, 'harbor.db')))
+    if (switched.error) return okJson({ error: switched.error })
     await mergeConfig('history.json', JSON.stringify({ dir: '' }))
     return okJson({ ok: true, dir: '', migrated: false, migrated_from: '' })
   }
@@ -239,16 +248,30 @@ export async function historyDirSet(dirPath, migrate = false) {
   if (normalized === driveRoot || sensitive.some(x => normalized === x || normalized.startsWith(x + path.sep))) {
     return okJson({ error: `不能使用系统目录：${target}` })
   }
-  const previous = readConfigJson('history.json', {}).dir || ''
-  const source = path.join(previous || CONFIG_DIR, 'sessions.json')
-  let migrated = false; let migratedFrom = ''
-  if (migrate && fs.existsSync(source) && path.dirname(fs.realpathSync(source)) !== target) {
-    const destination = path.join(target, 'sessions.json')
-    if (!fs.existsSync(destination)) {
-      try { fs.copyFileSync(source, destination); migrated = true; migratedFrom = source }
-      catch (error) { return okJson({ error: `迁移失败: ${error.message}` }) }
+  // 互斥锁整段（W4：校验-迁移-落 history.json 与并发切换不得交错）
+  return withDbSwitchLock(async () => {
+    const sourceDb = currentDbPath()
+    const targetDb = path.join(target, 'harbor.db')
+    let migrated = false
+    let migratedFrom = ''
+    if (migrate && fs.existsSync(sourceDb)
+      && path.resolve(path.dirname(sourceDb)).toLowerCase() !== path.resolve(target).toLowerCase()) {
+      // 迁移源取当前生效库（W9 口径）；目标已存在 → 跳过不覆盖（migrated 保持 false）
+      if (!fs.existsSync(targetDb)) {
+        try {
+          fs.copyFileSync(sourceDb, targetDb)
+          // 复制 DB 文件 → 物化导出 sessions.json 到目标目录（legacy 可读副本）
+          await materializeSessions(path.join(target, 'sessions.json'))
+          migrated = true
+          migratedFrom = sourceDb
+        } catch (error) { return okJson({ error: `迁移失败: ${error.message}` }) }
+      }
     }
-  }
-  await mergeConfig('history.json', JSON.stringify({ dir: target }))
-  return okJson({ ok: true, dir: target, migrated, migrated_from: migratedFrom })
+    // 切换 DB：migrate=false 目标为空库（不存在则建库+schema），旧库原地保留
+    // （Core 内核——本函数已持整段互斥锁，勿再取公共包装锁防自死锁）
+    const switched = await switchDatabaseCore(targetDb)
+    if (switched.error) return okJson({ error: switched.error })
+    await mergeConfig('history.json', JSON.stringify({ dir: target }))
+    return okJson({ ok: true, dir: target, migrated, migrated_from: migratedFrom })
+  })
 }

@@ -42,11 +42,33 @@
       "fixture": "history-dir-basic",
       "callId": "c05",
       "method": "history_dir_set",
-      "reason": "DB 存储无 sessions.json 文件可搬：Python migrate=true 复制 sessions.json 到新目录（migrated:true）；Node 会话在 Prisma DB，migrate 语义需 P0-2 重定义（导出/导入等价语义）",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。DB 存储下 migrate 语义需 P0-2 重定义（导出/导入等价语义），不伪造 migrated=true 的处置正确；P0-2 定案前恒 false 可接受",
-      "date": "2026-10-30",
+      "reason": "P0-2 定案：migrate 已实现 DB→DB 等价迁移（复制当前生效库 + sessions.json 物化导出 + 切换后写入跟随），migrated:true 双侧一致。migrated_from 值披露存储介质（Python=旧 sessions.json 路径 / Node=旧 harbor.db 路径）——与 ID-001/ID-202 同构：语义已对齐，值披露实际介质",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
       "expires": null,
-      "frontendCompat": "前端仅在显式勾选「迁移历史」时读 migrated 字段展示 toast；P0-2 补齐前该路径恒 false（不误报迁移成功）"
+      "frontendCompat": "前端仅在显式勾选「迁移历史」时读 migrated/migrated_from 字段展示；migrated:true 双侧一致，migrated_from 为介质路径披露不影响功能分支"
+    },
+    {
+      "id": "ID-103A",
+      "fixture": "history-dir-basic",
+      "callId": "c01",
+      "method": "history_dir_get",
+      "reason": "ID-103 同族介质披露：sessions_file 返回当前生效存储文件（Python=CONFIG_DIR/sessions.json / Node=CONFIG_DIR/harbor.db）。键语义（历史存放位置披露）一致，值为实际介质路径",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
+      "expires": null,
+      "frontendCompat": "sessions_file 供「打开数据目录/文件」类 UI 使用——指向真实生效文件（Node 为 DB 库文件），比指向不存在的 sessions.json 更正确；介质差异属披露非行为分叉"
+    },
+    {
+      "id": "ID-103B",
+      "fixture": "history-dir-basic",
+      "callId": "c03",
+      "method": "history_dir_get",
+      "reason": "ID-103A 的切换后同款：sessions_file 披露切换后生效库文件（Python=<dir>/sessions.json / Node=<dir>/harbor.db）",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
+      "expires": null,
+      "frontendCompat": "同 ID-103A——披露实际介质路径，不影响功能分支"
     },
     {
       "id": "ID-104",
