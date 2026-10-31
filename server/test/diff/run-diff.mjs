@@ -17,9 +17,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import { loadRules } from './normalize.mjs'
-import { loadIntentionalDeltas, compareCall, compareSideEffects } from './compare.mjs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { loadRules } from './normalize.mjs'import { loadIntentionalDeltas, compareCall, compareSideEffects } from './compare.mjs'
 import { buildReportJson, renderMarkdown, writeReports } from './report.mjs'
 import { listMethods } from '../../src/registry.js'
 
@@ -65,6 +64,23 @@ function childEnv(extra) {
   return { ...env, ...extra } // HARBOR 前缀 / GLM 前缀 / DATABASE_URL 等一律不继承
 }
 
+/** 双侧驱动退出后清扫本 runId 的临时根（进程已退，句柄全释放；残留=泄漏）。 */
+function sweepTempRoots(tag) {
+  if (process.env.HARBOR_DIFF_KEEP_TEMP === '1') return
+  const dir = os.tmpdir()
+  let removed = 0
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith(`${tag}-`)) continue
+      try {
+        fs.rmSync(path.join(dir, name), { recursive: true, force: true, retryDelay: 200, maxRetries: 5 })
+        removed += 1
+      } catch { /* 容忍个别句柄竞争残留 */ }
+    }
+  } catch { /* tmpdir 不可读时跳过 */ }
+  return removed
+}
+
 function spawnAsync(bin, args, options) {
   return new Promise(resolve => {
     const child = spawn(bin, args, options)
@@ -106,14 +122,15 @@ async function runPythonListMethods() {
   return JSON.parse(res.stdout).methods
 }
 
-async function runFixture(spec, rawDir) {
+async function runFixture(spec, rawDir, tempTag) {
   const fixture = JSON.parse(fs.readFileSync(spec.file, 'utf8'))
   const mocks = (fixture.mocks || []).join(',')
   const sharedEnv = {
     HARBOR_DIFF_MOCK_TABLE: MOCK_TABLE,
     HARBOR_DIFF_MOCKS: mocks,
     HARBOR_DIFF_DIALOG_REL: 'out/report.txt',
-    HARBOR_DIFF_KEEP_TEMP: args.keepTemp ? '1' : '0',
+    HARBOR_DIFF_TEMP_TAG: tempTag,
+    HARBOR_DIFF_KEEP_TEMP: process.env.HARBOR_DIFF_KEEP_TEMP === '1' ? '1' : '0',
   }
 
   const pyResultPath = path.join(rawDir, `${fixture.id}.py.json`)
@@ -125,7 +142,7 @@ async function runFixture(spec, rawDir) {
     timeoutMs: TIMEOUT_MS,
   })
   const nodeRun = await spawnAsync(NODE_BIN,
-    [...(mocks.includes('subprocess') ? ['--import', PRELOAD] : []), NODE_DRIVER, spec.file, '--result', nodeResultPath], {
+    [...(mocks.includes('subprocess') ? ['--import', pathToFileURL(PRELOAD).href] : []), NODE_DRIVER, spec.file, '--result', nodeResultPath], {
       cwd: PROJECT_ROOT,
       env: childEnv(sharedEnv),
       timeoutMs: TIMEOUT_MS,
@@ -191,6 +208,7 @@ async function computeCoverage(fixtureReports) {
 
 /* ---------------- 主流程 ---------------- */
 const args = parseArgs(process.argv)
+if (args.keepTemp) process.env.HARBOR_DIFF_KEEP_TEMP = '1'
 const startedAt = new Date()
 const runId = startedAt.toISOString().replace(/\D/g, '').slice(0, 14)
 const outDir = path.join(PROJECT_ROOT, 'outputs', 'diff', runId)
@@ -205,16 +223,19 @@ if (!fixtureSpecs.length) {
 }
 
 console.log(`[diff] runId=${runId} fixtures=${fixtureSpecs.length} families=[${[...new Set(fixtureSpecs.map(s => s.family))].join(',')}]`)
+const tempTag = `harbor-diff-${runId}`
 const results = []
 let infraErrors = 0
 for (const spec of fixtureSpecs) {
   process.stdout.write(`[diff] ${spec.family}/${path.basename(spec.file)} … `)
-  const result = await runFixture(spec, rawDir)
+  const result = await runFixture(spec, rawDir, tempTag)
   const counts = result.verdicts.reduce((acc, v) => { acc[v.verdict] = (acc[v.verdict] || 0) + 1; return acc }, {})
   if (result.error) infraErrors += 1
   console.log(`match=${counts.match || 0} intentional=${counts.intentional || 0} `
     + `suspect=${counts.suspect || 0} error=${counts.error || 0}${result.error ? ' [DRIVER-ERROR]' : ''}`)
   results.push(result)
+  // 双侧驱动已退出（句柄全释放）：清扫本轮临时根，零残留
+  sweepTempRoots(tempTag)
 }
 
 let coverage = null

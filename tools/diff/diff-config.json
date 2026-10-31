@@ -22,7 +22,8 @@
     "webdav",
     "experts",
     "mcp",
-    "rpc"
+    "rpc",
+    "selftest"
   ],
   "defaultFamilies": [
     "meta",

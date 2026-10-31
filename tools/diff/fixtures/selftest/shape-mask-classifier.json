@@ -1,0 +1,23 @@
+{
+  "id": "shape-mask-classifier",
+  "family": "selftest",
+  "priority": "P0",
+  "mode": "shape",
+  "description": "harness 自检：shape 模式只比键集+类型——文案级值差异应被掩掉为 match（结构等价即可比）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "software_probe",
+      "args": ["nosuch"],
+      "note": "刻意形状差异用例之掩蔽面：双侧 {ok,error{code,message,hint}} 同构、仅 message 文案不同 → shape 模式应 match"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}
