@@ -511,6 +511,11 @@ class SearchService:
                 用于 JS 渲染引擎空壳判定，规范 §5.1③）。
         """
         orig_engine = orig_engine or engine
+        # EXT-2 防崩溃兜底（P0-1b 唯一 Python 侧例外，防 UnboundLocalError）：
+        # RSS 空结果回落 HTML 且代理返回空 200（html=''）时 results 未赋值即被
+        # 引用——初始化为空列表不改契约行为（空列表与「解析为空」走同一
+        # engine_retry 兜底分支）；test_api_contract 不涉及此路径。
+        results = []
         if html is None:
             # v1.9.0 M2.9：bing 先试 RSS 主通道（4KB 量级 XML 主路径；非 bing
             # 与续跑/takeover 中直接走既有 HTML 路径——零改）
