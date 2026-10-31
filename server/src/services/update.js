@@ -37,6 +37,33 @@ async function fetchNoRedirect(url, options = {}) {
 
 const state = { state: 'idle', pct: 0, error: null, path: null, version: null, url: null, sha256: null }
 
+/**
+ * 宿主检测（T05，P0-4 §5.3/Q4）：
+ *   - Electron 宿主（A1 拓扑：server 宿主于 Electron 主进程，process.versions.electron
+ *     置位）→ Electron 分支：拉起已校验 Setup /S 静默安装 → 退出（NSIS 覆盖安装
+ *     原子性承接替换；sentinel/bat 单 exe 自替换思路保留为回退记录）；
+ *   - pkg 单 exe（process.pkg / HARBOR_FROZEN_EXE）→ 旧分支原样（自替换 bat）；
+ *   - 两者皆无 → 开发模式拒绝（语义逐字不变）。
+ *   HARBOR_FROZEN_EXE 优先于 Electron 检测（显式注入的冻结 exe 语义保守沿用旧路）。
+ *   HARBOR_UPDATE_ELECTRON=1 为测试 seam（mock 宿主；生产入口不设置）。
+ *   HARBOR_UPDATE_EXIT_DELAY_MS 为测试 seam（退出延迟毫秒数，默认 1500）。
+ */
+export function isElectronUpdateHost() {
+  if (process.env.HARBOR_FROZEN_EXE || process.pkg) return false
+  return Boolean(process.versions.electron) || process.env.HARBOR_UPDATE_ELECTRON === '1'
+}
+
+/** Setup 拉起 seam：测试注入 mock 以捕获 (setupPath, args)，生产恒为真实 spawn。 */
+let launchSetupImpl = null
+export function _setLaunchSetupForTest(fn) { launchSetupImpl = fn }
+
+function launchSilentSetup(setupPath) {
+  if (launchSetupImpl) return launchSetupImpl(setupPath, ['/S'])
+  const child = spawn(setupPath, ['/S'], { detached: true, stdio: 'ignore', windowsHide: true })
+  child.unref()
+  return child
+}
+
 export async function checkUpdate(manifestUrl) {
   const url = String(manifestUrl || DEFAULT_MANIFEST_URL).trim()
   if (!url.toLowerCase().startsWith('https://')) {
@@ -114,17 +141,41 @@ export async function getUpdateProgress() { return json({ ...state }) }
 
 export async function applyUpdate() {
   const oldExe = process.env.HARBOR_FROZEN_EXE || (process.pkg ? process.execPath : '')
-  if (!oldExe) return json({ error: '开发模式不支持自更新，请使用打包版' })
+  if (!oldExe && !isElectronUpdateHost()) return json({ error: '开发模式不支持自更新，请使用打包版' })
   if (state.state !== 'done' || !state.path) return json({ error: '尚无已完成校验的更新包' })
   if (!fs.existsSync(state.path)) return json({ error: '更新包不存在，请重新下载' })
-  const sentinel = path.join(UPDATE_DIR, `apply_ok.${process.pid}.sentinel`)
-  for (const value of [state.path, oldExe, sentinel]) {
-    if (/["\r\n%]/.test(value)) return json({ error: '更新路径含批处理敏感字符，已拒绝应用' })
-  }
+  // sha256 复核链共用（下载时校验 + 应用前复核，篡改面同口径）
   const digest = crypto.createHash('sha256').update(await fsp.readFile(state.path)).digest('hex')
   if (digest.toLowerCase() !== String(state.sha256).toLowerCase()) {
     return json({ error: '更新包复核哈希不匹配（可能被篡改），已拒绝安装' })
   }
+  if (!oldExe) {
+    // —— Electron 分支（§5.3/Q4）：拉起已校验 Setup /S 静默安装 → 退出 ——
+    // manifest 契约不变（url 即指向 Setup）；NSIS per-user 覆盖安装承接目录替换。
+    // spawn 失败（杀软拦截/文件占用）→ 旧版继续可用（R7：失败时旧版仍可启动），
+    // 取消退出定时器；成功则短延迟退出（等 HTTP 回包落定），NSIS 检测到进程
+    // 已退出后接管覆盖安装。旧 sentinel/bat 自替换路径原样保留在下方 pkg 分支。
+    if (/["\r\n%]/.test(state.path)) return json({ error: '更新包路径含非法字符，已拒绝应用' })
+    const exitDelayMs = Number(process.env.HARBOR_UPDATE_EXIT_DELAY_MS) || 1500
+    const exitTimer = setTimeout(() => process.exit(0), exitDelayMs)
+    exitTimer.unref()
+    try {
+      const child = launchSilentSetup(state.path)
+      child.on && child.on('error', error => {
+        console.error('[update] Setup 拉起失败（保留旧版继续运行）:', error && error.message)
+        clearTimeout(exitTimer)
+      })
+    } catch (error) {
+      clearTimeout(exitTimer)
+      console.error('[update] Setup 拉起异常（保留旧版继续运行）:', error && error.message)
+    }
+    return json({ ok: true, note: '已拉起已校验的安装包静默更新，应用即将退出' })
+  }
+  const sentinel = path.join(UPDATE_DIR, `apply_ok.${process.pid}.sentinel`)
+  for (const value of [state.path, oldExe, sentinel]) {
+    if (/["\r\n%]/.test(value)) return json({ error: '更新路径含批处理敏感字符，已拒绝应用' })
+  }
+  // 复核哈希已在本函数头部统一执行（共用校验链）；pkg 分支其余语义原样保留
   const bat = path.join(UPDATE_DIR, 'apply_update.bat')
   const script = `@echo off\r\ntimeout /t 2 /nobreak >nul\r\ncopy /y "${oldExe}" "${oldExe}.bak" >nul 2>&1\r\ncopy /y "${state.path}" "${oldExe}" >nul 2>&1\r\nif errorlevel 1 (copy /y "${oldExe}.bak" "${oldExe}" >nul 2>&1 & exit /b 1)\r\necho ok>"${sentinel}"\r\nstart "" "${oldExe}"\r\ndel "%~f0" >nul 2>&1\r\n`
   await fsp.writeFile(bat, script, 'utf8')
