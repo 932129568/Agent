@@ -71,11 +71,13 @@ function applyRegexRules(text, rules) {
   return out
 }
 
-/** 字符串归一：侧路径 → 正则规则 → 分隔符归一（N01 最后）。 */
+/** 字符串归一：侧路径 → 正则规则 → 分隔符归一（N01，数据驱动）。 */
 export function normalizeString(text, side, rules) {
   let out = replaceSidePaths(String(text ?? ''), side)
   out = applyRegexRules(out, rules.raw.regexRules || [])
-  return out.replaceAll('\\', '/')
+  const sep = rules.raw.separatorRule
+  if (sep && sep.from) out = out.split(sep.from).join(sep.to || '/')
+  return out
 }
 
 /** 结构归一：键控掩码 + 字符串归一，递归。 */
