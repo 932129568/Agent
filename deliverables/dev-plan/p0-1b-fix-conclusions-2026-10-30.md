@@ -19,12 +19,13 @@
 
 ## 二、收敛证据
 
-- **最终全量差分**：`outputs/diff/20261030155054/` —— **fixtures=12 / calls=121 / match=116 / intentional=5 / suspect=0 / error=0，退出码 0**
-- 族级收敛：meta 1 intentional；sessions-basic 8 match；sessions-validation 4 match + 3 intentional；history-dir 8 match + 1 intentional；checkpoints 9 match（含 side-effects）；plans 11 match；guard 25 match；commands 11 match；export 7 match；browser offline 14 match + tier-aligned 8 match；software 11 match
+- **最终全量差分**：`outputs/diff/20261030163332/` —— **fixtures=14 / calls=125 / match=120 / intentional=5 / suspect=0 / error=0，退出码 0**
+  （含 admin approve/deny fixture 补充批：commands 3 fixture 15/15 match——Python fake ShellExecuteW 真跑临时 bat ↔ Node mock 执行同形收敛）
+- 族级收敛：meta 1 intentional；sessions-basic 8 match；sessions-validation 4 match + 3 intentional；history-dir 8 match + 1 intentional；checkpoints 9 match（含 side-effects）；plans 11 match；guard 25 match；commands-guarded 11 match + admin-approve 2 match + admin-deny 2 match；export 7 match；browser offline 14 match + tier-aligned 8 match；software 11 match
 - 覆盖门禁：fixture 覆盖 **48/145** 无回退（缺口 92 为 T05 全覆盖范围，`diff:coverage` 报缺口属预期）
 - Node 回归：15 个 npm test 入口（16 组）全绿（browser.mjs closed 断言按 B4 口径更新）
 - Python 回归（新基线 1767/0/3/1 保持 0 failed）：见 outputs/pytest-tmp/p01b-regress/junit.xml
-- 复跑防交叉：批间全量复跑 3 次（runId 20261030152030 / 20261030153335 / 20261030154610 / 20261030155054），每批已收敛项零翻转
+- 复跑防交叉：批间全量复跑 6 次（20261030152030 / 20261030153335 / 20261030154610 / 20261030155054 / 20261030162318 / 20261030163332），已收敛项零翻转（20261030162454 轮 ID-103 一次误报 suspect，两次复跑 + 登记簿直查均正常，未复现）
 
 ## 三、残留 intentional 清单（5 项，均待主理人签核）
 
@@ -49,5 +50,6 @@
 | commit | 内容 |
 |---|---|
 | 4fad913 | 修复T01+T02：护栏判定链/armed + 命令族契约（suspect 66→43） |
-| （本提交） | 修复T03+T04+T05：browser/sessions/plans/software + ID-101..104 登记 + mock 修复（suspect 43→0） |
+| 8468f84 | 修复T03+T04+T05：browser/sessions/plans/software + ID-101..104 登记 + mock 修复（suspect 43→0） |
+| e6f9d9f | 修复T02 收尾：admin approve/deny fixture + fixture env 字段 + fakes ShellExecuteW（14 fixture 125 call 全收敛） |
 | d65884d | EXT-2：Python 侧 results 未初始化防崩溃兜底（唯一例外，单独提交） |
