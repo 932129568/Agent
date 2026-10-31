@@ -10,7 +10,7 @@
       "callId": "c01",
       "method": "get_api_info",
       "reason": "exe 字段披露实现宿主（Python 侧 'python(main.py)' vs Node 侧 'node(server/src/index.js)'）；version 与 methods 51 项清单按冻结契约严格比对，不允许差异",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。exe 字段为环境绑定宿主披露，version/methods 契约面严格比对不受影响；P0-4 切换前必须复核前端对 exe 字段的消费点",
       "date": "2026-10-31",
       "expires": "2026-12-31",
       "frontendCompat": "前端不依据 exe 字段做分支；P0-4 桌面切换前需复核前端对 exe 字段的消费点；契约面（version/methods）任何漂移都会让本 call 回到 suspect"
