@@ -228,10 +228,19 @@ def test_static_security_dependency_and_packaging_guards():
     lock = json.loads((ROOT / 'package-lock.json').read_text(encoding='utf-8'))
     assert package['private'] is True
     assert package['dependencies'] == {'zod': '4.6.7'}
-    assert package['devDependencies'] == {'esbuild': '0.28.2'}
+    # P0-4 桌面工具链（electron/electron-builder）入列——守卫白名单同步（T06 L0 复核修正）
+    assert package['devDependencies'] == {
+        'esbuild': '0.28.2',
+        'electron': '^45.2.1',
+        'electron-builder': '^26.18.0',
+    }
     assert lock['packages']['node_modules/zod']['version'] == '4.6.7'
     assert lock['packages']['node_modules/esbuild']['version'] == '0.28.2'
     assert lock['packages']['node_modules/esbuild']['dev'] is True
+    assert lock['packages']['node_modules/electron']['version'] == '45.2.1'
+    assert lock['packages']['node_modules/electron']['dev'] is True
+    assert lock['packages']['node_modules/electron-builder']['version'] == '26.18.0'
+    assert lock['packages']['node_modules/electron-builder']['dev'] is True
     assert 'node_modules/' in (ROOT / '.gitignore').read_text(encoding='utf-8')
     template = (ROOT / 'frontend' / 'index.template.html').read_text(encoding='utf-8')
     assert '<script src="libs/ui-schema.bundle.js"></script>' in template
