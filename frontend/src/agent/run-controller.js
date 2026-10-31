@@ -213,8 +213,9 @@ function harborStopRun(sessionId) {
 let __agentActiveRun = null;
 function agentRunCurrent(run) {
   if (typeof RunRegistry !== 'undefined') return RunRegistry.isCurrent(run);
-  // P0-3：按会话注册表判定活跃（并行 run 各自独立——不再全局唯一活跃指针）
-  return !!run && __agentRuns.get(run.sessionId) === run && !run.cancelled;
+  // P0-3：按会话注册表判定活跃（并行 run 各自独立——不再全局唯一活跃指针）；
+  // __agentActiveRun 回退兼容 legacy 手动单活跃使用（旧测试/旧调用路径不破坏）
+  return !!run && !run.cancelled && (__agentRuns.get(run.sessionId) === run || __agentActiveRun === run);
 }
 /** Visible-run guard: background runs may write their own history/status,
  *  but must never touch the currently visible chat DOM or stream controls. */
