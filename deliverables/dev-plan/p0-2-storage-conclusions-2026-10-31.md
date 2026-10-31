@@ -11,13 +11,13 @@
 
 - `expires` → `2099-12-31`；`reason` 改写为定案表述：**Prisma 结构化校验拒绝非对象条目为定案行为；Python 数组原文保底写入语义不迁移**（四点理由：合法输入双侧逐字节一致；保底写入在 Prisma 模型下无自然等价物且污染存储模型；Node fail-closed 显式拒绝优于静默写坏；P0-4 后 Python 退役该宽容度无消费者）。
 - `sessions-validation` fixture 转为长期契约差异存证用例（非待办缺陷）。
-- approvedBy=pending（待主理人按 Q1 裁定统一签核）。
+- approvedBy=team-lead（2026-10-31 已按 Q1 裁定统一签核，提交 4b45614）。
 
 ### ID-103（history_dir_set migrate）→ 已实现真实迁移语义，登记降级为介质披露
 
 - **Node 等价语义 = 历史 DB 存放位置切换 + 数据搬移**（非仅物化静态副本）：源取当前生效库（W9 口径）、目标已存在跳过不覆盖（migrated 保持 false）、复制 DB 文件 + sessions.json 物化导出到目标目录（legacy 可读副本）、switchDatabase 原子换绑（ESM live binding）→ 切换后新会话写入跟随新目录。
 - `migrated:true` 双侧一致（原「恒 false」登记事由消除）；`migrated_from` 值为旧 DB 文件路径（Python 为旧 sessions.json 路径）——**介质披露**（与 ID-001/ID-202 同构：语义已对齐，值披露实际介质）。
-- 登记落笔：ID-103（c05 定案）+ ID-103A/B（c01/c03 sessions_file 介质披露）+ ID-103C（selftest 金丝雀介质披露存证）；expires 维持复评标记至 QA 复验后转永久或撤销；approvedBy=pending。
+- 登记落笔：ID-103（c05 定案）+ ID-103A/B（c01/c03 sessions_file 介质披露）+ ID-103C（selftest 金丝雀介质披露存证）；expires 维持复评标记至 QA 复验后转永久或撤销；approvedBy=team-lead（2026-10-31 签核，提交 4b45614）。
 
 ### 范围澄清（Q2/Q7 裁定）
 
