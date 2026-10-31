@@ -75,8 +75,11 @@ check('GLM 端点过滤 browser_* 避免双搜索', () => {
   assert.ok(glmTools.some(t => t.function.name === 'software_call'))
 })
 
-const prompt = await provider.buildSystemPrompt('')
-check('build_system_prompt 含工作区路径', () => assert.ok(prompt.includes(tmp)))
+const prompt = JSON.parse(await provider.buildSystemPrompt(''))
+check('build_system_prompt JSON 编码字符串且含工作区路径（P0-1c PR1：ok(text)=json.dumps 口径）', () => {
+  assert.ok(prompt.includes(tmp))
+  assert.ok(prompt.includes('硬规则'))
+})
 const versionedPrompt = JSON.parse(await provider.promptGet('system-base'))
 check('prompt_get 返回版本化提示词', () => {
   assert.equal(versionedPrompt.ok, true)

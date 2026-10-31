@@ -49,6 +49,16 @@ for (const [key, value] of Object.entries(fixture.env?.node || {})) {
   process.env[String(key)] = String(value)
 }
 
+/* ---------- 0.5 listenPorts 挂起监听器（与 python_driver._start_hang_listener 同构）：
+ TCP accept 但不响应——「端口有服务但无 HTTP 应答」的确定性探测场景 ---------- */
+const hangServers = []
+for (const port of fixture.setup?.listenPorts || []) {
+  const { default: net } = await import('node:net')
+  const server = net.createServer(socket => { socket.pause() })
+  server.listen(Number(port), '127.0.0.1')
+  hangServers.push(server)
+}
+
 /* ---------- 1. 临时环境（子进程内设置；先于任何 src import 生效） ---------- */
 const tempTag = String(process.env.HARBOR_DIFF_TEMP_TAG || 'harbor-diff-node')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `${tempTag}-n-`))

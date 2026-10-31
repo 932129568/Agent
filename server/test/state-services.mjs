@@ -54,9 +54,10 @@ check('save_workspace_file 写入 attachments', () => {
   assert.ok(fs.existsSync(path.join(ws, 'attachments', 'a.md')))
 })
 const del = JSON.parse(await workspace.deletePath('attachments/a.md', true))
-check('delete_path 回报 recycled=false（不伪称入回收站）', () => {
-  assert.equal(del.recycled, false)
-  assert.equal(del.requested_recycle, true)
+check('delete_path 回报 mode=回收站（P0-1c F6：VB FileIO 真实回收站，与 send2trash 同因同果）', () => {
+  assert.equal(del.ok, true)
+  assert.equal(del.mode, '回收站')
+  assert.equal(path.isAbsolute(del.path), true)
 })
 
 /* 记忆 */

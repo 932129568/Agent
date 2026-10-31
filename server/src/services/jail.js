@@ -49,7 +49,8 @@ function realpathSafe(p) {
 }
 
 export function shortPath(abs, sid = runtime.currentSid) {
+  // P0-1c：短路径分隔符统一 '/'（workspace_service.py:69 rel.replace('\\', '/')）
   const root = path.resolve(effectiveRoot(sid))
   const rel = path.relative(root, abs)
-  return rel && !rel.startsWith('..') ? rel : abs
+  return rel && !rel.startsWith('..') ? rel.split(path.sep).join('/') : abs
 }

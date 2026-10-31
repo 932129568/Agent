@@ -6,7 +6,10 @@
   "description": "提示词/工具族：system prompt 渲染（同一 prompts 目录源）/工具清单（chat+full）/版本化提示词/工具缓存/trace/ui_nudge/澄清收集/CORS 代理基址/端点连通性（离线错误路径）/本地模型探测与就绪度",
   "setup": {
     "workspaceFiles": [],
-    "callsBefore": []
+    "callsBefore": [],
+    "listenPorts": [
+      58111
+    ]
   },
   "calls": [
     {
@@ -120,9 +123,9 @@
       "id": "c13",
       "method": "local_probe",
       "args": [
-        "[19999]"
+        "[58111]"
       ],
-      "note": "端口探测（19999 不可达，latency 掩蔽）"
+      "note": "端口探测（58111 挂起监听器：TCP 连接成功但 HTTP 无应答 → 双侧确定性「连接超时（端口无响应）」；规避本机 RST 延迟 2.06s 对 Python 阻塞 connect 的分类边界抖动）"
     },
     {
       "id": "c14",

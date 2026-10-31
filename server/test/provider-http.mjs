@@ -39,16 +39,20 @@ try {
     assert.ok(seen.some(x => x.url === '/v1/models' && x.auth === 'Bearer secret-test'))
   })
   const ready = JSON.parse(await provider.localReadiness(base, 'qwen3.5-9b', 'secret-test'))
-  check('local_readiness 返回 8 项评分与 full 判定', () => {
-    assert.equal(ready.max, 8)
-    assert.equal(ready.score, 8)
+  check('local_readiness 返回 8 项量表与 full 判定（P0-1c PR4：max=16、项含 name/score/max/ok/detail）', () => {
+    assert.equal(ready.max, 16)
+    assert.equal(ready.items.length, 8)
+    assert.ok(ready.items.every(x => x.max === 2 && typeof x.detail === 'string'))
     assert.equal(ready.verdict, 'full')
+    assert.equal(ready.model, 'qwen3.5-9b')
+    // 端点可达 + 元数据已识别（estimated=true 按保守估计 1 分）→ model_tagged 非 2
+    assert.ok(ready.items.find(x => x.name === 'model_tagged').score === 1)
   })
   const tested = JSON.parse(await provider.testProviderEndpoint(base, 'secret-test', 'qwen3.5-9b', 5, false))
   check('test_provider_endpoint 真实 POST 并解析 reply', () => {
     assert.equal(tested.ok, true, JSON.stringify(tested))
     assert.equal(tested.reply, 'pong')
-    assert.equal(tested.state, 'ready')
+    assert.equal(tested.url.includes('/chat/completions'), true)  // PR5：成功 {ok,url,model,reply}（无 state 键）
     const call = seen.filter(x => x.url === '/v1/chat/completions').at(-1)
     assert.equal(JSON.parse(call.body).model, 'qwen3.5-9b')
     assert.equal(call.auth, 'Bearer secret-test')

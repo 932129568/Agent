@@ -90,6 +90,31 @@ def _list_methods():
         fakes.cleanup(root)
 
 
+def _start_hang_listener(port):
+    """挂起监听器（fixture setup.listenPorts）：accept 但永不响应——
+    「端口有服务但无 HTTP 应答」的确定性探测场景（双侧同超时分类）。"""
+    import socket as sk
+    import threading
+
+    def _serve():
+        try:
+            srv = sk.socket(sk.AF_INET, sk.SOCK_STREAM)
+            srv.setsockopt(sk.SOL_SOCKET, sk.SO_REUSEADDR, 1)
+            srv.bind(('127.0.0.1', port))
+            srv.listen(8)
+            while True:
+                conn, _ = srv.accept()
+                # 不读写不关闭：连接挂起直到对端超时
+                try:
+                    conn.settimeout(60)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    threading.Thread(target=_serve, daemon=True).start()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('fixture', nargs='?', default=None)
@@ -127,6 +152,11 @@ def main():
         # 的 GLM_TEST_MSGBOX 等），先于 fakes 安装生效
         for key, value in (fixture.get('env') or {}).get('python', {}).items():
             os.environ[str(key)] = str(value)
+        # listenPorts 挂起监听器（T02 c13）：TCP accept 但不响应——使「端口有服务
+        # 但无 HTTP 应答」的双侧探测确定性超时（规避本机 RST 延迟 ~2.06s 对 Python
+        # 阻塞 connect 的 2s 探测分类边界抖动）
+        for port in (fixture.get('setup') or {}).get('listenPorts') or []:
+            _start_hang_listener(int(port))
         mocks = list(fixture.get('mocks') or [])
         # webview/PIL 在 import 前装：backend 模块运行期 import 时从 sys.modules 取
         fakes.install_fake_webview()

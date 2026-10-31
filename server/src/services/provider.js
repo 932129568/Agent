@@ -210,6 +210,33 @@ export async function localReadiness(baseUrl, model = '', apiKey = '') {
   return okJson(result)
 }
 
+/** A5 本地端点测试（local_model_service.test_local_endpoint:671-728 同构）：
+ * 免 Key、503/文案含 loading → state='loading'（冷启动等待）而非失败。 */
+async function testLocalEndpoint(target, model, timeout = 30) {
+  const result = await request(target, { method: 'POST', timeout,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 5, stream: false }) })
+  const payload = parseJson(result.body)
+  if (result.ok) {
+    if (!payload || typeof payload !== 'object' || !('choices' in payload)) {
+      return okJson({ ok: false, error: 'HTTP 200 但响应结构异常（非 OpenAI 兼容格式）' })
+    }
+    return okJson({ ok: true, url: target, model, state: 'ready',
+      reply: String(payload.choices?.[0]?.message?.content || '').slice(0, 80) })
+  }
+  if (result.kind === 'http') {
+    const snippet = String(result.body || '')
+    const b = snippet.toLowerCase()
+    // classify_local_error:317-319：503 或 loading 文案 → 冷启动等待态
+    if (result.status === 503 || b.includes('loading') || b.includes('is loading')) {
+      return okJson({ ok: true, url: target, model, state: 'loading',
+        message: '模型正在加载（Ollama 首次提问需 10-60s），已自动等待重试' })
+    }
+    return okJson({ ok: false, error: `HTTP ${result.status}: ${snippet.slice(0, 300)}`, status: result.status })
+  }
+  return okJson({ ok: false, error: `连接失败: ${result.error}` })
+}
+
 export async function testProviderEndpoint(baseUrl, apiKey, model, timeout = 15, local = false) {
   // PR5：provider_service.test_endpoint 口径——前置校验文案、错误路径不回显
   // url/model/state（库文本片段 → ID-203 登记）；成功 {ok, url, model, reply}
@@ -217,6 +244,7 @@ export async function testProviderEndpoint(baseUrl, apiKey, model, timeout = 15,
   if (!target) return okJson({ ok: false, error: '缺少 Base URL' })
   if (!local && !String(apiKey || '').trim()) return okJson({ ok: false, error: '缺少 API Key' })
   if (!String(model || '').trim()) return okJson({ ok: false, error: '缺少模型名' })
+  if (local) return testLocalEndpoint(target, String(model).trim(), timeout || 30)
   const result = await request(target, { method: 'POST', timeout: timeout || (local ? 30 : 15),
     headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
     body: JSON.stringify({ model: String(model).trim(), messages: [{ role: 'user', content: 'ping' }], max_tokens: 5, stream: false }) })
