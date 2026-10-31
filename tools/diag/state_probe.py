@@ -23,6 +23,8 @@ import os
 import sys
 import threading
 
+import pytest
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))
 
@@ -190,7 +192,10 @@ def pytest_configure(config):
     _STATE['out_path'] = config.getoption('--state-probe-out') or default_out
 
 
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_setup(item):
+    """pre-yield 快照 = fixture 装配之前（跨用例残留的接收态锚点；用例自身
+    fixture 内的 env 设置/复位与 monkeypatch 往返不在差异面内）。"""
     try:
         _STATE['setup_snapshot'] = _take_snapshot()
         if _STATE['baseline_threads'] is None:
@@ -198,10 +203,15 @@ def pytest_runtest_setup(item):
             _STATE['baseline_threads'] = set(_STATE['setup_snapshot']['threads'])
     except Exception as error:
         _STATE['entries'].append({'nodeid': item.nodeid, 'probe_error': str(error)})
+    yield
 
 
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item):
-    # teardown 快照先于 fixture finalizer（fresh_home 的 rmtree/复位不计入差异）
+    """post-yield 快照 = fixture finalizer（fresh_home 复位/state_reset/cwd 恢复）
+    之后——只报告「 sanctioned 恢复机制处理不掉」的残留。conftest 的线程停机
+    钩子（plain impl）与默认 finalizer 都在 yield 前完成。"""
+    yield
     try:
         after = _take_snapshot()
         before = _STATE['setup_snapshot'] or {}

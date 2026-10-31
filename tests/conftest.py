@@ -362,6 +362,8 @@ def _fresh_isolation_state():
 _BACKGROUND_THREAD_STOPS = {
     'browser-driver-sweeper': ('_stop', 1.0),
     'mcp-idle-reaper': ('_reaper_stop', 1.0),
+    # SearchBrowser 空闲回收看护（state_probe 实证：browser_search 用例遗留）
+    'search-browser-recycler': ('_stop_evt', 1.0),
     # mcp-client-dispatch：close() 后按 _closed 语义自然收尾（≤0.5s 轮询周期），
     # 诊断探针的 teardown 快照会与末轮 recv 竞态——attr=None 表示仅 join 等待。
     'mcp-client-dispatch': (None, 1.0),
@@ -383,10 +385,26 @@ def _stop_harbor_background_threads():
             t.join(timeout)
         except Exception:
             pass
+    # 测试自建的 HTTP 服务器 serve_forever 线程（state_probe 实证：local_proxy
+    # E2E 与 v15 wire 各遗留 1-8 个）：经线程对象取回 server 实例调其**既有**
+    # shutdown() API（BaseServer 标准停机面）。本地 CORS 代理线程有专属名
+    # （harbor-local-cors-proxy）不会命中 '(serve_forever)' 匹配。
+    for t in threading.enumerate():
+        name = getattr(t, 'name', '')
+        if '(serve_forever)' not in name or t is threading.current_thread():
+            continue
+        try:
+            server = getattr(getattr(t, '_target', None), '__self__', None)
+            if server is not None and hasattr(server, 'shutdown'):
+                server.shutdown()
+                t.join(1.0)
+        except Exception:
+            pass
 
 
 def pytest_runtest_teardown(item):
-    # conftest 钩子后注册先执行：先停后台线程，再让诊断探针（tools/diag/
-    # state_probe.py）取 teardown 快照，最后 fixture finalizer（fresh_home）
-    # 复位 HOME——三者互不遮蔽。
+    # plain impl（conftest 后注册先执行）：在 fixture finalizer（fresh_home
+    # rmtree/state_reset/cwd 恢复）**之前**停后台线程——避免迟写线程毁掉下一
+    # 用例种子；诊断探针（tools/diag/state_probe.py）是 hookwrapper，其快照
+    # 在全部 finalizer 之后取——只报告恢复机制处理不掉的残留。
     _stop_harbor_background_threads()

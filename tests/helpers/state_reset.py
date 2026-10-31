@@ -12,7 +12,24 @@ conftest 以追加的 autouse fixture 在每个用例前调用 reset_all()。
     是外部 safe-delete guard 环境继承，见 conftest 尾部隔离块），故本表仅
     保留防御性复位位 + 已证实需要的项，避免过度复位掩盖真实回归信号。
 """
+import os
 import sys
+
+
+# 测试不经 monkeypatch 直接写入 os.environ 且不复位的键（state_probe 实证）：
+# - GIT_CEILING_DIRECTORIES：检查点用例防 git 逃逸注入，指向当轮 basetemp
+#   子目录（跨用例残留指向已删目录）
+# - HARBOR_PROXY_ALLOW_HOSTS：本地代理白名单逃生门用例写入后遗留
+# - GLM_QA_SECRET：stdio 环境变量白名单用例写入后遗留（值非真实密钥，但
+#   跨用例残留会污染后续白名单判定口径）
+RESET_ENV_KEYS = ('GIT_CEILING_DIRECTORIES',
+                  'HARBOR_PROXY_ALLOW_HOSTS',
+                  'GLM_QA_SECRET')
+
+
+def _reset_env_keys():
+    for key in RESET_ENV_KEYS:
+        os.environ.pop(key, None)
 
 
 def _reset_sandbox_stats():
@@ -46,6 +63,7 @@ def _reset_legacy_trace():
 RESET_TABLE = [
     ('sandbox._STATS', _reset_sandbox_stats),
     ('legacy._RT', _reset_legacy_trace),
+    ('env.keys', _reset_env_keys),
 ]
 
 
