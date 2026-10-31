@@ -37,9 +37,26 @@ const results = []
 const check = (name, fn) => { fn(); results.push(name) }
 
 const platform = JSON.parse(await system.getPlatformInfo())
-check('get_platform_info 返回平台与 Node 版本', () => {
-  assert.equal(platform.node, process.version)
-  assert.ok(platform.platform)
+check('get_platform_info 返回 PL1 契约形状（os/machine/python/services/browser_backend）', () => {
+  assert.equal(platform.ok, true)
+  assert.equal(platform.os, 'win')
+  assert.equal(platform.machine, 'AMD64')
+  // ID-202：python 键冻结、值披露 Node 运行时版本串（与 ID-001 exe 字段同构）
+  assert.equal(platform.python, process.versions.node)
+  assert.deepEqual(Object.keys(platform.services).sort(),
+    ['notify', 'paths', 'process', 'sandbox', 'screen', 'secrets', 'trash'])
+  for (const name of Object.keys(platform.services)) {
+    assert.equal(platform.services[name].ok, true)
+    assert.equal(platform.services[name].name, name)
+  }
+  assert.equal(platform.browser_backend.platform, 'win')
+  assert.equal(platform.browser_backend.win, true)
+  assert.equal(platform.browser_backend.headless, true)
+  assert.equal(platform.browser_backend.mac, false)
+  assert.equal(platform.browser_backend.note, 'mac 后端为理论实现（PyObjC 就绪即启用；真机链路验证排期 M9.5）')
+  // Node 增强折叠：旧键不再外露（P0-1b 先例）
+  assert.equal(platform.arch, undefined)
+  assert.equal(platform.cpus, undefined)
 })
 
 const processes = JSON.parse(await system.listProcesses('node'))

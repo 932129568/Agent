@@ -67,7 +67,9 @@ process.env.DATABASE_URL = `file:${path.join(tmp, 'diff.db').replaceAll('\\', '/
 process.env.LOG_LEVEL = 'silent'
 // P0-1b B1：差分环境对齐 Python 未武装语义（生产缺省武装，入口永不设置本变量）
 process.env.HARBOR_GUARD_ARMED = 'false'
-const wsDir = path.join(tmp, 'ws')
+// P0-1c W 补齐：目录名对齐 Python fakes.paths_of（HOME/Desktop/GLM-Workspace）——
+// recent 条目 name=basename(ws)，目录名不一致会致 get_ws_state/list_recent_ws 伪差
+const wsDir = path.join(tmp, 'Desktop', 'GLM-Workspace')
 const configDir = process.env.HARBOR_CONFIG_DIR
 
 const dialogRel = String(process.env.HARBOR_DIFF_DIALOG_REL || 'out/report.txt')

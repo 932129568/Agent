@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { runtime, setCwd, effectiveRoot } from '../runtime.js'
 import { readTextIfExists } from '../paths.js'
+import { touchRecent } from './workspace.js'
 
 export function getCwd() {
   return runtime.cwd
@@ -21,6 +22,9 @@ export function setWorkspace(dir) {
     return JSON.stringify({ error: `目录不存在: ${target}` })
   }
   setCwd(target)
+  // P0-1c W 补齐（api.py:477-481 修复⑦）：经 api 直改目录后 recent 列表须含该目录
+  // （快捷条/面板下拉数据源），否则 set_workspace 切换的目录不进 recent
+  touchRecent(target)
   return JSON.stringify({ ok: true, path: runtime.cwd })
 }
 

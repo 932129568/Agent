@@ -105,13 +105,30 @@ export async function appendMemory(entry) {
   return JSON.stringify({ ok: true, kind, total: list.length })
 }
 
+/** Python %r 语义（str repr 单引号口径，与 system.js pyRepr 同规则）。 */
+const pyRepr = value => `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+
 export async function memoryDelete(index) {
-  // P0-1c M3/M4：{ok, remaining}；越界/非整数 → 结构化 BAD_PARAMS（人话+hint）
-  const list = loadAll()
-  const i = Number(index)
-  if (typeof index === 'boolean' || !Number.isInteger(i)) {
-    return JSON.stringify({ ok: false, error: { code: 'BAD_PARAMS', message: '序号需要是整数' } })
+  // P0-1c M3/M4：{ok, remaining}；非整数/越界 → 结构化 BAD_PARAMS
+  // （config_service.delete_memory:345-393 口径——_coerce_index：None/bool →
+  // 「序号需要是整数」；字符串按 int 解析，失败带 %r 收到值（截 32）；
+  // hint 固定「传入要删除的记忆序号（从 0 开始）」；越界 message+hint 人话）
+  const reject = message => JSON.stringify({ ok: false,
+    error: { code: 'BAD_PARAMS', message, hint: '传入要删除的记忆序号（从 0 开始）' } })
+  let i
+  if (index === null || index === undefined || typeof index === 'boolean') {
+    return reject('序号需要是整数')
   }
+  if (typeof index === 'string') {
+    const text = index.trim()
+    if (/^[+-]?\d+$/.test(text)) i = Number(text)
+    else return reject(`序号需要是整数（收到 ${pyRepr(text.slice(0, 32))}）`)
+  } else if (typeof index === 'number' && Number.isInteger(index)) {
+    i = index
+  } else {
+    return reject('序号需要是整数')
+  }
+  const list = loadAll()
   if (i < 0 || i >= list.length) {
     return JSON.stringify({ ok: false, error: { code: 'BAD_PARAMS',
       message: `序号越界：当前共 ${list.length} 条记忆`, hint: '刷新列表后重试；序号从 0 开始' } })

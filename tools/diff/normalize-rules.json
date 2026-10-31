@@ -63,7 +63,7 @@
     },
     {
       "id": "N11",
-      "pattern": "\\\\b\\\\d{6}_",
+      "pattern": "\\b\\d{6}_",
       "replace": "<TS6>_",
       "note": "P0-1c W8：copy_into_ws HHMMSS_ 前缀（N05 之后运行避免部分重叠）"
     }

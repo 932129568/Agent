@@ -190,8 +190,9 @@ check('approval_budget 设置并回读 limit/used/remaining/grant_active', () =>
 
 // ⑪ 未武装执行点放行（guard_service.py:476；本测试全程 HARBOR_GUARD_ARMED=false）
 await writeCfg({ tiers: { delete_path: 'always' } })
-await workspace.saveWorkspaceFile('victim.txt', 'x')
-const unarmedDelete = JSON.parse(await workspace.deletePath('attachments/victim.txt', true))
+// P0-1c W6：save_workspace_file 返回带时间戳前缀的裸绝对路径——按返回值删
+const victimPath = await workspace.saveWorkspaceFile('victim.txt', 'x')
+const unarmedDelete = JSON.parse(await workspace.deletePath(victimPath, true))
 check('未武装环境执行点放行（armed=false 跳过档位确认）', () => {
   assert.equal(unarmedDelete.ok, true)
 })

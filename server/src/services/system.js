@@ -2,7 +2,6 @@
  * OS 原生能力：进程、应用/链接打开、剪贴板、目录对话框、截图。
  * Windows 走 tasklist / PowerShell，全部 execFile + 参数数组，不做 shell 拼接。
  */
-import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -18,10 +17,38 @@ const PS = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Com
 const exportPaths = new Set()
 const pathKey = value => path.normalize(path.resolve(String(value || ''))).toLowerCase()
 
+/** P0-1c PL1：get_platform_info（api.py:308-346 结构全对齐）。
+ *
+ * - os：detect_platform 口径（win32→'win' / darwin→'mac' / 其余→'headless'）；
+ * - machine：platform.machine() 映射（x64→'AMD64' / arm64→'ARM64' / ia32→'x86'）；
+ * - python：键冻结（前端 window.__platformInfo 消费）、值披露 Node 运行时
+ *   版本串（ID-202——与 ID-001 exe 字段同构：键是契约，值是宿主身份）；
+ * - services：七接口就绪度 = 平台能力声明（sandbox 与 CF4 sandbox_status 的
+ *   available:true 同口径；Node 沙箱/DPAPI 设施缺口由 ID-201 / P0-2 跟踪）；
+ * - browser_backend：platform/win/headless 为 Python 字面量同值，mac 探测
+ *   （Node 无 cocoa 后端恒 false），note 为冻结契约文案。
+ * Node 增强折叠（os_release/cpus/total_memory/homedir）不外露——P0-1b 先例。 */
 export async function getPlatformInfo() {
-  return okJson({ ok: true, platform: process.platform, arch: process.arch,
-    node: process.version, os_release: os.release(), os_type: os.type(),
-    cpus: os.cpus().length, total_memory: os.totalmem(), homedir: os.homedir() })
+  const detect = IS_WIN ? 'win' : (process.platform === 'darwin' ? 'mac' : 'headless')
+  const machineMap = { x64: 'AMD64', arm64: 'ARM64', ia32: 'x86' }
+  const services = {}
+  for (const name of ['secrets', 'sandbox', 'screen', 'trash', 'paths', 'process', 'notify']) {
+    services[name] = { ok: IS_WIN, name }
+  }
+  return okJson({
+    ok: true,
+    os: detect,
+    machine: machineMap[process.arch] || process.arch,
+    python: process.versions.node,
+    services,
+    browser_backend: {
+      platform: detect,
+      win: true,
+      headless: true,
+      mac: false,
+      note: 'mac 后端为理论实现（PyObjC 就绪即启用；真机链路验证排期 M9.5）',
+    },
+  })
 }
 
 export async function listProcesses(keyword = null) {

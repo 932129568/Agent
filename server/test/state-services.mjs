@@ -33,27 +33,44 @@ const check = (name, fn) => { fn(); results.push(name) }
 /* 工作区 */
 await workspace.setSessionWs('s_state', ws)
 const eff = JSON.parse(await workspace.getEffectiveWs('s_state'))
-check('绑定后 get_effective_ws 返回绑定目录', () => {
+check('绑定后 get_effective_ws 返回 {sid,ws,source,exists}（W1 无 ok/bound 键）', () => {
+  assert.equal(eff.sid, 's_state')
   assert.equal(eff.ws, ws)
-  assert.equal(eff.bound, true)
+  assert.equal(eff.source, 'session')
+  assert.equal(eff.exists, true)
+  assert.equal(eff.ok, undefined)
+  assert.equal(eff.bound, undefined)
 })
 await workspace.setWsEnabled('s_state', false)
 const enabled = JSON.parse(await workspace.getWsEnabled('s_state'))
-check('set_ws_enabled(false) 后 get_ws_enabled 为 false', () => {
+check('set_ws_enabled(false) 后 get_ws_enabled 为 {enabled:false}（W3 无 ok 键）', () => {
   assert.equal(enabled.enabled, false)
+  assert.equal(enabled.ok, undefined)
 })
 const wsState = JSON.parse(await workspace.getWsState('s_state'))
-check('get_ws_state 返回绑定与存在性', () => {
+check('get_ws_state 返回 {ws,bound,enabled,recent}（W4 无 ok/exists）', () => {
   assert.equal(wsState.enabled, false)
   assert.equal(wsState.bound, true)
-  assert.equal(wsState.exists, true)
+  assert.ok(Array.isArray(wsState.recent))
+  assert.equal(wsState.recent[0].path, ws)
+  assert.equal(wsState.recent[0].name, 'ws')
+  assert.equal(typeof wsState.recent[0].ts, 'number')
+})
+const recentList = JSON.parse(await workspace.listRecentWs())
+check('list_recent_ws 裸 JSON 数组 [{path,name,ts}]（W5）', () => {
+  assert.ok(Array.isArray(recentList))
+  assert.equal(recentList[0].path, ws)
+  assert.equal(recentList[0].name, 'ws')
 })
 
-await workspace.saveWorkspaceFile('a.md', '内容')
-check('save_workspace_file 写入 attachments', () => {
-  assert.ok(fs.existsSync(path.join(ws, 'attachments', 'a.md')))
+const saved = await workspace.saveWorkspaceFile('a.md', '内容')
+check('save_workspace_file 返回裸绝对路径 + YYYYMMDD_HHMMSS_ 前缀（W6）', () => {
+  assert.equal(typeof saved, 'string')
+  assert.ok(path.isAbsolute(saved))
+  assert.match(path.basename(saved), /^\d{8}_\d{6}_a\.md$/)
+  assert.ok(fs.existsSync(saved))
 })
-const del = JSON.parse(await workspace.deletePath('attachments/a.md', true))
+const del = JSON.parse(await workspace.deletePath(saved, true))
 check('delete_path 回报 mode=回收站（P0-1c F6：VB FileIO 真实回收站，与 send2trash 同因同果）', () => {
   assert.equal(del.ok, true)
   assert.equal(del.mode, '回收站')
@@ -73,9 +90,41 @@ check('memory_retrieve 命中相关记忆', () => {
   assert.ok(retrieved.items[0].text.includes('模型文件'))
 })
 const all = JSON.parse(await memory.getMemory())
-check('get_memory 返回结构化数组', () => assert.ok(all.length >= 2))
+check('get_memory 返回结构化数组且条目带 ts/ts_iso 双字段（M1）', () => {
+  assert.ok(all.length >= 2)
+  assert.ok(all.every(x => typeof x.ts === 'string' && typeof x.ts_iso === 'string'))
+  assert.match(all[0].ts_iso, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/)
+})
 const deleted = JSON.parse(await memory.memoryDelete(0))
-check('memory_delete 按索引删除', () => assert.equal(deleted.ok, true))
+check('memory_delete 按索引删除 → {ok,remaining}（M3 无 total 键）', () => {
+  assert.equal(deleted.ok, true)
+  assert.equal(typeof deleted.remaining, 'number')
+  assert.equal(deleted.total, undefined)
+})
+const oob = JSON.parse(await memory.memoryDelete(99))
+check('memory_delete 越界 → BAD_PARAMS 结构化（M4）', () => {
+  assert.equal(oob.ok, false)
+  assert.equal(oob.error.code, 'BAD_PARAMS')
+  assert.equal(oob.error.message, `序号越界：当前共 ${all.length - 1} 条记忆`)
+  assert.equal(oob.error.hint, '刷新列表后重试；序号从 0 开始')
+})
+const nonInt = JSON.parse(await memory.memoryDelete(true))
+check('memory_delete 非整数 → BAD_PARAMS + hint（M4 对齐 _coerce_index）', () => {
+  assert.equal(nonInt.ok, false)
+  assert.equal(nonInt.error.code, 'BAD_PARAMS')
+  assert.equal(nonInt.error.message, '序号需要是整数')
+  assert.equal(nonInt.error.hint, '传入要删除的记忆序号（从 0 开始）')
+})
+const nonIntStr = JSON.parse(await memory.memoryDelete('abc'))
+check('memory_delete 非数字串 → %r 收到值（M4 对齐 _coerce_index）', () => {
+  assert.equal(nonIntStr.error.code, 'BAD_PARAMS')
+  assert.equal(nonIntStr.error.message, "序号需要是整数（收到 'abc'）")
+})
+const numericStr = JSON.parse(await memory.memoryDelete('0'))
+check('memory_delete 数字串按 int 解析（M4 对齐 _coerce_index）', () => {
+  assert.equal(numericStr.ok, true)
+  assert.equal(typeof numericStr.remaining, 'number')
+})
 
 /* 计划与检查点（legacy 参数/返回形状） */
 const created = JSON.parse(await plans.planCreate('迁移全部方法', [

@@ -10,14 +10,24 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { runtime, setCwd, effectiveRoot } from '../runtime.js'
 import { resolveWs, shortPath } from './jail.js'
-import { atomicWriteJson, RUNTIME_PATH } from '../paths.js'
+import { atomicWriteJson, RUNTIME_PATH, readJsonIfExists } from '../paths.js'
 import { enforceExec } from './guard.js'
+import { childLogger } from '../logger.js'
+
+const log = childLogger('workspace')
 
 const okJson = value => JSON.stringify(value)
 const errJson = message => JSON.stringify({ error: String(message) })
 
-const wsEnabledMap = new Map()
-let recentWs = []
+// P0-1c W 补齐：runtime.json 既有持久化形状消费（recent/ws_enabled 跨重启存活，
+// 对齐 Python RECENT_WS_FILE / WS_ENABLED_FILE 语义；文件布局属 Node 内部实现非契约）
+const persistedRuntime = readJsonIfExists(RUNTIME_PATH, {}) || {}
+const wsEnabledMap = new Map(
+  Object.entries(persistedRuntime.wsEnabled || {})
+    .filter(([, value]) => typeof value === 'boolean'))
+let recentWs = Array.isArray(persistedRuntime.recentWs)
+  ? persistedRuntime.recentWs.filter(item => item && typeof item === 'object')
+  : []
 
 function persist() {
   atomicWriteJson(RUNTIME_PATH, {
@@ -25,29 +35,35 @@ function persist() {
     cwd: runtime.cwd,
     sessionWs: runtime.sessionWs,
     recentWs,
+    wsEnabled: Object.fromEntries(wsEnabledMap),
   })
 }
 
 export function wsEnabledFor(sid) {
-  if (sid && wsEnabledMap.has(sid)) return wsEnabledMap.get(sid)
-  return true
+  // Python runtime.ws_enabled_for（runtime.py:69-71）：get(sid or '', default=True)
+  // ——键口径空串，无 currentSid 回退
+  return wsEnabledMap.get(String(sid ?? '')) ?? true
 }
 
 export function touchRecent(dir) {
-  // P0-1c W5：recent 条目 {path, name, ts}（workspace_service.touch_recent_ws 同构）
+  // P0-1c W5：recent 条目 {path, name, ts}（workspace_service.touch_recent_ws:147-154
+  // 同构）——path 原样入表（Python 不做 abspath）、name=basename（尾分隔符 → 空 →
+  // 回落全路径，os.path.basename 同款）、ts=epoch 秒；去重=精确 path 匹配；上限 12
   if (!dir) return
-  const target = path.resolve(String(dir))
+  const target = String(dir)
+  const base = /[\\/]$/.test(target) ? '' : path.basename(target)
   recentWs = [
-    { path: target, name: path.basename(target) || target, ts: Date.now() / 1000 },
+    { path: target, name: base || target, ts: Date.now() / 1000 },
     ...recentWs.filter(item => item.path !== target),
   ].slice(0, 12)
   persist()
 }
 
 export async function getEffectiveWs(sid) {
-  // P0-1c W1：{sid, ws, source, exists}（workspace_service.py:99-107，无 ok 键；
-  // sid 原样回传——空即 null 语义）
-  const id = sid || ''
+  // P0-1c W1：{sid, ws, source, exists}（workspace_service.py:99-107，无 ok 键）。
+  // api 层注入 current_sid（api.py:687-688）：registry 无参调用 → undefined 时取
+  // runtime.currentSid；sid 原样回传（null 透传——差分未设 sid 时 Python=null）
+  const id = sid === undefined ? runtime.currentSid : sid
   let ws = runtime.cwd
   let source = 'global'
   if (id && runtime.sessionWs[id]) { ws = runtime.sessionWs[id]; source = 'session' }
@@ -80,24 +96,26 @@ export async function setSessionWs(sid, dir, enabled = true) {
 }
 
 export async function deleteSessionWs(sid) {
-  // P0-1c W7：裸 '{"ok":true}'（workspace_service.py:111-119——sid 空串亦合法）
+  // P0-1c W7：裸 '{"ok":true}'（workspace_service.py:111-119——sid 空串亦合法；
+  // 解绑同时摘除该 sid 的 ws_enabled 开关，runtime.pop_ws_enabled 同款）
   delete runtime.sessionWs[sid || '']
-  wsEnabledMap.delete(sid || '')
+  wsEnabledMap.delete(String(sid ?? ''))
   persist()
   return okJson({ ok: true })
 }
 
 export async function getWsEnabled(sid) {
-  // P0-1c W3：{enabled}（workspace_service.py:126-128——get 无 ok 键）
-  return okJson({ enabled: wsEnabledFor(sid || runtime.currentSid) })
+  // P0-1c W3：{enabled}（workspace_service.py:126-128——get 无 ok 键、
+  // 无 currentSid 回退——api.get_ws_enabled 直传 sid）
+  return okJson({ enabled: wsEnabledFor(sid) })
 }
 
 export async function setWsEnabled(sid, enabled) {
-  // P0-1c W3：{ok, enabled}（workspace_service.py:121-124——无 sid 回显）
-  const id = sid || runtime.currentSid
-  if (id) wsEnabledMap.set(id, !!enabled)
+  // P0-1c W3：{ok, enabled}（workspace_service.py:121-124——无 sid 回显；
+  // 键口径 sid or ''（runtime.set_ws_enabled），无 currentSid 回退）
+  wsEnabledMap.set(String(sid ?? ''), !!enabled)
   persist()
-  return okJson({ ok: true, enabled: wsEnabledFor(id) })
+  return okJson({ ok: true, enabled: wsEnabledFor(sid) })
 }
 
 export async function getWsState(sid) {
@@ -105,7 +123,7 @@ export async function getWsState(sid) {
   const bound = !!(sid && runtime.sessionWs[sid])
   return okJson({
     ws: (sid && runtime.sessionWs[sid]) || runtime.cwd, bound,
-    enabled: wsEnabledFor(sid || runtime.currentSid),
+    enabled: wsEnabledFor(sid),
     recent: recentWs.slice(0, 8),
   })
 }
@@ -136,7 +154,8 @@ const pad2 = n => String(n).padStart(2, '0')
 
 export async function saveWorkspaceFile(name, text) {
   // P0-1c W6：返回裸绝对路径字符串（legacy ok(p) 直通语义）+
-  // YYYYMMDD_HHMMSS_ 时间戳前缀（N05 <TSFN> 归一）
+  // YYYYMMDD_HHMMSS_ 时间戳前缀（N05 <TSFN> 归一）。
+  // 异常路径：Python 仅告警并返回 ''（H12 外层保护——裸 reject 会穿透 js_api 桥）
   try {
     const root = effectiveRoot(runtime.currentSid)
     const dir = path.join(root, 'attachments')
@@ -147,7 +166,10 @@ export async function saveWorkspaceFile(name, text) {
     const target = path.join(dir, `${stamp}_${sanitizeName(name)}`)
     fs.writeFileSync(target, String(text ?? ''), 'utf8')
     return target
-  } catch (error) { return okJson({ ok: false, error: String(error.message || error) }) }
+  } catch (error) {
+    log.warn({ err: error }, 'save_workspace_file 失败')
+    return ''
+  }
 }
 
 export async function copyIntoWs(src, dstName) {
