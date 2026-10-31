@@ -76,9 +76,13 @@ export function ctxExplicit() {
   return store ? store.explicitSid : false
 }
 
-/** per-sid cwd 覆盖容器（session-context 持有注册，runtime.json 持久化由
- * runtime.setSessionCwd 负责）。 */
-export const sessionCwds = registerSidContainer('sessionCwds', new Map())
+/** per-sid cwd 覆盖的只读适配器——唯一事实源是 runtime.sessionCwds
+ * （runtime.json 持久化对象，setSessionCwd 写入；purgeSid 显式清理并持久化）。
+ * 不得再建第二份独立 Map（split-brain 防线：两处写入必须同源）。 */
+export const sessionCwds = {
+  has: sid => Object.hasOwn(runtime.sessionCwds, sid),
+  get: sid => runtime.sessionCwds[sid],
+}
 
 /** 当前请求的工作区根解析序（§3.3）：
  *   sessionWs[sid]（显式绑定，per-sid 全局表）→ sessionCwds.get(sid)（仅
