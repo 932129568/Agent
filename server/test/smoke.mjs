@@ -137,6 +137,165 @@ try {
     assert.ok(fs.existsSync(path.join(workspace, '_glm_worklog.md')))
   })
 
+  /* ---------- 独立配置族（P0-1c T04 CF1-CF7：规格化配置面端到端） ---------- */
+  const hybridDefault = await app.inject({ method: 'POST', url: '/jsapi/hybrid_get_config', payload: { args: [] } })
+  check('CF1 hybrid_get_config 默认 {ok, config(5键), source}', () => {
+    const body = JSON.parse(hybridDefault.body)
+    assert.equal(body.ok, true)
+    assert.equal(body.source, 'default')
+    assert.deepEqual(body.config, {
+      strategy: 'auto', local_budget_understand_s: 5, local_budget_validate_s: 3,
+      confidence_gate: 0.7, cost_split_display: true,
+    })
+  })
+  const hybridBad = await app.inject({
+    method: 'POST', url: '/jsapi/hybrid_save_config',
+    payload: { args: ['{"strategy": "bogus"}'] },
+  })
+  check('CF1 hybrid 非法 strategy → BAD_PARAMS + hint 且不落盘', () => {
+    const body = JSON.parse(hybridBad.body)
+    assert.equal(body.ok, false)
+    assert.equal(body.error.code, 'BAD_PARAMS')
+    assert.equal(body.error.message, "字段 strategy 的值 'bogus' 不合法")
+    assert.ok(body.error.hint.startsWith('字段 strategy 合法域：'))
+    // 默认值已由 c01 读取顺带落盘；非法保存不得污染（内容仍是全量默认）
+    const onDisk = JSON.parse(fs.readFileSync(path.join(tmp, 'config', 'hybrid.json'), 'utf8'))
+    assert.equal(onDisk.strategy, 'auto')
+  })
+  const hybridOk = await app.inject({
+    method: 'POST', url: '/jsapi/hybrid_save_config',
+    payload: { args: ['{"strategy": "quality"}'] },
+  })
+  check('CF1 hybrid 合法保存 → {ok, config} 全量归一', () => {
+    const body = JSON.parse(hybridOk.body)
+    assert.equal(body.ok, true)
+    assert.equal(body.config.strategy, 'quality')
+    assert.equal(body.config.confidence_gate, 0.7)
+  })
+
+  const prefsDefault = await app.inject({ method: 'POST', url: '/jsapi/model_prefs_get', payload: { args: [] } })
+  check('CF2 model_prefs_get 默认 {thinking, ctx_k, ok}', () => {
+    assert.deepEqual(JSON.parse(prefsDefault.body), { thinking: 'auto', ctx_k: 0, ok: true })
+  })
+  const prefsBad = await app.inject({
+    method: 'POST', url: '/jsapi/model_prefs_save', payload: { args: ['{"thinking": "bogus"}'] },
+  })
+  check('CF2 model_prefs 非法 thinking → flat error 且不落盘', () => {
+    assert.deepEqual(JSON.parse(prefsBad.body), { error: 'thinking 仅支持 auto/off/low/medium/high' })
+    assert.equal(fs.existsSync(path.join(tmp, 'config', 'model_prefs.json')), false)
+  })
+  const prefsOk = await app.inject({
+    method: 'POST', url: '/jsapi/model_prefs_save', payload: { args: ['{"thinking": "high", "ctx_k": 128}'] },
+  })
+  check('CF2 model_prefs 合法保存 → {ok, thinking, ctx_k}；文件带 version:1', () => {
+    assert.deepEqual(JSON.parse(prefsOk.body), { ok: true, thinking: 'high', ctx_k: 128 })
+    const onDisk = JSON.parse(fs.readFileSync(path.join(tmp, 'config', 'model_prefs.json'), 'utf8'))
+    assert.deepEqual(onDisk, { thinking: 'high', ctx_k: 128, version: 1 })
+  })
+
+  const readerDefault = await app.inject({ method: 'POST', url: '/jsapi/reader_config_get', payload: { args: [] } })
+  check('CF3 reader_config_get 裸 8 键 dict（无 ok）', () => {
+    const body = JSON.parse(readerDefault.body)
+    assert.equal(body.ok, undefined)
+    assert.equal(body.budget_s, 10)
+    assert.equal(body.version, 1)
+  })
+  const readerBad = await app.inject({
+    method: 'POST', url: '/jsapi/reader_config_save', payload: { args: ['{"budget_s": 999}'] },
+  })
+  check('CF3 reader 越界 budget → flat error 且不落盘', () => {
+    assert.deepEqual(JSON.parse(readerBad.body), { error: 'budget_s 需为 1-60 的整数' })
+    assert.equal(fs.existsSync(path.join(tmp, 'config', 'reader.json')), false)
+  })
+  const readerOk = await app.inject({
+    method: 'POST', url: '/jsapi/reader_config_save', payload: { args: ['{"budget_s": 30}'] },
+  })
+  check('CF3 reader 合法保存 → {ok, config} 全量归一', () => {
+    const body = JSON.parse(readerOk.body)
+    assert.equal(body.ok, true)
+    assert.equal(body.config.budget_s, 30)
+    assert.equal(body.config.max_input_chars, 12000)
+  })
+
+  const sandboxDefault = await app.inject({ method: 'POST', url: '/jsapi/sandbox_get_config', payload: { args: [] } })
+  check('CF4 sandbox_get_config 裸全量配置（无 ok）', () => {
+    const body = JSON.parse(sandboxDefault.body)
+    assert.equal(body.ok, undefined)
+    assert.equal(body.enabled, true)
+    assert.equal(body.command_profiles.run_admin_command, 'off')
+    assert.equal(body.limits.strict.max_processes, 8)
+  })
+  const sandboxSave = await app.inject({
+    method: 'POST', url: '/jsapi/sandbox_save_config', payload: { args: ['{"enabled": true}'] },
+  })
+  check('CF4 sandbox_save_config → 裸 {ok:true}（宽松合并）', () => {
+    assert.equal(sandboxSave.body, '{"ok":true}')
+    const onDisk = JSON.parse(fs.readFileSync(path.join(tmp, 'config', 'sandbox.json'), 'utf8'))
+    assert.equal(onDisk.command_profiles.run_command, 'standard')
+  })
+  const sandboxStatus = await app.inject({ method: 'POST', url: '/jsapi/sandbox_status', payload: { args: [] } })
+  check('CF4 sandbox_status {available, platform, enabled, command_profiles, stats}', () => {
+    const body = JSON.parse(sandboxStatus.body)
+    assert.equal(body.available, true)
+    assert.equal(body.platform, 'nt')
+    assert.deepEqual(body.stats, { jobs_created: 0, runs_sandboxed: 0, runs_failed_closed: 0 })
+  })
+
+  const cacheStats = await app.inject({ method: 'POST', url: '/jsapi/search_cache_stats', payload: { args: [] } })
+  check('CF5 search_cache_stats 七键（空起步）', () => {
+    const body = JSON.parse(cacheStats.body)
+    assert.equal(body.ok, true)
+    assert.equal(body.ttl_minutes, 60)
+    assert.deepEqual(body.ttl_classes, { news: 0, general: 0, encyclopedia: 0 })
+    assert.equal(body.bytes, undefined)
+  })
+  const readerStats = await app.inject({ method: 'POST', url: '/jsapi/search_reader_stats', payload: { args: [] } })
+  check('CF6 search_reader_stats 七键（空起步 + since 掩蔽源）', () => {
+    const body = JSON.parse(readerStats.body)
+    assert.equal(body.ok, true)
+    assert.equal(body.reader_calls, 0)
+    assert.equal(body.local_available, true)
+    assert.equal(body.configured, false)
+    assert.equal(typeof body.since, 'number')
+  })
+  const searchIdle = await app.inject({ method: 'POST', url: '/jsapi/search_status', payload: { args: [''] } })
+  check('CF7 search_status 无活跃 → {ok, active}（无 state/task_id 回显）', () => {
+    const body = JSON.parse(searchIdle.body)
+    assert.deepEqual(body, { ok: true, active: false })
+  })
+
+  /* ---------- rpc kwargs-only（P0-1c T04 RP1/RP2） ---------- */
+  const rpcUnknownKwarg = await app.inject({
+    method: 'POST', url: '/jsapi/rpc',
+    payload: { args: ['save_config', '{"model": "rpc-model"}'] },
+  })
+  check('RP1 rpc 未知 kwarg → CPython TypeError 合成', () => {
+    assert.deepEqual(JSON.parse(rpcUnknownKwarg.body),
+      { error: "Api.save_config() got an unexpected keyword argument 'model'" })
+  })
+  const rpcArrayPayload = await app.inject({
+    method: 'POST', url: '/jsapi/rpc',
+    payload: { args: ['save_sessions', '[{"id": "r1", "title": "rpc 会话"}]'] },
+  })
+  check('RP2 rpc 数组 payload 归一 {} → missing positional 合成', () => {
+    assert.deepEqual(JSON.parse(rpcArrayPayload.body),
+      { error: "Api.save_sessions() missing 1 required positional argument: 'data'" })
+  })
+  const rpcKnown = await app.inject({
+    method: 'POST', url: '/jsapi/rpc',
+    payload: { args: ['get_cwd', '{}'] },
+  })
+  check('RP1 rpc 合法 kwargs 透传（裸文本协议方法）', () => {
+    assert.ok(rpcKnown.body.length > 0)
+  })
+  const rpcJson = await app.inject({
+    method: 'POST', url: '/jsapi/rpc',
+    payload: { args: ['get_ws_enabled', '{"sid": "s_smoke_1"}'] },
+  })
+  check('RP1 rpc 合法 kwargs 透传（JSON 方法）', () => {
+    assert.deepEqual(JSON.parse(rpcJson.body), { enabled: true })
+  })
+
   /* ---------- 降级与错误面 ---------- */
   const missing = await app.inject({ method: 'POST', url: '/jsapi/__definitely_unknown__', payload: { args: [] } })
   check('未注册方法返回 NOT_MIGRATED（不打 500）', () => {

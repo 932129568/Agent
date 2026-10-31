@@ -13,7 +13,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { CONFIG_DIR, atomicWriteJson, readTextIfExists } from '../paths.js'
-import { readConfigJson, mergeConfig } from './jsonstore.js'
+import { readConfigJson, mergeConfig, readConfigNormalized } from './jsonstore.js'
+import { CONFIG_SPECS } from './config-specs.js'
 import { runtime } from '../runtime.js'
 
 const AUDIT_FILE = path.join(CONFIG_DIR, 'audit_log.jsonl')
@@ -167,20 +168,46 @@ export async function getAuditLog(limit = 200, offset = 0, verifyAll = false) {
 }
 
 /* ---------------- 搜索缓存统计 / 历史目录（不变） ---------------- */
+/** 读取器统计的进程起点（search_reader._started_at = time.time() 同口径）。 */
+const READER_STARTED_AT = Date.now() / 1000
+
 export async function searchCacheStats() {
+  // P0-1c CF5（service.py:1329-1387）：{ok, entries, hits, misses, ttl_minutes,
+  // ttl_classes, size_kb}——entries/size_kb 按落盘文件实时统计（ttl_class 缺分类
+  // 计入 general）；hits/misses 为进程内计数（Node 搜索缓存未迁移 → 0 起步，
+  // 与 Python 空起步一致）；size_kb = int(bytes/1024) 截断
   const dir = path.join(CONFIG_DIR, 'search_cache')
-  if (!fs.existsSync(dir)) return okJson({ ok: true, entries: 0, bytes: 0 })
   let entries = 0
-  let bytes = 0
-  for (const name of fs.readdirSync(dir)) {
-    const stat = fs.statSync(path.join(dir, name))
-    if (stat.isFile()) { entries += 1; bytes += stat.size }
+  let size = 0
+  const ttlClasses = { news: 0, general: 0, encyclopedia: 0 }
+  if (fs.existsSync(dir)) {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.json')) continue
+      const file = path.join(dir, name)
+      try {
+        const stat = fs.statSync(file)
+        if (!stat.isFile()) continue
+        entries += 1
+        size += stat.size
+        let cls = 'general'
+        try { cls = (JSON.parse(fs.readFileSync(file, 'utf8') || '{}') || {}).ttl_class || 'general' } catch { /* 分类失败计入 general */ }
+        if (Object.hasOwn(ttlClasses, cls)) ttlClasses[cls] += 1
+      } catch { /* OSError continue（service.py 同款防御） */ }
+    }
   }
-  return okJson({ ok: true, entries, bytes })
+  return okJson({ ok: true, entries, hits: 0, misses: 0, ttl_minutes: 60,
+    ttl_classes: ttlClasses, size_kb: Math.trunc(size / 1024) })
 }
 
 export async function searchReaderStats() {
-  return okJson({ ok: true, note: 'reader 统计在浏览器驱动迁移后提供', entries: 0 })
+  // P0-1c CF6（search_reader.stats:154-162）：{ok, reader_calls, schema_fail,
+  // degrade_count, local_available, configured, last_error, since}——Node 读取器
+  // 未迁移，计数器 0/false/'' 起步与 Python 空态一致；configured 按 reader.json
+  // base_url 判定（归一化读取）；since=进程起点 epoch（N 规则掩蔽键）
+  const { config } = readConfigNormalized(CONFIG_SPECS.reader)
+  return okJson({ ok: true, reader_calls: 0, schema_fail: 0, degrade_count: 0,
+    local_available: true, configured: !!String(config.base_url || '').trim(),
+    last_error: '', since: READER_STARTED_AT })
 }
 
 export async function searchStatus(taskId = '') {

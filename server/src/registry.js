@@ -13,7 +13,8 @@ import {
   movePath, copyPath,
 } from './services/files.js'
 import { setCurrentSid } from './runtime.js'
-import { readConfigText, readConfigJson, mergeConfig } from './services/jsonstore.js'
+import { readConfigNormalized, mergeConfigValidated } from './services/jsonstore.js'
+import { CONFIG_SPECS } from './services/config-specs.js'
 import * as workspace from './services/workspace.js'
 import * as memory from './services/memory.js'
 import * as plans from './services/plans.js'
@@ -160,24 +161,101 @@ register('checkpoint_list', async task_id => plans.checkpointList(task_id))
 register('checkpoint_rollback', async (task_id, ws_dir, confirm) => plans.checkpointRollback(task_id, ws_dir, confirm))
 
 /* 独立 JSON 配置族（config.json 零污染，各自独立文件）。
- * guard 走归一化配置面（P0-1b G9/G12：读归一全量、写校验+整写）——不能套用
- * 下面的裸文本模板（形状与 legacy guard_get_config 对齐）。 */
-for (const [name, file] of [
-  ['sandbox', 'sandbox.json'], ['hybrid', 'hybrid.json'],
-  ['webdav', 'webdav.json'],
-]) {
-  register(`${name}_get_config`, async () => readConfigText(file))
-  register(`${name}_save_config`, async cfg_json => mergeConfig(file, cfg_json))
-}
+ * P0-1c T04 CF1-CF4：规格化配置面（defaults 归一 + 保存校验 + 归一化整写）——
+ * 规格数据在 config-specs.js、读写函数在 jsonstore（规格=数据、读写=函数，
+ * 禁止按配置名写 service 类——design §6 T04 风险条）。
+ * 响应形状逐字对齐 api.py 各包装器（含错误方言三款：hybrid BAD_PARAMS+hint /
+ * model_prefs+reader 平 error / sandbox 裸 '{"ok":true}'）。 */
+register('hybrid_get_config', async () => {
+  // CF1（api.py:1239-1242）：{ok, config, source}——缺失/损坏返回默认 +
+  // source=default（readConfigNormalized 内顺带落盘默认，首启零配置）
+  const { config, source } = readConfigNormalized(CONFIG_SPECS.hybrid)
+  return JSON.stringify({ ok: true, config, source })
+})
+register('hybrid_save_config', async cfg_json => {
+  // CF1（api.py:1244-1258）：部分更新；字段级校验失败 → BAD_PARAMS + hint
+  let incoming
+  try { incoming = JSON.parse(String(cfg_json ?? '{}')) } catch {
+    return JSON.stringify({ ok: false,
+      error: { code: 'BAD_PARAMS', message: '配置必须是 JSON 对象或 JSON 字符串' } })
+  }
+  const result = mergeConfigValidated(CONFIG_SPECS.hybrid, incoming)
+  if (result.error) {
+    const error = { code: 'BAD_PARAMS', message: result.error }
+    if (result.field) {
+      error.hint = `字段 ${result.field} 合法域：strategy auto|saver|quality；`
+        + 'local_budget_understand_s/local_budget_validate_s 1-30；'
+        + 'confidence_gate 0.5-0.95；cost_split_display true/false'
+    }
+    return JSON.stringify({ ok: false, error })
+  }
+  return JSON.stringify({ ok: true, config: result.record })
+})
+register('model_prefs_get', async () => {
+  // CF2（api.py:380-385 + model_prefs_service.get）：{thinking, ctx_k, ok}
+  const { config } = readConfigNormalized(CONFIG_SPECS.model_prefs)
+  return JSON.stringify({ ...config, ok: true })
+})
+register('model_prefs_save', async prefs_json => {
+  // CF2（api.py:387-403）：校验失败 flat {error}；成功 {ok, thinking, ctx_k}
+  let prefs
+  try { prefs = JSON.parse(String(prefs_json ?? '{}')) } catch (error) {
+    return JSON.stringify({ error: `偏好不是合法 JSON: ${error.message}` })
+  }
+  const result = mergeConfigValidated(CONFIG_SPECS.model_prefs, prefs)
+  if (result.error) return JSON.stringify({ error: result.error })
+  return JSON.stringify({ ok: true, thinking: result.record.thinking, ctx_k: result.record.ctx_k })
+})
+register('reader_config_get', async () => {
+  // CF3（api.py:365-367）：裸配置 dict（无 ok 键）
+  const { config } = readConfigNormalized(CONFIG_SPECS.reader)
+  return JSON.stringify(config)
+})
+register('reader_config_save', async config_json => {
+  // CF3（api.py:369-378）：解析失败/校验失败 flat {error}；成功 {ok, config}
+  let incoming
+  try { incoming = JSON.parse(String(config_json ?? '{}')) } catch (error) {
+    return JSON.stringify({ error: `reader 配置 JSON 解析失败: ${error.message}` })
+  }
+  const result = mergeConfigValidated(CONFIG_SPECS.reader, incoming)
+  if (result.error) return JSON.stringify({ error: result.error })
+  return JSON.stringify({ ok: true, config: result.record })
+})
+register('sandbox_get_config', async () => {
+  // CF4（api.py:591-595）：裸配置 dict（无 ok 键）
+  const { config } = readConfigNormalized(CONFIG_SPECS.sandbox)
+  return JSON.stringify(config)
+})
+register('sandbox_save_config', async cfg_json => {
+  // CF4（sandbox_service.save_config:730-766）：宽松合并（非对象静默 {}）；
+  // 裸 '{"ok":true}'（Python 直返字面量）
+  let incoming = cfg_json
+  if (typeof incoming === 'string') {
+    try { incoming = JSON.parse(incoming) } catch (error) {
+      return JSON.stringify({ error: String(error.message || error) })
+    }
+  }
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) incoming = {}
+  const result = mergeConfigValidated(CONFIG_SPECS.sandbox, incoming)
+  if (result.error) return JSON.stringify({ error: result.error })
+  return '{"ok":true}'
+})
+register('sandbox_status', async () => {
+  // CF4（sandbox_service.status:811-823）：{available, platform, enabled,
+  // command_profiles, stats}。available=平台能力声明（与 get_platform_info
+  // services.sandbox 同口径；Node Job 沙箱设施缺口由 ID-201/P0-2 跟踪）；
+  // stats 恒 0 是如实陈述（Node 无 Job 对象计数器）。
+  const { config } = readConfigNormalized(CONFIG_SPECS.sandbox)
+  return JSON.stringify({
+    available: process.platform === 'win32',
+    platform: process.platform === 'win32' ? 'nt' : process.platform,
+    enabled: !!config.enabled,
+    command_profiles: config.command_profiles,
+    stats: { jobs_created: 0, runs_sandboxed: 0, runs_failed_closed: 0 },
+  })
+})
 register('guard_get_config', async () => guard.guardGetConfig())
 register('guard_save_config', async cfg_json => guard.guardSaveConfig(cfg_json))
-// 注意：model_prefs 与 reader 在 legacy 中就是 get/save 而非 get_config/save_config，
-// 不能套用上面的命名模板（否则与 43 个契约方法名不一致）。
-register('model_prefs_get', async () => readConfigText('model_prefs.json'))
-register('model_prefs_save', async prefs_json => mergeConfig('model_prefs.json', prefs_json))
-register('reader_config_get', async () => readConfigText('reader.json'))
-register('reader_config_save', async config_json => mergeConfig('reader.json', config_json))
-register('sandbox_status', async () => JSON.stringify(readConfigJson('sandbox.json', {})))
 
 /* 审计 / 搜索 / 历史目录 */
 register('get_audit_log', async (limit, offset, verify_all) => misc.getAuditLog(limit, offset, verify_all))
@@ -219,17 +297,116 @@ register('clarify_collect', async (questions, answers) => provider.clarifyCollec
 register('save_export_file', async (path, content) => provider.saveExportFile(path, content))
 register('session_purge', async (sid, task_ids_json) => provider.sessionPurge(sid, task_ids_json))
 
-/* 通用 RPC 透传（legacy payload 是 kwargs 对象，不是把对象当第一个位置参数）。 */
+/* 通用 RPC 透传（legacy api.py:503-518 kwargs-only 契约）：
+ * - payload 解析失败或非 dict（含数组）一律归一 {}（RP2：删除数组位置展开）；
+ * - 未知 kwarg → CPython TypeError 固定格式合成（RP1）：
+ *   'Api.<m>() got an unexpected keyword argument '<k>''；
+ * - 缺必填位置参数 → 'Api.<m>() missing N required positional argument(s): ...'
+ *   （RP2；必填补齐源 = Python api.py 签名的默认值表——格式串稳定，
+ *   确定性合成非脆弱解析——Q3 裁定）；
+ * - rpc 自身与私有方法拒绝（_RPC_PRIVATE_OK = {_software_save, _software_remove}
+ *   与 api.py:32 同款豁免）。 */
+const RPC_PRIVATE_OK = new Set(['_software_save', '_software_remove'])
+
+/** Python api.py 签名的可选参数表（有默认值的形参 = rpc kwargs 调用可缺省）——
+ * 由 tools/diff/extract_rpc_defaults.py 从 backend/api.py AST 机械提取；
+ * 再生成须重跑脚本勿手改（单一事实源 = api.py 源码）。 */
+const PY_OPTIONAL_PARAMS = {
+  _execute_guarded: ['denial', 'rejection_reason'],
+  history_dir_set: ['migrate'],
+  pick_save_path: ['default_name'],
+  browser_navigate: ['wait_selector', 'timeout', 'mode', 'token'],
+  browser_extract: ['selector', 'mode', 'token'],
+  browser_click: ['token'],
+  browser_fill: ['token'],
+  browser_screenshot: ['full_page', 'token'],
+  browser_close: ['session_id', 'token'],
+  browser_set_mode: ['session_id'],
+  guard_approval_budget: ['limit'],
+  ui_nudge: ['visibility'],
+  session_purge: ['task_ids_json'],
+  rpc: ['payload_json'],
+  list_dir: ['path'],
+  read_file: ['offset', 'limit', 'force'],
+  search_replace: ['replace_all'],
+  delete_path: ['recycle', 'token'],
+  run_command: ['timeout', 'token'],
+  run_powershell: ['timeout', 'token'],
+  run_admin_command: ['token', 'timeout'],
+  get_clipboard: ['token'],
+  set_clipboard: ['token'],
+  list_processes: ['keyword'],
+  kill_process: ['pid', 'name', 'token'],
+  set_session_ws: ['enabled'],
+  pick_folder: ['sid'],
+  open_app: ['token'],
+  take_screenshot: ['left', 'top', 'width', 'height', 'token'],
+  read_more: ['offset', 'limit'],
+  build_system_prompt: ['query'],
+  memory_retrieve: ['limit'],
+  build_tools: ['role', 'include_mcp', 'include_agent', 'is_glm_endpoint'],
+  guard_check: ['detail_json'],
+  guard_audit: ['detail_json', 'decision'],
+  get_audit_log: ['limit', 'offset', 'verify_all'],
+  guard_confirm_token: ['detail_json'],
+  check_update: ['manifest_url'],
+  start_update_download: ['version'],
+  test_provider_endpoint: ['timeout', 'local'],
+  local_probe: ['ports'],
+  local_models: ['api_key'],
+  local_readiness: ['model', 'api_key'],
+  browser_search: ['params', 'token'],
+  browser_open: ['params'],
+  search_status: ['task_id'],
+  software_list: ['status'],
+  software_probe: ['name'],
+  software_call: ['params', 'token'],
+  _software_save: ['entry'],
+  guard_task_grant: ['ttl_seconds'],
+  guard_task_revoke: ['grant_id'],
+  guard_rule_add: ['detail_pattern', 'note'],
+  plan_create: ['task_id'],
+  plan_update: ['status', 'step_index', 'step_status'],
+  plan_list: ['limit'],
+  checkpoint_create: ['ws_dir'],
+  checkpoint_rollback: ['ws_dir', 'confirm'],
+  checkpoint_list: ['task_id'],
+  expert_list: ['query'],
+  expert_get: ['snapshot_id'],
+  expert_set_enabled: ['snapshot_id'],
+  webdav_test: ['cfg_json'],
+  mcp_check_tool: ['arguments_json'],
+  mcp_call_tool: ['arguments_json', 'decision', 'token'],
+  mcp_save_subscriptions: ['uris_json'],
+}
+
 register('rpc', async (name, payload_json = '{}') => {
   const method = String(name || '')
   const handler = handlers.get(method)
-  if (!handler || method === 'rpc' || method.startsWith('_')) return JSON.stringify({ error: `未知方法: ${method}` })
+  if (!handler || method === 'rpc'
+    || (method.startsWith('_') && !RPC_PRIVATE_OK.has(method))) {
+    return JSON.stringify({ error: `未知方法: ${method}` })
+  }
   let payload
   try { payload = JSON.parse(String(payload_json || '{}')) } catch { payload = {} }
-  if (Array.isArray(payload)) return handler(...payload)
-  if (!payload || typeof payload !== 'object') payload = {}
-  // 注册处理器保留了 legacy 的参数名；从函数形参还原 kwargs → argv 的稳定映射。
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {}
   const names = explicitSignatures.get(method) || handlerSignature(handler)
+  // RP1：未知 kwarg（CPython 在缺参前先报 unexpected）
+  for (const key of Object.keys(payload)) {
+    if (!names.includes(key)) {
+      return JSON.stringify({ error: `Api.${method}() got an unexpected keyword argument '${key}'` })
+    }
+  }
+  // RP2：缺必填位置参数（Python 签名默认值表之外且未携带的形参）；
+  // CPython 复数口径：2 → "'a' and 'b'"；3+ → "'a', 'b', and 'c'"
+  const optional = new Set(PY_OPTIONAL_PARAMS[method] || [])
+  const missing = names.filter(n => !optional.has(n) && !Object.hasOwn(payload, n))
+  if (missing.length) {
+    const quoted = missing.map(m => `'${m}'`)
+    const list = quoted.length === 1 ? quoted[0]
+      : `${quoted.slice(0, -1).join(', ')}${quoted.length === 2 ? ' and ' : ', and '}${quoted[quoted.length - 1]}`
+    return JSON.stringify({ error: `Api.${method}() missing ${missing.length} required positional argument${missing.length > 1 ? 's' : ''}: ${list}` })
+  }
   return handler(...names.map(key => payload[key]))
 })
 
@@ -262,7 +439,11 @@ register('start_update_download', async (url, sha256, version) => update.startUp
 register('get_update_progress', async () => update.getUpdateProgress())
 register('apply_update', async () => update.applyUpdate())
 
-/* WebDAV 数据主权（HTTPS、本机开发例外、禁重定向、SHA256 与冲突策略） */
+/* WebDAV 数据主权（HTTPS、本机开发例外、禁重定向、SHA256 与冲突策略）
+ * P0-1c WD1：get/save 走专用配置语义（密码必填才落盘 + configured 态判定），
+ * 不再套用裸读写模板 */
+register('webdav_get_config', async () => webdav.webdavGetConfig())
+register('webdav_save_config', async cfg_json => webdav.webdavSaveConfig(cfg_json))
 register('webdav_test', async cfg_json => webdav.webdavTest(cfg_json))
 register('webdav_export', async () => webdav.webdavExport())
 register('webdav_restore', async payload_json => webdav.webdavRestore(payload_json))

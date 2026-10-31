@@ -29,10 +29,48 @@ const server = http.createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 const port = server.address().port
 const config = { url: `http://127.0.0.1:${port}`, username: 'user', password: 'pass', remote_path: '/backup', conflict_policy: 'remote_wins' }
-fs.writeFileSync(path.join(process.env.HARBOR_CONFIG_DIR, 'webdav.json'), JSON.stringify(config))
 
 const webdav = await import('../src/services/webdav.js')
 const results = []; const check = (name, fn) => { fn(); results.push(name) }
+
+/* P0-1c WD1/WD2：未配置态语义（webdav_service.get_config/save_config/_record_for_io） */
+const noConfig = JSON.parse(await webdav.webdavGetConfig())
+check('WD1 未配置态 get → {ok, config:null}（文件不存在）', () => {
+  assert.deepEqual(noConfig, { ok: true, config: null })
+})
+const noPwd = JSON.parse(await webdav.webdavSaveConfig(JSON.stringify({ url: config.url, username: 'user' })))
+check('WD1 密码必填才落盘（校验失败文件不写）', () => {
+  assert.equal(noPwd.ok, false)
+  assert.equal(noPwd.error, '缺少 WebDAV 密码')
+  assert.equal(fs.existsSync(path.join(process.env.HARBOR_CONFIG_DIR, 'webdav.json')), false)
+})
+const untested = JSON.parse(await webdav.webdavTest('{}'))
+check('WD2 未配置检测在前（test 文案）', () => {
+  assert.equal(untested.error, '未配置 WebDAV（设置 → 数据与备份）')
+})
+const unexported = JSON.parse(await webdav.webdavExport())
+check('WD2 未配置导出仍返回 plan（三文件清单；本测试环境文件已在 → sha256 项）', () => {
+  assert.equal(unexported.error, '未配置 WebDAV（设置 → 数据与备份）')
+  assert.deepEqual(unexported.plan.map(x => x.path), ['config.json', 'sessions.json', 'audit_log.jsonl'])
+})
+const unrestored = JSON.parse(await webdav.webdavRestore('{}'))
+check('WD2 未配置恢复返回 manifest 键（payload {} 解析为 {}）', () => {
+  assert.equal(unrestored.error, '未配置 WebDAV（设置 → 数据与备份）')
+  assert.deepEqual(unrestored.manifest, {})
+})
+const saved = JSON.parse(await webdav.webdavSaveConfig(JSON.stringify(config)))
+check('WD1 合法保存 → {ok, config(无 password 回显)}', () => {
+  assert.equal(saved.ok, true)
+  assert.equal(saved.config.username, 'user')
+  assert.equal(saved.config.password, undefined)
+  assert.ok(fs.existsSync(path.join(process.env.HARBOR_CONFIG_DIR, 'webdav.json')))
+})
+const reread = JSON.parse(await webdav.webdavGetConfig())
+check('WD1 保存后回读 → config 键白名单视图', () => {
+  assert.equal(reread.ok, true)
+  assert.equal(reread.config.url, config.url)
+  assert.equal(reread.config.remote_path, '/backup')
+})
 const tested = JSON.parse(await webdav.webdavTest(JSON.stringify(config)))
 check('OPTIONS + PROPFIND 连通性与 Basic Auth', () => assert.equal(tested.ok, true))
 const exported = JSON.parse(await webdav.webdavExport())

@@ -328,7 +328,11 @@ export async function searchStatus(taskId = '') {
   const pending = id ? takeovers.get(id) : takeovers.values().next().value
   if (pending) return json({ ok: true, active: true, state: 'captcha_required', task_id: pending.id,
     takeover_id: pending.id, query: pending.query, retry: pending.retry })
-  return json({ ok: true, active: false, state: 'idle', task_id: id || null })
+  // P0-1c CF7（service.py:1180-1197）：无活跃搜索 → {ok, active}（无 state/
+  // task_id 回显）；传了 id 但查无任务 → unknown_task 标记（与「无活跃」区分，
+  // 前端可止轮询而非误判终态）
+  if (id) return json({ ok: true, active: false, unknown_task: true })
+  return json({ ok: true, active: false })
 }
 export async function browserTakeover(takeoverId, action) {
   // legacy service.browser_takeover 口径（P0-1b B6）：空 id → action → 查找

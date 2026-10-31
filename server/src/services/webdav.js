@@ -3,11 +3,12 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { CONFIG_DIR, ensureDir, readJsonIfExists } from '../paths.js'
+import { CONFIG_DIR, ensureDir, atomicWriteJson, readJsonIfExists } from '../paths.js'
 
 const SCOPE = ['config.json', 'sessions.json', 'audit_log.jsonl']
 const POLICIES = new Set(['ask', 'local_wins', 'remote_wins', 'keep_both'])
 const MAX_BYTES = 256 * 1024 * 1024
+const WEBDAV_CONFIG_KEYS = ['url', 'username', 'password', 'remote_path', 'auto_sync', 'conflict_policy']
 const json = value => JSON.stringify(value)
 const sha = data => crypto.createHash('sha256').update(data).digest('hex')
 const fileSha = file => { try { return sha(fs.readFileSync(file)) } catch { return '' } }
@@ -15,6 +16,54 @@ const fileSha = file => { try { return sha(fs.readFileSync(file)) } catch { retu
 function parse(value) {
   if (value && typeof value === 'object') return value
   try { return JSON.parse(value || '{}') } catch { return null }
+}
+
+/** P0-1c WD1：webdav_get_config（webdav_service.get_config:612-629 同构）——
+ * 无文件 → {ok, config:null}；有文件 → 键白名单视图。DPAPI 解密缺口：Node 侧
+ * 未迁移 DPAPI（P0-2），password 原样透传（Node 保存亦不加密，读写对称）。 */
+export function webdavGetConfig() {
+  const file = path.join(CONFIG_DIR, 'webdav.json')
+  if (!fs.existsSync(file)) return json({ ok: true, config: null })
+  let data
+  try {
+    data = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (error) {
+    return json({ ok: false, error: `webdav.json 读取失败: ${error.message}` })
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return json({ ok: false, error: 'webdav.json 结构异常' })
+  }
+  const config = {}
+  for (const key of WEBDAV_CONFIG_KEYS) {
+    if (Object.hasOwn(data, key)) config[key] = data[key]
+  }
+  return json({ ok: true, config })
+}
+
+/** P0-1c WD1：webdav_save_config（webdav_service.save_config:631-657 同构）——
+ * 校验（密码必填）→ 原子写 → {ok, config(无 password)}。校验失败不落盘
+ * （未配置态文件不存在的语义由此保持）。Node 无 DPAPI：明文落盘附 warning
+ * （Python W17 的 DPAPI 不可用分支同款文案）。 */
+export function webdavSaveConfig(cfgJson) {
+  let cfg
+  try {
+    cfg = JSON.parse(String(cfgJson ?? '{}'))
+  } catch (error) {
+    return json({ ok: false, error: `配置解析失败: ${error.message}` })
+  }
+  const { record, error } = validateConfig(cfg)
+  if (error) return json({ ok: false, error })
+  ensureDir(CONFIG_DIR)
+  try {
+    atomicWriteJson(path.join(CONFIG_DIR, 'webdav.json'), record)
+  } catch (writeError) {
+    return json({ ok: false, error: `webdav.json 写入失败: ${writeError.message}` })
+  }
+  const { password, ...safeRecord } = record
+  const out = { ok: true, config: safeRecord }
+  // Node 未迁移 DPAPI：明文落盘须用户可见（W17 口径）
+  out.warning = '当前系统 DPAPI 不可用，密码以本地文件权限保护（未加密）；建议在正常 Windows 会话使用'
+  return json(out)
 }
 export function validateConfig(input) {
   const cfg = parse(input)
@@ -134,7 +183,17 @@ function classify(local, remote, baseline) {
 }
 export async function webdavRestore(payloadJson) {
   const { record, error } = storedRecord()
-  if (error) return json({ ok: false, error })
+  if (error) {
+    // P0-1c WD2（webdav_service.restore:700-709）：未配置时 manifest 校验仍执行
+    // （UI 预览），返回 {ok:false, error, manifest}——payload '{}' 解析为 {} 而非 null
+    let manifest = null
+    if (payloadJson) {
+      try { manifest = JSON.parse(String(payloadJson)) } catch (parseError) {
+        return json({ ok: false, error: `manifest 解析失败: ${parseError.message}` })
+      }
+    }
+    return json({ ok: false, error, manifest })
+  }
   const baseline = parse(payloadJson || '{}')
   if (!baseline || !Array.isArray(baseline.items)) return json({ ok: false, error: 'manifest 结构异常（缺 items 数组）' })
   if (baseline.items.some(x => !x || !x.path || !x.sha256)) return json({ ok: false, error: 'manifest items 每项需含 path 与 sha256' })

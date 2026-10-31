@@ -83,43 +83,79 @@ async function connect(name, configOverride) {
 export async function mcpListServers() {
   const servers = Object.entries(data().mcpServers).map(([name, cfg]) => {
     const entry = runtime.get(name)
+    // P0-1c MC2（mcp_service.list_servers:205-237）：补 warm/spawn_ms 两键
+    // （温启状态与冷启耗时——Node 未做温启登记，恒 false/null 如实陈述）
     return { name, transport: cfg.url ? 'http' : 'stdio', enabled: !!cfg.enabled,
       status: !cfg.enabled ? 'disabled' : entry?.status || 'stale', tool_count: entry?.tools?.length || 0,
-      last_error: entry?.last_error || '', callTimeout: cfg.callTimeout ?? null, health: entry?.last_error ? 'error' : 'ok', schema_review: false }
+      last_error: entry?.last_error || '', callTimeout: cfg.callTimeout ?? null,
+      warm: runtime.has(name), spawn_ms: null,
+      health: entry?.last_error ? 'error' : 'ok', schema_review: false }
   }).sort((a, b) => a.name.localeCompare(b.name))
   return json({ ok: true, servers })
 }
 export async function mcpSaveServer(name, configJson) {
-  const { record, error } = normalized(name, configJson)
-  if (error) return json({ error })
-  const previous = serverConfig(name)
-  if (previous && parse(configJson)?.tierOverrides == null) record.tierOverrides = previous.tierOverrides || {}
-  if (record.enabled) {
-    try { const tested = await connect(name, { ...record, enabled: true }); await tested.client.close(); await tested.transport.close() }
-    catch (error) { return json({ error: `连接测试失败，未启用: ${error.message}` }) }
+  // P0-1c MC1（api.py:1441-1481 包装口径）：停用保存 → {ok, name}（无 enabled
+  // 回显）；启用保存 → 测试连接，失败回弹停用 + flat error。
+  // enabled 未携带时保留既有开关（config_service.save_server:282-283 同款）。
+  let cfg
+  try { cfg = JSON.parse(String(configJson ?? '{}')) } catch (error) {
+    return json({ error: `配置解析失败: ${error.message}` })
   }
-  await closeRuntime(name); const all = data(); all.mcpServers[name] = record; save(all)
-  return json({ ok: true, name, enabled: record.enabled })
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return json({ error: '配置必须是 JSON 对象' })
+  const cleanName = String(name || '').trim()
+  if (!cleanName) return json({ error: '服务器名称不能为空' })
+  const { record, error } = normalized(cleanName, cfg)
+  if (error) return json({ error })
+  const previous = serverConfig(cleanName)
+  if (!Object.hasOwn(cfg, 'enabled')) record.enabled = !!(previous && previous.enabled)
+  if (previous && parse(configJson)?.tierOverrides == null) record.tierOverrides = previous.tierOverrides || {}
+  const wantEnable = !!record.enabled
+  if (wantEnable) {
+    try {
+      const tested = await connect(cleanName, { ...record, enabled: true })
+      await tested.client.close().catch(() => {}); await tested.transport.close().catch(() => {})
+    } catch (testError) {
+      // 测试连接失败 → 回弹 enabled=false（配置已保存，保持停用）
+      await closeRuntime(cleanName)
+      const all = data(); all.mcpServers[cleanName] = { ...record, enabled: false }; save(all)
+      return json({ error: testError.message })
+    }
+  }
+  await closeRuntime(cleanName); const all = data(); all.mcpServers[cleanName] = record; save(all)
+  return json({ ok: true, name: cleanName })
 }
 export async function mcpDeleteServer(name) {
   const all = data(); if (!all.mcpServers[name]) return json({ error: `服务器不存在: ${name}` })
   delete all.mcpServers[name]; save(all); await closeRuntime(name); return json({ ok: true })
 }
 export async function mcpTestServer(name) {
-  try { await closeRuntime(name); const entry = await connect(name, { ...serverConfig(name), enabled: true })
+  // P0-1c MC9：不存在服务器显式错误（原 undefined 解引用泄漏内部 TypeError 文案
+  // ——性质同 P0-1b 的 500 泄漏，防御缺失修复）
+  const stored = serverConfig(name)
+  if (!stored) return json({ error: `服务器不存在: ${name}` })
+  try { await closeRuntime(name); const entry = await connect(name, { ...stored, enabled: true })
     runtime.set(name, entry); return json({ ok: true, name, tools: entry.tools, tool_count: entry.tools.length, server_info: entry.server_info, instructions: entry.instructions }) }
   catch (error) { return json({ error: error.message }) }
 }
 export async function mcpGetServerDetail(name) {
   const cfg = serverConfig(name); if (!cfg) return json({ error: `服务器不存在: ${name}` })
   const entry = runtime.get(name); const env = plainMapping(cfg.env); const headers = plainMapping(cfg.headers)
+  // P0-1c MC3（mcp_config_service.get_server:139-158 + mcp_service.get_server_detail:328-353）：
+  // config 视图 = 存储副本 + name + env/headers 解密视图 + decrypt_failed；
+  // headers 仅在存储携带时透出（stdio 服务器无 headers 键——Python 同款）
+  const view = { ...cfg }
+  view.name = name
+  view.env = env.values
+  if (cfg.headers) view.headers = headers.values
+  view.decrypt_failed = [...env.failed, ...headers.failed]
   return json({ ok: true, name, transport: cfg.url ? 'http' : 'stdio', status: !cfg.enabled ? 'disabled' : entry?.status || 'stale',
-    last_error: entry?.last_error || '', config: { ...cfg, env: env.values, headers: headers.values, decrypt_failed: [...env.failed, ...headers.failed] },
+    last_error: entry?.last_error || '', config: view,
     tierOverrides: cfg.tierOverrides || {}, tools: (entry?.tools || []).map(tool => ({ ...tool, tier: cfg.tierOverrides?.[tool.name] || 'always' })),
     instructions: entry?.instructions || '', server_info: entry?.server_info || {}, decrypt_failed: [...env.failed, ...headers.failed] })
 }
 export async function mcpSetToolTier(server, tool, tier) {
-  if (!VALID_TIERS.has(tier)) return json({ error: '档位仅支持 always/session/off' })
+  // P0-1c MC4：'档位必须是 always/session/off'（config_service.set_tool_tier:372 逐字）
+  if (!VALID_TIERS.has(tier)) return json({ error: '档位必须是 always/session/off' })
   const all = data(); const cfg = all.mcpServers[server]; if (!cfg) return json({ error: `服务器不存在: ${server}` })
   cfg.tierOverrides ||= {}; cfg.tierOverrides[tool] = tier; save(all); return json({ ok: true })
 }
@@ -127,23 +163,30 @@ function argsOf(value) { const parsed = parse(value || '{}'); return parsed && !
 export async function mcpCheckTool(server, tool, argumentsJson = '{}') {
   const cfg = serverConfig(server)
   if (!cfg) return json({ action: 'block', reason: `MCP 服务器 ${server} 不存在。` })
-  if (!cfg.enabled) return json({ action: 'block', reason: `MCP 服务器 ${server} 未启用，请先在设置中测试连接。` })
+  // P0-1c MC5（mcp_service.check_tool:589-592 逐字）：'（可能已禁用或崩溃）'从句
+  if (!cfg.enabled) return json({ action: 'block', reason: `MCP 服务器 ${server} 未启用（可能已禁用或崩溃），请先在设置中测试连接。` })
   const tier = cfg.tierOverrides?.[tool] || 'always'
   if (tier === 'off') return json({ action: 'allow', tier, tier_source: 'override' })
   return json({ action: 'confirm', tier, tier_source: cfg.tierOverrides?.[tool] ? 'override' : 'default', reason: `该工具需要确认（档位 ${tier}）。` })
 }
 export async function mcpCallTool(server, tool, argumentsJson = '{}', decision = 'deny', token = null) {
+  // P0-1c MC6（mcp_service.call_tool:603-640 校验顺序）：服务器存在 → 启用 →
+  // 档位 → decision 方言——「以用户拒绝话术掩盖服务器未启用」的误导性回执
+  // 在 Python 不存在，Node 对齐同序
+  const cfg = serverConfig(server)
+  if (!cfg) return json({ error: `MCP 服务器 ${server} 不存在。` })
+  if (!cfg.enabled) return json({ error: `MCP 服务器 ${server} 未启用（可能已禁用或崩溃），请先在设置中测试连接。` })
   if (decision === 'deny') return json({ info: `用户拒绝了本次 MCP 工具调用（${server} · ${tool}）。请调整方案或询问用户意图，不要原样重试。`, skipped: true })
   const verdict = JSON.parse(await mcpCheckTool(server, tool, argumentsJson))
   if (verdict.action === 'block') return json({ error: verdict.reason })
   const args = argsOf(argumentsJson); const detail = { server, tool, arguments: args }
   if (verdict.tier !== 'off') {
-    if (!['allow', 'session-trust'].includes(decision)) return json({ error: `该工具需要确认（档位 ${verdict.tier}）。请通过界面确认后重试。` })
+    if (!['allow', 'session-trust'].includes(decision)) return json({ error: `该工具需要确认（档位 ${verdict.tier}）。请通过界面确认后重试，不要绕过确认流程。` })
     if (!token || !(await consumeToken('mcp_call', detail, token))) return json({ error: 'MCP 工具缺少有效的一次性确认 token（参数可能已变化），请重新确认。' })
   }
   try {
-    const entry = await connect(server); const cfg = serverConfig(server)
-    const result = await entry.client.callTool({ name: tool, arguments: args }, undefined, { timeout: (cfg.callTimeout || 60) * 1000 })
+    const entry = await connect(server); const cfgNow = serverConfig(server)
+    const result = await entry.client.callTool({ name: tool, arguments: args }, undefined, { timeout: (cfgNow.callTimeout || 60) * 1000 })
     const output = (result.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n') || JSON.stringify(result.structuredContent ?? result)
     return json({ ok: true, output, content: result.content || [], structuredContent: result.structuredContent, isError: !!result.isError })
   } catch (error) {
@@ -154,24 +197,37 @@ export async function mcpCallTool(server, tool, argumentsJson = '{}', decision =
 export async function mcpImportClaude(configJson) {
   const input = parse(configJson)
   if (!input || !input.mcpServers || typeof input.mcpServers !== 'object') return json({ error: '未找到 mcpServers 段——请粘贴 claude_desktop_config.json 全文' })
-  const all = data(); let imported = 0; const skipped = []; const entries = Object.entries(input.mcpServers)
+  // P0-1c MC8（config_service.import_claude:394-437）：imported 为名字数组
+  const all = data(); const imported = []; const skipped = []; const entries = Object.entries(input.mcpServers)
   for (const [name, cfg] of entries) {
-    if (all.mcpServers[name]) { skipped.push({ name, reason: '同名服务器已存在' }); continue }
-    if (cfg?.type === 'sse') { skipped.push({ name, reason: '旧 SSE 传输不受支持，请使用 Streamable HTTP' }); continue }
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) { skipped.push({ name, reason: '条目不是对象，已跳过' }); continue }
+    if (String(cfg.type || '').toLowerCase() === 'sse') { skipped.push({ name, reason: 'SSE 传输不受支持（v1.3 仅支持 stdio 与 Streamable HTTP）' }); continue }
+    if (all.mcpServers[name]) { skipped.push({ name, reason: '同名服务器已存在，已跳过（可编辑后覆盖保存）' }); continue }
     const { record, error } = normalized(name, { ...cfg, enabled: false })
     if (error) { skipped.push({ name, reason: error }); continue }
-    all.mcpServers[name] = record; imported++
+    all.mcpServers[name] = record; imported.push(name)
   }
   save(all); return json({ ok: true, imported, skipped, total: entries.length })
 }
 export async function mcpListResources(server) {
+  // P0-1c MC7（mcp_service.list_resources:725-754）：服务器存在/启用检查先于
+  // 连接（未启用 → flat 'MCP 服务器 X 未启用。'，无前缀包裹）；前缀文案仅用于
+  // 客户端调用异常路径
+  const cfg = serverConfig(server)
+  if (!cfg) return json({ error: `MCP 服务器 ${server} 不存在。` })
+  if (!cfg.enabled) return json({ error: `MCP 服务器 ${server} 未启用。` })
   try { const entry = await connect(server); const result = await entry.client.listResources(undefined, { timeout: 60000 })
     entry.resources = result.resources || []; return json({ ok: true, resources: entry.resources, supported: true }) }
   catch (error) { if (error.code === -32601 || /Method not found/i.test(error.message)) return json({ ok: true, resources: [], supported: false })
     return json({ error: `MCP 资源列表获取失败: ${error.message}` }) }
 }
 export async function mcpReadResource(server, uri) {
+  // P0-1c MC7（mcp_service.read_resource:756-789）：uri 空检 → 存在 → 启用 →
+  // 连接（顺序即语义，与 Python 同序）
   if (!uri) return json({ error: '缺少资源 uri' })
+  const cfg = serverConfig(server)
+  if (!cfg) return json({ error: `MCP 服务器 ${server} 不存在。` })
+  if (!cfg.enabled) return json({ error: `MCP 服务器 ${server} 未启用。` })
   try { const entry = await connect(server); const result = await entry.client.readResource({ uri }, { timeout: 60000 })
     const contents = result.contents || []; const text = contents.filter(x => x.text).map(x => x.text).join('\n')
     return json({ ok: true, text, contents, blobs: contents.filter(x => x.blob).map(x => x.blob) }) }
