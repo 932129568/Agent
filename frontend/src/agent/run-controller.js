@@ -159,10 +159,62 @@ function planFinishIfNatural(userStopped, naturalDone) {
 /* 请求所有权：每次生成都有独立 run；切换/新建会话只撤销所有权，
  * 不强行杀死底层 RPC。旧 run 之后不得再写会话、全局状态或新 run 的 UI。 */
 let __agentRunSeq = 0;
+/* P0-3：并行 run 注册表与状态访问器（Map<sessionId, run>——run.id 为唯一写者，
+ * 每 run 只写自己 session 的 runStatus 字段（R8 竞态防线）。 */
+const __agentRuns = new Map();
+
+/** 显式「并行运行」入口（Q5）：对指定会话启动 run 而不取消其他会话在途 run。 */
+async function runAgentLoopParallel(s, apiKey) {
+  return runAgentLoop(s, apiKey, { parallel: true });
+}
+
+/** 当前视窗 run 的 sessionId（单活跃兼容；无 run 返回 null——UI 调用不带 header）。 */
+function getActiveRunSid() {
+  return __agentActiveRun && !__agentActiveRun.cancelled ? __agentActiveRun.sessionId : null;
+}
+
+/** 全部在途 run 的快照（多任务面板数据源——前端本地运行时态，无新增 js_api）。 */
+function getActiveRuns() {
+  return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
+    sessionId: r.sessionId, title: r.session.title || '', status: r.status,
+    parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
+  }));
+}
+
+/** 全部在途 run 的快照（多任务面板数据源——前端本地运行时态，无新增 js_api）。 */
+function getActiveRuns() {
+  return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
+    sessionId: r.sessionId, title: r.session.title || '', status: r.status,
+    parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
+  }));
+}
+
+/** P0-3（Q5）：显式「并行运行」入口（React 岛按钮调用）——对指定会话启动 run
+ * 而不取消其他会话在途 run；找不到会话/密钥时静默不动作（不破坏现有 UI）。 */
+async function harborStartParallelRun(sessionId) {
+  try {
+    const s = (typeof getSession === 'function' ? getSession(sessionId) : null)
+      || (typeof sessions !== 'undefined' && Array.isArray(sessions)
+        ? sessions.find(item => item.id === sessionId) : null);
+    if (!s) return null;
+    const key = typeof apiKey !== 'undefined' ? apiKey : '';
+    return await runAgentLoopParallel(s, key);
+  } catch (e) { return null; }
+}
+
+/** 多任务面板的停止按钮：仅取消指定会话的 run（不影响其他并行实例）。 */
+function harborStopRun(sessionId) {
+  const run = __agentRuns.get(sessionId);
+  if (!run || run.cancelled) return;
+  run.cancelled = true;
+  try { if (run.abortController) run.abortController.abort(); } catch (e) {}
+}
+
 let __agentActiveRun = null;
 function agentRunCurrent(run) {
   if (typeof RunRegistry !== 'undefined') return RunRegistry.isCurrent(run);
-  return !!run && __agentActiveRun === run && !run.cancelled;
+  // P0-3：按会话注册表判定活跃（并行 run 各自独立——不再全局唯一活跃指针）
+  return !!run && __agentRuns.get(run.sessionId) === run && !run.cancelled;
 }
 /** Visible-run guard: background runs may write their own history/status,
  *  but must never touch the currently visible chat DOM or stream controls. */
@@ -230,12 +282,16 @@ function cancelActiveAgentLoop() {
     if (btn) { setSendButtonVisual(btn, 'send'); btn.style.background = ''; btn.onclick = sendMessage; }
   }
 }
-async function runAgentLoop(s, apiKey) {
-  if (__agentActiveRun) cancelActiveAgentLoop();
+async function runAgentLoop(s, apiKey, opts) {
+  const parallel = !!(opts && opts.parallel);
+  // P0-3：默认单活跃——非并行入口才取消当前 run（Q5 默认习惯不变）
+  if (__agentActiveRun && !parallel) cancelActiveAgentLoop();
   const run = (typeof RunRegistry !== 'undefined') ? RunRegistry.start(s) : {
     id: ++__agentRunSeq, sessionId: s.id, session: s, cancelled: false,
     assistantMsg: null, abortController: null, nudgeTimer: null, localWaitTimer: null };
+  run.parallel = parallel;
   if (typeof RunRegistry === 'undefined') __agentActiveRun = run;
+  __agentRuns.set(s.id, run);
   const _visibleAtStart = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
   run.background = _visibleAtStart !== s.id;
   run.statusFinalized = false;
@@ -357,11 +413,17 @@ async function runAgentLoop(s, apiKey) {
       if (!agentRunCurrent(run)) {
         return JSON.stringify({ info: '任务已停止或会话已切换，工具结果已丢弃', skipped: true });
       }
-      try { await callApi('set_current_sid', [s.id]); } catch (e) {}
+      // P0-3：HTTP 路径由 X-Harbor-Sid 头承载 sid（executeTool 透传 s.id），
+      // 不再每 call 写全局 set_current_sid；pywebview 路径保持现状
+      if (!(window.pywebview && window.pywebview.api) && harborHttpAvailable()) {
+        // HTTP 桥：sid 由 executeTool 的 run 级参数注入（消竞态源）
+      } else {
+        try { await callApi('set_current_sid', [s.id]); } catch (e) {}
+      }
       if (!agentRunCurrent(run)) {
         return JSON.stringify({ info: '任务已停止或会话已切换，工具结果已丢弃', skipped: true });
       }
-      return executeTool(name, args);
+      return executeTool(name, args, s.id);
     };
     let toolMode = document.getElementById('toolMode').value;
     let effectiveTools;
@@ -1201,6 +1263,8 @@ async function runAgentLoop(s, apiKey) {
     // 才能复位全局流式状态与按钮，避免关掉新 run。
     const ownedFinish = (typeof RunRegistry !== 'undefined')
       ? RunRegistry.finish(run) : (__agentActiveRun === run);
+    // P0-3：run 结束时从自身注册表摘除（不论是否视窗 run——并行实例互不影响）
+    if (__agentRuns.get(run.sessionId) === run) __agentRuns.delete(run.sessionId);
     if (ownedFinish) {
       if (typeof RunRegistry === 'undefined') __agentActiveRun = null;
       if (typeof AppState !== 'undefined') AppState.isStreaming = false;

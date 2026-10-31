@@ -5,11 +5,18 @@
  * 修复 S4①：护栏确认通过后携带后端签发的一次性 confirm token 调实际 op（仅追加尾参，
  * 旧 exe 未收到多余位置参数，保持兼容）。
  */
-async function executeToolRaw(name, args) {
+async function executeToolRaw(name, args, runSid) {
   if (!window.pywebview || !window.pywebview.api) {
     return JSON.stringify({error: '请在 Harbor.exe 桌面端中使用此功能'});
   }
-  try { await callApi('set_current_sid', [currentSessionId]); } catch (e) {}
+  // P0-3：run 级 sid 参数贯穿（显式传参而非模块级可变全局——并行 run 下
+  // 全局 sid 会被交错调用竞态污染）；HTTP 路径移除每 call 全局 set_current_sid
+  // （由 X-Harbor-Sid 头取代——消 A/B 竞态源）；pywebview 路径保持现状
+  const api = __apiWithSid(runSid || null);
+  const __useHttp = !(window.pywebview && window.pywebview.api) && harborHttpAvailable();
+  if (!__useHttp) {
+    try { await callApi('set_current_sid', [currentSessionId]); } catch (e) {}
+  }
   args = args || {};   // 修复 ㊱：args 缺省兜底（原 pickPath 对 undefined 取属性虽不炸，但统一归一更稳）
   // v1.2 R2：破坏性操作护栏（delete/kill/剪贴板/截屏/命令执行 → 确认矩阵/保护名单）
   let guardToken = null;
@@ -56,25 +63,25 @@ async function executeToolRaw(name, args) {
     error: '命令为空：请在 cmd（或 command）字段提供要执行的具体命令。空命令已被拒绝，不会执行。'
   });
   try {
-    if (name === 'write_file')        return await callApi('write_file', [pickPath(args), args.content]);
-    if (name === 'append_file')       return await callApi('append_file', [pickPath(args), args.content]);
-    if (name === 'search_replace')    return await callApi('search_replace', [pickPath(args), args.old, args.new, args.replace_all === true]);
-    if (name === 'read_file')         return await callApi('read_file', [pickPath(args), args.offset || 0, args.limit || 0, args.force === true]);
-    if (name === 'list_dir')          return await callApi('list_dir', [pickPath(args) || null]);
-    if (name === 'make_dir')          return await callApi('make_dir', [pickPath(args)]);
-    if (name === 'delete_path')       return await callApi('delete_path', withToken([pickPath(args), args.recycle !== false], guardToken));
-    if (name === 'move_path')         return await callApi('move_path', [pickPath(args), args.new_path || args.dst]);
-    if (name === 'copy_path')         return await callApi('copy_path', [pickPath(args), args.new_path || args.dst]);
-    if (name === 'get_file_info')     return await callApi('get_file_info', [pickPath(args)]);
+    if (name === 'write_file')        return await api('write_file', [pickPath(args), args.content]);
+    if (name === 'append_file')       return await api('append_file', [pickPath(args), args.content]);
+    if (name === 'search_replace')    return await api('search_replace', [pickPath(args), args.old, args.new, args.replace_all === true]);
+    if (name === 'read_file')         return await api('read_file', [pickPath(args), args.offset || 0, args.limit || 0, args.force === true]);
+    if (name === 'list_dir')          return await api('list_dir', [pickPath(args) || null]);
+    if (name === 'make_dir')          return await api('make_dir', [pickPath(args)]);
+    if (name === 'delete_path')       return await api('delete_path', withToken([pickPath(args), args.recycle !== false], guardToken));
+    if (name === 'move_path')         return await api('move_path', [pickPath(args), args.new_path || args.dst]);
+    if (name === 'copy_path')         return await api('copy_path', [pickPath(args), args.new_path || args.dst]);
+    if (name === 'get_file_info')     return await api('get_file_info', [pickPath(args)]);
     if (name === 'run_command') {
       const _c = pickCmd(args);
       if (!_c.trim()) return rejectEmptyCmd();   // 修复 ②（三轮）：空命令不送执行
-      return await callApi('run_command', withToken([_c, pickTimeout(args)], guardToken), 660000);
+      return await api('run_command', withToken([_c, pickTimeout(args)], guardToken), 660000);
     }
     if (name === 'run_powershell') {
       const _c = pickCmd(args);
       if (!_c.trim()) return rejectEmptyCmd();   // 修复 ②（三轮）：空命令不送执行
-      return await callApi('run_powershell', withToken([_c, pickTimeout(args)], guardToken), 660000);
+      return await api('run_powershell', withToken([_c, pickTimeout(args)], guardToken), 660000);
     }
     if (name === 'run_admin_command') {
       /* 修复 S5/W8（三轮）：① timeout 参数接线（原只传 cmd，后端 timeout 是死参数）；
@@ -86,7 +93,7 @@ async function executeToolRaw(name, args) {
       try {
         const _c = pickCmd(args);
         if (!_c.trim()) return rejectEmptyCmd();   // 修复 ②（三轮）：空命令不送执行
-        return await callApi('run_admin_command', [_c, guardToken, pickTimeout(args)], 150000);
+        return await api('run_admin_command', [_c, guardToken, pickTimeout(args)], 150000);
       } catch (e) {
         const msg = String((e && e.message) || e);
         if (/timeout|超时|Timeout/i.test(msg)) {
@@ -95,20 +102,20 @@ async function executeToolRaw(name, args) {
         throw e;
       }
     }
-    if (name === 'read_more')         return await callApi('read_more', [args.cache_id, args.offset || 0, args.limit || 2000]);
+    if (name === 'read_more')         return await api('read_more', [args.cache_id, args.offset || 0, args.limit || 2000]);
     // 修复 H8（四轮）：open_app 后端已纳入护栏矩阵（W9），前端补 token 透传——
     // 原不携带 token，guard.json 提档后 enforce_exec 必拒且无 UI 确认路径（提档即砖）。
-    if (name === 'open_app')          return await callApi('open_app', withToken([pickPath(args)], guardToken));
-    if (name === 'open_url')          return await callApi('open_url', [args.url]);
-    if (name === 'clipboard_read')    return await callApi('get_clipboard', withToken([], guardToken));
-    if (name === 'clipboard_write')   return await callApi('set_clipboard', withToken([args.text || ''], guardToken));
-    if (name === 'list_processes')    return await callApi('list_processes', [args.keyword || null]);
-    if (name === 'kill_process')      return await callApi('kill_process', withToken([args.pid || null, args.name || null], guardToken));
+    if (name === 'open_app')          return await api('open_app', withToken([pickPath(args)], guardToken));
+    if (name === 'open_url')          return await api('open_url', [args.url]);
+    if (name === 'clipboard_read')    return await api('get_clipboard', withToken([], guardToken));
+    if (name === 'clipboard_write')   return await api('set_clipboard', withToken([args.text || ''], guardToken));
+    if (name === 'list_processes')    return await api('list_processes', [args.keyword || null]);
+    if (name === 'kill_process')      return await api('kill_process', withToken([args.pid || null, args.name || null], guardToken));
     if (name === 'take_screenshot') {
       // 修复 H9（四轮）：区域参数 0 值不吞——`args.left || null` 把合法坐标 0 变 null，
       // 后端判定区域参数缺失走整屏，区域截图静默丢失（后端 R6 修复被前端抵消）。
       const _pickCoord = (v) => (v != null ? v : null);
-      const res = await callApi('take_screenshot', withToken([_pickCoord(args.left), _pickCoord(args.top), _pickCoord(args.width), _pickCoord(args.height)], guardToken));
+      const res = await api('take_screenshot', withToken([_pickCoord(args.left), _pickCoord(args.top), _pickCoord(args.width), _pickCoord(args.height)], guardToken));
       try {
         const data = JSON.parse(res);
         if (data.dataUrl) {
@@ -121,7 +128,7 @@ async function executeToolRaw(name, args) {
         return JSON.stringify({error: data.error || '截图失败'});
       } catch (e) { return JSON.stringify({error: '截图返回解析失败'}); }
     }
-    if (name === 'append_memory')     return await callApi('append_memory', [typeof args === 'string' ? args : JSON.stringify(args)]);
+    if (name === 'append_memory')     return await api('append_memory', [typeof args === 'string' ? args : JSON.stringify(args)]);
     // v1.8.0 B/S 域：Agent 工具族分发（C 域接线；参数透传，timeoutMs 口径见联调规范 §2.1）
     // §3.3/§4.4 护栏链（2026-10-21）：browser_search/software_call 前置
     // agentGuardCheck（guard_check → 确认弹窗 → 一次性 token 回传后端
@@ -132,10 +139,10 @@ async function executeToolRaw(name, args) {
       // §2.4：CAPTCHA_REQUIRED → 挂起标记（fail-fast + 前端挂起，browser_takeover
       // 终态才由 60-agent-loop 注入上下文——Agent 循环永不挂死在人类动作上）
       return browserToolWrapCaptcha(
-        await callApi('browser_search', [args, g.token], 90000));
+        await api('browser_search', [args, g.token], 90000));
     }
     if (name === 'browser_open') {
-      return await callApi('browser_open', [args], 60000);
+      return await api('browser_open', [args], 60000);
     }
     // v1.9.0 M5：浏览器驱动六原语分发（guard 矩阵：click/fill=always，其余
     // session；护栏链同 browser_search 走 agentGuardCheck；预算超限
@@ -144,7 +151,7 @@ async function executeToolRaw(name, args) {
       const g = await agentGuardCheck('browser_navigate',
         { url: String((args && args.url) || '').slice(0, 200) });
       if (g.blocked) return g.blocked;
-      return maybeBudgetInvite(await callApi('browser_navigate',
+      return maybeBudgetInvite(await api('browser_navigate',
         [(args && args.url) || '', (args && args.wait_selector) || '',
          pickTimeout(args), (args && args.mode) === 'visible' ? 'visible' : 'hidden',
          g.token], 120000));
@@ -153,34 +160,34 @@ async function executeToolRaw(name, args) {
       const g = await agentGuardCheck('browser_extract',
         { selector: String((args && args.selector) || '').slice(0, 80) });
       if (g.blocked) return g.blocked;
-      return maybeBudgetInvite(await callApi('browser_extract',
+      return maybeBudgetInvite(await api('browser_extract',
         [(args && args.selector) || '', (args && args.mode) || 'markdown', g.token], 90000));
     }
     if (name === 'browser_click') {
       const g = await agentGuardCheck('browser_click',
         { target: String((args && args.target) || '').slice(0, 120) });
       if (g.blocked) return g.blocked;
-      return maybeBudgetInvite(await callApi('browser_click',
+      return maybeBudgetInvite(await api('browser_click',
         [(args && args.target) || '', g.token], 90000));
     }
     if (name === 'browser_fill') {
       const g = await agentGuardCheck('browser_fill',
         { selector: String((args && args.selector) || '').slice(0, 80) });
       if (g.blocked) return g.blocked;
-      return maybeBudgetInvite(await callApi('browser_fill',
+      return maybeBudgetInvite(await api('browser_fill',
         [(args && args.selector) || '', (args && args.text) || '', g.token], 90000));
     }
     if (name === 'browser_screenshot') {
       const g = await agentGuardCheck('browser_screenshot', {});
       if (g.blocked) return g.blocked;
-      return maybeBudgetInvite(await callApi('browser_screenshot',
+      return maybeBudgetInvite(await api('browser_screenshot',
         [args && args.full_page === true, g.token], 90000));
     }
     if (name === 'browser_close') {
       // 会话管理类（session 档）：确认后执行；缺省关全部（session_id 可选）
       const g = await agentGuardCheck('browser_close', {});
       if (g.blocked) return g.blocked;
-      return maybeBudgetInvite(await callApi('browser_close',
+      return maybeBudgetInvite(await api('browser_close',
         [(args && args.session_id) || '', g.token], 60000));
     }
     if (name === 'software_call') {
@@ -193,7 +200,7 @@ async function executeToolRaw(name, args) {
       if (g.blocked) return g.blocked;
       // 后端执行上限 600s + 30s 缓冲（与 run_command 660000 同款口径）
       const _swT = pickTimeout(args);
-      return await callApi('software_call', [args, g.token],
+      return await api('software_call', [args, g.token],
         Math.min(660000, _swT * 1000 + 30000));
     }
     // v1.3 R4：MCP 工具分发（后端二次 enforce + 审计 + 结果渲染）
@@ -207,9 +214,9 @@ async function executeToolRaw(name, args) {
     return JSON.stringify({error: '未知工具: ' + name});
   } catch (e) { return JSON.stringify({error: (e && e.message) ? e.message : String(e)}); }   // 修复 ㊱：catch 输出 err.message（非 Error 抛出兜底 String）
 }
-async function executeTool(name, args) {
+async function executeTool(name, args, runSid) {
   const t0 = performance.now();
-  const result = await executeToolRaw(name, args);
+  const result = await executeToolRaw(name, args, runSid);
   const ms = performance.now() - t0;
   try {
     const d = JSON.parse(result);
@@ -239,6 +246,12 @@ function browserToolWrapCaptcha(raw) {
     }
   } catch (e) { /* 非 JSON：原样返回 */ }
   return raw;
+}
+
+/* P0-3：run 级 sid 的 callApi 包装工厂（显式参数传递——并行 run 各自 sid
+ * 随 X-Harbor-Sid 头注入，绝不依赖全局 set_current_sid 的时序）。 */
+function __apiWithSid(sid) {
+  return (name, args, ms) => callApi(name, args, ms, sid);
 }
 
 /* ================= V1 结果校验框架·前端孪生（v1.8.0 迭代方案 §6 P1）=================
@@ -341,9 +354,11 @@ const agentTrusted = new Set();
 /* 复核批修正：origin 参数——'ai'（Agent 发起，默认）|'user'（设置面板手动
  * 按钮）。手动入口与 AI 走同一护栏链（armed 态 session 档必须换 token），
  * 但确认框措辞不再是「AI 请求」——用户是确认主体。 */
-async function agentGuardCheck(op, detail, origin) {
+async function agentGuardCheck(op, detail, origin, runSid) {
   origin = origin || 'ai';
   detail = detail || {};
+  // P0-3：护栏检查同样按 run 级 sid 路由（trust/grant per-sid）
+  const api = __apiWithSid(runSid || null);
   // v1.9.0 M5：浏览器驱动六原语的 target 取值（URL/目标元素/选择器）；
   // 信任键按 op 粒度（session 档语义=同类操作会话内首次确认，非按 URL 逐条）
   const _isBrowserOp = op.indexOf('browser_') === 0;
@@ -356,7 +371,7 @@ async function agentGuardCheck(op, detail, origin) {
   }
   let verdict = { action: 'confirm' };
   try {
-    const raw = await callApi('guard_check', [op, JSON.stringify(detail)], 20000);
+    const raw = await api('guard_check', [op, JSON.stringify(detail)], 20000);
     verdict = JSON.parse(raw) || {};
   } catch (e) {
     // 后端 guard_check 不可用（旧 exe）：不放行——外部软件执行面 fail-closed；
@@ -423,14 +438,14 @@ async function agentGuardCheck(op, detail, origin) {
     // 改为 await 登记，成功才进前端 Set；失败保持「每次确认」——降级为多弹一次
     // 窗，绝不在前端假装信任。
     try {
-      await callApi('guard_session_trust', [op], 20000);
+      await api('guard_session_trust', [op], 20000);
       agentTrusted.add(trustKey);
     } catch (e) { /* 登记失败：不进前端信任——下次仍走确认弹窗，由用户重新勾选重试 */ }
   }
   // 换一次性 confirm token（op 级；detail 摘要与后端 enforce 同口径）
   let token = null;
   try {
-    const t = JSON.parse(await callApi('guard_confirm_token', [op, JSON.stringify(detail)], 20000));
+    const t = JSON.parse(await api('guard_confirm_token', [op, JSON.stringify(detail)], 20000));
     // 复核修正（真机实锤）：api 层 ok() 只序列化不加 ok 键——后端返回
     // {token,ttl}，原 `t.ok && t.token` 判定恒假 → token 永不生效，armed 态
     // 全部确认流（AI+面板手动）死循环在 CONFIRM_REQUIRED。vm 测试桩返回带

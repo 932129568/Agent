@@ -174,7 +174,8 @@
         "executeTool",
         "executeToolRaw",
         "harborRenderValidation",
-        "toolValidateResult"
+        "toolValidateResult",
+        "__apiWithSid"
       ],
       "requires": [
         "callApi",
@@ -850,7 +851,13 @@
         "planFinishIfNatural",
         "runAgentLoop",
         "streamSpeedText",
-        "setSendButtonVisual"
+        "setSendButtonVisual",
+        "__agentRuns",
+        "runAgentLoopParallel",
+        "getActiveRunSid",
+        "getActiveRuns",
+        "harborStartParallelRun",
+        "harborStopRun"
       ],
       "requires": [
         "isStreaming",
@@ -1744,9 +1751,9 @@
         "COLLABORATION_SHA_K",
         "collaborationCanonical",
         "collaborationSha256",
-"collaborationAssertNoSecret",
-      "collaborationValidateCredentialRef",
-      "EndpointRef",
+        "collaborationAssertNoSecret",
+        "collaborationValidateCredentialRef",
+        "EndpointRef",
         "collaborationEndpointSnapshot",
         "createCollaborationEndpoints"
       ],

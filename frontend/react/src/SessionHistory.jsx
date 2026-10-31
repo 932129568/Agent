@@ -71,6 +71,19 @@ function SessionItem({ session, active, onSelect }) {
             {session.runStatus === 'working' && <span>{STATUS_LABEL[session.runStatus]}</span>}
           </span>
         )}
+        {/* P0-3（Q5）：显式「并行运行」入口——对指定会话启动 run 而不取消
+            其他会话在途 run；默认单活跃习惯不变 */}
+        {typeof window !== 'undefined' && typeof window.harborStartParallelRun === 'function' && (
+          <button
+            type="button"
+            className="i-parallel-btn"
+            title="并行运行（不中断其他会话）"
+            onClick={event => {
+              event.stopPropagation()
+              window.harborStartParallelRun(session.id)
+            }}
+          >并行</button>
+        )}
       </div>
     </div>
   )

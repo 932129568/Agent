@@ -14,6 +14,7 @@
 import { version as reactVersion } from 'react'
 import { createRoot } from 'react-dom/client'
 import SessionHistory from './SessionHistory.jsx'
+import ParallelRuns from './ParallelRuns.jsx'
 import { syncSessions, getState } from './store.js'
 import tokensCss from '../../styles/tokens.css'
 import islandCss from './island.css'
@@ -41,10 +42,13 @@ export function mount(target, options) {
   injectStyles()
   const root = createRoot(el)
   root.render(
-    <SessionHistory
-      onSelect={opts.onSelect}
-      onNewSessionInProject={opts.onNewSessionInProject}
-    />,
+    <>
+      <ParallelRuns />
+      <SessionHistory
+        onSelect={opts.onSelect}
+        onNewSessionInProject={opts.onNewSessionInProject}
+      />
+    </>,
   )
   roots.set(el, root)
   return root

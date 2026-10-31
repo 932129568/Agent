@@ -112,3 +112,19 @@
   transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .i-new-chat:hover { border-color: var(--border-strong); background: var(--hover); }
+
+/* P0-3 多任务面板与并行入口 */
+.i-parallel-runs {
+  margin: var(--space-2) var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+}
+.i-parallel-title { font-size: var(--fs-caption); color: var(--text-3); margin-bottom: var(--space-1); }
+.i-parallel-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: var(--fs-caption); }
+.i-parallel-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.i-parallel-stop { border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font-size: var(--fs-caption); cursor: pointer; padding: 0 6px; }
+.i-parallel-stop:hover { background: var(--hover); }
+.i-parallel-btn { margin-left: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-3); font-size: var(--fs-caption); cursor: pointer; padding: 0 5px; }
+.i-parallel-btn:hover { background: var(--hover); color: var(--text); }

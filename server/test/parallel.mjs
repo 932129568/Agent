@@ -188,6 +188,43 @@ await check('services/** 无 runtime.currentSid 直读（单点收口）', () =>
   assert.deepEqual(offenders, [])
 })
 
+/* ---------------- 7. 并行 run 端到端（T03：bridge 源码 → HTTP → ALS 隔离） ---------------- */
+await check('并行 run 端到端：bridge 注入 sid，两会话各自工作区', async () => {
+  // 真实 HTTP 监听（bridge.callApiHttp 需 fetch 可及的真实端口）
+  await app.listen({ host: '127.0.0.1', port: 0 })
+  const port = app.server.address().port
+  // 未修改的 frontend bridge 源码在 vm 沙箱执行（window/fetch/AbortController
+  // 由 Node 原生提供；window.HARBOR_API_BASE 指向真实监听）
+  const vm = await import('node:vm')
+  const bridgeSrc = fs.readFileSync(path.join(serverRoot, '..', 'frontend', 'src', 'core', 'bridge.js'), 'utf8')
+  const sandbox = { window: { HARBOR_API_BASE: `http://127.0.0.1:${port}` }, fetch, AbortController, console,
+    setTimeout, clearTimeout, setInterval, clearInterval }
+  vm.createContext(sandbox)
+  vm.runInContext(bridgeSrc + '\n;this.__callApi = callApi;', sandbox)
+  const callApi = sandbox.__callApi
+  const wsE2eA = path.join(tmp, 'e2eA')
+  const wsE2eB = path.join(tmp, 'e2eB')
+  fs.mkdirSync(wsE2eA, { recursive: true })
+  fs.mkdirSync(wsE2eB, { recursive: true })
+  // 两会话同时 run：set_workspace + write_file 各 6 次交错（bridge 带 sid 头）
+  const runFor = async (sid, ws) => {
+    await callApi('set_workspace', [ws], 60000, sid)
+    for (let i = 0; i < 6; i += 1) {
+      const r = JSON.parse(await callApi('write_file', [path.join(ws, `run-${sid}-${i}.txt`), `content-${sid}-${i}`], 60000, sid))
+      if (!r.ok) throw new Error(`write_file ${sid} 失败: ${JSON.stringify(r).slice(0, 100)}`)
+    }
+  }
+  await Promise.all([runFor('e2e-A', wsE2eA), runFor('e2e-B', wsE2eB)])
+  // 各自工作区文件归属正确（A 的文件不在 B 目录、B 的文件不在 A 目录）
+  assert.equal(fs.readdirSync(wsE2eA).filter(f => f.startsWith('run-e2e-A')).length, 6)
+  assert.equal(fs.readdirSync(wsE2eB).filter(f => f.startsWith('run-e2e-B')).length, 6)
+  assert.equal(fs.readdirSync(wsE2eA).filter(f => f.startsWith('run-e2e-B')).length, 0)
+  assert.equal(fs.readdirSync(wsE2eB).filter(f => f.startsWith('run-e2e-A')).length, 0)
+  // get_cwd 各自独立
+  assert.equal(await callApi('get_cwd', [], 60000, 'e2e-A'), wsE2eA)
+  assert.equal(await callApi('get_cwd', [], 60000, 'e2e-B'), wsE2eB)
+})
+
 await app.close()
 await disconnectDb()
 console.log(JSON.stringify({ ok: true, node: process.version, checks: results.length, results }, null, 2))

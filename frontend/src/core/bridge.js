@@ -18,13 +18,17 @@ function harborHttpAvailable() {
   return !!harborApiBase() && typeof fetch === 'function' && typeof AbortController === 'function';
 }
 
-async function callApiHttp(name, args, timeoutMs) {
+async function callApiHttp(name, args, timeoutMs, sid) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // P0-3：请求级 sid 注入（X-Harbor-Sid 头）——值=当前 run 的 sessionId
+    // （executeRunTool 显式传入，消 A/B 竞态源）；无 run 的 UI 调用不带 header
+    const headers = { 'content-type': 'application/json' };
+    if (sid) headers['x-harbor-sid'] = String(sid);
     const response = await fetch(harborApiBase() + '/jsapi/' + encodeURIComponent(name), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({ args: args || [] }),
       signal: controller.signal,
     });
@@ -39,14 +43,15 @@ async function callApiHttp(name, args, timeoutMs) {
   }
 }
 
-async function callApi(name, argsArray, timeoutMs) {
+async function callApi(name, argsArray, timeoutMs, sid) {
   const args = argsArray || [];
   // 修复 ㉞：timeoutMs 显式判断（原 `timeoutMs || 60000` 吞 0 值）
   const ms = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : 60000;
   const hasNative = typeof window !== 'undefined' && window.pywebview &&
     window.pywebview.api && window.pywebview.api[name];
   if (!hasNative) {
-    if (harborHttpAvailable()) return callApiHttp(name, args, ms);
+    // P0-3：sid 仅 HTTP 路径注入（pywebview 生产链逐行保留——不带 sid 参数语义）
+    if (harborHttpAvailable()) return callApiHttp(name, args, ms, sid);
     throw new Error('pywebview bridge 未就绪: ' + name);
   }
   let timer = null;
