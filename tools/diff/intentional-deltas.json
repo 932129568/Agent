@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "_meta": {
+    "policy": "有意差异登记簿。匹配粒度 = (fixture id, call id) 精确匹配。expires 到期自动回到 suspect 强制复审。approvedBy 留空或 pending = 预登记待主理人签核（签核后填入签核人；比对器按存在登记即判 intentional，签核状态在报告中逐条展示）。"
+  },
+  "deltas": [
+    {
+      "id": "ID-001",
+      "fixture": "meta/api-info",
+      "callId": "c01",
+      "method": "get_api_info",
+      "reason": "exe 字段披露实现宿主（Python 侧 'python(main.py)' vs Node 侧 'node(server/src/index.js)'）；version 与 methods 51 项清单按冻结契约严格比对，不允许差异",
+      "approvedBy": "pending",
+      "date": "2026-10-31",
+      "expires": "2026-12-31",
+      "frontendCompat": "前端不依据 exe 字段做分支；P0-4 桌面切换前需复核前端对 exe 字段的消费点；契约面（version/methods）任何漂移都会让本 call 回到 suspect"
+    }
+  ]
+}

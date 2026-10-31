@@ -103,6 +103,10 @@ export async function setClipboard(text, token = null) {
 }
 
 export async function pickFolder(sid = null) { // sid 保留 legacy 参数面；原生对话框不依赖会话状态
+  // 测试例外（差分设计 §2.3 对话框 seam，与 Python 侧 GLM_TEST_PICK 对等）：
+  // 默认空 = 真实对话框；非空 = 直接按给定路径返回（不弹窗）。契约输出形状不变。
+  const testPicked = process.env.HARBOR_TEST_PICKED_PATH
+  if (testPicked) return okJson({ ok: true, path: testPicked })
   if (!IS_WIN) return okJson({ ok: false, err: 'no window' })
   const script = `
 Add-Type -AssemblyName System.Windows.Forms
@@ -117,6 +121,13 @@ if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $dlg.Select
 }
 
 export async function pickSavePath(defaultName = 'export.md') {
+  // 测试例外同 pick_folder：HARBOR_TEST_PICKED_PATH 非空时登记后直接返回（不弹窗），
+  // 与 Python 侧 GLM_TEST_PICK 驱动桩对等；默认行为（真实另存为对话框）不变。
+  const testPicked = process.env.HARBOR_TEST_PICKED_PATH
+  if (testPicked) {
+    exportPaths.add(pathKey(testPicked))
+    return okJson({ ok: true, path: testPicked })
+  }
   if (!IS_WIN) return errJson('当前环境不支持保存对话框')
   const script = `
 Add-Type -AssemblyName System.Windows.Forms

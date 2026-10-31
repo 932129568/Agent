@@ -1,0 +1,75 @@
+{
+  "id": "commands-guarded",
+  "family": "commands",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "命令族（B 类 mock）：放行执行/短窗口去重/PowerShell/超时/admin 确认弹窗/去重重置/超长截断（共享 mock 表驱动，输出对等）",
+  "mocks": ["subprocess", "windll"],
+  "setup": {
+    "workspaceFiles": [
+      { "path": "seed.txt", "content": "命令族工作区种子\n", "encoding": "utf-8" }
+    ],
+    "callsBefore": [
+      {
+        "id": "b01",
+        "method": "guard_save_config",
+        "args": ["{\"tiers\": {\"run_command\": \"off\", \"run_powershell\": \"off\", \"run_admin_command\": \"off\"}}"],
+        "note": "对齐命令三档为 off（Python 默认即 off；Node 缺省 session→先经契约面对齐）"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "run_command",
+      "args": ["echo hello", 5],
+      "note": "正常执行（mock stdout=hello）"
+    },
+    {
+      "id": "c02",
+      "method": "run_command",
+      "args": ["echo hello", 5],
+      "note": "短窗口去重应命中（dedup 语义）"
+    },
+    {
+      "id": "c03",
+      "method": "run_powershell",
+      "args": ["Get-Date", 5],
+      "note": "PowerShell 通道（mock stdout=ps-out）"
+    },
+    {
+      "id": "c04",
+      "method": "run_command",
+      "args": ["raise-timeout", 5],
+      "note": "超时强杀错误形状"
+    },
+    {
+      "id": "c05",
+      "method": "run_admin_command",
+      "args": ["echo hello"],
+      "note": "admin 通道：Python MessageBox 人审拒绝（IDNO）；Node Start-Process 包装执行"
+    },
+    {
+      "id": "c06",
+      "method": "begin_task",
+      "args": [],
+      "note": "任务开始重置去重窗口"
+    },
+    {
+      "id": "c07",
+      "method": "run_command",
+      "args": ["echo hello", 5],
+      "note": "重置后同命令应放行"
+    },
+    {
+      "id": "c08",
+      "method": "run_command",
+      "args": ["echo BIG", 5],
+      "note": "超长输出截断（Python 6000 字截断+toolcache id vs Node 60000 上限）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["guard.json"]
+  }
+}

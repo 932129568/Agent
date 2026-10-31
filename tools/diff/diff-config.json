@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "pythonBin": "C:\\Users\\陈\\.workbuddy\\binaries\\python\\envs\\default\\Scripts\\python.exe",
+  "nodeBin": "process.execPath",
+  "familyOrder": [
+    "meta",
+    "sessions",
+    "history-dir",
+    "plans-checkpoints",
+    "guard",
+    "commands",
+    "export",
+    "browser",
+    "software",
+    "files",
+    "workspace",
+    "memory",
+    "misc-config",
+    "provider",
+    "os-system",
+    "update",
+    "webdav",
+    "experts",
+    "mcp",
+    "rpc"
+  ],
+  "defaultFamilies": [
+    "meta",
+    "sessions",
+    "history-dir",
+    "plans-checkpoints",
+    "guard",
+    "commands",
+    "export",
+    "browser",
+    "software"
+  ],
+  "driverTimeoutSeconds": 300,
+  "keepRawResults": true,
+  "cleanTempRoots": true
+}

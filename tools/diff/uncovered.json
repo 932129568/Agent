@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "_meta": {
+    "policy": "C 类（环境绑定不可离线差分）登记簿：真实窗口/网络/外部软件/真实端点。正向路径不纳入跨语言差分，其错误路径仍由 A 类 fixture 覆盖。tracking 填后续任务编号（P0-1b=差分修复批，P1-2=真机验收，T05=全覆盖收尾）。"
+  },
+  "entries": [
+    {
+      "method": "browser_navigate",
+      "aspect": "positive-navigation",
+      "reason": "正向导航需真实浏览器渲染（Python pywebview 次窗 / Node Playwright Edge），无外网环境不可离线对等；错误路径（协议/SSRF/会话缺失）已由 browser 族 fixture 覆盖",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_extract",
+      "aspect": "positive-extraction",
+      "reason": "依赖真实导航后的页面 DOM；离线无可比内容",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_click",
+      "aspect": "positive-interaction",
+      "reason": "点击/前后态截图依赖真实页面与渲染引擎；错误路径已覆盖",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_fill",
+      "aspect": "positive-interaction",
+      "reason": "表单填充与敏感字段拒填依赖真实页面元素；错误路径已覆盖",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_screenshot",
+      "aspect": "positive-capture",
+      "reason": "截图内容（b64）随屏幕内容变化，非确定输出；错误路径已覆盖",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_search",
+      "aspect": "positive-search",
+      "reason": "检索结果依赖真实公网；CAPTCHA/接管正向流不可离线复现；参数校验错误路径已覆盖",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_takeover",
+      "aspect": "positive-resume",
+      "reason": "续跑依赖在途 CAPTCHA 会话（真实公网产物）；action 非法/空 id 错误路径已覆盖",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "browser_open",
+      "aspect": "positive-fetch",
+      "reason": "打开 URL 提取正文依赖真实公网页面；属 C 类（族 8 的正向分支）",
+      "tracking": "P1-2",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "take_screenshot",
+      "aspect": "positive-capture",
+      "reason": "屏幕截图 b64 非确定输出；os-system 族（T05）以 shape 模式或错误路径覆盖",
+      "tracking": "T05",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "open_app",
+      "aspect": "positive-launch",
+      "reason": "真实启动外部应用产生本机副作用（GUI 进程），不可离线对等；os-system 族 T05 处理",
+      "tracking": "T05",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "open_url",
+      "aspect": "positive-launch",
+      "reason": "真实打开系统浏览器产生本机副作用；os-system 族 T05 处理",
+      "tracking": "T05",
+      "plannedPhase": "T05"
+    },
+    {
+      "method": "list_processes",
+      "aspect": "positive-list",
+      "reason": "真实进程清单随宿主机瞬时变化（非确定输出）；B 类 mock 表在 T05 评估是否纳入",
+      "tracking": "T05",
+      "plannedPhase": "T05"
+    }
+  ]
+}

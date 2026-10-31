@@ -1,0 +1,60 @@
+{
+  "id": "history-dir-basic",
+  "family": "history-dir",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "历史目录族：默认读→切换（已存在目录）→回读→保存会话→迁移切换→恢复默认→拒绝不存在目录",
+  "setup": {
+    "workspaceFiles": [],
+    "dirs": ["hist", "hist2"],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "history_dir_get",
+      "args": [],
+      "note": "默认态：dir='' + default_dir + sessions_file 落默认目录"
+    },
+    {
+      "id": "c02",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/hist"],
+      "note": "切换到已存在目录（realpath 归一）"
+    },
+    {
+      "id": "c03",
+      "method": "history_dir_get",
+      "args": [],
+      "note": "回读：sessions_file 落新目录"
+    },
+    {
+      "id": "c04",
+      "method": "save_sessions",
+      "args": ["[{\"id\":\"h1\",\"title\":\"历史会话\",\"messages\":[]}]"],
+      "note": "写入一条会话（迁移源数据）"
+    },
+    {
+      "id": "c05",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/hist2", true],
+      "note": "migrate=true 搬迁：Python 复制 sessions.json；Node 无该文件（DB 存储）——已知存储分叉面"
+    },
+    {
+      "id": "c06",
+      "method": "history_dir_set",
+      "args": [""],
+      "note": "空串恢复默认"
+    },
+    {
+      "id": "c07",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/no-such-dir"],
+      "note": "不存在目录拒绝（错误文案比对）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["history.json"]
+  }
+}

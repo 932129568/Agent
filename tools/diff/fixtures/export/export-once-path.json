@@ -1,0 +1,54 @@
+{
+  "id": "export-once-path",
+  "family": "export",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "导出族：一次性登记路径约束（未登记拒写 / 对话框登记 / 一次消费 / 复用拒绝 / 空路径）",
+  "mocks": ["dialog"],
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "save_export_file",
+      "args": ["{ROOT}/out/unregistered.txt", "内容A"],
+      "note": "未登记路径必须被拒（安全约束文案）"
+    },
+    {
+      "id": "c02",
+      "method": "pick_save_path",
+      "args": ["report.txt"],
+      "note": "保存对话框（桩返回选中路径并登记）"
+    },
+    {
+      "id": "c03",
+      "method": "save_export_file",
+      "args": ["{PICKED}", "导出内容B"],
+      "note": "登记路径首次写入（bytes 回传）"
+    },
+    {
+      "id": "c04",
+      "method": "save_export_file",
+      "args": ["{PICKED}", "第二次写入必须被拒"],
+      "note": "登记的一次性消费"
+    },
+    {
+      "id": "c05",
+      "method": "save_export_file",
+      "args": ["", "x"],
+      "note": "空路径拒绝"
+    },
+    {
+      "id": "c06",
+      "method": "save_export_file",
+      "args": ["{ROOT}/out/report.txt", "未再登记"],
+      "note": "目录存在但未再登记 → 拒绝"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

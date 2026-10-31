@@ -12,6 +12,7 @@
     "build:island": "npm --prefix frontend/react run build",
     "build": "node frontend/build.js",
     "build:all": "npm run build:island && npm run build",
+    "diff:all": "npm --prefix server run diff:all",
     "smoke:island": "node tools/smoke_harbor_island.js",
     "perf:confirm": "node tools/perf_confirm_path.js"
   },

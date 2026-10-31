@@ -27,6 +27,9 @@
     "test:browser": "node test/browser.mjs",
     "test:contract": "node test/contract-coverage.mjs && node test/contract-signatures.mjs",
     "test:bridge": "node ../tools/test_bridge_http.mjs",
+    "diff": "node test/diff/run-diff.mjs",
+    "diff:all": "node test/diff/run-diff.mjs --all",
+    "diff:coverage": "node test/diff/run-diff.mjs --coverage",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
   },

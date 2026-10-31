@@ -1,0 +1,23 @@
+{
+  "id": "meta/api-info",
+  "family": "meta",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "meta 族：get_api_info 冻结契约面（version/methods 严格比对；exe 字段宿主差异走 ID-001 登记）——端到端管路最小验证",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "get_api_info",
+      "args": [],
+      "note": "51 项公开自省面 + version=v1.0.0；exe 字段双侧披露不同宿主（ID-001）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}

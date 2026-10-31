@@ -1,0 +1,77 @@
+{
+  "id": "plans-basic",
+  "family": "plans-checkpoints",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "计划族：创建/读取/清单/更新/批准推进/状态机拒绝/begin_task（plans/<tid>.json 落盘语义）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "plan_create",
+      "args": ["差分计划", [{ "text": "第一步", "risk": "l2" }, { "text": "第二步", "risk": "" }], "task-a"],
+      "note": "创建：steps 数组归一 + risk_max + eta_seconds"
+    },
+    {
+      "id": "c02",
+      "method": "plan_get",
+      "args": ["task-a"],
+      "note": "读取计划"
+    },
+    {
+      "id": "c03",
+      "method": "plan_get",
+      "args": ["no-such-task"],
+      "note": "不存在计划的错误形状"
+    },
+    {
+      "id": "c04",
+      "method": "plan_list",
+      "args": [],
+      "note": "计划清单"
+    },
+    {
+      "id": "c05",
+      "method": "plan_update",
+      "args": ["task-a", "approved", "", ""],
+      "note": "批准：status=approved + approved_at 时间戳"
+    },
+    {
+      "id": "c06",
+      "method": "plan_update",
+      "args": ["task-a", "", 0, "doing"],
+      "note": "步骤推进：step_index=0 → doing"
+    },
+    {
+      "id": "c07",
+      "method": "plan_update",
+      "args": ["task-a", "bogus-status", "", ""],
+      "note": "非法 status 必须拒绝（人话回显合法值）"
+    },
+    {
+      "id": "c08",
+      "method": "begin_task",
+      "args": [],
+      "note": "任务开始钩子（去重器复位，返回裸 'ok'）"
+    },
+    {
+      "id": "c09",
+      "method": "plan_create",
+      "args": ["空步骤计划", [], "task-b"],
+      "note": "空 steps 拒绝"
+    },
+    {
+      "id": "c10",
+      "method": "plan_create",
+      "args": ["非法 id", [{ "text": "x" }], "bad id!"],
+      "note": "task_id 含空格非法（防路径逃逸）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

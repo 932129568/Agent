@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "_meta": {
+    "consumer": "server/test/diff/normalize.mjs（唯一消费方）——规则引擎 = 侧路径占位替换（先长后短：PICKED→WS→CFG→ROOT，原生分隔符大小写不敏感）+ 正则序贯替换（顺序敏感）+ 键控掩码（递归遍历，键命中即掩值）。新增/调整规则改本文件而非改代码。",
+    "ordering": [
+      "N02 侧路径替换先于 N01 分隔符归一（避免占位符产生后失配）",
+      "ISO 时间戳 N04 涵盖 Python 无时区/毫秒与 Node Z 后缀/毫秒两种形态",
+      "平台/宿主标识（exe 字段等）不归一，一律走 intentional 登记"
+    ]
+  },
+  "regexRules": [
+    { "id": "N03", "pattern": "(?i)^[a-z]:", "replace": "UPPER_DRIVE", "note": "replace=UPPER_DRIVE 为引擎特殊约定：盘符字母统一大写" },
+    { "id": "N04", "pattern": "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:?\\d{2})?", "replace": "<TS>" },
+    { "id": "N05", "pattern": "\\d{8}_\\d{6}(_\\d{3})?", "replace": "<TSFN>" },
+    { "id": "N06", "pattern": "\\d{2}-\\d{2} \\d{2}:\\d{2}", "replace": "<DTS>" },
+    { "id": "N08", "pattern": "\\btc\\d+_\\d+\\b", "replace": "<CID>" },
+    { "id": "N09a", "pattern": "\\b[0-9a-f]{32,64}\\b", "replace": "<TOKEN>" },
+    { "id": "N09b", "pattern": "\\b(?:tok_|tk_|bs_|brw_)[0-9a-z]{2,}\\b", "replace": "<TOKEN>" },
+    { "id": "N09c", "pattern": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b", "replace": "<TOKEN>" },
+    { "id": "N14", "pattern": "(\\.rollback-bak\\.)\\d{10,14}$", "replace": "$1<TSMS>" }
+  ],
+  "separatorRule": { "id": "N01", "from": "\\\\", "to": "/" },
+  "maskKeys": {
+    "epoch": ["ts", "updatedAt", "createdAt", "mtime", "timestamp", "expires_at", "lastUsed", "last_used", "probed_at", "granted_at", "updated_at"],
+    "milliseconds": ["duration_ms", "elapsed", "elapsed_ms", "timeout_used", "costMs", "preheat_ms"],
+    "pid": ["pid"],
+    "identifier": ["sessionId", "session_id", "grantId", "grant_id", "taskId", "task_id", "takeoverId", "takeover_id", "runId", "snapshotId", "rule_id", "token", "trace"]
+  },
+  "maskValues": {
+    "epoch": "<EPOCH>",
+    "milliseconds": "<MS>",
+    "pid": "<PID>",
+    "identifier": "<ID>"
+  },
+  "unorderedNote": "call 声明 unordered:true 时该 call 顶层数组按归一后 JSON 文本排序后再比（N13 集合序）",
+  "shapeNote": "mode:\"shape\" 仅比较键集 + 值类型树（环境绑定输出用）"
+}

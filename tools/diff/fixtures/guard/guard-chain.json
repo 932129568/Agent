@@ -1,0 +1,155 @@
+{
+  "id": "guard-chain",
+  "family": "guard",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "护栏族判定链：三档判定→token 签发→会话信任→白名单规则增删查命中→任务授权→审批预算→配置读写→审计（fail-closed 与顺序语义）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "guard_check",
+      "args": ["run_command", "{}"],
+      "note": "默认档 run_command：Python off→allow；Node 缺省 session→confirm（默认档矩阵漂移面）"
+    },
+    {
+      "id": "c02",
+      "method": "guard_check",
+      "args": ["take_screenshot", "{}"],
+      "note": "session 档 confirm：Python 带 label，Node 带 tier（键名差异面）"
+    },
+    {
+      "id": "c03",
+      "method": "guard_check",
+      "args": ["no_such_op", "{}"],
+      "note": "未知 op：Python allow（不在 GUARD_OPS）vs Node confirm（fail-closed 差异面）"
+    },
+    {
+      "id": "c04",
+      "method": "guard_check",
+      "args": ["delete_path", "{\"path\": \"C:/Windows/system32/x.dll\"}"],
+      "note": "保护名单未配置 → 不阻断，走档位确认"
+    },
+    {
+      "id": "c05",
+      "method": "guard_confirm_token",
+      "args": ["run_command", "{}"],
+      "note": "一次性 token 签发（TTL/字段形状：Python ttl=60 vs Node expires_in=120）"
+    },
+    {
+      "id": "c06",
+      "method": "guard_session_trust",
+      "args": ["run_command"],
+      "note": "登记本会话信任"
+    },
+    {
+      "id": "c07",
+      "method": "guard_session_trust",
+      "args": ["bogus_op"],
+      "note": "未知 op 信任登记：Python 拒绝 vs Node 接受（校验缺失面）"
+    },
+    {
+      "id": "c08",
+      "method": "guard_rule_add",
+      "args": ["run_command", "echo", "差分白名单"],
+      "note": "窄规则：op_pattern=run_command + detail_pattern=echo"
+    },
+    {
+      "id": "c09",
+      "method": "guard_rule_list",
+      "args": [],
+      "note": "规则清单（归一字段：rule_id/op_pattern/hits/created_at/detail_pattern/note）"
+    },
+    {
+      "id": "c10",
+      "method": "guard_check",
+      "args": ["run_command", "{\"cmd\": \"echo hi\"}"],
+      "note": "白名单命中 → allow via=rule"
+    },
+    {
+      "id": "c11",
+      "method": "guard_rule_remove",
+      "args": ["r_nonexistent"],
+      "note": "幂等删除：Python 回 removed:false，Node 不回该键"
+    },
+    {
+      "id": "c12",
+      "method": "guard_task_grant",
+      "args": ["exec", 7200],
+      "note": "任务授权（scope 枚举校验 + 响应形状）"
+    },
+    {
+      "id": "c13",
+      "method": "guard_task_status",
+      "args": [],
+      "note": "授权状态（expires_at/idle_deadline/remaining_s/expiring_soon）"
+    },
+    {
+      "id": "c14",
+      "method": "guard_task_revoke",
+      "args": [],
+      "note": "收回当前授权（幂等）"
+    },
+    {
+      "id": "c15",
+      "method": "guard_task_status",
+      "args": [],
+      "note": "收回后 active=false"
+    },
+    {
+      "id": "c16",
+      "method": "guard_task_grant",
+      "args": ["bogus_scope", 100],
+      "note": "非法 scope：Python 拒绝（枚举校验）vs Node 接受（校验缺失面）"
+    },
+    {
+      "id": "c17",
+      "method": "guard_approval_budget",
+      "args": [],
+      "note": "预算只读（used 计数口径：token 签发 + 信任登记是否计一次）"
+    },
+    {
+      "id": "c18",
+      "method": "guard_approval_budget",
+      "args": [0],
+      "note": "越界 limit=0 拒绝（BAD_PARAMS 人话）"
+    },
+    {
+      "id": "c19",
+      "method": "guard_get_config",
+      "args": [],
+      "note": "配置读取：Python 归一默认全量 vs Node '{}'（配置面形状）"
+    },
+    {
+      "id": "c20",
+      "method": "guard_save_config",
+      "args": ["{\"tiers\": {\"run_command\": \"off\"}}"],
+      "note": "配置部分更新（合并语义）"
+    },
+    {
+      "id": "c21",
+      "method": "guard_check",
+      "args": ["run_command", "{}"],
+      "note": "配置后复检：两侧应一致 allow（对齐后可比）"
+    },
+    {
+      "id": "c22",
+      "method": "guard_audit",
+      "args": ["test-op", "{}", "allow"],
+      "note": "前端决策上报（审计落盘）"
+    },
+    {
+      "id": "c23",
+      "method": "get_audit_log",
+      "args": [10, 0, false],
+      "note": "审计读取（entries 字段 + chain 形状）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["guard.json"]
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "_meta": {
+    "usage": "双语言共享 canned 响应表（B 类 mock 对等契约的唯一事实源）。Python 侧 tools/diff/fakes.py 与 Node 侧 server/test/diff/preload-mocks.mjs 读取同一份文件打桩，保证两侧服务层收到相同字节。",
+    "conventions": {
+      "dialog.relativePath": "对话框桩的相对选中路径（相对本侧临时 ROOT；双侧驱动会先建好父目录）",
+      "clipboard.text": "剪贴板桩初值（Python 侧忠实内存剪贴板 Set→Get 回读一致；Node 侧 Get-Clipboard/Set-Clipboard 桩）",
+      "msgbox.ret": "MessageBoxW 桩返回值（7=IDNO 即用户拒绝提权）",
+      "which": "PATH 扫描桩：可执行名 → mock 绝对路径（null=找不到，探测态 missing）",
+      "exec[].file": "按可执行 basename 匹配（不区分大小写，忽略 .exe 后缀差异）",
+      "exec[].kind": "cmd=shell 字符串命令通道（Python 侧剥 chcp 前缀后按 contains 匹配；Node 侧 cmd.exe /c 载荷）；powershell=PowerShell -Command 通道",
+      "exec[].contains": "argv 拼接文本（或命令文本）须包含的全部子串",
+      "exec[].stdoutRepeat": "stdout 展开约定：{char,count} → char*count（替代超长字面量）",
+      "exec[].timeout": "true=按超时处理（Python raise TimeoutExpired；Node 回 killed/signal 错误）",
+      "unmatched": "未命中的子进程调用一律放行真实执行（如 prisma db push 的 node 进程）"
+    }
+  },
+  "dialog": {
+    "relativePath": "out/report.txt"
+  },
+  "clipboard": {
+    "text": "clip-content"
+  },
+  "msgbox": {
+    "ret": 7
+  },
+  "which": {
+    "git": "C:\\mockbin\\git.exe",
+    "ffmpeg": null,
+    "7z": null,
+    "python": "C:\\mockbin\\python.exe",
+    "node": "C:\\mockbin\\node.exe",
+    "notepad": null
+  },
+  "exec": [
+    {
+      "name": "where-git",
+      "file": "where.exe",
+      "argvContains": ["git"],
+      "stdout": "C:\\mockbin\\git.exe\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "where-python",
+      "file": "where.exe",
+      "argvContains": ["python"],
+      "stdout": "C:\\mockbin\\python.exe\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "where-node",
+      "file": "where.exe",
+      "argvContains": ["node"],
+      "stdout": "C:\\mockbin\\node.exe\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "git-version",
+      "file": "git.exe",
+      "argvContains": ["--version"],
+      "stdout": "git version 2.50.1.windows.1\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "git-commit",
+      "file": "git.exe",
+      "argvContains": ["commit"],
+      "stdout": "",
+      "exitCode": 0
+    },
+    {
+      "name": "python-version",
+      "file": "python.exe",
+      "argvContains": ["--version"],
+      "stdout": "Python 3.13.14\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "node-version",
+      "file": "node.exe",
+      "argvContains": ["--version"],
+      "stdout": "v27.0.0\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "python-run-seed",
+      "file": "python.exe",
+      "argvContains": ["seed.py"],
+      "stdout": "seed-ok\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "echo-hello",
+      "kind": "cmd",
+      "contains": ["echo hello"],
+      "stdout": "hello\r\n",
+      "exitCode": 0
+    },
+    {
+      "name": "echo-big",
+      "kind": "cmd",
+      "contains": ["echo BIG"],
+      "stdoutRepeat": { "char": "X", "count": 8000 },
+      "exitCode": 0
+    },
+    {
+      "name": "cmd-timeout",
+      "kind": "cmd",
+      "contains": ["raise-timeout"],
+      "timeout": true
+    },
+    {
+      "name": "ps-timeout",
+      "kind": "powershell",
+      "contains": ["raise-timeout"],
+      "timeout": true
+    },
+    {
+      "name": "ps-getdate",
+      "kind": "powershell",
+      "contains": ["Get-Date"],
+      "stdout": "ps-out",
+      "exitCode": 0
+    },
+    {
+      "name": "admin-start-process",
+      "kind": "powershell",
+      "contains": ["Start-Process", "-Verb RunAs"],
+      "stdout": "",
+      "exitCode": 0
+    }
+  ]
+}
