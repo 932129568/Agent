@@ -21,7 +21,7 @@
       "callId": "c03",
       "method": "save_sessions",
       "reason": "P0-2 定案（正式化）：Prisma 结构化校验拒绝非对象条目为定案行为；Python 数组原文保底写入语义不迁移（合法输入双侧逐字节一致；保底写入在 Prisma 模型下无自然等价物且会污染存储模型；Node fail-closed 显式拒绝优于静默写坏；P0-4 后 Python 运行时退役该宽容度无消费者）",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q1 裁定正式化）。Prisma 结构化校验为定案行为，转长期契约差异存证",
       "date": "2026-10-31",
       "expires": "2099-12-31",
       "frontendCompat": "前端 save_sessions 调用方恒发合法会话对象数组；对抗性/误用输入在 Node 得到 200+{error} 显式拒绝（比静默写坏更利于排查）。sessions-validation fixture 转为长期契约差异存证用例（非待办缺陷）"
@@ -32,7 +32,7 @@
       "callId": "c04",
       "method": "get_sessions",
       "reason": "ID-101 定案的回读级联：Python 保底写入后回读原文 [1,2]；Node 拒绝写入后空库 []。定案行为即如此（拒绝路径为长期契约差异），随 ID-101 永久登记",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。随 ID-101 定案的回读级联，永久登记",
       "date": "2026-10-31",
       "expires": "2099-12-31",
       "frontendCompat": "同 ID-101——合法数组条目双侧回读逐字节一致；仅对抗性输入的持久化语义分叉（定案的长期契约差异）"
@@ -43,7 +43,7 @@
       "callId": "c05",
       "method": "history_dir_set",
       "reason": "P0-2 定案：migrate 已实现 DB→DB 等价迁移（复制当前生效库 + sessions.json 物化导出 + 切换后写入跟随），migrated:true 双侧一致。migrated_from 值披露存储介质（Python=旧 sessions.json 路径 / Node=旧 harbor.db 路径）——与 ID-001/ID-202 同构：语义已对齐，值披露实际介质",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q3 裁定完整 DB 切换）。migrate 已实现 DB→DB 等价语义，登记降级为介质披露",
       "date": "2026-10-31",
       "expires": null,
       "frontendCompat": "前端仅在显式勾选「迁移历史」时读 migrated/migrated_from 字段展示；migrated:true 双侧一致，migrated_from 为介质路径披露不影响功能分支"
@@ -54,7 +54,7 @@
       "callId": "c01",
       "method": "history_dir_get",
       "reason": "ID-103 同族介质披露：sessions_file 返回当前生效存储文件（Python=CONFIG_DIR/sessions.json / Node=CONFIG_DIR/harbor.db）。键语义（历史存放位置披露）一致，值为实际介质路径",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。sessions_file 介质披露（指向真实生效库文件更正确），与 ID-001/202 同构",
       "date": "2026-10-31",
       "expires": null,
       "frontendCompat": "sessions_file 供「打开数据目录/文件」类 UI 使用——指向真实生效文件（Node 为 DB 库文件），比指向不存在的 sessions.json 更正确；介质差异属披露非行为分叉"
@@ -65,7 +65,7 @@
       "callId": "c03",
       "method": "history_dir_get",
       "reason": "ID-103A 的切换后同款：sessions_file 披露切换后生效库文件（Python=<dir>/sessions.json / Node=<dir>/harbor.db）",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。ID-103A 切换后同款介质披露",
       "date": "2026-10-31",
       "expires": null,
       "frontendCompat": "同 ID-103A——披露实际介质路径，不影响功能分支"
@@ -120,7 +120,7 @@
       "callId": "c08",
       "method": "history_dir_set",
       "reason": "P0-2 介质披露金丝雀（与 ID-103 同族）：migrate 已实现 DB→DB——migrated:true 双侧一致；migrated_from 披露旧介质路径（Python=<CFG>/sessions.json / Node=<tmp>/diff.db）。回退为恒 false 时本 call 即 suspect（修复回归探测器）",
-      "approvedBy": "pending",
+      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。介质披露金丝雀——回退为恒 false 时回 suspect 的修复回归探测器，设计合理",
       "date": "2026-10-31",
       "expires": null,
       "frontendCompat": "同 ID-103——migrated:true 双侧一致；介质路径披露不影响功能分支"
