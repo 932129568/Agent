@@ -21,7 +21,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadRules } from './normalize.mjs'
 import { loadIntentionalDeltas, compareCall, compareSideEffects } from './compare.mjs'
 import { buildReportJson, renderMarkdown, writeReports } from './report.mjs'
-import { listMethods } from '../../src/registry.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SERVER_ROOT = path.resolve(HERE, '..', '..')
@@ -214,6 +213,17 @@ async function computeCoverage() {
 /* ---------------- 主流程 ---------------- */
 const args = parseArgs(process.argv)
 if (args.keepTemp) process.env.HARBOR_DIFF_KEEP_TEMP = '1'
+
+// QA（任务 #13）修复：registry.js 静态拉起 services/experts.js 的顶层 await
+// 内置导入器（P0-1c T01 引入）——主进程未隔离 CONFIG_DIR 时，导入器会把
+// 8 个内置专家包写进真实 ~/.glm-chat（终验实测两次泄漏）。listMethods 为
+// 纯代码定义不受配置目录影响：先重定向到临时目录再动态 import，退出时清理。
+const registryIsoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-diff-regiso-'))
+process.env.HARBOR_CONFIG_DIR = registryIsoDir
+process.on('exit', () => {
+  try { fs.rmSync(registryIsoDir, { recursive: true, force: true }) } catch { /* 句柄竞争容忍 */ }
+})
+const { listMethods } = await import('../../src/registry.js')
 const startedAt = new Date()
 const runId = startedAt.toISOString().replace(/\D/g, '').slice(0, 14)
 const outDir = path.join(PROJECT_ROOT, 'outputs', 'diff', runId)

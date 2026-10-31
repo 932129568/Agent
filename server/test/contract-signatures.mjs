@@ -1,9 +1,18 @@
 /** js_api 参数个数契约：防止“方法名对了，但位置参数顺序/数量漂移”。 */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { listSignatures } from '../src/registry.js'
+
+// QA（任务 #13）修复：registry.js 拉起 experts.js 顶层 await 内置导入器，
+// 未隔离 CONFIG_DIR 时写真实 ~/.glm-chat——先重定向再动态 import。
+const registryIsoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-contract-regiso-'))
+process.env.HARBOR_CONFIG_DIR = registryIsoDir
+process.on('exit', () => {
+  try { fs.rmSync(registryIsoDir, { recursive: true, force: true }) } catch { /* 容忍 */ }
+})
+const { listSignatures } = await import('../src/registry.js')
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const source = fs.readFileSync(path.join(root, 'backend', 'api.py'), 'utf8')
