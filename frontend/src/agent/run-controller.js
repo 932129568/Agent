@@ -284,8 +284,14 @@ function cancelActiveAgentLoop() {
   }
 }
 async function runAgentLoop(s, apiKey, opts) {
-  const parallel = !!(opts && opts.parallel);
-  // P0-3：默认单活跃——非并行入口才取消当前 run（Q5 默认习惯不变）
+  let parallel = !!(opts && opts.parallel);
+  // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——存在其他会话的在途 run
+  // 时，本调用自动升级为并行 run（不再取消他方）；同会话重入仍走单活跃取消
+  // 语义（S20 双发保护不变）。「并行」按钮保留为显式入口。
+  if (__agentActiveRun && !__agentActiveRun.cancelled
+      && __agentActiveRun.sessionId !== s.id) {
+    parallel = true;
+  }
   if (__agentActiveRun && !parallel) cancelActiveAgentLoop();
   const run = (typeof RunRegistry !== 'undefined') ? RunRegistry.start(s) : {
     id: ++__agentRunSeq, sessionId: s.id, session: s, cancelled: false,

@@ -4,14 +4,14 @@ async function sendMessage() {
   const appAttachments = appState ? appState.attachments : attachments;
   const activeRun = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : null;
   const activeSessionId = appState ? appState.currentSessionId : currentSessionId;
-  if (activeRun && !activeRun.cancelled) {
-    if (activeRun.sessionId !== activeSessionId) {
-      if (typeof toast === 'function') toast('另一个会话正在运行，完成后可继续', 'warn');
-      return;
-    }
+  const __crossRun = !!(activeRun && !activeRun.cancelled && activeRun.sessionId !== activeSessionId);
+  if (activeRun && !activeRun.cancelled && !__crossRun) {
     return;   // 当前会话已有活动 run，不启动第二 run
   }
-  if (appState ? appState.isStreaming : isStreaming) return;
+  // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——__crossRun 时不再拦截
+  // 提示，runAgentLoop 入口自动升级为并行 run；isStreaming 全局标志由 run
+  // 所有权管理（P0-3「并行」按钮路径同口径）
+  if (!__crossRun && (appState ? appState.isStreaming : isStreaming)) return;
   // 专家选择是一次性消费：回车与发送按钮都在真正普通发送之前走专家 run。
   if (typeof expertNextSelection !== 'undefined' && expertNextSelection) {
     return runExpertSelection();
