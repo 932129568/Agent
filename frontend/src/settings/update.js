@@ -20,7 +20,9 @@ function _updatePill() {
 }
 
 async function checkForUpdate(manual) {
-  if (!window.pywebview || !window.pywebview.api) return;
+  // P0-4 修正：HTTP 桥（Electron）同样执行更新检查（T05 Electron applyUpdate 分支的
+  // 前端入口——原 pywebview 门控使其在桌面端不可达）
+  if (!(window.pywebview && window.pywebview.api) && !window.HARBOR_API_BASE) return;
   let url = '';
   const el = document.getElementById('updateManifestUrl');
   if (el && el.value.trim()) url = el.value.trim();

@@ -6,15 +6,22 @@
  * 旧 exe 未收到多余位置参数，保持兼容）。
  */
 async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
-  if (!window.pywebview || !window.pywebview.api) {
+  // P0-4 修正：pywebview 缺席时走 HTTP 桥（HARBOR_API_BASE）——原版在此早退
+  // 「请在 Harbor.exe 桌面端中使用此功能」，使下方 __useHttp HTTP 分支成为
+  // 死代码，Electron 桌面端全部工具调用失败（T06 真机用户报障根因）。
+  const __isPy = !!(window.pywebview && window.pywebview.api);
+  const __useHttp = !__isPy && (typeof harborHttpAvailable === 'function'
+    ? harborHttpAvailable() : !!window.HARBOR_API_BASE);
+  if (!__isPy && !__useHttp) {
     return JSON.stringify({error: '请在 Harbor.exe 桌面端中使用此功能'});
   }
   // P0-3：run 级 sid 影子（默认参数 realCallApi 在调用方作用域捕获真实全局
   // callApi——函数体自包含、无 TDZ、不依赖任何模块级辅助符号；全部
   // `await callApi('…')` 源码模式原样保留）
   const callApi = (n, a, ms) => realCallApi(n, a, ms, runSid);
-  const __useHttp = !(window.pywebview && window.pywebview.api) && harborHttpAvailable();
-  if (!__useHttp) {
+  if (__isPy) {
+    // pywebview 路径：全局 sid 切换；HTTP 桥（Electron）按 runSid 走
+    // x-harbor-sid 请求头路由（P0-3），不触碰全局 activeSid
     try { await callApi('set_current_sid', [currentSessionId]); } catch (e) {}
   }
   args = args || {};   // 修复 ㊱：args 缺省兜底（原 pickPath 对 undefined 取属性虽不炸，但统一归一更稳）

@@ -78,11 +78,15 @@ function modelMeta(id) {
 }
 
 export async function getLocalProxy() {
-  // PR6：{ok, port, base_url}（base_url=http://127.0.0.1:<port>，无 /v1 后缀——
-  // legacy get_proxy().info() 口径；端口随机 → 差分经 N10/<PROXY> 与 port 键掩蔽）
-  const base = localBase().replace(/\/v1$/, '')
-  const port = Number(new URL(base).port) || 80
-  return okJson({ ok: true, port, base_url: `http://127.0.0.1:${port}` })
+  // P0-4 真机修正（ID-204）：如实返回「无本地代理监听器」——Python 侧存在
+  // LocalCorsProxy 实际监听（127.0.0.1:0 懒启动转发），Node 迁移只保留了本
+  // 方法的响应形状而从未实现监听器；旧口径把用户配置 base_url/默认 1919
+  // 冒充代理基址返回，前端 localProxyBase() 非空即走「死端口代理」→ 全部
+  // 模型请求 Failed to fetch（T06 真机用户报障根因）。ok:false 使前端回落
+  // 直连（GLM/DeepSeek 自带 ACAO:*，直连可通——真机活体 HTTP 200 已验证）。
+  // 真正的 Node 转发监听器实现已四轮加固待 Mimosa 写入门放行后落地：
+  // deliverables/dev-plan/design-2026-11-01-local-proxy-pending.md（§三全文+§二步骤）
+  return okJson({ ok: false, port: 0, base_url: '' })
 }
 
 export async function localModels(baseUrl, apiKey = '') {

@@ -427,7 +427,7 @@ function switchSession(id, silent) {
     if (target.projectWorkspace) {
       try {
         callApi('set_session_ws', [id, target.projectWorkspace, true]).catch(() => {
-          if (window.pywebview && window.pywebview.api && typeof toast === 'function') {
+          if ((window.pywebview && window.pywebview.api || window.HARBOR_API_BASE) && typeof toast === 'function') {
             toast('已进入项目对话；工作区绑定暂未同步，可稍后重试', 'warn');
           }
         });

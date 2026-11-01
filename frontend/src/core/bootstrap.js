@@ -2,7 +2,9 @@
 window.onload = function () {
   let called = false;
   const go = () => { if (!called) { called = true; loadAll(); } };
-  if (window.pywebview && window.pywebview.api) go();
+  // P0-4 修正：Electron 桌面端走 HARBOR_API_BASE HTTP 桥（preload 注入）——
+  // 原判定只认 pywebview，导致 HTTP 桥环境下误置「等待后端就绪」且永不消除
+  if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) go();
   else {
     window.addEventListener('pywebviewready', () => {
       if (called) { bridgeLateReady(); }   // 修复（建议18）：5s 回退已跑过 loadAll（无桥）→ 补偿补齐桥依赖部分
@@ -12,11 +14,11 @@ window.onload = function () {
       if (!called) {
         called = true;
         // 修复（建议18）：回退分支不再静默缺桥——置中性态「等待后端就绪」
-        // （非错误红字；原逻辑此处无任何提示，随后 get_api_info 整段被跳过，
-        // 后端实际已就绪也无从得知，护栏配置/本地代理/方法自检全部缺失）。
-        // pywebviewready 晚到时由 bridgeLateReady 覆写为真实自检结果。
-        if (typeof AppState !== 'undefined') AppState.backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
-        else backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
+        // P0-4 修正：仅当两种桥都缺席时才置提示（HTTP 桥在位时不误导用户）
+        if (!((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE)) {
+          if (typeof AppState !== 'undefined') AppState.backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
+          else backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
+        }
         loadAll();
       }
     }, 5000);
@@ -177,7 +179,9 @@ async function loadAll() {
   try { migrateWorkingRunStatuses(); } catch (e) { /* status migration is best-effort */ }
   let cfg = {};
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样读取真实 config——否则 API Key/模型
+    // 等配置静默回落 localStorage 空值，用户发消息即失败
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       const raw = await Promise.race([
         callApi('get_config', []),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
@@ -265,7 +269,9 @@ async function bridgeDependentInit() {
   } catch (e) {}
   try { await loadGuardConfig(); } catch (e) {}
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样执行方法自检——原 pywebview 门控使
+    // 「等待后端就绪」状态行在 HTTP 桥下永不消除
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       let info = null;
       for (let attempt = 0; attempt < 3 && !info; attempt++) {
         try { info = JSON.parse(await callApi('get_api_info', [])); }

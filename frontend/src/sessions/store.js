@@ -80,7 +80,8 @@ async function loadSessions() {
   let local = [];
   let backendOk = false;   // 实现 v1.6 W27：后端读取成败标志——墓碑清理只在读成功后进行
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样从 DB 读会话——原门控使新装端会话列表为空
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       backend = normalizeSessions(await callApi('get_sessions', []));
       backendOk = true;
     }
@@ -219,7 +220,8 @@ async function saveSessions() {
   try { localStorage.setItem('glm_sessions', _sessionsMirrorProjection(currentSessions)); }
   catch (e) { toast('本地会话缓存写入失败（浏览器存储可能已满）: ' + e.message, 'warn'); }   // 修复 建议㊶（二轮）：原完全静默
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样落盘（R4 纪律：恒提交全量数组）
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       await callApi('save_sessions', [data]);
       _savedSignatures = sigs;   // 仅在后端写成功后更新基线（失败时下次仍全量重试）
     }

@@ -1,129 +1,140 @@
 {
-  "version": 1,
-  "_meta": {
-    "policy": "有意差异登记簿。匹配粒度 = (fixture id, call id) 精确匹配。expires 到期自动回到 suspect 强制复审。approvedBy 留空或 pending = 预登记待主理人签核（签核后填入签核人；比对器按存在登记即判 intentional，签核状态在报告中逐条展示）。"
+ "version": 1,
+ "_meta": {
+  "policy": "有意差异登记簿。匹配粒度 = (fixture id, call id) 精确匹配。expires 到期自动回到 suspect 强制复审。approvedBy 留空或 pending = 预登记待主理人签核（签核后填入签核人；比对器按存在登记即判 intentional，签核状态在报告中逐条展示）。"
+ },
+ "deltas": [
+  {
+   "id": "ID-001",
+   "fixture": "meta/api-info",
+   "callId": "c01",
+   "method": "get_api_info",
+   "reason": "exe 字段披露实现宿主（Python 侧 'python(main.py)' vs Node 侧 'node(server/src/index.js)'）；version 与 methods 51 项清单按冻结契约严格比对，不允许差异",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。exe 字段为环境绑定宿主披露，version/methods 契约面严格比对不受影响；P0-4 切换前必须复核前端对 exe 字段的消费点",
+   "date": "2026-10-31",
+   "expires": "2026-12-31",
+   "frontendCompat": "前端不依据 exe 字段做分支；P0-4 桌面切换前需复核前端对 exe 字段的消费点；契约面（version/methods）任何漂移都会让本 call 回到 suspect"
   },
-  "deltas": [
-    {
-      "id": "ID-001",
-      "fixture": "meta/api-info",
-      "callId": "c01",
-      "method": "get_api_info",
-      "reason": "exe 字段披露实现宿主（Python 侧 'python(main.py)' vs Node 侧 'node(server/src/index.js)'）；version 与 methods 51 项清单按冻结契约严格比对，不允许差异",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。exe 字段为环境绑定宿主披露，version/methods 契约面严格比对不受影响；P0-4 切换前必须复核前端对 exe 字段的消费点",
-      "date": "2026-10-31",
-      "expires": "2026-12-31",
-      "frontendCompat": "前端不依据 exe 字段做分支；P0-4 桌面切换前需复核前端对 exe 字段的消费点；契约面（version/methods）任何漂移都会让本 call 回到 suspect"
-    },
-    {
-      "id": "ID-101",
-      "fixture": "sessions-validation",
-      "callId": "c03",
-      "method": "save_sessions",
-      "reason": "P0-2 定案（正式化）：Prisma 结构化校验拒绝非对象条目为定案行为；Python 数组原文保底写入语义不迁移（合法输入双侧逐字节一致；保底写入在 Prisma 模型下无自然等价物且会污染存储模型；Node fail-closed 显式拒绝优于静默写坏；P0-4 后 Python 运行时退役该宽容度无消费者）",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q1 裁定正式化）。Prisma 结构化校验为定案行为，转长期契约差异存证",
-      "date": "2026-10-31",
-      "expires": "2099-12-31",
-      "frontendCompat": "前端 save_sessions 调用方恒发合法会话对象数组；对抗性/误用输入在 Node 得到 200+{error} 显式拒绝（比静默写坏更利于排查）。sessions-validation fixture 转为长期契约差异存证用例（非待办缺陷）"
-    },
-    {
-      "id": "ID-102",
-      "fixture": "sessions-validation",
-      "callId": "c04",
-      "method": "get_sessions",
-      "reason": "ID-101 定案的回读级联：Python 保底写入后回读原文 [1,2]；Node 拒绝写入后空库 []。定案行为即如此（拒绝路径为长期契约差异），随 ID-101 永久登记",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。随 ID-101 定案的回读级联，永久登记",
-      "date": "2026-10-31",
-      "expires": "2099-12-31",
-      "frontendCompat": "同 ID-101——合法数组条目双侧回读逐字节一致；仅对抗性输入的持久化语义分叉（定案的长期契约差异）"
-    },
-    {
-      "id": "ID-103",
-      "fixture": "history-dir-basic",
-      "callId": "c05",
-      "method": "history_dir_set",
-      "reason": "P0-2 定案：migrate 已实现 DB→DB 等价迁移（复制当前生效库 + sessions.json 物化导出 + 切换后写入跟随），migrated:true 双侧一致。migrated_from 值披露存储介质（Python=旧 sessions.json 路径 / Node=旧 harbor.db 路径）——与 ID-001/ID-202 同构：语义已对齐，值披露实际介质",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q3 裁定完整 DB 切换）。migrate 已实现 DB→DB 等价语义，登记降级为介质披露",
-      "date": "2026-10-31",
-      "expires": null,
-      "frontendCompat": "前端仅在显式勾选「迁移历史」时读 migrated/migrated_from 字段展示；migrated:true 双侧一致，migrated_from 为介质路径披露不影响功能分支"
-    },
-    {
-      "id": "ID-103A",
-      "fixture": "history-dir-basic",
-      "callId": "c01",
-      "method": "history_dir_get",
-      "reason": "ID-103 同族介质披露：sessions_file 返回当前生效存储文件（Python=CONFIG_DIR/sessions.json / Node=CONFIG_DIR/harbor.db）。键语义（历史存放位置披露）一致，值为实际介质路径",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。sessions_file 介质披露（指向真实生效库文件更正确），与 ID-001/202 同构",
-      "date": "2026-10-31",
-      "expires": null,
-      "frontendCompat": "sessions_file 供「打开数据目录/文件」类 UI 使用——指向真实生效文件（Node 为 DB 库文件），比指向不存在的 sessions.json 更正确；介质差异属披露非行为分叉"
-    },
-    {
-      "id": "ID-103B",
-      "fixture": "history-dir-basic",
-      "callId": "c03",
-      "method": "history_dir_get",
-      "reason": "ID-103A 的切换后同款：sessions_file 披露切换后生效库文件（Python=<dir>/sessions.json / Node=<dir>/harbor.db）",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。ID-103A 切换后同款介质披露",
-      "date": "2026-10-31",
-      "expires": null,
-      "frontendCompat": "同 ID-103A——披露实际介质路径，不影响功能分支"
-    },
-    {
-      "id": "ID-104",
-      "fixture": "sessions-validation",
-      "callId": "c01",
-      "method": "save_sessions",
-      "reason": "JSON 解析器错误文案天然不同（CPython 'Expecting property name enclosed in double quotes: line 1 column 2 (char 1)' vs V8 \"Expected property name or '}' in JSON at position 1 (line 1 column 2)\"）——解析器实现细节，形状同构 {error:string} + HTTP 200",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。Q3 裁定永久 intentional——CPython vs V8 解析器实现细节，形状同构，仿写文案脆弱无前端收益",
-      "date": "2026-10-30",
-      "expires": "2099-12-31",
-      "frontendCompat": "前端仅将 error 字符串原样展示给用户（toast），无文案分支逻辑；永久 intentional（主理人 Q3 裁定）"
-    },
-    {
-      "id": "ID-201",
-      "fixture": "prompts-tools",
-      "callId": "c01",
-      "method": "build_system_prompt",
-      "reason": "沙箱尾注缺失：Python 尾注声明命令在受限 Job 内执行（内存/进程数/CPU 上限），Node 未迁移沙箱设施（无 Job 对象/资源上限），照抄=向模型与用户做虚假安全声明（比缺文案更危险）。编码形态（JSON 字符串）已修复对齐（PR1），仅尾注内容差异登记",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q1 裁定）。诚实优于表面一致——不注入虚假沙箱声明是正确处置；P0-2 沙箱服务迁移后注入真实尾注并撤销本登记（撤销条件明确）",
-      "date": "2026-10-31",
-      "expires": null,
-      "frontendCompat": "尾注是安全告知非功能契约；模型行为影响=Node 侧更保守（无沙箱声明→模型对命令副作用更谨慎，敏感操作仍走 guard 确认链）；P0-2 沙箱服务迁移后注入真实尾注并撤销登记"
-    },
-    {
-      "id": "ID-202",
-      "fixture": "clipboard-process",
-      "callId": "c08",
-      "method": "get_platform_info",
-      "reason": "python 键值披露实现宿主（Python 侧 '3.13.14' vs Node 侧 '27.0.0-alpha.0.0.0'）；键集是前端契约（window.__platformInfo 消费）须保留，值为运行时身份披露。其余结构（os:'win'/machine:'AMD64' 映射/services 七接口就绪度/browser_backend 含冻结文案）全部字节级对齐",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q2 裁定）。键冻结、值披露实际宿主——与 ID-001 exe 字段同构；前端展示的即真实运行时（Node）",
-      "date": "2026-10-31",
-      "expires": "2099-12-31",
-      "frontendCompat": "与 ID-001 exe 字段完全同构：键冻结、值披露实际宿主——前端若展示运行时版本，展示的即真实宿主（Node）；data-platform 根类与 Cmd 键位映射不依赖该值"
-    },
-    {
-      "id": "ID-203",
-      "fixture": "prompts-tools",
-      "callId": "c11",
-      "method": "test_provider_endpoint",
-      "reason": "网络库错误文本内嵌片段天然不同（urllib '<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>' vs undici 'fetch failed Error: connect ECONNREFUSED 127.0.0.1:59998'）；键集与外层文案 '连接失败: ' 已对齐（PR5），仅库文本片段差异登记",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。网络库异常文本是运行时实现细节（同 ID-104 先例），键集与外层文案已对齐",
-      "date": "2026-10-31",
-      "expires": "2099-12-31",
-      "frontendCompat": "前端仅展示 error 字符串（toast）；库文本是运行时实现细节（同 ID-104 解析器文案先例），无文案分支逻辑"
-    },
-    {
-      "id": "ID-103C",
-      "fixture": "fixed-shape-canary",
-      "callId": "c08",
-      "method": "history_dir_set",
-      "reason": "P0-2 介质披露金丝雀（与 ID-103 同族）：migrate 已实现 DB→DB——migrated:true 双侧一致；migrated_from 披露旧介质路径（Python=<CFG>/sessions.json / Node=<tmp>/diff.db）。回退为恒 false 时本 call 即 suspect（修复回归探测器）",
-      "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。介质披露金丝雀——回退为恒 false 时回 suspect 的修复回归探测器，设计合理",
-      "date": "2026-10-31",
-      "expires": null,
-      "frontendCompat": "同 ID-103——migrated:true 双侧一致；介质路径披露不影响功能分支"
-    }
-  ]
+  {
+   "id": "ID-101",
+   "fixture": "sessions-validation",
+   "callId": "c03",
+   "method": "save_sessions",
+   "reason": "P0-2 定案（正式化）：Prisma 结构化校验拒绝非对象条目为定案行为；Python 数组原文保底写入语义不迁移（合法输入双侧逐字节一致；保底写入在 Prisma 模型下无自然等价物且会污染存储模型；Node fail-closed 显式拒绝优于静默写坏；P0-4 后 Python 运行时退役该宽容度无消费者）",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q1 裁定正式化）。Prisma 结构化校验为定案行为，转长期契约差异存证",
+   "date": "2026-10-31",
+   "expires": "2099-12-31",
+   "frontendCompat": "前端 save_sessions 调用方恒发合法会话对象数组；对抗性/误用输入在 Node 得到 200+{error} 显式拒绝（比静默写坏更利于排查）。sessions-validation fixture 转为长期契约差异存证用例（非待办缺陷）"
+  },
+  {
+   "id": "ID-102",
+   "fixture": "sessions-validation",
+   "callId": "c04",
+   "method": "get_sessions",
+   "reason": "ID-101 定案的回读级联：Python 保底写入后回读原文 [1,2]；Node 拒绝写入后空库 []。定案行为即如此（拒绝路径为长期契约差异），随 ID-101 永久登记",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。随 ID-101 定案的回读级联，永久登记",
+   "date": "2026-10-31",
+   "expires": "2099-12-31",
+   "frontendCompat": "同 ID-101——合法数组条目双侧回读逐字节一致；仅对抗性输入的持久化语义分叉（定案的长期契约差异）"
+  },
+  {
+   "id": "ID-103",
+   "fixture": "history-dir-basic",
+   "callId": "c05",
+   "method": "history_dir_set",
+   "reason": "P0-2 定案：migrate 已实现 DB→DB 等价迁移（复制当前生效库 + sessions.json 物化导出 + 切换后写入跟随），migrated:true 双侧一致。migrated_from 值披露存储介质（Python=旧 sessions.json 路径 / Node=旧 harbor.db 路径）——与 ID-001/ID-202 同构：语义已对齐，值披露实际介质",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q3 裁定完整 DB 切换）。migrate 已实现 DB→DB 等价语义，登记降级为介质披露",
+   "date": "2026-10-31",
+   "expires": null,
+   "frontendCompat": "前端仅在显式勾选「迁移历史」时读 migrated/migrated_from 字段展示；migrated:true 双侧一致，migrated_from 为介质路径披露不影响功能分支"
+  },
+  {
+   "id": "ID-103A",
+   "fixture": "history-dir-basic",
+   "callId": "c01",
+   "method": "history_dir_get",
+   "reason": "ID-103 同族介质披露：sessions_file 返回当前生效存储文件（Python=CONFIG_DIR/sessions.json / Node=CONFIG_DIR/harbor.db）。键语义（历史存放位置披露）一致，值为实际介质路径",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。sessions_file 介质披露（指向真实生效库文件更正确），与 ID-001/202 同构",
+   "date": "2026-10-31",
+   "expires": null,
+   "frontendCompat": "sessions_file 供「打开数据目录/文件」类 UI 使用——指向真实生效文件（Node 为 DB 库文件），比指向不存在的 sessions.json 更正确；介质差异属披露非行为分叉"
+  },
+  {
+   "id": "ID-103B",
+   "fixture": "history-dir-basic",
+   "callId": "c03",
+   "method": "history_dir_get",
+   "reason": "ID-103A 的切换后同款：sessions_file 披露切换后生效库文件（Python=<dir>/sessions.json / Node=<dir>/harbor.db）",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。ID-103A 切换后同款介质披露",
+   "date": "2026-10-31",
+   "expires": null,
+   "frontendCompat": "同 ID-103A——披露实际介质路径，不影响功能分支"
+  },
+  {
+   "id": "ID-104",
+   "fixture": "sessions-validation",
+   "callId": "c01",
+   "method": "save_sessions",
+   "reason": "JSON 解析器错误文案天然不同（CPython 'Expecting property name enclosed in double quotes: line 1 column 2 (char 1)' vs V8 \"Expected property name or '}' in JSON at position 1 (line 1 column 2)\"）——解析器实现细节，形状同构 {error:string} + HTTP 200",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-30 签核：接受。Q3 裁定永久 intentional——CPython vs V8 解析器实现细节，形状同构，仿写文案脆弱无前端收益",
+   "date": "2026-10-30",
+   "expires": "2099-12-31",
+   "frontendCompat": "前端仅将 error 字符串原样展示给用户（toast），无文案分支逻辑；永久 intentional（主理人 Q3 裁定）"
+  },
+  {
+   "id": "ID-201",
+   "fixture": "prompts-tools",
+   "callId": "c01",
+   "method": "build_system_prompt",
+   "reason": "沙箱尾注缺失：Python 尾注声明命令在受限 Job 内执行（内存/进程数/CPU 上限），Node 未迁移沙箱设施（无 Job 对象/资源上限），照抄=向模型与用户做虚假安全声明（比缺文案更危险）。编码形态（JSON 字符串）已修复对齐（PR1），仅尾注内容差异登记",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q1 裁定）。诚实优于表面一致——不注入虚假沙箱声明是正确处置；P0-2 沙箱服务迁移后注入真实尾注并撤销本登记（撤销条件明确）",
+   "date": "2026-10-31",
+   "expires": null,
+   "frontendCompat": "尾注是安全告知非功能契约；模型行为影响=Node 侧更保守（无沙箱声明→模型对命令副作用更谨慎，敏感操作仍走 guard 确认链）；P0-2 沙箱服务迁移后注入真实尾注并撤销登记"
+  },
+  {
+   "id": "ID-202",
+   "fixture": "clipboard-process",
+   "callId": "c08",
+   "method": "get_platform_info",
+   "reason": "python 键值披露实现宿主（Python 侧 '3.13.14' vs Node 侧 '27.0.0-alpha.0.0.0'）；键集是前端契约（window.__platformInfo 消费）须保留，值为运行时身份披露。其余结构（os:'win'/machine:'AMD64' 映射/services 七接口就绪度/browser_backend 含冻结文案）全部字节级对齐",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受（Q2 裁定）。键冻结、值披露实际宿主——与 ID-001 exe 字段同构；前端展示的即真实运行时（Node）",
+   "date": "2026-10-31",
+   "expires": "2099-12-31",
+   "frontendCompat": "与 ID-001 exe 字段完全同构：键冻结、值披露实际宿主——前端若展示运行时版本，展示的即真实宿主（Node）；data-platform 根类与 Cmd 键位映射不依赖该值"
+  },
+  {
+   "id": "ID-203",
+   "fixture": "prompts-tools",
+   "callId": "c11",
+   "method": "test_provider_endpoint",
+   "reason": "网络库错误文本内嵌片段天然不同（urllib '<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>' vs undici 'fetch failed Error: connect ECONNREFUSED 127.0.0.1:59998'）；键集与外层文案 '连接失败: ' 已对齐（PR5），仅库文本片段差异登记",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。网络库异常文本是运行时实现细节（同 ID-104 先例），键集与外层文案已对齐",
+   "date": "2026-10-31",
+   "expires": "2099-12-31",
+   "frontendCompat": "前端仅展示 error 字符串（toast）；库文本是运行时实现细节（同 ID-104 解析器文案先例），无文案分支逻辑"
+  },
+  {
+   "id": "ID-103C",
+   "fixture": "fixed-shape-canary",
+   "callId": "c08",
+   "method": "history_dir_set",
+   "reason": "P0-2 介质披露金丝雀（与 ID-103 同族）：migrate 已实现 DB→DB——migrated:true 双侧一致；migrated_from 披露旧介质路径（Python=<CFG>/sessions.json / Node=<tmp>/diff.db）。回退为恒 false 时本 call 即 suspect（修复回归探测器）",
+   "approvedBy": "team-lead（主理人·齐活林）2026-10-31 签核：接受。介质披露金丝雀——回退为恒 false 时回 suspect 的修复回归探测器，设计合理",
+   "date": "2026-10-31",
+   "expires": null,
+   "frontendCompat": "同 ID-103——migrated:true 双侧一致；介质路径披露不影响功能分支"
+  },
+  {
+   "id": "ID-204",
+   "fixture": "prompts-tools",
+   "callId": "c10",
+   "method": "get_local_proxy",
+   "reason": "P0-4 桌面切换真机修正:Node 侧从未实现 Python 的 LocalCorsProxy 转发监听器,旧口径把用户配置 base_url/默认 1919 冒充代理基址返回——前端 localProxyBase() 非空即走死端口,全部模型请求 Failed to fetch(真机报障根因)。修正为如实 ok:false,前端回落直连(GLM/DeepSeek 自带 ACAO:*)。转发监听器实现已四轮加固待 Mimosa 写入门放行后落地(design-2026-11-01-local-proxy-pending.md),落地后本豁免撤销",
+   "approvedBy": "待主理人签核(暂行生效):主会话两度征询未获明示答复,按可逆默认执行;真机活体验证直连 HTTP 200(finish=length,14 tokens)",
+   "date": "2026-11-01",
+   "expires": "2027-01-31",
+   "frontendCompat": "前端 localProxyBase() 为空 → resolveApiEndpoint 回落直连;云端 GLM/DeepSeek ACAO:* 直连可通;本地模型服务器(无 CORS 头)用户在代理落地前直连仍会 CORS 失败——行为与旧 exe 挂系统代理时一致,不劣化"
+  }
+ ]
 }

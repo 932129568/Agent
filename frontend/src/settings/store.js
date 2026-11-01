@@ -65,6 +65,7 @@ async function saveConfig() {
   } catch (e) { localCfg = '{}'; }
   try { localStorage.setItem('glm_config', localCfg); } catch (e) {}
   try {
-    if (window.pywebview && window.pywebview.api) await callApi('save_config', [cfg]);
+    // P0-4 修正：HTTP 桥（Electron）同样持久化配置
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) await callApi('save_config', [cfg]);
   } catch (e) { toast('配置保存到本机失败：' + e.message, 'warn'); }   // v1.2 R3：静默吞错 → 可见
 }

@@ -116,6 +116,7 @@ function updateLiveTokenStat() {
 setInterval(() => { try { if (typeof isStreaming === 'undefined' || !isStreaming) updateLiveTokenStat(); } catch (e) {} }, 10000);
 async function openBilling() {
   try {
-    if (window.pywebview && window.pywebview.api) await callApi('open_billing', []);
+    // P0-4 修正：HTTP 桥（Electron）同样可用
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) await callApi('open_billing', []);
   } catch (e) {}
 }

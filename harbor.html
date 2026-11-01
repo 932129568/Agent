@@ -5434,15 +5434,22 @@ async function shotDedup(comp) {
  * 旧 exe 未收到多余位置参数，保持兼容）。
  */
 async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
-  if (!window.pywebview || !window.pywebview.api) {
+  // P0-4 修正：pywebview 缺席时走 HTTP 桥（HARBOR_API_BASE）——原版在此早退
+  // 「请在 Harbor.exe 桌面端中使用此功能」，使下方 __useHttp HTTP 分支成为
+  // 死代码，Electron 桌面端全部工具调用失败（T06 真机用户报障根因）。
+  const __isPy = !!(window.pywebview && window.pywebview.api);
+  const __useHttp = !__isPy && (typeof harborHttpAvailable === 'function'
+    ? harborHttpAvailable() : !!window.HARBOR_API_BASE);
+  if (!__isPy && !__useHttp) {
     return JSON.stringify({error: '请在 Harbor.exe 桌面端中使用此功能'});
   }
   // P0-3：run 级 sid 影子（默认参数 realCallApi 在调用方作用域捕获真实全局
   // callApi——函数体自包含、无 TDZ、不依赖任何模块级辅助符号；全部
   // `await callApi('…')` 源码模式原样保留）
   const callApi = (n, a, ms) => realCallApi(n, a, ms, runSid);
-  const __useHttp = !(window.pywebview && window.pywebview.api) && harborHttpAvailable();
-  if (!__useHttp) {
+  if (__isPy) {
+    // pywebview 路径：全局 sid 切换；HTTP 桥（Electron）按 runSid 走
+    // x-harbor-sid 请求头路由（P0-3），不触碰全局 activeSid
     try { await callApi('set_current_sid', [currentSessionId]); } catch (e) {}
   }
   args = args || {};   // 修复 ㊱：args 缺省兜底（原 pickPath 对 undefined 取属性虽不炸，但统一归一更稳）
@@ -6244,7 +6251,9 @@ function _updatePill() {
 }
 
 async function checkForUpdate(manual) {
-  if (!window.pywebview || !window.pywebview.api) return;
+  // P0-4 修正：HTTP 桥（Electron）同样执行更新检查（T05 Electron applyUpdate 分支的
+  // 前端入口——原 pywebview 门控使其在桌面端不可达）
+  if (!(window.pywebview && window.pywebview.api) && !window.HARBOR_API_BASE) return;
   let url = '';
   const el = document.getElementById('updateManifestUrl');
   if (el && el.value.trim()) url = el.value.trim();
@@ -15935,7 +15944,8 @@ async function loadSessions() {
   let local = [];
   let backendOk = false;   // 实现 v1.6 W27：后端读取成败标志——墓碑清理只在读成功后进行
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样从 DB 读会话——原门控使新装端会话列表为空
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       backend = normalizeSessions(await callApi('get_sessions', []));
       backendOk = true;
     }
@@ -16074,7 +16084,8 @@ async function saveSessions() {
   try { localStorage.setItem('glm_sessions', _sessionsMirrorProjection(currentSessions)); }
   catch (e) { toast('本地会话缓存写入失败（浏览器存储可能已满）: ' + e.message, 'warn'); }   // 修复 建议㊶（二轮）：原完全静默
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样落盘（R4 纪律：恒提交全量数组）
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       await callApi('save_sessions', [data]);
       _savedSignatures = sigs;   // 仅在后端写成功后更新基线（失败时下次仍全量重试）
     }
@@ -18097,7 +18108,8 @@ async function saveConfig() {
   } catch (e) { localCfg = '{}'; }
   try { localStorage.setItem('glm_config', localCfg); } catch (e) {}
   try {
-    if (window.pywebview && window.pywebview.api) await callApi('save_config', [cfg]);
+    // P0-4 修正：HTTP 桥（Electron）同样持久化配置
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) await callApi('save_config', [cfg]);
   } catch (e) { toast('配置保存到本机失败：' + e.message, 'warn'); }   // v1.2 R3：静默吞错 → 可见
 }
 
@@ -19261,7 +19273,8 @@ function updateLiveTokenStat() {
 setInterval(() => { try { if (typeof isStreaming === 'undefined' || !isStreaming) updateLiveTokenStat(); } catch (e) {} }, 10000);
 async function openBilling() {
   try {
-    if (window.pywebview && window.pywebview.api) await callApi('open_billing', []);
+    // P0-4 修正：HTTP 桥（Electron）同样可用
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) await callApi('open_billing', []);
   } catch (e) {}
 }
 
@@ -20391,7 +20404,7 @@ function switchSession(id, silent) {
     if (target.projectWorkspace) {
       try {
         callApi('set_session_ws', [id, target.projectWorkspace, true]).catch(() => {
-          if (window.pywebview && window.pywebview.api && typeof toast === 'function') {
+          if ((window.pywebview && window.pywebview.api || window.HARBOR_API_BASE) && typeof toast === 'function') {
             toast('已进入项目对话；工作区绑定暂未同步，可稍后重试', 'warn');
           }
         });
@@ -24403,7 +24416,9 @@ function harborIslandMountSidebar() {
 window.onload = function () {
   let called = false;
   const go = () => { if (!called) { called = true; loadAll(); } };
-  if (window.pywebview && window.pywebview.api) go();
+  // P0-4 修正：Electron 桌面端走 HARBOR_API_BASE HTTP 桥（preload 注入）——
+  // 原判定只认 pywebview，导致 HTTP 桥环境下误置「等待后端就绪」且永不消除
+  if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) go();
   else {
     window.addEventListener('pywebviewready', () => {
       if (called) { bridgeLateReady(); }   // 修复（建议18）：5s 回退已跑过 loadAll（无桥）→ 补偿补齐桥依赖部分
@@ -24413,11 +24428,11 @@ window.onload = function () {
       if (!called) {
         called = true;
         // 修复（建议18）：回退分支不再静默缺桥——置中性态「等待后端就绪」
-        // （非错误红字；原逻辑此处无任何提示，随后 get_api_info 整段被跳过，
-        // 后端实际已就绪也无从得知，护栏配置/本地代理/方法自检全部缺失）。
-        // pywebviewready 晚到时由 bridgeLateReady 覆写为真实自检结果。
-        if (typeof AppState !== 'undefined') AppState.backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
-        else backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
+        // P0-4 修正：仅当两种桥都缺席时才置提示（HTTP 桥在位时不误导用户）
+        if (!((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE)) {
+          if (typeof AppState !== 'undefined') AppState.backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
+          else backendWarning = '◇ 等待后端就绪…（桌面端连接中）';
+        }
         loadAll();
       }
     }, 5000);
@@ -24578,7 +24593,9 @@ async function loadAll() {
   try { migrateWorkingRunStatuses(); } catch (e) { /* status migration is best-effort */ }
   let cfg = {};
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样读取真实 config——否则 API Key/模型
+    // 等配置静默回落 localStorage 空值，用户发消息即失败
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       const raw = await Promise.race([
         callApi('get_config', []),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
@@ -24666,7 +24683,9 @@ async function bridgeDependentInit() {
   } catch (e) {}
   try { await loadGuardConfig(); } catch (e) {}
   try {
-    if (window.pywebview && window.pywebview.api) {
+    // P0-4 修正：HTTP 桥（Electron）同样执行方法自检——原 pywebview 门控使
+    // 「等待后端就绪」状态行在 HTTP 桥下永不消除
+    if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       let info = null;
       for (let attempt = 0; attempt < 3 && !info; attempt++) {
         try { info = JSON.parse(await callApi('get_api_info', [])); }
