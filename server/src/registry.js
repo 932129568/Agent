@@ -119,6 +119,8 @@ register('set_current_sid', async sid => {
   const previous = runtime.currentSid
   setCurrentSid(sid)
   if (previous !== runtime.currentSid) clearTrustForSid(previous)
+  // P0-4 真机修正②：MCP 会话信任与 guard 信任同步清理（Python session.py:25 镜像）
+  mcp.clearMcpSessionTrust(previous)
   return '{"ok":true}'
 })
 register('get_worklog', async () => getWorklog())

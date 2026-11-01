@@ -30,6 +30,15 @@ const args = { a: 2, b: 3 }
 const token = JSON.parse(await guard.guardConfirmToken('mcp_call', { server: 'local-test', tool: 'add', arguments: args })).token
 const added = JSON.parse(await mcp.mcpCallTool('local-test', 'add', JSON.stringify(args), 'allow', token))
 check('always 工具参数绑定 token 后执行', () => { assert.equal(added.ok, true, added.error); assert.equal(added.structuredContent.sum, 5) })
+/* P0-4 真机修正②：会话信任（S4① 镜像）——token_ok 且 decision=session-trust
+ * 登记信任；此后无 token 亦放行（sequentialthinking 类「每次参数都变」的工具
+ * 在「本会话内不再提示」下可连续调用）。 */
+const argsT2 = { a: 10, b: 20 }
+const tokenT2 = JSON.parse(await guard.guardConfirmToken('mcp_call', { server: 'local-test', tool: 'add', arguments: argsT2 })).token
+const registered = JSON.parse(await mcp.mcpCallTool('local-test', 'add', JSON.stringify(argsT2), 'session-trust', tokenT2))
+check('会话信任登记：token+session-trust 执行', () => { assert.equal(registered.ok, true, registered.error); assert.equal(registered.structuredContent.sum, 30) })
+const trustedNoToken = JSON.parse(await mcp.mcpCallTool('local-test', 'add', JSON.stringify({ a: 30, b: 12 }), 'session-trust'))
+check('会话信任后无 token 放行（参数可变工具不再全灭）', () => { assert.equal(trustedNoToken.ok, true, trustedNoToken.error); assert.equal(trustedNoToken.structuredContent.sum, 42) })
 const resources = JSON.parse(await mcp.mcpListResources('local-test'))
 check('resources/list 原生能力', () => { assert.equal(resources.supported, true); assert.equal(resources.resources[0].uri, 'memory://greeting') })
 const resource = JSON.parse(await mcp.mcpReadResource('local-test', 'memory://greeting'))

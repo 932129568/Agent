@@ -4,13 +4,17 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { CONFIG_DIR, atomicWriteJson, readJsonIfExists } from '../paths.js'
-import { consumeToken } from './guard.js'
+import { consumeToken, ARMED } from './guard.js'
+import { ctxSid, registerSidContainer } from '../session-context.js'
 import { ENC_PREFIX, encryptField, decryptMapping } from './dpapi.js'
 
 const FILE = () => path.join(CONFIG_DIR, 'mcp_servers.json')
 const json = value => JSON.stringify(value)
 const runtime = new Map()
 const VALID_TIERS = new Set(['always', 'session', 'off'])
+// P0-4 真机修正②：MCP 会话信任（「本会话内不再提示」的后端事实源）——per-sid
+// 容器（P0-3 注册器：purge/驱逐自动清理）。Python 原版 mcp_service._session_trust 镜像。
+const mcpTrustBySid = registerSidContainer('mcpToolTrust', new Map())
 const parse = value => { if (value && typeof value === 'object') return value; try { return JSON.parse(value || '{}') } catch { return null } }
 function data() { const value = readJsonIfExists(FILE(), { mcpServers: {} }); return value && value.mcpServers ? value : { mcpServers: {} } }
 function save(value) { atomicWriteJson(FILE(), value) }
@@ -180,8 +184,13 @@ export async function mcpSetToolTier(server, tool, tier) {
   cfg.tierOverrides ||= {}; cfg.tierOverrides[tool] = tier; save(all); return json({ ok: true })
 }
 function argsOf(value) { const parsed = parse(value || '{}'); return parsed && !Array.isArray(parsed) ? parsed : {} }
-export async function mcpCheckTool(server, tool, argumentsJson = '{}') {
-  const cfg = serverConfig(server)
+/** 全局 set_current_sid 切换的 legacy clear-on-switch（Python session.py:25 镜像：
+ * guard 信任与 MCP 会话信任同步清理）。registry.js set_current_sid 调用。 */
+export function clearMcpSessionTrust(sid) {
+  mcpTrustBySid.delete(sid)
+}
+
+export async function mcpCheckTool(server, tool, argumentsJson = '{}') {  const cfg = serverConfig(server)
   if (!cfg) return json({ action: 'block', reason: `MCP 服务器 ${server} 不存在。` })
   // P0-1c MC5（mcp_service.check_tool:589-592 逐字）：'（可能已禁用或崩溃）'从句
   if (!cfg.enabled) return json({ action: 'block', reason: `MCP 服务器 ${server} 未启用（可能已禁用或崩溃），请先在设置中测试连接。` })
@@ -202,7 +211,25 @@ export async function mcpCallTool(server, tool, argumentsJson = '{}', decision =
   const args = argsOf(argumentsJson); const detail = { server, tool, arguments: args }
   if (verdict.tier !== 'off') {
     if (!['allow', 'session-trust'].includes(decision)) return json({ error: `该工具需要确认（档位 ${verdict.tier}）。请通过界面确认后重试，不要绕过确认流程。` })
-    if (!token || !(await consumeToken('mcp_call', detail, token))) return json({ error: 'MCP 工具缺少有效的一次性确认 token（参数可能已变化），请重新确认。' })
+    // 修复 S4① 镜像（Python mcp_service.call_tool:633-651 逐条对齐）：武装后
+    // token/后端会话信任二选一——P0-1 迁移漏掉信任侧：前端「本会话内不再提示」
+    // 返回 token:null → 旧口径必拒，MCP 工具自第二次调用起全灭（T06 真机报障②
+    // 根因：sequentialthinking 每次调用参数都变，恰好踩中）。
+    // token 绑定实参摘要（W4）；token_ok 且 decision=session-trust 时登记信任；
+    // 信任按 sid 隔离（P0-3 容器——purge/驱逐自动清理）。
+    if (ARMED) {
+      const trustKey = server + '__' + tool
+      const tokenOk = !!token && await consumeToken('mcp_call', { server, tool, arguments: args }, token)
+      const trusted = (mcpTrustBySid.get(ctxSid()) || new Set()).has(trustKey)
+      if (!tokenOk && !trusted) {
+        return json({ error: `该工具需要界面确认后携带一次性确认 token 执行（档位 ${verdict.tier}），请通过界面确认流程，不要绕过。` })
+      }
+      if (tokenOk && decision === 'session-trust') {
+        let set = mcpTrustBySid.get(ctxSid())
+        if (!set) { set = new Set(); mcpTrustBySid.set(ctxSid(), set) }
+        set.add(trustKey)
+      }
+    }
   }
   try {
     const entry = await connect(server); const cfgNow = serverConfig(server)
