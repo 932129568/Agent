@@ -815,7 +815,8 @@
         "chatGenerativeAutoRender",
         "chatAutoRenderPendingFor",
         "buildChatUiHost",
-        "mountChatUiSpecFromMessage"
+        "mountChatUiSpecFromMessage",
+        "wireChatUiChecklistPersist"
       ],
       "requires": [
         "UiGenerativeSettings",

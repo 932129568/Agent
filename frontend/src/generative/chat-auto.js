@@ -91,12 +91,31 @@ function buildChatUiHost(contentEl) {
   return body;
 }
 
+/** Checklist 打卡落盘委托:把视图内的勾选状态写回 message.uiSpec 并随会话保存。
+ * 挂在宿主 body 上(事件委托,渲染器无需感知持久化)。 */
+function wireChatUiChecklistPersist(body, sessionId, message) {
+  if (!body || !message || !message.uiSpec) return;
+  body.addEventListener('click', event => {
+    const row = event.target && event.target.closest
+      ? event.target.closest('.ui-checklist-item') : null;
+    if (!row || !row.dataset.uiCheckIdx) return;
+    const blockId = row.dataset.uiCheckBlock;
+    const idx = Number(row.dataset.uiCheckIdx);
+    const block = (message.uiSpec.blocks || []).find(b => b.blockId === blockId);
+    const items = block && block.props && Array.isArray(block.props.items) ? block.props.items : null;
+    if (!items || !items[idx]) return;
+    items[idx].checked = !items[idx].checked;
+    if (typeof saveSessions === 'function') { try { saveSessions(); } catch (e) {} }
+  });
+}
+
 /** 会话渲染挂载:消息带 uiSpec 时重建内联视图(renderChatHistory 调用)。 */
 function mountChatUiSpecFromMessage(contentEl, message) {
   try {
     if (!contentEl || !message || !message.uiSpec || typeof UiProjection === 'undefined') return;
     if (contentEl.querySelector('.ui-chat-host')) return;
     const body = buildChatUiHost(contentEl);
+    wireChatUiChecklistPersist(body, null, message);
     const spec = message.uiSpec;
     UiProjection.mount(body, spec, {
       dataRefHost: (typeof createUiDataRefHost === 'function') ? createUiDataRefHost({
@@ -109,9 +128,11 @@ function mountChatUiSpecFromMessage(contentEl, message) {
   }
 }
 
-/** 供 run-controller finally 调用的入口(fire-and-forget)。 */
-async function chatGenerativeAutoRender(sessionId) {
+/** 供 run-controller finally 调用的入口(fire-and-forget)。
+ * opts.force=true:忽略去重/移除旧视图强制重生成(「刷新」动作走此路径)。 */
+async function chatGenerativeAutoRender(sessionId, opts) {
   try {
+    const force = !!(opts && opts.force);
     if (typeof UiGenerativeSettings === 'undefined' || !UiGenerativeSettings.enabled) return;
     if (typeof document === 'undefined' || typeof UiProjection === 'undefined'
         || typeof generateUiSpec !== 'function') return;
@@ -123,20 +144,53 @@ async function chatGenerativeAutoRender(sessionId) {
     const answer = chatAutoSessionText(sessionId);
     if (!answer || answer.length < CHAT_AUTO.minChars) return;
     const sig = String(sessionId) + '::' + answer.length;
-    if (CHAT_AUTO.done.has(sig)) return;
+    if (CHAT_AUTO.done.has(sig) && !force) return;
     if (view !== sessionId || !el) {
       // 会话不在视窗(并行后台完成)→ 记入待渲染,switchSession 切回时补
       CHAT_AUTO.pending.add(String(sessionId));
       return;
     }
     const content = el.querySelector('.content');
-    if (!content || content.dataset.uiAuto === '1' || CHAT_AUTO.mounts.has(content)) return;
+    if (!content) return;
+    if (!force && (content.dataset.uiAuto === '1' || CHAT_AUTO.mounts.has(content))) return;
     const trimmed = answer.slice(0, CHAT_AUTO.maxChars);
     CHAT_AUTO.done.add(sig);
     content.dataset.uiAuto = '1';
     CHAT_AUTO.mounts.add(content);
+    if (force) {
+      const old = content.querySelector('.ui-chat-host');
+      if (old) old.remove();
+    }
 
     const body = buildChatUiHost(content);
+    // Checklist 打卡落盘:视图勾选 → message.uiSpec → 会话保存(R4 全量数组)
+    const sessionRef = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+      ? sessions.find(item => item.id === sessionId) : null;
+    if (sessionRef) wireChatUiChecklistPersist(body, sessionId, sessionRef);
+    // 低危动作接线(copy/export/refresh)——与计划卡同口径:全部只读本地动作,
+    // 需用户真实点击(userGesture 门),模型不能自触发
+    const actionHandlers = {
+      copy: ctx => {
+        const text = (ctx && ctx.text) ? String(ctx.text) : answer;
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          return navigator.clipboard.writeText(text);
+        }
+        return text;
+      },
+      export: () => {
+        if (typeof exportSessionMd === 'function') return exportSessionMd(sessionId);
+        return null;
+      },
+      refresh: () => {
+        // 重转视图:清签名+移除旧宿主后强制重跑本入口(同答案重新生成)
+        CHAT_AUTO.done.delete(sig);
+        if (content.dataset) delete content.dataset.uiAuto;
+        CHAT_AUTO.mounts.delete(content);
+        const oldHost = content.querySelector('.ui-chat-host');
+        if (oldHost) oldHost.remove();
+        return chatGenerativeAutoRender(sessionId, { force: true });
+      },
+    };
 
     void (async () => {
       try {
@@ -150,6 +204,8 @@ async function chatGenerativeAutoRender(sessionId) {
           // P0-4 修正：端点快照由本调用方注入（本模块时序在 provider.js 之后，
           // 能拿到带真实密钥的 uiEndpointSnapshot——controller 内联快照密钥恒空）
           endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
+          actionHandlers,
+          actionPermission: () => true,   // copy/export/refresh=低危只读本地动作(计划卡同口径)
           isActive: () => document.contains(body),
         });
         // 持久化：成品 spec 写回会话消息对象（随 save_sessions 落盘）——

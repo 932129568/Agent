@@ -381,14 +381,29 @@ registerUiComponent('Checklist', {
       row.setAttribute('data-entity-id', entityId);
       row.setAttribute('data-focus-key', (context.blockId || 'checklist') + '/' + entityId);
       row.setAttribute('tabindex', '0');
-      row.setAttribute('aria-selected', 'false');
-      row.setAttribute('role', 'listitem');
+      row.setAttribute('role', 'checkbox');
+      row.setAttribute('aria-checked', String(!!item.checked));
+      // 生成式UI升级(2026-11-03):清单可点击打卡——纯客户端视图态切换,
+      // 持久化由宿主层委托(见 chat-auto/mount 的 ui-check 事件委托)
+      row.setAttribute('data-ui-check-idx', String(index));
+      row.setAttribute('data-ui-check-block', context.blockId || 'checklist');
+      row.style.cursor = 'pointer';
       const box = context.createElement('span', 'ui-check-box', item.checked ? '✓' : '');
       box.setAttribute('aria-hidden', 'true');
       row.appendChild(box);
       const main = context.createElement('span', 'ui-check-text', item.text);
       row.appendChild(main);
       if (item.note) row.appendChild(context.createElement('span', 'ui-check-note', item.note));
+      row.addEventListener('click', () => {
+        const nowChecked = row.getAttribute('aria-checked') !== 'true';
+        row.setAttribute('aria-checked', String(nowChecked));
+        row.classList.toggle('ui-checked', nowChecked);
+        box.textContent = nowChecked ? '✓' : '';
+        main.style.textDecoration = nowChecked ? 'line-through' : '';
+        main.style.color = nowChecked ? 'var(--text-2)' : '';
+        const count = wrap.querySelectorAll('.ui-checklist-item.ui-checked').length;
+        badge.textContent = count + '/' + props.items.length;
+      });
       wrap.appendChild(row);
     });
     return wrap;
