@@ -34,3 +34,7 @@
   .ctx-bar{width:100%}
   .plan-acts>*{flex:1;min-width:120px}
 }
+
+/* Round 2 视觉修正:ckpt-row 收敛为纯分隔行(去除「圆角卡+分隔线」杂种样式) */
+.ckpt-row { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 2px; }
+.ckpt-row:last-child { border-bottom: 0; }

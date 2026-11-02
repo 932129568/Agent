@@ -160,8 +160,7 @@ export default function SessionHistory({ onSelect, onNewSessionInProject }) {
                   <SessionItem key={session.id} session={session}
                                active={session.id === state.currentSessionId} onSelect={select} />
                 ))}
-                <button type="button" className="i-new-chat"
-                        style={{ margin: '4px 8px 8px', height: 30, fontSize: 12 }}
+                <button type="button" className="i-new-chat inline"
                         onClick={() => { if (onNewSessionInProject) onNewSessionInProject(project) }}>
                   ＋ 在此项目中新建对话
                 </button>

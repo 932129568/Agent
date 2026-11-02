@@ -150,3 +150,35 @@ body.fx-off .session-status-dot,[data-reduced-motion="true"] .session-status-dot
   .project-path-row{flex-direction:column;align-items:stretch}
   .project-path-row .expert-btn{width:100%}
 }
+
+
+/* ===== Round 2 视觉修正(2026-11-03):对齐/主题/误触/节律 ===== */
+/* [2] AI 消息三锚点对齐:正文/操作条/时间戳同一中轴(「文字没对齐」主源) */
+.message.assistant{justify-content:center;max-width:min(92%,40rem);margin-inline:auto}
+.message.assistant .content{max-width:100%}
+.message.assistant .msg-actions{width:auto;margin-inline:auto;padding-left:2px}
+.message.assistant .msg-time{position:static;order:2;align-self:flex-start;margin-left:8px}
+/* [1] 浅色主题代码块:残留淡彩高亮在浅灰底不可读 → 压回令牌色;复制钮/语言标签改令牌 */
+.md-body pre .hljs-attr,.md-body pre .hljs-built_in,.md-body pre .hljs-type,.md-body pre .hljs-meta,
+.md-body pre .hljs-variable,.md-body pre .hljs-template-variable,.md-body pre .hljs-selector-tag,
+.md-body pre .hljs-name,.md-body pre .hljs-function,.md-body pre .hljs-literal{color:var(--text-2)}
+.code-copy{background:var(--surface-2);color:var(--text-2)}
+.code-copy:hover{background:var(--hover,var(--surface-2));color:var(--text)}
+.code-lang{color:var(--text-2)}
+/* [8] 会话状态点走令牌(与岛层一致,清除字面量漂移) */
+.session-status.completed .session-status-dot{background:var(--ok)}
+.session-status.failed .session-status-dot{background:var(--err)}
+.session-status.failed .session-status-label{color:var(--err)}
+/* [9] 隐形操作条:不占布局+不可误触(悬停/焦点/acting 才进入交互) */
+.message{position:relative}
+.msg-actions{position:absolute;left:0;right:0;bottom:-30px;min-height:0;pointer-events:none;opacity:0}
+.message:hover .msg-actions,.message:focus-within .msg-actions,.message.acting .msg-actions{pointer-events:auto;opacity:1;transform:none}
+/* [5] mono 字体不再整套套在含中文的行——数字部分才用 mono */
+.usage-info,.plan-eta,.ckpt-count,.session-time{font-family:var(--font-sans)}
+.usage-info b,.plan-eta b,.ckpt-count b{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+/* [6] 空态三步引导卡居中(标题居中而引导卡左贴边) */
+.empty-guide{margin-inline:auto}
+/* [10] 44px 按钮塞进 11px 提示行 → 收敛 */
+#continueNewBtn{min-height:28px;height:28px;padding:0 10px;font-size:11px}
+/* [13] 设置窗口内容列居中(右侧 56px 死白) */
+.set-content .set-grid{margin:0 auto}

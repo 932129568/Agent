@@ -128,3 +128,8 @@
 .i-parallel-stop:hover { background: var(--hover); }
 .i-parallel-btn { margin-left: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-3); font-size: var(--fs-caption); cursor: pointer; padding: 0 5px; }
 .i-parallel-btn:hover { background: var(--hover); color: var(--text); }
+
+/* Round 2 视觉修正:侧栏岛层级缩进(项目>会话 不再倒挂)+并行按钮触控目标 */
+.i-project > div { padding-left: 14px; }
+.i-parallel-btn { margin-left: auto; min-height: 22px; min-width: 44px; line-height: 20px; }
+.i-new-chat.inline { height: 30px; font-size: var(--fs-caption); margin: 4px 8px 8px; }
