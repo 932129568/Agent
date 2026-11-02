@@ -257,6 +257,7 @@
       "provides": [
         "UI_GENERATIVE_SETTING_KEYS",
         "uiGenerativeSettingRead",
+        "uiGenerativeSettingReadDefaultOn",
         "UiGenerativeSettings",
         "uiGenerativeSettingsInit"
       ],
@@ -785,6 +786,45 @@
       ]
     },
     {
+      "path": "frontend/src/providers/provider.js",
+      "provides": [
+        "chatCompletionsOf",
+        "currentEndpointName",
+        "effectiveApiKey",
+        "isGlmBaseUrl",
+        "isGlmEndpoint",
+        "localModeActive",
+        "localProxyBase",
+        "localProxyHeaders",
+        "providerPriceFor",
+        "resolveApiEndpoint",
+        "uiEndpointSnapshot",
+        "updateBrandModel"
+      ],
+      "requires": [
+        "providerState",
+        "localState"
+      ]
+    },
+    {
+      "path": "frontend/src/generative/chat-auto.js",
+      "provides": [
+        "CHAT_AUTO",
+        "chatAutoSessionText",
+        "chatAutoSeedSpec",
+        "chatGenerativeAutoRender"
+      ],
+      "requires": [
+        "UiGenerativeSettings",
+        "UiProjection",
+        "generateUiSpec",
+        "uiEndpointSnapshot",
+        "AppState",
+        "currentSessionId",
+        "sessions"
+      ]
+    },
+    {
       "path": "frontend/src/integrations/mcp-panel.js",
       "provides": [
         "MCP_PANEL_TIMEOUT_MS",
@@ -829,7 +869,8 @@
         "UiSpecFixtures",
         "createUiDataRefHost",
         "UiProjection",
-        "createUiGenerationController"
+        "createUiGenerationController",
+        "uiEndpointSnapshot"
       ]
     },
     {
@@ -1175,7 +1216,8 @@
         "UiSpecFixtures",
         "createUiDataRefHost",
         "UiProjection",
-        "createUiGenerationController"
+        "createUiGenerationController",
+        "uiEndpointSnapshot"
       ]
     },
     {
@@ -1244,7 +1286,8 @@
         "UiSpecFixtures",
         "createUiDataRefHost",
         "UiProjection",
-        "createUiGenerationController"
+        "createUiGenerationController",
+        "uiEndpointSnapshot"
       ]
     },
     {
@@ -1289,26 +1332,6 @@
         "callApi",
         "planCurrent",
         "toast"
-      ]
-    },
-    {
-      "path": "frontend/src/providers/provider.js",
-      "provides": [
-        "chatCompletionsOf",
-        "currentEndpointName",
-        "effectiveApiKey",
-        "isGlmBaseUrl",
-        "isGlmEndpoint",
-        "localModeActive",
-        "localProxyBase",
-        "localProxyHeaders",
-        "providerPriceFor",
-        "resolveApiEndpoint",
-        "updateBrandModel"
-      ],
-      "requires": [
-        "providerState",
-        "localState"
       ]
     },
     {

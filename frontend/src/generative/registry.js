@@ -269,6 +269,185 @@ registerUiComponent('Skeleton', {
   },
 });
 
+/* ---------------- 生成式 UI 重做（2026-11-02 主理人裁定）：六组件扩容 ----------------
+ * 设计语汇：KPI 大数字卡 / 进度条 / 打卡清单 / 标签组 / 强调提示框 / 分节标题。
+ * 安全面不变：全部只读、createElement/textContent、schema 严格校验、无 HTML/URL。 */
+
+registerUiComponent('StatTile', {
+  schema: UiSchema.z.object({
+    items: UiSchema.z.array(UiSchema.z.object({
+      label: uiText, value: uiText,
+      delta: uiText.optional(),
+      deltaTone: UiSchema.z.enum(['up', 'down', 'flat']).optional(),
+      entityKey: uiText.optional(),
+    }).strict()).min(1).max(6),
+  }).strict(),
+  bindProp: 'items',
+  role: 'group', aria: props => ({ label: '关键指标：' + props.items.map(i => i.label).join('、') }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'wrap' },
+  renderer(props, context) {
+    const grid = context.createElement('div', 'ui-stat-grid');
+    props.items.forEach((item, index) => {
+      const tile = context.createElement('div', 'ui-stat-tile');
+      const entityId = item.entityKey || 'stat-' + index;
+      tile.setAttribute('data-entity-id', entityId);
+      tile.setAttribute('data-focus-key', (context.blockId || 'stats') + '/' + entityId);
+      tile.setAttribute('tabindex', '0');
+      tile.setAttribute('aria-selected', 'false');
+      tile.appendChild(context.createElement('div', 'ui-stat-label', item.label));
+      tile.appendChild(context.createElement('div', 'ui-stat-value', String(item.value ?? '')));
+      if (item.delta) {
+        const arrow = item.deltaTone === 'up' ? '▲ ' : item.deltaTone === 'down' ? '▼ ' : '';
+        tile.appendChild(context.createElement('div',
+          'ui-stat-delta ui-delta-' + (item.deltaTone || 'flat'), arrow + item.delta));
+      }
+      grid.appendChild(tile);
+    });
+    return grid;
+  },
+});
+
+registerUiComponent('Progress', {
+  schema: UiSchema.z.object({
+    title: uiText.optional(),
+    items: UiSchema.z.array(UiSchema.z.object({
+      label: uiText,
+      percent: UiSchema.z.number().int().min(0).max(100),
+      note: uiText.optional(),
+      status: uiStatus.optional(),
+      entityKey: uiText.optional(),
+    }).strict()).min(1).max(8),
+  }).strict(),
+  bindProp: 'items',
+  role: 'group', aria: props => ({
+    label: (props.title || '进度') + '：' + props.items.map(i => i.label + ' ' + i.percent + '%').join('，'),
+  }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'vertical' },
+  renderer(props, context) {
+    const wrap = context.createElement('div', 'ui-progress');
+    if (props.title) wrap.appendChild(context.createElement('div', 'ui-progress-title', props.title));
+    props.items.forEach((item, index) => {
+      const row = context.createElement('div', 'ui-progress-row ui-status-' + (item.status || 'doing'));
+      const entityId = item.entityKey || 'progress-' + index;
+      row.setAttribute('data-entity-id', entityId);
+      row.setAttribute('data-focus-key', (context.blockId || 'progress') + '/' + entityId);
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-selected', 'false');
+      const head = context.createElement('div', 'ui-progress-head');
+      head.appendChild(context.createElement('span', 'ui-progress-label', item.label));
+      head.appendChild(context.createElement('span', 'ui-progress-pct', item.percent + '%'));
+      row.appendChild(head);
+      const track = context.createElement('div', 'ui-progress-track');
+      track.setAttribute('role', 'progressbar');
+      track.setAttribute('aria-valuenow', String(item.percent));
+      track.setAttribute('aria-valuemin', '0');
+      track.setAttribute('aria-valuemax', '100');
+      const fill = context.createElement('div', 'ui-progress-fill');
+      fill.style.width = item.percent + '%';
+      track.appendChild(fill);
+      row.appendChild(track);
+      if (item.note) row.appendChild(context.createElement('div', 'ui-progress-note', item.note));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  },
+});
+
+registerUiComponent('Checklist', {
+  schema: UiSchema.z.object({
+    title: uiText.optional(),
+    items: UiSchema.z.array(UiSchema.z.object({
+      text: uiText,
+      checked: UiSchema.z.boolean().default(false),
+      note: uiText.optional(),
+      entityKey: uiText.optional(),
+    }).strict()).min(1).max(20),
+  }).strict(),
+  bindProp: 'items',
+  role: 'list', aria: props => ({
+    label: (props.title || '清单') + '（已完成 ' + props.items.filter(i => i.checked).length + '/' + props.items.length + '）',
+  }),
+  keyboard: { focusable: false, behavior: 'read-order' }, responsive: { rule: 'vertical' },
+  renderer(props, context) {
+    const wrap = context.createElement('div', 'ui-checklist');
+    if (props.title) wrap.appendChild(context.createElement('div', 'ui-checklist-title', props.title));
+    const done = props.items.filter(i => i.checked).length;
+    const badge = context.createElement('span', 'ui-checklist-count', done + '/' + props.items.length);
+    if (props.title) wrap.lastChild.appendChild(badge);
+    props.items.forEach((item, index) => {
+      const row = context.createElement('div',
+        'ui-checklist-item' + (item.checked ? ' ui-checked' : ''));
+      const entityId = item.entityKey || 'check-' + index;
+      row.setAttribute('data-entity-id', entityId);
+      row.setAttribute('data-focus-key', (context.blockId || 'checklist') + '/' + entityId);
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-selected', 'false');
+      row.setAttribute('role', 'listitem');
+      const box = context.createElement('span', 'ui-check-box', item.checked ? '✓' : '');
+      box.setAttribute('aria-hidden', 'true');
+      row.appendChild(box);
+      const main = context.createElement('span', 'ui-check-text', item.text);
+      row.appendChild(main);
+      if (item.note) row.appendChild(context.createElement('span', 'ui-check-note', item.note));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  },
+});
+
+registerUiComponent('Chips', {
+  schema: UiSchema.z.object({
+    title: uiText.optional(),
+    items: UiSchema.z.array(uiText).min(1).max(24),
+  }).strict(),
+  bindProp: 'items',
+  role: 'list', aria: props => ({ label: props.title || '标签' }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'wrap' },
+  renderer(props, context) {
+    const wrap = context.createElement('div', 'ui-chips');
+    if (props.title) wrap.appendChild(context.createElement('span', 'ui-chips-title', props.title));
+    props.items.forEach(text => {
+      wrap.appendChild(context.createElement('span', 'ui-chip', text));
+    });
+    return wrap;
+  },
+});
+
+registerUiComponent('Callout', {
+  schema: UiSchema.z.object({
+    tone: UiSchema.z.enum(['info', 'success', 'warning', 'error']).default('info'),
+    title: uiText.optional(),
+    body: uiText,
+  }).strict(),
+  bindProp: '$props',
+  role: 'note', aria: props => ({ label: props.title || props.tone + ' 提示' }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'stack' },
+  renderer(props, context) {
+    const box = context.createElement('div', 'ui-callout ui-callout-' + props.tone);
+    box.setAttribute('role', 'note');
+    if (props.title) box.appendChild(context.createElement('div', 'ui-callout-title', props.title));
+    box.appendChild(context.createElement('div', 'ui-callout-body', props.body));
+    return box;
+  },
+});
+
+registerUiComponent('SectionHeader', {
+  schema: UiSchema.z.object({
+    text: uiText,
+    sub: uiText.optional(),
+  }).strict(),
+  bindProp: '$props',
+  role: 'heading', aria: props => ({ label: props.text }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'stack' },
+  renderer(props, context) {
+    const head = context.createElement('div', 'ui-section-header');
+    head.setAttribute('role', 'heading');
+    head.appendChild(context.createElement('span', 'ui-section-text', props.text));
+    if (props.sub) head.appendChild(context.createElement('span', 'ui-section-sub', props.sub));
+    return head;
+  },
+});
+
 const UiComponentRegistry = Object.freeze({
   register: registerUiComponent,
   render: renderUiComponent,

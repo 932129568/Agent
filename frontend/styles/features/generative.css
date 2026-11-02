@@ -58,6 +58,129 @@ body.fx-off [data-entity-id],body.fx-off .ui-action-btn{transition:none}
 .ui-bar-rect{fill:var(--primary)}
 .ui-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ui-tone-muted{color:var(--text-2)}.ui-tone-error{color:var(--err)}
+
+/* ================= 生成式 UI 重做（2026-11-02）：视觉体系 ================= */
+/* 设计基调：卡片柔和投影 + 渐变强调 + 清晰节律；全部走主题令牌，深浅色自适应 */
+
+.ui-projection{--ui-accent:var(--primary);--ui-accent-soft:var(--primary-soft);
+  --ui-ok:var(--ok);--ui-err:var(--err);--ui-warn:var(--warn,#b45309);
+  --ui-radius:var(--radius-md);--ui-shadow:var(--shadow-sm)}
+
+.ui-projection-title{font-size:21px;font-weight:650;letter-spacing:-.015em;
+  padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:16px}
+
+.ui-layout{gap:14px}
+.ui-card{border-radius:var(--ui-radius);box-shadow:var(--ui-shadow);transition:border-color .18s,box-shadow .18s}
+.ui-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md)}
+.ui-card-title{font-size:15.5px;font-weight:600;letter-spacing:-.01em}
+
+.ui-table-wrap{border-radius:var(--radius-sm);box-shadow:var(--ui-shadow);border-color:var(--border)}
+.ui-table th{font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-2);background:var(--surface-2)}
+.ui-table tbody tr{transition:background .12s}
+.ui-table tbody tr:hover{background:var(--surface-2)}
+
+.ui-timeline-item{border-left:2px solid var(--border);padding-left:22px;border-radius:0}
+.ui-timeline-item::before{left:-6px;width:10px;height:10px;border:2px solid var(--card-bg);
+  box-shadow:0 0 0 1px var(--border-strong)}
+.ui-timeline-item.ui-status-done::before{background:var(--ui-ok);border-color:var(--ui-ok);box-shadow:0 0 0 1px var(--ui-ok)}
+.ui-timeline-item.ui-status-doing::before{background:var(--ui-accent);border-color:var(--ui-accent);box-shadow:0 0 0 1px var(--ui-accent)}
+.ui-timeline-item.ui-status-blocked::before{background:var(--ui-err);border-color:var(--ui-err);box-shadow:0 0 0 1px var(--ui-err)}
+.ui-timeline-title{font-weight:600}
+
+.ui-bars{display:block;width:100%;height:auto;overflow:visible}
+.ui-bar-rect{fill:var(--ui-accent);opacity:.88;transition:opacity .15s}
+.ui-bar-rect:hover{opacity:1}
+
+/* ---- StatTile：KPI 大数字卡 ---- */
+.ui-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:12px}
+.ui-stat-tile{position:relative;overflow:hidden;padding:14px 16px;background:var(--card-bg);
+  border:1px solid var(--border);border-radius:var(--ui-radius);box-shadow:var(--ui-shadow);
+  transition:border-color .18s,transform .18s,box-shadow .18s}
+.ui-stat-tile::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;
+  background:linear-gradient(180deg,var(--ui-accent),transparent)}
+.ui-stat-tile:hover{border-color:var(--border-strong);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.ui-stat-label{color:var(--text-2);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.ui-stat-value{margin-top:4px;font-size:26px;font-weight:700;line-height:1.15;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ui-stat-delta{margin-top:2px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.ui-delta-up{color:var(--ui-ok)}.ui-delta-down{color:var(--ui-err)}.ui-delta-flat{color:var(--text-2)}
+
+/* ---- Progress：渐变进度条 ---- */
+.ui-progress{display:grid;gap:12px}
+.ui-progress-title{font-size:13px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em}
+.ui-progress-row{display:grid;gap:6px}
+.ui-progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ui-progress-label{font-weight:500}
+.ui-progress-pct{color:var(--text-2);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.ui-progress-track{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.ui-progress-fill{height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--ui-accent),color-mix(in srgb,var(--ui-accent) 55%,#7ee0c2));
+  transition:width .5s cubic-bezier(.22,1,.36,1)}
+.ui-progress-row.ui-status-done .ui-progress-fill{background:var(--ui-ok)}
+.ui-progress-row.ui-status-blocked .ui-progress-fill{background:var(--ui-err)}
+.ui-progress-note{color:var(--text-2);font-size:var(--fs-caption)}
+
+/* ---- Checklist：打卡清单 ---- */
+.ui-checklist{display:grid;gap:6px;padding:14px 16px;background:var(--card-bg);
+  border:1px solid var(--border);border-radius:var(--ui-radius);box-shadow:var(--ui-shadow)}
+.ui-checklist-title{display:flex;justify-content:space-between;align-items:center;
+  font-weight:600;margin-bottom:4px}
+.ui-checklist-count{color:var(--text-2);font-size:12px;font-weight:600;
+  padding:2px 8px;border-radius:99px;background:var(--surface-2);font-variant-numeric:tabular-nums}
+.ui-checklist-item{display:flex;align-items:baseline;gap:10px;padding:7px 8px;border-radius:var(--radius-xs);
+  transition:background .12s}
+.ui-checklist-item:hover{background:var(--surface-2)}
+.ui-check-box{flex:none;width:18px;height:18px;min-width:18px;display:inline-flex;align-items:center;
+  justify-content:center;border-radius:6px;border:1.5px solid var(--border-strong);
+  font-size:12px;font-weight:700;color:#fff;transform:translateY(2px)}
+.ui-checklist-item.ui-checked .ui-check-box{background:var(--ui-ok);border-color:var(--ui-ok)}
+.ui-check-text{overflow-wrap:anywhere}
+.ui-checklist-item.ui-checked .ui-check-text{color:var(--text-2);text-decoration:line-through;
+  text-decoration-color:color-mix(in srgb,var(--text-2) 60%,transparent)}
+.ui-check-note{margin-left:auto;color:var(--text-2);font-size:var(--fs-caption);white-space:nowrap}
+
+/* ---- Chips：标签组 ---- */
+.ui-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ui-chips-title{color:var(--text-2);font-size:12.5px;font-weight:600;margin-right:2px}
+.ui-chip{padding:4px 12px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);
+  font-size:12.5px;font-weight:500;transition:border-color .12s,background .12s}
+.ui-chip:hover{border-color:var(--ui-accent);background:var(--ui-accent-soft)}
+
+/* ---- Callout：强调提示框 ---- */
+.ui-callout{position:relative;padding:12px 14px 12px 16px;border-radius:var(--radius-sm);
+  background:var(--ui-accent-soft);border:1px solid var(--border);overflow:hidden}
+.ui-callout::before{content:"";position:absolute;inset:0 auto 0 0;width:3px}
+.ui-callout-info::before{background:var(--ui-accent)}
+.ui-callout-info{background:var(--ui-accent-soft)}
+.ui-callout-success{background:color-mix(in srgb,var(--ui-ok) 10%,var(--card-bg))}
+.ui-callout-success::before{background:var(--ui-ok)}
+.ui-callout-warning{background:color-mix(in srgb,var(--ui-warn) 10%,var(--card-bg))}
+.ui-callout-warning::before{background:var(--ui-warn)}
+.ui-callout-error{background:color-mix(in srgb,var(--ui-err) 10%,var(--card-bg))}
+.ui-callout-error::before{background:var(--ui-err)}
+.ui-callout-title{font-weight:650;margin-bottom:2px}
+.ui-callout-body{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ---- SectionHeader：分节标题 ---- */
+.ui-section-header{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px;
+  padding-bottom:6px;border-bottom:1px solid var(--border)}
+.ui-section-text{font-size:15px;font-weight:650;letter-spacing:-.01em}
+.ui-section-sub{color:var(--text-2);font-size:var(--fs-caption)}
+
+body.fx-off .ui-progress-fill,body.fx-off .ui-stat-tile,body.fx-off .ui-card{transition:none}
+@media (prefers-reduced-motion:reduce){.ui-progress-fill,.ui-stat-tile,.ui-card{transition:none}}
+
+/* ---- 聊天内联自动视图容器 ---- */
+.ui-chat-host{margin-top:14px;border:1px solid var(--border);border-radius:var(--ui-radius);
+  background:var(--card-bg);box-shadow:var(--ui-shadow);overflow:hidden}
+.ui-chat-host-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:8px 14px;background:linear-gradient(90deg,var(--ui-accent-soft),var(--card-bg));
+  border-bottom:1px solid var(--border)}
+.ui-chat-host-label{font-size:12.5px;font-weight:600;color:var(--text);letter-spacing:.01em}
+.ui-chat-host-toggle{min-height:28px;padding:0 10px;font-size:12px;border-radius:var(--radius-xs)}
+.ui-chat-host-body{padding:14px;max-height:70vh;overflow:auto}
+.ui-chat-host-body .ui-projection{font-size:14px}
 .ui-empty{padding:24px 16px;text-align:center;border:1px dashed var(--border);
   border-radius:var(--radius-md);background:var(--surface-2)}
 .ui-empty-title{font-weight:500}.ui-empty-body{margin:8px 0 0;color:var(--text-2)}

@@ -175,6 +175,8 @@ function planCardRender(plan) {
   card.__uiGenerateBtn = generate; card.__uiRawBtn = raw; card.__uiProjection = null;
   card.__uiAiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'plan', host: generativeHost, button: ai, cancelButton: aiCancel,
+    // P0-4 修正：注入带真实密钥的端点快照（原内联快照密钥恒空 → AI生成 401 从未可用）
+    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
     fallback: () => UiSpecFixtures.plan({ plan: planCurrent, revision: planUiRevision,
       sessionId: typeof AppState !== 'undefined' ? AppState.currentSessionId : 'current-session' }),
     actionHandlers: {

@@ -96,7 +96,8 @@ for (const layout of UI_LAYOUTS) {
 return { names, layouts, tableCount, rectCount, roles };
 ''', MODULES)
     assert result['names'] == ['Table', 'Card', 'KeyValue', 'Timeline', 'BarChart',
-                               'TextBlock', 'EmptyState', 'Skeleton']
+                               'TextBlock', 'EmptyState', 'Skeleton', 'StatTile',
+                               'Progress', 'Checklist', 'Chips', 'Callout', 'SectionHeader']
     assert [item['layout'] for item in result['layouts']] == [
         'single-column', 'two-column', 'card-grid', 'table-focus', 'timeline']
     assert all(item['ok'] and item['className'] == item['layout'] for item in result['layouts'])
@@ -119,7 +120,7 @@ for (let i = 0; i < 4; i++) {
 const actions = simple('x'); actions.blocks[0].actions = [{ name: 'danger' }];
 const overflow = simple('x'); overflow.blocks = Array.from({ length: 7 }, (_, i) => ({
   blockId: 'large-' + i, component: 'TextBlock', props: { text: 'x'.repeat(10000) } }));
-const tooMany = simple('x'); tooMany.blocks = Array.from({ length: 13 }, (_, i) => ({
+const tooMany = simple('x'); tooMany.blocks = Array.from({ length: 17 }, (_, i) => ({
   blockId: 'block-' + i, component: 'TextBlock', props: { text: 'x' } }));
 return { badVersion: validateUiSpec(badVersion), duplicate: validateUiSpec(duplicate),
   nan: validateUiSpec(nan), text: validateUiSpec(text), depth: validateUiSpec(depth),
@@ -158,7 +159,7 @@ return { badRole: bad.element.getAttribute('role'), badFallback: bad.fallback,
     assert 'NotRegistered' in result['unknownText']
     assert result['metrics'] == {'invalid_props': 1, 'unknown_component': 1}
     assert result['registrationError'] == 'component_metadata_incomplete'
-    assert len(result['metadata']) == 8
+    assert len(result['metadata']) == 14
     assert all(item['role'] and item['responsive'] for item in result['metadata'])
 
 

@@ -1,12 +1,13 @@
 /* Harbor UiSpec v1: structural validation only; permissions stay outside schema. */
 const UI_LIMITS = Object.freeze({
-  specBytes: 64 * 1024, blocks: 12, depth: 3, title: 200, text: 10000,
+  specBytes: 64 * 1024, blocks: 16, depth: 3, title: 200, text: 10000,
 });
 const UI_LAYOUTS = Object.freeze([
   'single-column', 'two-column', 'card-grid', 'table-focus', 'timeline',
 ]);
 const UI_COMPONENTS = Object.freeze([
   'Table', 'Card', 'KeyValue', 'Timeline', 'BarChart', 'TextBlock', 'EmptyState', 'Skeleton',
+  'StatTile', 'Progress', 'Checklist', 'Chips', 'Callout', 'SectionHeader',
 ]);
 const UI_DATA_REF_SCHEMA = UiSchema.z.object({
   source: UiSchema.z.enum(['appState', 'tool', 'session', 'run', 'artifact']),

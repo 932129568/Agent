@@ -80,6 +80,7 @@ function mcpGenerativeEnsure(box) {
   const host = document.createElement('div'); host.className = 'mcp-generative-host'; host.hidden = true;
   state.aiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'mcp', host, button: ai, cancelButton: aiCancel,
+    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
     fallback: () => UiSpecFixtures.mcp({
       servers: typeof AppState !== 'undefined' ? AppState.mcpServers : mcpServers,
       revision: Math.max(mcpServersRevision, state.projection && state.projection.current

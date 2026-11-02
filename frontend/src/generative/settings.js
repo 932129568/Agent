@@ -1,12 +1,19 @@
-/* G4 independent local settings; both switches default off and never touch config.json. */
+/* G4 independent local settings; never touch config.json.
+ * 2026-11-02 主理人裁定：新增 enabled 总开关（聊天回答自动生成视图）——默认开启
+ * （用户要的是「聊天时真正能用」，默认关等于没有这个功能）。 */
 const UI_GENERATIVE_SETTING_KEYS = Object.freeze({
+  enabled: 'harbor.uiGenerative.enabled',
   strictSchema: 'harbor.uiGenerative.strictSchema',
   actionsEnabled: 'harbor.uiGenerative.actionsEnabled',
 });
 function uiGenerativeSettingRead(key) {
   try { return localStorage.getItem(key) === '1'; } catch (error) { return false; }
 }
+function uiGenerativeSettingReadDefaultOn(key) {
+  try { return localStorage.getItem(key) !== '0'; } catch (error) { return true; }
+}
 const UiGenerativeSettings = {
+  enabled: uiGenerativeSettingReadDefaultOn(UI_GENERATIVE_SETTING_KEYS.enabled),
   strictSchema: uiGenerativeSettingRead(UI_GENERATIVE_SETTING_KEYS.strictSchema),
   actionsEnabled: uiGenerativeSettingRead(UI_GENERATIVE_SETTING_KEYS.actionsEnabled),
   set(name, value) {
@@ -44,6 +51,13 @@ function uiGenerativeSettingsInit() {
     };
     const strict = makeToggle('uiStrictSchemaToggle', '尝试 strictSchema', '仅用户显式启用；真实端点能力 UNCOVERED');
     const actions = makeToggle('uiActionsToggle', '允许低危动作', '仅 copy/export/refresh，仍需当前权限与原 handler');
+    const auto = makeToggle('uiAutoViewToggle', '回答自动生成视图',
+      '开启后每条较长的 AI 回答落定时会自动转换为可交互视图（另有一次快速模型调用）。关闭则只在计划卡片手动生成。');
+    auto.checked = UiGenerativeSettings.enabled;
+    auto.addEventListener('change', () => {
+      UiGenerativeSettings.set('enabled', auto.checked);
+      if (typeof toast === 'function') toast(auto.checked ? '已开启回答自动生成视图' : '已关闭自动生成视图', 'info');
+    });
     strict.checked = UiGenerativeSettings.strictSchema;
     actions.checked = UiGenerativeSettings.actionsEnabled;
     strict.addEventListener('change', () => {

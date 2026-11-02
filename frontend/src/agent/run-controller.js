@@ -1286,6 +1286,11 @@ async function runAgentLoop(s, apiKey, opts) {
       // currently looking at this run's session; otherwise update status only.
       if (ownsVisibleSession) {
         try { renderChatHistory(run.session); } catch (e) {}
+        // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图
+        // （fire-and-forget；失败静默，绝不影响聊天主链路）
+        if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
+          try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
+        }
       } else {
         try { callApi('set_current_sid', [activeId]).catch(() => {}); } catch (e) {}
         try {

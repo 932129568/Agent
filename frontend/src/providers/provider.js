@@ -112,6 +112,18 @@ function effectiveApiKey() {
   return (providerState && providerState.key) ? String(providerState.key).trim() : '';
 }
 
+/** 生成式 UI 端点快照（控制器与各宿主共用，2026-11-02）。
+ *  密钥统一走 effectiveApiKey()——原 controller 内联快照引用了不存在的 apiKey
+ *  全局变量，密钥恒空 → 计划卡 AI生成/聊天自动视图 401 从未真正可用。 */
+function uiEndpointSnapshot() {
+  return {
+    endpoint: resolveApiEndpoint(),
+    apiKey: effectiveApiKey(),
+    local: localModeActive(),
+    proxyHeaders: localProxyHeaders(),
+  };
+}
+
 /** 价格表：本地系零费（A4）；非 GLM 云端端点用「高级 · 计费三价」；GLM 用内置 MODEL_PRICE。 */
 function providerPriceFor(model) {
   if (localModeActive()) {

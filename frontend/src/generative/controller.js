@@ -1,16 +1,39 @@
 /* G3 explicit model generation coordinator using the shared ModelExecutor. */
-function uiGenerationMessages(kind, fallbackSpec, feedback, raw) {
+function uiGenerationMessages(kind, fallbackSpec, feedback, raw, answerText) {
   const actionRule = typeof UiGenerativeSettings !== 'undefined' && UiGenerativeSettings.actionsEnabled
     ? '低危动作仅允许 copy/export/refresh，仍需用户点击和宿主权限。' : 'actions 必须为空数组。';
   const system = [
-    '你是 Harbor 生成式 UI 结构器。你只选择宿主白名单中的布局、组件和绑定，不编造业务数据。',
+    '你是 Harbor 生成式 UI 结构器，目标是产出**信息设计出色、视觉层次丰富**的界面结构，而不是把文字搬进框里。',
     '输出仅为逐行完整 JSON envelope，不要 Markdown、解释、HTML、JS、CSS、URL 或动作。',
-    '每行形状：{"schemaVersion":1,"layout":"single-column","title":"可选","block":{"blockId":"稳定语义ID","component":"TextBlock","props":{},"actions":[]}}。',
+    '每行形状：{"schemaVersion":1,"layout":"card-grid","title":"可选","block":{"blockId":"稳定语义ID","component":"StatTile","props":{},"actions":[]}}。',
     '布局限：' + UI_LAYOUTS.join('、') + '。组件限：' + UI_COMPONENTS.join('、') + '。',
+    '',
+    '组件选型指南（按信息性质选，禁止全用 TextBlock 堆字）：',
+    '· StatTile：2-6 个关键指标并排大数字卡（数值+标签+涨跌 delta）。任何「概览/汇总」首选。',
+    '· Progress：多条进度条（label+percent 0-100+status）。展示完成度、占比、达成率。',
+    '· Checklist：可打卡清单（text+checked）。计划、待办、训练日/购物清单类内容首选。',
+    '· Timeline：带状态的时间线（title+time+description+status）。步骤、日程、里程碑。',
+    '· BarChart：横向条形对比（label+value 数值）。多项目数量对比。',
+    '· Card：图文卡片（title+body+fields 键值对），group 可嵌 children 子块。',
+    '· KeyValue：紧凑键值明细。Chips：标签/要点罗列。Table：规整二维数据。',
+    '· Callout：info/success/warning/error 强调提示（注意事项、关键结论）。',
+    '· SectionHeader：分节标题（text+sub），把长页面切成可扫读的节。',
+    '',
+    '排版原则：①开篇用 StatTile/SectionHeader 立骨架，禁止以大段 TextBlock 开头；',
+    '②数值信息一律进 StatTile/Progress/BarChart，不要写在句子里；',
+    '③并列要点用 Checklist/Chips，不要用长段落；④风险与结论用 Callout 突出；',
+    '⑤layout 用 card-grid/two-column 制造并排层次；⑥blocks 6-12 个为佳，宁丰富勿寒酸。',
+    '',
     'DataRef 只能使用当前输入中列出的 source/selector/scope/entityId；数字和正文由宿主绑定，不得写入 props 冒充真实数据。',
     '每行必须能独立 JSON.parse；不要输出半块；不要重复 blockId。' + actionRule,
+    '',
+    '示例（第 1 行展示 StatTile 用法，实际按场景组合 6-12 行）：',
+    '{"schemaVersion":1,"layout":"card-grid","title":"训练概览","block":{"blockId":"overview.stats","component":"StatTile","props":{"items":[{"label":"周训练量","value":"5 天","delta":"↑ 1 天","deltaTone":"up"},{"label":"总时长","value":"4.5 小时"},{"label":"消耗","value":"3200 kcal"}]},"actions":[]}}',
   ].join('\n');
-  const user = '场景：' + kind + '\n当前手写默认 UiSpec（仅结构参考，不是业务数据）：\n' +
+  const user = (answerText
+    ? '需要转换的助手回答全文（数据唯一来源，不要编造、不要遗漏关键信息）：\n' + answerText + '\n\n'
+    : '') +
+    '场景：' + kind + '\n当前手写默认 UiSpec（仅结构参考，不是业务数据）：\n' +
     JSON.stringify(fallbackSpec).slice(0, 12000) +
     (feedback ? '\n\n' + feedback + '\n原始输出：\n' + String(raw || '').slice(0, UI_ARTIFACT_LIMITS.feedbackChars) : '');
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
@@ -138,7 +161,7 @@ async function generateUiSpec(options) {
     const stream = new UiArtifactStream();
     const messages = uiGenerationMessages(kind, fallbackSpec,
       attempt ? uiArtifactFeedback(lastError ? [lastError] : [], attempts[attempt - 1].raw) : null,
-      attempt ? attempts[attempt - 1].raw : '');
+      attempt ? attempts[attempt - 1].raw : '', options.answerText);
     const onText = chunk => {
       if (!canCommit()) return;
       for (const item of stream.push(chunk)) {
@@ -254,6 +277,11 @@ function createUiGenerationController(options) {
       try {
         result = await generateUiSpec({
           kind: options.kind, fallbackSpec, host: options.host,
+          // P0-4 真机修正：端点快照由调用方注入（时序上晚于 provider.js 的宿主
+          // 用 uiEndpointSnapshot() 取真实密钥——controller 在 provider 之前,
+          // 内联快照的 apiKey 全局恒空 → 生成调用 401,计划卡 AI生成从未真正可用）
+          endpoint: options.endpoint,
+          answerText: options.answerText,
           dataRefHost: options.dataRefHost || createUiDataRefHost({
             runId: fallbackSpec.runId, sessionId: fallbackSpec.sessionId,
             generation: fallbackSpec.generation,

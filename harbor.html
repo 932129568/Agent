@@ -3387,6 +3387,129 @@ body.fx-off [data-entity-id],body.fx-off .ui-action-btn{transition:none}
 .ui-bar-rect{fill:var(--primary)}
 .ui-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ui-tone-muted{color:var(--text-2)}.ui-tone-error{color:var(--err)}
+
+/* ================= 生成式 UI 重做（2026-11-02）：视觉体系 ================= */
+/* 设计基调：卡片柔和投影 + 渐变强调 + 清晰节律；全部走主题令牌，深浅色自适应 */
+
+.ui-projection{--ui-accent:var(--primary);--ui-accent-soft:var(--primary-soft);
+  --ui-ok:var(--ok);--ui-err:var(--err);--ui-warn:var(--warn,#b45309);
+  --ui-radius:var(--radius-md);--ui-shadow:var(--shadow-sm)}
+
+.ui-projection-title{font-size:21px;font-weight:650;letter-spacing:-.015em;
+  padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:16px}
+
+.ui-layout{gap:14px}
+.ui-card{border-radius:var(--ui-radius);box-shadow:var(--ui-shadow);transition:border-color .18s,box-shadow .18s}
+.ui-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md)}
+.ui-card-title{font-size:15.5px;font-weight:600;letter-spacing:-.01em}
+
+.ui-table-wrap{border-radius:var(--radius-sm);box-shadow:var(--ui-shadow);border-color:var(--border)}
+.ui-table th{font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-2);background:var(--surface-2)}
+.ui-table tbody tr{transition:background .12s}
+.ui-table tbody tr:hover{background:var(--surface-2)}
+
+.ui-timeline-item{border-left:2px solid var(--border);padding-left:22px;border-radius:0}
+.ui-timeline-item::before{left:-6px;width:10px;height:10px;border:2px solid var(--card-bg);
+  box-shadow:0 0 0 1px var(--border-strong)}
+.ui-timeline-item.ui-status-done::before{background:var(--ui-ok);border-color:var(--ui-ok);box-shadow:0 0 0 1px var(--ui-ok)}
+.ui-timeline-item.ui-status-doing::before{background:var(--ui-accent);border-color:var(--ui-accent);box-shadow:0 0 0 1px var(--ui-accent)}
+.ui-timeline-item.ui-status-blocked::before{background:var(--ui-err);border-color:var(--ui-err);box-shadow:0 0 0 1px var(--ui-err)}
+.ui-timeline-title{font-weight:600}
+
+.ui-bars{display:block;width:100%;height:auto;overflow:visible}
+.ui-bar-rect{fill:var(--ui-accent);opacity:.88;transition:opacity .15s}
+.ui-bar-rect:hover{opacity:1}
+
+/* ---- StatTile：KPI 大数字卡 ---- */
+.ui-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:12px}
+.ui-stat-tile{position:relative;overflow:hidden;padding:14px 16px;background:var(--card-bg);
+  border:1px solid var(--border);border-radius:var(--ui-radius);box-shadow:var(--ui-shadow);
+  transition:border-color .18s,transform .18s,box-shadow .18s}
+.ui-stat-tile::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;
+  background:linear-gradient(180deg,var(--ui-accent),transparent)}
+.ui-stat-tile:hover{border-color:var(--border-strong);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.ui-stat-label{color:var(--text-2);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.ui-stat-value{margin-top:4px;font-size:26px;font-weight:700;line-height:1.15;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ui-stat-delta{margin-top:2px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.ui-delta-up{color:var(--ui-ok)}.ui-delta-down{color:var(--ui-err)}.ui-delta-flat{color:var(--text-2)}
+
+/* ---- Progress：渐变进度条 ---- */
+.ui-progress{display:grid;gap:12px}
+.ui-progress-title{font-size:13px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em}
+.ui-progress-row{display:grid;gap:6px}
+.ui-progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ui-progress-label{font-weight:500}
+.ui-progress-pct{color:var(--text-2);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.ui-progress-track{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.ui-progress-fill{height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--ui-accent),color-mix(in srgb,var(--ui-accent) 55%,#7ee0c2));
+  transition:width .5s cubic-bezier(.22,1,.36,1)}
+.ui-progress-row.ui-status-done .ui-progress-fill{background:var(--ui-ok)}
+.ui-progress-row.ui-status-blocked .ui-progress-fill{background:var(--ui-err)}
+.ui-progress-note{color:var(--text-2);font-size:var(--fs-caption)}
+
+/* ---- Checklist：打卡清单 ---- */
+.ui-checklist{display:grid;gap:6px;padding:14px 16px;background:var(--card-bg);
+  border:1px solid var(--border);border-radius:var(--ui-radius);box-shadow:var(--ui-shadow)}
+.ui-checklist-title{display:flex;justify-content:space-between;align-items:center;
+  font-weight:600;margin-bottom:4px}
+.ui-checklist-count{color:var(--text-2);font-size:12px;font-weight:600;
+  padding:2px 8px;border-radius:99px;background:var(--surface-2);font-variant-numeric:tabular-nums}
+.ui-checklist-item{display:flex;align-items:baseline;gap:10px;padding:7px 8px;border-radius:var(--radius-xs);
+  transition:background .12s}
+.ui-checklist-item:hover{background:var(--surface-2)}
+.ui-check-box{flex:none;width:18px;height:18px;min-width:18px;display:inline-flex;align-items:center;
+  justify-content:center;border-radius:6px;border:1.5px solid var(--border-strong);
+  font-size:12px;font-weight:700;color:#fff;transform:translateY(2px)}
+.ui-checklist-item.ui-checked .ui-check-box{background:var(--ui-ok);border-color:var(--ui-ok)}
+.ui-check-text{overflow-wrap:anywhere}
+.ui-checklist-item.ui-checked .ui-check-text{color:var(--text-2);text-decoration:line-through;
+  text-decoration-color:color-mix(in srgb,var(--text-2) 60%,transparent)}
+.ui-check-note{margin-left:auto;color:var(--text-2);font-size:var(--fs-caption);white-space:nowrap}
+
+/* ---- Chips：标签组 ---- */
+.ui-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ui-chips-title{color:var(--text-2);font-size:12.5px;font-weight:600;margin-right:2px}
+.ui-chip{padding:4px 12px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);
+  font-size:12.5px;font-weight:500;transition:border-color .12s,background .12s}
+.ui-chip:hover{border-color:var(--ui-accent);background:var(--ui-accent-soft)}
+
+/* ---- Callout：强调提示框 ---- */
+.ui-callout{position:relative;padding:12px 14px 12px 16px;border-radius:var(--radius-sm);
+  background:var(--ui-accent-soft);border:1px solid var(--border);overflow:hidden}
+.ui-callout::before{content:"";position:absolute;inset:0 auto 0 0;width:3px}
+.ui-callout-info::before{background:var(--ui-accent)}
+.ui-callout-info{background:var(--ui-accent-soft)}
+.ui-callout-success{background:color-mix(in srgb,var(--ui-ok) 10%,var(--card-bg))}
+.ui-callout-success::before{background:var(--ui-ok)}
+.ui-callout-warning{background:color-mix(in srgb,var(--ui-warn) 10%,var(--card-bg))}
+.ui-callout-warning::before{background:var(--ui-warn)}
+.ui-callout-error{background:color-mix(in srgb,var(--ui-err) 10%,var(--card-bg))}
+.ui-callout-error::before{background:var(--ui-err)}
+.ui-callout-title{font-weight:650;margin-bottom:2px}
+.ui-callout-body{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ---- SectionHeader：分节标题 ---- */
+.ui-section-header{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px;
+  padding-bottom:6px;border-bottom:1px solid var(--border)}
+.ui-section-text{font-size:15px;font-weight:650;letter-spacing:-.01em}
+.ui-section-sub{color:var(--text-2);font-size:var(--fs-caption)}
+
+body.fx-off .ui-progress-fill,body.fx-off .ui-stat-tile,body.fx-off .ui-card{transition:none}
+@media (prefers-reduced-motion:reduce){.ui-progress-fill,.ui-stat-tile,.ui-card{transition:none}}
+
+/* ---- 聊天内联自动视图容器 ---- */
+.ui-chat-host{margin-top:14px;border:1px solid var(--border);border-radius:var(--ui-radius);
+  background:var(--card-bg);box-shadow:var(--ui-shadow);overflow:hidden}
+.ui-chat-host-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:8px 14px;background:linear-gradient(90deg,var(--ui-accent-soft),var(--card-bg));
+  border-bottom:1px solid var(--border)}
+.ui-chat-host-label{font-size:12.5px;font-weight:600;color:var(--text);letter-spacing:.01em}
+.ui-chat-host-toggle{min-height:28px;padding:0 10px;font-size:12px;border-radius:var(--radius-xs)}
+.ui-chat-host-body{padding:14px;max-height:70vh;overflow:auto}
+.ui-chat-host-body .ui-projection{font-size:14px}
 .ui-empty{padding:24px 16px;text-align:center;border:1px dashed var(--border);
   border-radius:var(--radius-md);background:var(--surface-2)}
 .ui-empty-title{font-weight:500}.ui-empty-body{margin:8px 0 0;color:var(--text-2)}
@@ -6508,13 +6631,14 @@ async function renderAuditList() {
 /* ===== frontend/src/generative/schemas.js ===== */
 /* Harbor UiSpec v1: structural validation only; permissions stay outside schema. */
 const UI_LIMITS = Object.freeze({
-  specBytes: 64 * 1024, blocks: 12, depth: 3, title: 200, text: 10000,
+  specBytes: 64 * 1024, blocks: 16, depth: 3, title: 200, text: 10000,
 });
 const UI_LAYOUTS = Object.freeze([
   'single-column', 'two-column', 'card-grid', 'table-focus', 'timeline',
 ]);
 const UI_COMPONENTS = Object.freeze([
   'Table', 'Card', 'KeyValue', 'Timeline', 'BarChart', 'TextBlock', 'EmptyState', 'Skeleton',
+  'StatTile', 'Progress', 'Checklist', 'Chips', 'Callout', 'SectionHeader',
 ]);
 const UI_DATA_REF_SCHEMA = UiSchema.z.object({
   source: UiSchema.z.enum(['appState', 'tool', 'session', 'run', 'artifact']),
@@ -6608,15 +6732,22 @@ function validateUiSpec(input) {
 }
 
 /* ===== frontend/src/generative/settings.js ===== */
-/* G4 independent local settings; both switches default off and never touch config.json. */
+/* G4 independent local settings; never touch config.json.
+ * 2026-11-02 主理人裁定：新增 enabled 总开关（聊天回答自动生成视图）——默认开启
+ * （用户要的是「聊天时真正能用」，默认关等于没有这个功能）。 */
 const UI_GENERATIVE_SETTING_KEYS = Object.freeze({
+  enabled: 'harbor.uiGenerative.enabled',
   strictSchema: 'harbor.uiGenerative.strictSchema',
   actionsEnabled: 'harbor.uiGenerative.actionsEnabled',
 });
 function uiGenerativeSettingRead(key) {
   try { return localStorage.getItem(key) === '1'; } catch (error) { return false; }
 }
+function uiGenerativeSettingReadDefaultOn(key) {
+  try { return localStorage.getItem(key) !== '0'; } catch (error) { return true; }
+}
 const UiGenerativeSettings = {
+  enabled: uiGenerativeSettingReadDefaultOn(UI_GENERATIVE_SETTING_KEYS.enabled),
   strictSchema: uiGenerativeSettingRead(UI_GENERATIVE_SETTING_KEYS.strictSchema),
   actionsEnabled: uiGenerativeSettingRead(UI_GENERATIVE_SETTING_KEYS.actionsEnabled),
   set(name, value) {
@@ -6654,6 +6785,13 @@ function uiGenerativeSettingsInit() {
     };
     const strict = makeToggle('uiStrictSchemaToggle', '尝试 strictSchema', '仅用户显式启用；真实端点能力 UNCOVERED');
     const actions = makeToggle('uiActionsToggle', '允许低危动作', '仅 copy/export/refresh，仍需当前权限与原 handler');
+    const auto = makeToggle('uiAutoViewToggle', '回答自动生成视图',
+      '开启后每条较长的 AI 回答落定时会自动转换为可交互视图（另有一次快速模型调用）。关闭则只在计划卡片手动生成。');
+    auto.checked = UiGenerativeSettings.enabled;
+    auto.addEventListener('change', () => {
+      UiGenerativeSettings.set('enabled', auto.checked);
+      if (typeof toast === 'function') toast(auto.checked ? '已开启回答自动生成视图' : '已关闭自动生成视图', 'info');
+    });
     strict.checked = UiGenerativeSettings.strictSchema;
     actions.checked = UiGenerativeSettings.actionsEnabled;
     strict.addEventListener('change', () => {
@@ -7098,6 +7236,185 @@ registerUiComponent('Skeleton', {
     }
     skeleton.appendChild(context.createElement('span', 'ui-sr-only', props.label));
     return skeleton;
+  },
+});
+
+/* ---------------- 生成式 UI 重做（2026-11-02 主理人裁定）：六组件扩容 ----------------
+ * 设计语汇：KPI 大数字卡 / 进度条 / 打卡清单 / 标签组 / 强调提示框 / 分节标题。
+ * 安全面不变：全部只读、createElement/textContent、schema 严格校验、无 HTML/URL。 */
+
+registerUiComponent('StatTile', {
+  schema: UiSchema.z.object({
+    items: UiSchema.z.array(UiSchema.z.object({
+      label: uiText, value: uiText,
+      delta: uiText.optional(),
+      deltaTone: UiSchema.z.enum(['up', 'down', 'flat']).optional(),
+      entityKey: uiText.optional(),
+    }).strict()).min(1).max(6),
+  }).strict(),
+  bindProp: 'items',
+  role: 'group', aria: props => ({ label: '关键指标：' + props.items.map(i => i.label).join('、') }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'wrap' },
+  renderer(props, context) {
+    const grid = context.createElement('div', 'ui-stat-grid');
+    props.items.forEach((item, index) => {
+      const tile = context.createElement('div', 'ui-stat-tile');
+      const entityId = item.entityKey || 'stat-' + index;
+      tile.setAttribute('data-entity-id', entityId);
+      tile.setAttribute('data-focus-key', (context.blockId || 'stats') + '/' + entityId);
+      tile.setAttribute('tabindex', '0');
+      tile.setAttribute('aria-selected', 'false');
+      tile.appendChild(context.createElement('div', 'ui-stat-label', item.label));
+      tile.appendChild(context.createElement('div', 'ui-stat-value', String(item.value ?? '')));
+      if (item.delta) {
+        const arrow = item.deltaTone === 'up' ? '▲ ' : item.deltaTone === 'down' ? '▼ ' : '';
+        tile.appendChild(context.createElement('div',
+          'ui-stat-delta ui-delta-' + (item.deltaTone || 'flat'), arrow + item.delta));
+      }
+      grid.appendChild(tile);
+    });
+    return grid;
+  },
+});
+
+registerUiComponent('Progress', {
+  schema: UiSchema.z.object({
+    title: uiText.optional(),
+    items: UiSchema.z.array(UiSchema.z.object({
+      label: uiText,
+      percent: UiSchema.z.number().int().min(0).max(100),
+      note: uiText.optional(),
+      status: uiStatus.optional(),
+      entityKey: uiText.optional(),
+    }).strict()).min(1).max(8),
+  }).strict(),
+  bindProp: 'items',
+  role: 'group', aria: props => ({
+    label: (props.title || '进度') + '：' + props.items.map(i => i.label + ' ' + i.percent + '%').join('，'),
+  }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'vertical' },
+  renderer(props, context) {
+    const wrap = context.createElement('div', 'ui-progress');
+    if (props.title) wrap.appendChild(context.createElement('div', 'ui-progress-title', props.title));
+    props.items.forEach((item, index) => {
+      const row = context.createElement('div', 'ui-progress-row ui-status-' + (item.status || 'doing'));
+      const entityId = item.entityKey || 'progress-' + index;
+      row.setAttribute('data-entity-id', entityId);
+      row.setAttribute('data-focus-key', (context.blockId || 'progress') + '/' + entityId);
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-selected', 'false');
+      const head = context.createElement('div', 'ui-progress-head');
+      head.appendChild(context.createElement('span', 'ui-progress-label', item.label));
+      head.appendChild(context.createElement('span', 'ui-progress-pct', item.percent + '%'));
+      row.appendChild(head);
+      const track = context.createElement('div', 'ui-progress-track');
+      track.setAttribute('role', 'progressbar');
+      track.setAttribute('aria-valuenow', String(item.percent));
+      track.setAttribute('aria-valuemin', '0');
+      track.setAttribute('aria-valuemax', '100');
+      const fill = context.createElement('div', 'ui-progress-fill');
+      fill.style.width = item.percent + '%';
+      track.appendChild(fill);
+      row.appendChild(track);
+      if (item.note) row.appendChild(context.createElement('div', 'ui-progress-note', item.note));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  },
+});
+
+registerUiComponent('Checklist', {
+  schema: UiSchema.z.object({
+    title: uiText.optional(),
+    items: UiSchema.z.array(UiSchema.z.object({
+      text: uiText,
+      checked: UiSchema.z.boolean().default(false),
+      note: uiText.optional(),
+      entityKey: uiText.optional(),
+    }).strict()).min(1).max(20),
+  }).strict(),
+  bindProp: 'items',
+  role: 'list', aria: props => ({
+    label: (props.title || '清单') + '（已完成 ' + props.items.filter(i => i.checked).length + '/' + props.items.length + '）',
+  }),
+  keyboard: { focusable: false, behavior: 'read-order' }, responsive: { rule: 'vertical' },
+  renderer(props, context) {
+    const wrap = context.createElement('div', 'ui-checklist');
+    if (props.title) wrap.appendChild(context.createElement('div', 'ui-checklist-title', props.title));
+    const done = props.items.filter(i => i.checked).length;
+    const badge = context.createElement('span', 'ui-checklist-count', done + '/' + props.items.length);
+    if (props.title) wrap.lastChild.appendChild(badge);
+    props.items.forEach((item, index) => {
+      const row = context.createElement('div',
+        'ui-checklist-item' + (item.checked ? ' ui-checked' : ''));
+      const entityId = item.entityKey || 'check-' + index;
+      row.setAttribute('data-entity-id', entityId);
+      row.setAttribute('data-focus-key', (context.blockId || 'checklist') + '/' + entityId);
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-selected', 'false');
+      row.setAttribute('role', 'listitem');
+      const box = context.createElement('span', 'ui-check-box', item.checked ? '✓' : '');
+      box.setAttribute('aria-hidden', 'true');
+      row.appendChild(box);
+      const main = context.createElement('span', 'ui-check-text', item.text);
+      row.appendChild(main);
+      if (item.note) row.appendChild(context.createElement('span', 'ui-check-note', item.note));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  },
+});
+
+registerUiComponent('Chips', {
+  schema: UiSchema.z.object({
+    title: uiText.optional(),
+    items: UiSchema.z.array(uiText).min(1).max(24),
+  }).strict(),
+  bindProp: 'items',
+  role: 'list', aria: props => ({ label: props.title || '标签' }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'wrap' },
+  renderer(props, context) {
+    const wrap = context.createElement('div', 'ui-chips');
+    if (props.title) wrap.appendChild(context.createElement('span', 'ui-chips-title', props.title));
+    props.items.forEach(text => {
+      wrap.appendChild(context.createElement('span', 'ui-chip', text));
+    });
+    return wrap;
+  },
+});
+
+registerUiComponent('Callout', {
+  schema: UiSchema.z.object({
+    tone: UiSchema.z.enum(['info', 'success', 'warning', 'error']).default('info'),
+    title: uiText.optional(),
+    body: uiText,
+  }).strict(),
+  bindProp: '$props',
+  role: 'note', aria: props => ({ label: props.title || props.tone + ' 提示' }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'stack' },
+  renderer(props, context) {
+    const box = context.createElement('div', 'ui-callout ui-callout-' + props.tone);
+    box.setAttribute('role', 'note');
+    if (props.title) box.appendChild(context.createElement('div', 'ui-callout-title', props.title));
+    box.appendChild(context.createElement('div', 'ui-callout-body', props.body));
+    return box;
+  },
+});
+
+registerUiComponent('SectionHeader', {
+  schema: UiSchema.z.object({
+    text: uiText,
+    sub: uiText.optional(),
+  }).strict(),
+  bindProp: '$props',
+  role: 'heading', aria: props => ({ label: props.text }),
+  keyboard: { focusable: false, behavior: 'read' }, responsive: { rule: 'stack' },
+  renderer(props, context) {
+    const head = context.createElement('div', 'ui-section-header');
+    head.setAttribute('role', 'heading');
+    head.appendChild(context.createElement('span', 'ui-section-text', props.text));
+    if (props.sub) head.appendChild(context.createElement('span', 'ui-section-sub', props.sub));
+    return head;
   },
 });
 
@@ -11773,18 +12090,41 @@ const ModelExecutor = Object.freeze({ execute: modelExecutorExecute });
 
 /* ===== frontend/src/generative/controller.js ===== */
 /* G3 explicit model generation coordinator using the shared ModelExecutor. */
-function uiGenerationMessages(kind, fallbackSpec, feedback, raw) {
+function uiGenerationMessages(kind, fallbackSpec, feedback, raw, answerText) {
   const actionRule = typeof UiGenerativeSettings !== 'undefined' && UiGenerativeSettings.actionsEnabled
     ? '低危动作仅允许 copy/export/refresh，仍需用户点击和宿主权限。' : 'actions 必须为空数组。';
   const system = [
-    '你是 Harbor 生成式 UI 结构器。你只选择宿主白名单中的布局、组件和绑定，不编造业务数据。',
+    '你是 Harbor 生成式 UI 结构器，目标是产出**信息设计出色、视觉层次丰富**的界面结构，而不是把文字搬进框里。',
     '输出仅为逐行完整 JSON envelope，不要 Markdown、解释、HTML、JS、CSS、URL 或动作。',
-    '每行形状：{"schemaVersion":1,"layout":"single-column","title":"可选","block":{"blockId":"稳定语义ID","component":"TextBlock","props":{},"actions":[]}}。',
+    '每行形状：{"schemaVersion":1,"layout":"card-grid","title":"可选","block":{"blockId":"稳定语义ID","component":"StatTile","props":{},"actions":[]}}。',
     '布局限：' + UI_LAYOUTS.join('、') + '。组件限：' + UI_COMPONENTS.join('、') + '。',
+    '',
+    '组件选型指南（按信息性质选，禁止全用 TextBlock 堆字）：',
+    '· StatTile：2-6 个关键指标并排大数字卡（数值+标签+涨跌 delta）。任何「概览/汇总」首选。',
+    '· Progress：多条进度条（label+percent 0-100+status）。展示完成度、占比、达成率。',
+    '· Checklist：可打卡清单（text+checked）。计划、待办、训练日/购物清单类内容首选。',
+    '· Timeline：带状态的时间线（title+time+description+status）。步骤、日程、里程碑。',
+    '· BarChart：横向条形对比（label+value 数值）。多项目数量对比。',
+    '· Card：图文卡片（title+body+fields 键值对），group 可嵌 children 子块。',
+    '· KeyValue：紧凑键值明细。Chips：标签/要点罗列。Table：规整二维数据。',
+    '· Callout：info/success/warning/error 强调提示（注意事项、关键结论）。',
+    '· SectionHeader：分节标题（text+sub），把长页面切成可扫读的节。',
+    '',
+    '排版原则：①开篇用 StatTile/SectionHeader 立骨架，禁止以大段 TextBlock 开头；',
+    '②数值信息一律进 StatTile/Progress/BarChart，不要写在句子里；',
+    '③并列要点用 Checklist/Chips，不要用长段落；④风险与结论用 Callout 突出；',
+    '⑤layout 用 card-grid/two-column 制造并排层次；⑥blocks 6-12 个为佳，宁丰富勿寒酸。',
+    '',
     'DataRef 只能使用当前输入中列出的 source/selector/scope/entityId；数字和正文由宿主绑定，不得写入 props 冒充真实数据。',
     '每行必须能独立 JSON.parse；不要输出半块；不要重复 blockId。' + actionRule,
+    '',
+    '示例（第 1 行展示 StatTile 用法，实际按场景组合 6-12 行）：',
+    '{"schemaVersion":1,"layout":"card-grid","title":"训练概览","block":{"blockId":"overview.stats","component":"StatTile","props":{"items":[{"label":"周训练量","value":"5 天","delta":"↑ 1 天","deltaTone":"up"},{"label":"总时长","value":"4.5 小时"},{"label":"消耗","value":"3200 kcal"}]},"actions":[]}}',
   ].join('\n');
-  const user = '场景：' + kind + '\n当前手写默认 UiSpec（仅结构参考，不是业务数据）：\n' +
+  const user = (answerText
+    ? '需要转换的助手回答全文（数据唯一来源，不要编造、不要遗漏关键信息）：\n' + answerText + '\n\n'
+    : '') +
+    '场景：' + kind + '\n当前手写默认 UiSpec（仅结构参考，不是业务数据）：\n' +
     JSON.stringify(fallbackSpec).slice(0, 12000) +
     (feedback ? '\n\n' + feedback + '\n原始输出：\n' + String(raw || '').slice(0, UI_ARTIFACT_LIMITS.feedbackChars) : '');
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
@@ -11912,7 +12252,7 @@ async function generateUiSpec(options) {
     const stream = new UiArtifactStream();
     const messages = uiGenerationMessages(kind, fallbackSpec,
       attempt ? uiArtifactFeedback(lastError ? [lastError] : [], attempts[attempt - 1].raw) : null,
-      attempt ? attempts[attempt - 1].raw : '');
+      attempt ? attempts[attempt - 1].raw : '', options.answerText);
     const onText = chunk => {
       if (!canCommit()) return;
       for (const item of stream.push(chunk)) {
@@ -12028,6 +12368,11 @@ function createUiGenerationController(options) {
       try {
         result = await generateUiSpec({
           kind: options.kind, fallbackSpec, host: options.host,
+          // P0-4 真机修正：端点快照由调用方注入（时序上晚于 provider.js 的宿主
+          // 用 uiEndpointSnapshot() 取真实密钥——controller 在 provider 之前,
+          // 内联快照的 apiKey 全局恒空 → 生成调用 401,计划卡 AI生成从未真正可用）
+          endpoint: options.endpoint,
+          answerText: options.answerText,
           dataRefHost: options.dataRefHost || createUiDataRefHost({
             runId: fallbackSpec.runId, sessionId: fallbackSpec.sessionId,
             generation: fallbackSpec.generation,
@@ -12060,6 +12405,269 @@ function createUiGenerationController(options) {
     return run;
   };
   return { start, cancel, isBusy: () => !!active };
+}
+
+/* ===== frontend/src/providers/provider.js ===== */
+/* ================= 端点抽象（v4 · 完全单端点） =================
+ * 全 App 只有一个「当前端点」概念，由 36-connect.js 的预设状态机决定：
+ * 「连接与模型」区块的预设下拉是唯一开关（GLM / DeepSeek / Moonshot / 通义千问 /
+ * Ollama / LM Studio / vLLM / llama.cpp / LocalAI / 自定义）。
+ *
+ * 运行态派生（36-connect.js connectSyncState 写入，本模块只读）：
+ * - providerState = {enabled, name(预设 id), base_url, model, key, prices} —— 云端与 GLM 共用；
+ * - localState = {mode, base_url, model, ctx_window, tool_capable} —— 本地系预设派生，
+ *   60-agent-loop 的本地模型分支继续依赖它（localState.model 优先）。
+ *
+ * GLM 判据（v4 改判）：provider_name === 'glm' 或 base_url 含 bigmodel.cn ——
+ * 决定 thinking / reasoning_effort / web_search 工具 / 智能档 / 内置价格表。
+ * 语义与合并前一致：GLM 端点全开，非 GLM（云端第三方 / 本地）全部关闭。
+ */
+
+/** Base URL 是否指向智谱官方域名（自定义预设填官方地址也按 GLM 对待）。 */
+function isGlmBaseUrl(url) {
+  return /bigmodel\.cn/i.test(String(url || ''));
+}
+
+/** 本地端点是否生效（本地系预设 + 有 base_url；本地端点无需 API Key）。 */
+function localModeActive() {
+  return !!(localState && localState.mode && localState.base_url);
+}
+
+/** 本地 CORS 代理基址（v1.6 HF-P0）：页面加载时经 js_api get_local_proxy 取一次，
+ *  缓存于 window.__localProxyBase；空 = 代理不可用（回落直连，行为不劣化）。
+ *  存在原因：EdgeWebView（Chromium）对跨源 fetch 强制 CORS——不输出 CORS 头的
+ *  本地模型服务器（FreeToken / 裸 llama.cpp / vLLM 默认配置）直连必被拒。 */
+function localProxyBase() {
+  return (typeof window !== 'undefined' && window.__localProxyBase)
+    ? String(window.__localProxyBase) : '';
+}
+
+/** chat/completions 拼接（base 已含则原样）。 */
+function chatCompletionsOf(base) {
+  const b = String(base || '').trim().replace(/\/+$/, '');
+  if (!b) return '';
+  return b.endsWith('/chat/completions') ? b : b + '/chat/completions';
+}
+
+/** 端点地址解析：45-request-debounce / 97-compact 的 fetch 目标。
+ *  本地系预设 → 本地 CORS 代理（CORS 头由后端补齐；真实目标经
+ *    localProxyHeaders() 的 X-Harbor-Target 头传递）；代理不可用 → 回落直连；
+ *  **所有云端端点 → 也走代理**（2026-10-21 P0，不止 GLM）：EdgeWebView 的
+ *    fetch 读系统代理栈（Clash/IE 代理），用户机器挂代理时直连任何云端 API
+ *    （GLM/DeepSeek/Moonshot/Qwen/GitHub/自定义）都会被拦成 Failed to fetch，
+ *    而浏览器 fetch 无法禁代理；后端 opener 已禁系统代理直连，前端只 fetch
+ *    127.0.0.1 必然绕开，且代理补 CORS 头让 4xx 真因不再被吞。代理不可用
+ *    → 回落直连（行为不劣化）；都空 → 官方 API_URL。 */
+function resolveApiEndpoint() {
+  if (localModeActive()) {
+    const proxied = chatCompletionsOf(localProxyBase());
+    if (proxied) return proxied;                    // 代理模式（HF-P0 主路径）
+    const local = chatCompletionsOf(localState.base_url);
+    if (local) return local;                        // 回落：代理不可用时直连（行为不劣化）
+  }
+  const base = chatCompletionsOf((providerState && providerState.base_url) || '');
+  // 云端端点且代理可用 → 经代理转发（绕开 EdgeWebView 系统代理栈；后端域名
+  // 白名单兜底安全：内置主流 API 域名 + 用户配置的 base_url 动态放行）
+  if (base && localProxyBase()) {
+    return chatCompletionsOf(localProxyBase());
+  }
+  if (base) return base;
+  return API_URL;
+}
+
+/** 代理模式附加请求头：X-Harbor-Target = 真实目标 base_url（本地或云端；
+ * 后端代理据此转发，仅放行回环 + 白名单/用户配置目标）。非代理模式 / 无目标
+ * 返回 {}——调用处 Object.assign 合并。 */
+function localProxyHeaders() {
+  if (!localProxyBase()) return {};
+  let target = '';
+  if (localModeActive()) {
+    target = String((localState && localState.base_url) || '').trim();
+  } else {
+    // 云端：目标 = 用户配置的 base_url（缺省 API_URL 官方地址）
+    target = String((providerState && providerState.base_url) || API_URL || '').trim();
+  }
+  return target ? { 'X-Harbor-Target': target } : {};
+}
+
+/** 当前端点是否智谱 GLM（GLM 专属能力总开关）。
+ *  判据（v4 D5）：provider_name === 'glm' 或 base_url 含 bigmodel.cn。 */
+function isGlmEndpoint() {
+  if (localModeActive()) return false;
+  const st = providerState || {};
+  const name = String(st.name || '').trim().toLowerCase();
+  const base = String(st.base_url || '').trim();
+  if (name === 'glm') return true;               // 判据一：预设即智谱官方
+  if (name) return isGlmBaseUrl(base);           // 判据二：非 GLM 预设，只有填了官方域名才算
+  return base ? isGlmBaseUrl(base) : true;       // 无端点信息 → 沿用 GLM 官方默认
+}
+
+/** 当前端点显示名（会话里 addSysTip 用）。 */
+function currentEndpointName() {
+  if (localModeActive()) return '本地 · ' + (localState.model || '?');
+  if (isGlmEndpoint()) return 'GLM';
+  const id = String((providerState && providerState.name) || '');
+  const meta = (typeof connectPresetMeta === 'function') ? connectPresetMeta(id) : null;
+  return (meta && meta.name) || id || 'custom';
+}
+
+/** 生效的 API Key：本地系免 Key；其余用合并块唯一的 Key 字段（#apiKey，
+ *  旧运行态 providerState.key 作为内存回退）。
+ *  所有请求入口（发送/重新生成/压缩/断点续跑）统一走此函数，避免端点切了 Key 没切。 */
+function effectiveApiKey() {
+  if (localModeActive()) return '';
+  const el = document.getElementById('apiKey');
+  const typed = el ? String(el.value || '').trim() : '';
+  if (typed) return typed;
+  return (providerState && providerState.key) ? String(providerState.key).trim() : '';
+}
+
+/** 生成式 UI 端点快照（控制器与各宿主共用，2026-11-02）。
+ *  密钥统一走 effectiveApiKey()——原 controller 内联快照引用了不存在的 apiKey
+ *  全局变量，密钥恒空 → 计划卡 AI生成/聊天自动视图 401 从未真正可用。 */
+function uiEndpointSnapshot() {
+  return {
+    endpoint: resolveApiEndpoint(),
+    apiKey: effectiveApiKey(),
+    local: localModeActive(),
+    proxyHeaders: localProxyHeaders(),
+  };
+}
+
+/** 价格表：本地系零费（A4）；非 GLM 云端端点用「高级 · 计费三价」；GLM 用内置 MODEL_PRICE。 */
+function providerPriceFor(model) {
+  if (localModeActive()) {
+    return { in: 0, out: 0, cache: 0 };
+  }
+  if (!isGlmEndpoint() && providerState && providerState.prices) {
+    const p = providerState.prices;
+    const has = Number(p.in) > 0 || Number(p.out) > 0 || Number(p.cache) > 0;
+    if (has) return { in: Number(p.in) || 0, out: Number(p.out) || 0, cache: Number(p.cache) || 0 };
+  }
+  return MODEL_PRICE[model] || MODEL_PRICE['glm-5.3-flashx'];
+}
+
+/** 品牌位 / 会话头标题：显示当前生效模型名（手动态取文本框）。 */
+function updateBrandModel() {
+  let txt = '';
+  if (typeof connectModelValue === 'function') txt = connectModelValue();
+  if (!txt) {
+    const sel = document.getElementById('modelSelect');
+    const v = sel ? String(sel.value || '') : '';
+    txt = (v && v !== '__manual__' && v !== '__group__') ? v : '';
+  }
+  if (!txt) txt = 'glm-5.3-flash';
+  const bm = document.getElementById('brandModel');
+  const ht = document.getElementById('headerTitle');
+  if (bm) bm.textContent = txt;
+  if (ht) ht.textContent = txt;
+  /* 修复（四轮）：模型切换后刷新头部状态区与空态引导（41-nav 只渲染一次会永久陈旧；
+   * 老「设置」入口配 Key 后空态引导不消失也靠这里兜底） */
+  if (typeof navRenderHeaderStatus === 'function') navRenderHeaderStatus();
+  if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
+}
+
+/* ===== frontend/src/generative/chat-auto.js ===== */
+/* 聊天回答自动生成式 UI(2026-11-02 主理人裁定「回答本身自动变成可交互 UI,要真正能用」)。
+ * 机制:run 落定 → 取本会话最后一条 assistant 回答 → 二次快速模型调用(strict schema,
+ * 复用 generateUiSpec 的生成+修复回路)把回答内容转成 UiSpec → 内联挂载在回答下方,
+ * 可折叠回原文。失败静默,绝不影响聊天主链路。安全面:组件只读(14 组件白名单),
+ * 数据来自回答文本,不经模型工具面。 */
+const CHAT_AUTO = {
+  minChars: 240,          // 短回答(寒暄/单句)不值得转 UI
+  maxChars: 12000,        // 超长回答截断喂给转换器
+  mounts: new WeakSet(),  // 同一消息元素只挂一次(重试/重渲染防护)
+};
+
+function chatAutoSessionText(sessionId) {
+  const session = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+    ? sessions.find(item => item.id === sessionId) : null;
+  if (!session || !Array.isArray(session.messages)) return null;
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    const m = session.messages[i];
+    if (!m || m.role !== 'assistant') continue;
+    const c = m.content;
+    if (typeof c === 'string') return c;
+    if (Array.isArray(c)) {
+      const text = c.map(part => (part && typeof part.text === 'string') ? part.text : '').join('\n');
+      if (text.trim()) return text;
+    }
+    return null;
+  }
+  return null;
+}
+
+function chatAutoSeedSpec(sessionId, answer) {
+  return {
+    schemaVersion: 1,
+    specId: 'chat-auto-' + Date.now().toString(36),
+    sessionId: String(sessionId || '').slice(0, 128),
+    layout: 'card-grid',
+    blocks: [{ blockId: 'answer.source', component: 'TextBlock', props: { text: answer.slice(0, 4000) }, actions: [] }],
+  };
+}
+
+/** 供 run-controller finally 调用的入口(fire-and-forget)。 */
+async function chatGenerativeAutoRender(sessionId) {
+  try {
+    if (typeof UiGenerativeSettings === 'undefined' || !UiGenerativeSettings.enabled) return;
+    if (typeof document === 'undefined' || typeof UiProjection === 'undefined'
+        || typeof generateUiSpec !== 'function') return;
+    const view = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
+    if (view !== sessionId) return;   // 只为当前正在看的会话自动渲染(切走的跳过)
+    const el = (function () {
+      const all = document.querySelectorAll('#chatContainer .message.assistant');
+      return all.length ? all[all.length - 1] : null;
+    })();
+    if (!el) return;
+    const content = el.querySelector('.content');
+    if (!content || content.dataset.uiAuto === '1' || CHAT_AUTO.mounts.has(content)) return;
+    const answer = chatAutoSessionText(sessionId);
+    if (!answer || answer.length < CHAT_AUTO.minChars) return;
+    const trimmed = answer.slice(0, CHAT_AUTO.maxChars);
+    content.dataset.uiAuto = '1';
+    CHAT_AUTO.mounts.add(content);
+
+    const host = document.createElement('div');
+    host.className = 'ui-chat-host';
+    const bar = document.createElement('div');
+    bar.className = 'ui-chat-host-bar';
+    const label = document.createElement('span');
+    label.className = 'ui-chat-host-label';
+    label.textContent = '✦ 生成视图(由本回答自动生成)';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'ui-chat-host-toggle';
+    toggleBtn.textContent = '收起';
+    const body = document.createElement('div');
+    body.className = 'ui-chat-host-body';
+    toggleBtn.addEventListener('click', () => {
+      const hidden = body.hidden;
+      body.hidden = hidden;
+      toggleBtn.textContent = hidden ? '收起' : '展开';
+    });
+    bar.appendChild(label);
+    bar.appendChild(toggleBtn);
+    host.appendChild(bar);
+    host.appendChild(body);
+    content.appendChild(host);
+
+    const controller = generateUiSpec({
+      kind: 'chat-answer(把助手回答重构为信息设计出色的可交互视图)',
+      fallbackSpec: chatAutoSeedSpec(sessionId, trimmed),
+      host: body,
+      sessionId: String(sessionId || ''),
+      runId: 'chat-auto',
+      answerText: trimmed,
+      // P0-4 修正：端点快照由本调用方注入（本模块时序在 provider.js 之后，
+      // 能拿到带真实密钥的 uiEndpointSnapshot——controller 内联快照密钥恒空）
+      endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
+      isActive: () => document.contains(host),
+    });
+    void controller;
+  } catch (error) {
+    try { console.warn('[gen-ui] 自动视图生成失败(不影响聊天):', error && error.message); } catch (e) {}
+  }
 }
 
 /* ===== frontend/src/integrations/mcp-panel.js ===== */
@@ -12145,6 +12753,7 @@ function mcpGenerativeEnsure(box) {
   const host = document.createElement('div'); host.className = 'mcp-generative-host'; host.hidden = true;
   state.aiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'mcp', host, button: ai, cancelButton: aiCancel,
+    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
     fallback: () => UiSpecFixtures.mcp({
       servers: typeof AppState !== 'undefined' ? AppState.mcpServers : mcpServers,
       revision: Math.max(mcpServersRevision, state.projection && state.projection.current
@@ -14164,6 +14773,11 @@ async function runAgentLoop(s, apiKey, opts) {
       // currently looking at this run's session; otherwise update status only.
       if (ownsVisibleSession) {
         try { renderChatHistory(run.session); } catch (e) {}
+        // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图
+        // （fire-and-forget；失败静默，绝不影响聊天主链路）
+        if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
+          try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
+        }
       } else {
         try { callApi('set_current_sid', [activeId]).catch(() => {}); } catch (e) {}
         try {
@@ -16761,6 +17375,8 @@ function planCardRender(plan) {
   card.__uiGenerateBtn = generate; card.__uiRawBtn = raw; card.__uiProjection = null;
   card.__uiAiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'plan', host: generativeHost, button: ai, cancelButton: aiCancel,
+    // P0-4 修正：注入带真实密钥的端点快照（原内联快照密钥恒空 → AI生成 401 从未可用）
+    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
     fallback: () => UiSpecFixtures.plan({ plan: planCurrent, revision: planUiRevision,
       sessionId: typeof AppState !== 'undefined' ? AppState.currentSessionId : 'current-session' }),
     actionHandlers: {
@@ -17604,6 +18220,7 @@ function memoryGenerativeEnsure(block) {
   const host = document.createElement('div'); host.className = 'memory-generative-host'; host.hidden = true;
   state.aiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'memory', host, button: ai, cancelButton: aiCancel,
+    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
     fallback: () => UiSpecFixtures.memory({ items: mmLastItems, revision: memoryReqSeq,
       error: mmLastError,
       sessionId: typeof AppState !== 'undefined' ? AppState.currentSessionId : 'current-session' }),
@@ -18465,154 +19082,6 @@ async function checkpointMgrRefresh() {
       else if (typeof toast === 'function') toast('回滚组件未加载', 'err');
     });
   });
-}
-
-/* ===== frontend/src/providers/provider.js ===== */
-/* ================= 端点抽象（v4 · 完全单端点） =================
- * 全 App 只有一个「当前端点」概念，由 36-connect.js 的预设状态机决定：
- * 「连接与模型」区块的预设下拉是唯一开关（GLM / DeepSeek / Moonshot / 通义千问 /
- * Ollama / LM Studio / vLLM / llama.cpp / LocalAI / 自定义）。
- *
- * 运行态派生（36-connect.js connectSyncState 写入，本模块只读）：
- * - providerState = {enabled, name(预设 id), base_url, model, key, prices} —— 云端与 GLM 共用；
- * - localState = {mode, base_url, model, ctx_window, tool_capable} —— 本地系预设派生，
- *   60-agent-loop 的本地模型分支继续依赖它（localState.model 优先）。
- *
- * GLM 判据（v4 改判）：provider_name === 'glm' 或 base_url 含 bigmodel.cn ——
- * 决定 thinking / reasoning_effort / web_search 工具 / 智能档 / 内置价格表。
- * 语义与合并前一致：GLM 端点全开，非 GLM（云端第三方 / 本地）全部关闭。
- */
-
-/** Base URL 是否指向智谱官方域名（自定义预设填官方地址也按 GLM 对待）。 */
-function isGlmBaseUrl(url) {
-  return /bigmodel\.cn/i.test(String(url || ''));
-}
-
-/** 本地端点是否生效（本地系预设 + 有 base_url；本地端点无需 API Key）。 */
-function localModeActive() {
-  return !!(localState && localState.mode && localState.base_url);
-}
-
-/** 本地 CORS 代理基址（v1.6 HF-P0）：页面加载时经 js_api get_local_proxy 取一次，
- *  缓存于 window.__localProxyBase；空 = 代理不可用（回落直连，行为不劣化）。
- *  存在原因：EdgeWebView（Chromium）对跨源 fetch 强制 CORS——不输出 CORS 头的
- *  本地模型服务器（FreeToken / 裸 llama.cpp / vLLM 默认配置）直连必被拒。 */
-function localProxyBase() {
-  return (typeof window !== 'undefined' && window.__localProxyBase)
-    ? String(window.__localProxyBase) : '';
-}
-
-/** chat/completions 拼接（base 已含则原样）。 */
-function chatCompletionsOf(base) {
-  const b = String(base || '').trim().replace(/\/+$/, '');
-  if (!b) return '';
-  return b.endsWith('/chat/completions') ? b : b + '/chat/completions';
-}
-
-/** 端点地址解析：45-request-debounce / 97-compact 的 fetch 目标。
- *  本地系预设 → 本地 CORS 代理（CORS 头由后端补齐；真实目标经
- *    localProxyHeaders() 的 X-Harbor-Target 头传递）；代理不可用 → 回落直连；
- *  **所有云端端点 → 也走代理**（2026-10-21 P0，不止 GLM）：EdgeWebView 的
- *    fetch 读系统代理栈（Clash/IE 代理），用户机器挂代理时直连任何云端 API
- *    （GLM/DeepSeek/Moonshot/Qwen/GitHub/自定义）都会被拦成 Failed to fetch，
- *    而浏览器 fetch 无法禁代理；后端 opener 已禁系统代理直连，前端只 fetch
- *    127.0.0.1 必然绕开，且代理补 CORS 头让 4xx 真因不再被吞。代理不可用
- *    → 回落直连（行为不劣化）；都空 → 官方 API_URL。 */
-function resolveApiEndpoint() {
-  if (localModeActive()) {
-    const proxied = chatCompletionsOf(localProxyBase());
-    if (proxied) return proxied;                    // 代理模式（HF-P0 主路径）
-    const local = chatCompletionsOf(localState.base_url);
-    if (local) return local;                        // 回落：代理不可用时直连（行为不劣化）
-  }
-  const base = chatCompletionsOf((providerState && providerState.base_url) || '');
-  // 云端端点且代理可用 → 经代理转发（绕开 EdgeWebView 系统代理栈；后端域名
-  // 白名单兜底安全：内置主流 API 域名 + 用户配置的 base_url 动态放行）
-  if (base && localProxyBase()) {
-    return chatCompletionsOf(localProxyBase());
-  }
-  if (base) return base;
-  return API_URL;
-}
-
-/** 代理模式附加请求头：X-Harbor-Target = 真实目标 base_url（本地或云端；
- * 后端代理据此转发，仅放行回环 + 白名单/用户配置目标）。非代理模式 / 无目标
- * 返回 {}——调用处 Object.assign 合并。 */
-function localProxyHeaders() {
-  if (!localProxyBase()) return {};
-  let target = '';
-  if (localModeActive()) {
-    target = String((localState && localState.base_url) || '').trim();
-  } else {
-    // 云端：目标 = 用户配置的 base_url（缺省 API_URL 官方地址）
-    target = String((providerState && providerState.base_url) || API_URL || '').trim();
-  }
-  return target ? { 'X-Harbor-Target': target } : {};
-}
-
-/** 当前端点是否智谱 GLM（GLM 专属能力总开关）。
- *  判据（v4 D5）：provider_name === 'glm' 或 base_url 含 bigmodel.cn。 */
-function isGlmEndpoint() {
-  if (localModeActive()) return false;
-  const st = providerState || {};
-  const name = String(st.name || '').trim().toLowerCase();
-  const base = String(st.base_url || '').trim();
-  if (name === 'glm') return true;               // 判据一：预设即智谱官方
-  if (name) return isGlmBaseUrl(base);           // 判据二：非 GLM 预设，只有填了官方域名才算
-  return base ? isGlmBaseUrl(base) : true;       // 无端点信息 → 沿用 GLM 官方默认
-}
-
-/** 当前端点显示名（会话里 addSysTip 用）。 */
-function currentEndpointName() {
-  if (localModeActive()) return '本地 · ' + (localState.model || '?');
-  if (isGlmEndpoint()) return 'GLM';
-  const id = String((providerState && providerState.name) || '');
-  const meta = (typeof connectPresetMeta === 'function') ? connectPresetMeta(id) : null;
-  return (meta && meta.name) || id || 'custom';
-}
-
-/** 生效的 API Key：本地系免 Key；其余用合并块唯一的 Key 字段（#apiKey，
- *  旧运行态 providerState.key 作为内存回退）。
- *  所有请求入口（发送/重新生成/压缩/断点续跑）统一走此函数，避免端点切了 Key 没切。 */
-function effectiveApiKey() {
-  if (localModeActive()) return '';
-  const el = document.getElementById('apiKey');
-  const typed = el ? String(el.value || '').trim() : '';
-  if (typed) return typed;
-  return (providerState && providerState.key) ? String(providerState.key).trim() : '';
-}
-
-/** 价格表：本地系零费（A4）；非 GLM 云端端点用「高级 · 计费三价」；GLM 用内置 MODEL_PRICE。 */
-function providerPriceFor(model) {
-  if (localModeActive()) {
-    return { in: 0, out: 0, cache: 0 };
-  }
-  if (!isGlmEndpoint() && providerState && providerState.prices) {
-    const p = providerState.prices;
-    const has = Number(p.in) > 0 || Number(p.out) > 0 || Number(p.cache) > 0;
-    if (has) return { in: Number(p.in) || 0, out: Number(p.out) || 0, cache: Number(p.cache) || 0 };
-  }
-  return MODEL_PRICE[model] || MODEL_PRICE['glm-5.3-flashx'];
-}
-
-/** 品牌位 / 会话头标题：显示当前生效模型名（手动态取文本框）。 */
-function updateBrandModel() {
-  let txt = '';
-  if (typeof connectModelValue === 'function') txt = connectModelValue();
-  if (!txt) {
-    const sel = document.getElementById('modelSelect');
-    const v = sel ? String(sel.value || '') : '';
-    txt = (v && v !== '__manual__' && v !== '__group__') ? v : '';
-  }
-  if (!txt) txt = 'glm-5.3-flash';
-  const bm = document.getElementById('brandModel');
-  const ht = document.getElementById('headerTitle');
-  if (bm) bm.textContent = txt;
-  if (ht) ht.textContent = txt;
-  /* 修复（四轮）：模型切换后刷新头部状态区与空态引导（41-nav 只渲染一次会永久陈旧；
-   * 老「设置」入口配 Key 后空态引导不消失也靠这里兜底） */
-  if (typeof navRenderHeaderStatus === 'function') navRenderHeaderStatus();
-  if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
 }
 
 /* ===== frontend/src/shell/shortcuts.js ===== */
