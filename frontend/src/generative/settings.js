@@ -37,7 +37,7 @@ function uiGenerativeSettingsInit() {
     block.setAttribute('data-group', '生成式UI');
     const title = document.createElement('div'); title.className = 'set-title'; title.textContent = '生成式 UI';
     const hint = document.createElement('div'); hint.className = 'set-hint';
-    hint.textContent = '默认关闭。strictSchema 仅在端点明确支持时尝试；能力未探测，失败会回退普通 JSON。低危动作只允许用户点击后的 copy/export/refresh。';
+    hint.textContent = '回答自动生成视图默认开启：每条较长回答落定后会额外发起一次快速模型调用并内联渲染可交互视图（视图条上可直接关闭自动生成）。strictSchema 仅在端点明确支持时尝试；低危动作只允许用户点击后的 copy/export/refresh。';
     block.appendChild(title); block.appendChild(hint);
     const makeToggle = (id, label, description) => {
       const row = document.createElement('label'); row.className = 'ui-setting-toggle';

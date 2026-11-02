@@ -1286,11 +1286,6 @@ async function runAgentLoop(s, apiKey, opts) {
       // currently looking at this run's session; otherwise update status only.
       if (ownsVisibleSession) {
         try { renderChatHistory(run.session); } catch (e) {}
-        // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图
-        // （fire-and-forget；失败静默，绝不影响聊天主链路）
-        if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
-          try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
-        }
       } else {
         try { callApi('set_current_sid', [activeId]).catch(() => {}); } catch (e) {}
         try {
@@ -1300,6 +1295,14 @@ async function runAgentLoop(s, apiKey, opts) {
           }
         } catch (e) {}
         try { if (typeof refreshWsCard === 'function') refreshWsCard(); } catch (e) {}
+      }
+      // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图。
+      // P0-4 真机修正：必须在 ownedFinish 门之外——并行时代后台完成的 run 不持
+      // 全局所有权，门内触发会被静默跳过（真机报障：生成视图未出现）。
+      // 可见性/去重由 chatGenerativeAutoRender 自守；用户切回会话时由
+      // switchSession 的补渲染入口兜底。
+      if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
+        try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
       }
     }
   }

@@ -371,7 +371,13 @@ function newSession() {
       <div class="empty-icon">✦</div>
       <h2>开始和 Harbor 聊天</h2>
       <p>支持文字、图片、视频、文本文件 · 历史记录自动保存</p>
+      <div class="empty-guide" id="emptyGuide">
+        <div class="eg-step"><b>1</b>选来源<button type="button" class="modal-btn" onclick="navGuidePickSource()">去选择<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
+        <div class="eg-step"><b>2</b>填 Key<button type="button" class="modal-btn" onclick="navGuideFillKey()">去填写<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
+        <div class="eg-step"><b>3</b>发问<button type="button" class="modal-btn" disabled>在下方输入框</button></div>
+      </div>
     </div>`;
+  if (typeof navUpdateEmptyGuide === 'function') { try { navUpdateEmptyGuide(); } catch (e) {} }
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
@@ -435,6 +441,10 @@ function switchSession(id, silent) {
     }
   }
   refreshWsCard();
+  // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）
+  if (typeof chatAutoRenderPendingFor === 'function') {
+    try { chatAutoRenderPendingFor(id); } catch (e) {}
+  }
 }
 /** 修复 ㉘：抽出的历史回放渲染（switchSession / regenerate 共用——原 regenerate 只回放 user，历史 assistant 消失） */
 function renderChatHistory(s) {
@@ -492,6 +502,10 @@ function renderChatHistory(s) {
         if (contentEl && contentEl.dataset) contentEl.dataset.midx = i;   // 修复 UX-3（v1.4）：stamp 源消息下标，供会话搜索跳转定位（dataset 防御）
         addMsgActions(contentEl, text);
         enhanceCodeBlocks(contentEl);
+        // 生成式UI（P0-4 重做）：消息携带 uiSpec 时重建内联可交互视图（跨重启持久）
+        if (m.uiSpec && typeof mountChatUiSpecFromMessage === 'function') {
+          try { mountChatUiSpecFromMessage(contentEl, m); } catch (e) {}
+        }
         if (m.__compactCard || m.__archiveCard) renderCompactCard(box, s, m);   // 修复 UX-1（v1.4）：压缩/归档卡片（token 对比+恢复原文）
       }
     }

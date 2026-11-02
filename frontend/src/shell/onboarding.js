@@ -104,7 +104,7 @@ function obStepHtml(id) {
       '<div class="ob-alt">使用本地模型（Ollama 等）？<a href="#" id="obLocal">跳过 Key，直接选本地服务 →</a></div>';
   }
   return '<div class="ob-hero"><div class="ob-logo ok">✓</div>' +
-    '<h2>准备就绪</h2><p>在下方输入框开始提问吧。输入 /plan 可让 Agent 先出计划再执行。</p>' +
+    '<h2>准备就绪</h2><p>直接在输入框开始提问即可。输入 /plan 可让 Agent 先出计划再执行。</p>' +
     '<div class="ob-tips">' +
     ['Enter 发送 · Shift+Enter 换行', '支持拖入图片/文件', '随时点 header 放大镜试用浏览器搜索']
       .map(t => '<div class="ob-tip">' + t + '</div>').join('') + '</div></div>';
@@ -137,7 +137,16 @@ function obWireStep(id) {
       obFinish();
     };
     const input = obRoot.querySelector('#obKey');
-    if (input) setTimeout(() => input.focus(), 80);
+    if (input) {
+      // 修复（R1-UX[1]）：原只绑「测试连接」——用户粘贴 Key 后直接「下一步」，
+      // Key 静默丢失（首条消息即报「请先填入 API Key」）。实时同步到主设置链。
+      input.addEventListener('input', () => {
+        const apiKeyEl = document.getElementById('apiKey');
+        if (apiKeyEl) apiKeyEl.value = String(input.value || '').trim();
+        if (typeof queueSaveConfig === 'function') queueSaveConfig();
+      });
+      setTimeout(() => input.focus(), 80);
+    }
   }
 }
 
@@ -209,6 +218,19 @@ function obFinish() {
   if (typeof MOTION !== 'undefined' && !MOTION.instant()) {
     MOTION.onAnimEnd(obRoot, 'animationend', MOTION.compOut()).then(done);
   } else done();
+  // 修复（R1-UX[2]）：向导承诺「在下方输入框开始提问」——落点必须与之一致：
+  // 收起新建任务选择屏（恢复输入框可见），关闭仍然叠着设置窗（本地路径除外，
+  // obLocal 本来就跳设置面板继续配置）。
+  if (typeof _setNewChatScreenVisible === 'function') {
+    try { _setNewChatScreenVisible(false); } catch (e) {}
+  }
+  const cameFromLocal = obRoot && obRoot.dataset && obRoot.dataset.obLocal === '1';
+  if (!cameFromLocal && typeof toggleSettings === 'function') {
+    const panel = document.getElementById('settingsPanel');
+    if (panel && panel.classList.contains('show')) {
+      try { toggleSettings(); } catch (e) {}
+    }
+  }
   // 完成后刷新空态引导/头部状态（既有钩子）
   if (typeof navRenderHeaderStatus === 'function') navRenderHeaderStatus();
   if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();

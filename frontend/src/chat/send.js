@@ -6,6 +6,12 @@ async function sendMessage() {
   const activeSessionId = appState ? appState.currentSessionId : currentSessionId;
   const __crossRun = !!(activeRun && !activeRun.cancelled && activeRun.sessionId !== activeSessionId);
   if (activeRun && !activeRun.cancelled && !__crossRun) {
+    // R1-UX[7]：生成中零反馈让新用户以为卡住——一次性轻提示（节流）
+    if (typeof toast === 'function' && !sendMessage._busyToastAt) {
+      sendMessage._busyToastAt = Date.now();
+      toast('正在生成中，点红色停止键可中断', 'info');
+      setTimeout(() => { sendMessage._busyToastAt = 0; }, 8000);
+    }
     return;   // 当前会话已有活动 run，不启动第二 run
   }
   // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——__crossRun 时不再拦截

@@ -812,7 +812,10 @@
         "CHAT_AUTO",
         "chatAutoSessionText",
         "chatAutoSeedSpec",
-        "chatGenerativeAutoRender"
+        "chatGenerativeAutoRender",
+        "chatAutoRenderPendingFor",
+        "buildChatUiHost",
+        "mountChatUiSpecFromMessage"
       ],
       "requires": [
         "UiGenerativeSettings",

@@ -3979,8 +3979,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
               </select></div>
             </div>
             <div class="set-hint">
-              在 <a href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys" target="_blank">智谱开放平台</a> 创建 Key 后粘贴即可。<br>
-              模型名 <code>glm-5.3-flash</code> 已内置。系统设定在缓存前缀内，后续轮按约 0.3 折计费。
+              系统设定在缓存前缀内，后续轮按约 0.3 折计费。Key 与端点统一在「连接与模型」配置。
             </div>
           </div>
 
@@ -4025,7 +4024,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
             </div>
             <div class="set-hint">
               有新版本时右上角会出现更新提示；下载经 SHA256 校验，失败不影响当前版本，重启时自动替换并备份旧版。<br>
-              ⚠ 默认更新源为<b>占位地址</b>，正式分发前请在下方填入你的真实清单地址（manifest JSON：version/url/sha256/notes）。
+              未配置更新源时，检查更新将不可用；有新版本时右上角会出现提示。
             </div>
           </div>
 
@@ -4053,7 +4052,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
           </div>
 
           <div class="set-block" data-group="工具与软件">
-            <div class="set-title">MCP 服务器（v1.3）</div>
+            <div class="set-title">MCP 服务器</div>
             <div class="set-hint" style="margin:2px 0 8px;">
               接入 Model Context Protocol 工具生态：stdio 本地服务器 / Streamable HTTP 远程服务器。<br>
               新服务器默认停用（opt-in）；启用前会测试连接；调用按档位确认，全程留审计。配置存于
@@ -4070,7 +4069,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
           <!-- 实现 v1.6 T6：命令沙箱设置面板 + 状态灯（纯新增区块；新 id 全部唯一，
                接线既有 js_api sandbox_get_config/sandbox_save_config/sandbox_status） -->
           <div class="set-block" id="sandboxBlock" data-group="系统">
-            <div class="set-title">命令沙箱（v1.6）</div>
+            <div class="set-title">命令沙箱</div>
             <div class="set-hint" style="margin:2px 0 8px;">
               Windows Job Object 进程隔离：每次命令一个独立 Job，收编整棵进程树，句柄关闭即清剿（防孤儿）。<br>
               诚实边界：<b>网络不隔离、文件系统仅应用层校验</b>——沙箱不是绝对安全，敏感操作仍会先确认。
@@ -4275,7 +4274,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
             <input type="file" id="fileInput" multiple hidden>
             <input type="file" id="zipInput" accept=".zip" multiple hidden>
             <button class="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">专家</button>
-            <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…" aria-label="消息输入"></textarea>
+            <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…（输入 /plan 可先出计划）" aria-label="消息输入"></textarea>
             <div class="expert-selection-chip" id="expertSelectionChip" aria-live="polite" hidden></div>
             <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="发送消息"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-send"/></svg></button>
           </div>
@@ -6771,7 +6770,7 @@ function uiGenerativeSettingsInit() {
     block.setAttribute('data-group', '生成式UI');
     const title = document.createElement('div'); title.className = 'set-title'; title.textContent = '生成式 UI';
     const hint = document.createElement('div'); hint.className = 'set-hint';
-    hint.textContent = '默认关闭。strictSchema 仅在端点明确支持时尝试；能力未探测，失败会回退普通 JSON。低危动作只允许用户点击后的 copy/export/refresh。';
+    hint.textContent = '回答自动生成视图默认开启：每条较长回答落定后会额外发起一次快速模型调用并内联渲染可交互视图（视图条上可直接关闭自动生成）。strictSchema 仅在端点明确支持时尝试；低危动作只允许用户点击后的 copy/export/refresh。';
     block.appendChild(title); block.appendChild(hint);
     const makeToggle = (id, label, description) => {
       const row = document.createElement('label'); row.className = 'ui-setting-toggle';
@@ -12577,6 +12576,8 @@ const CHAT_AUTO = {
   minChars: 240,          // 短回答(寒暄/单句)不值得转 UI
   maxChars: 12000,        // 超长回答截断喂给转换器
   mounts: new WeakSet(),  // 同一消息元素只挂一次(重试/重渲染防护)
+  done: new Set(),        // sessionId::回答长度 签名——跨切换/重渲染去重
+  pending: new Set(),     // 后台完成时会话不在视窗 → 切回时兜底渲染
 };
 
 function chatAutoSessionText(sessionId) {
@@ -12607,6 +12608,76 @@ function chatAutoSeedSpec(sessionId, answer) {
   };
 }
 
+/** 切回会话时的兜底入口(后台完成时会话不在视窗 → 此刻补渲染)。
+ * sessions/controller.js 的 switchSession 在视图渲染完成后调用。 */
+function chatAutoRenderPendingFor(sessionId) {
+  if (!CHAT_AUTO.pending.has(String(sessionId))) return;
+  CHAT_AUTO.pending.delete(String(sessionId));
+  void chatGenerativeAutoRender(sessionId);
+}
+
+/** 内联视图宿主(标题栏+折叠钮+内容体)——chat-auto 与 renderChatHistory 共用。 */
+function buildChatUiHost(contentEl) {
+  const host = document.createElement('div');
+  host.className = 'ui-chat-host';
+  const bar = document.createElement('div');
+  bar.className = 'ui-chat-host-bar';
+  const label = document.createElement('span');
+  label.className = 'ui-chat-host-label';
+  label.textContent = '✦ 生成视图(由本回答自动生成)';
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'ui-chat-host-toggle';
+  toggleBtn.textContent = '收起';
+  const offBtn = document.createElement('button');
+  offBtn.type = 'button';
+  offBtn.className = 'ui-chat-host-toggle';
+  offBtn.textContent = '不再自动生成';
+  offBtn.title = '关闭后仅在计划卡片手动生成视图；可随时在设置里重新开启';
+  offBtn.addEventListener('click', () => {
+    if (typeof UiGenerativeSettings !== 'undefined') {
+      UiGenerativeSettings.set('enabled', false);
+    }
+    host.remove();
+    if (typeof toast === 'function') toast('已关闭自动生成视图；计划卡片的「AI生成」不受影响', 'info');
+  });
+  const body = document.createElement('div');
+  body.className = 'ui-chat-host-body';
+  toggleBtn.addEventListener('click', () => {
+    body.hidden = !body.hidden;
+    toggleBtn.textContent = body.hidden ? '展开' : '收起';
+  });
+  bar.appendChild(label);
+  const btns = document.createElement('span');
+  btns.style.display = 'flex';
+  btns.style.gap = '6px';
+  btns.appendChild(offBtn);
+  btns.appendChild(toggleBtn);
+  bar.appendChild(btns);
+  host.appendChild(bar);
+  host.appendChild(body);
+  contentEl.appendChild(host);
+  return body;
+}
+
+/** 会话渲染挂载:消息带 uiSpec 时重建内联视图(renderChatHistory 调用)。 */
+function mountChatUiSpecFromMessage(contentEl, message) {
+  try {
+    if (!contentEl || !message || !message.uiSpec || typeof UiProjection === 'undefined') return;
+    if (contentEl.querySelector('.ui-chat-host')) return;
+    const body = buildChatUiHost(contentEl);
+    const spec = message.uiSpec;
+    UiProjection.mount(body, spec, {
+      dataRefHost: (typeof createUiDataRefHost === 'function') ? createUiDataRefHost({
+        runId: spec.runId, sessionId: spec.sessionId, generation: spec.generation,
+      }) : undefined,
+      focusTitle: false,
+    });
+  } catch (e) {
+    try { console.warn('[gen-ui] 视图重建失败(不影响原文):', e && e.message); } catch (e2) {}
+  }
+}
+
 /** 供 run-controller finally 调用的入口(fire-and-forget)。 */
 async function chatGenerativeAutoRender(sessionId) {
   try {
@@ -12614,57 +12685,62 @@ async function chatGenerativeAutoRender(sessionId) {
     if (typeof document === 'undefined' || typeof UiProjection === 'undefined'
         || typeof generateUiSpec !== 'function') return;
     const view = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
-    if (view !== sessionId) return;   // 只为当前正在看的会话自动渲染(切走的跳过)
     const el = (function () {
       const all = document.querySelectorAll('#chatContainer .message.assistant');
       return all.length ? all[all.length - 1] : null;
     })();
-    if (!el) return;
-    const content = el.querySelector('.content');
-    if (!content || content.dataset.uiAuto === '1' || CHAT_AUTO.mounts.has(content)) return;
     const answer = chatAutoSessionText(sessionId);
     if (!answer || answer.length < CHAT_AUTO.minChars) return;
+    const sig = String(sessionId) + '::' + answer.length;
+    if (CHAT_AUTO.done.has(sig)) return;
+    if (view !== sessionId || !el) {
+      // 会话不在视窗(并行后台完成)→ 记入待渲染,switchSession 切回时补
+      CHAT_AUTO.pending.add(String(sessionId));
+      return;
+    }
+    const content = el.querySelector('.content');
+    if (!content || content.dataset.uiAuto === '1' || CHAT_AUTO.mounts.has(content)) return;
     const trimmed = answer.slice(0, CHAT_AUTO.maxChars);
+    CHAT_AUTO.done.add(sig);
     content.dataset.uiAuto = '1';
     CHAT_AUTO.mounts.add(content);
 
-    const host = document.createElement('div');
-    host.className = 'ui-chat-host';
-    const bar = document.createElement('div');
-    bar.className = 'ui-chat-host-bar';
-    const label = document.createElement('span');
-    label.className = 'ui-chat-host-label';
-    label.textContent = '✦ 生成视图(由本回答自动生成)';
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className = 'ui-chat-host-toggle';
-    toggleBtn.textContent = '收起';
-    const body = document.createElement('div');
-    body.className = 'ui-chat-host-body';
-    toggleBtn.addEventListener('click', () => {
-      const hidden = body.hidden;
-      body.hidden = hidden;
-      toggleBtn.textContent = hidden ? '收起' : '展开';
-    });
-    bar.appendChild(label);
-    bar.appendChild(toggleBtn);
-    host.appendChild(bar);
-    host.appendChild(body);
-    content.appendChild(host);
+    const body = buildChatUiHost(content);
 
-    const controller = generateUiSpec({
-      kind: 'chat-answer(把助手回答重构为信息设计出色的可交互视图)',
-      fallbackSpec: chatAutoSeedSpec(sessionId, trimmed),
-      host: body,
-      sessionId: String(sessionId || ''),
-      runId: 'chat-auto',
-      answerText: trimmed,
-      // P0-4 修正：端点快照由本调用方注入（本模块时序在 provider.js 之后，
-      // 能拿到带真实密钥的 uiEndpointSnapshot——controller 内联快照密钥恒空）
-      endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
-      isActive: () => document.contains(host),
-    });
-    void controller;
+    void (async () => {
+      try {
+        const result = await generateUiSpec({
+          kind: 'chat-answer(把助手回答重构为信息设计出色的可交互视图)',
+          fallbackSpec: chatAutoSeedSpec(sessionId, trimmed),
+          host: body,
+          sessionId: String(sessionId || ''),
+          runId: 'chat-auto',
+          answerText: trimmed,
+          // P0-4 修正：端点快照由本调用方注入（本模块时序在 provider.js 之后，
+          // 能拿到带真实密钥的 uiEndpointSnapshot——controller 内联快照密钥恒空）
+          endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
+          isActive: () => document.contains(body),
+        });
+        // 持久化：成品 spec 写回会话消息对象（随 save_sessions 落盘）——
+        // 重启/切换后 renderChatHistory 依据 message.uiSpec 重建视图
+        if (result && result.projection && result.projection.current) {
+          const session = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+            ? sessions.find(item => item.id === sessionId) : null;
+          const msgs = session && Array.isArray(session.messages) ? session.messages : null;
+          if (msgs) {
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              if (msgs[i] && msgs[i].role === 'assistant') {
+                try { msgs[i].uiSpec = JSON.parse(JSON.stringify(result.projection.current)); } catch (e) {}
+                break;
+              }
+            }
+            if (typeof saveSessions === 'function') { try { saveSessions(); } catch (e) {} }
+          }
+        }
+      } catch (error) {
+        try { console.warn('[gen-ui] 自动视图生成失败(不影响聊天):', error && error.message); } catch (e2) {}
+      }
+    })();
   } catch (error) {
     try { console.warn('[gen-ui] 自动视图生成失败(不影响聊天):', error && error.message); } catch (e) {}
   }
@@ -14773,11 +14849,6 @@ async function runAgentLoop(s, apiKey, opts) {
       // currently looking at this run's session; otherwise update status only.
       if (ownsVisibleSession) {
         try { renderChatHistory(run.session); } catch (e) {}
-        // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图
-        // （fire-and-forget；失败静默，绝不影响聊天主链路）
-        if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
-          try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
-        }
       } else {
         try { callApi('set_current_sid', [activeId]).catch(() => {}); } catch (e) {}
         try {
@@ -14787,6 +14858,14 @@ async function runAgentLoop(s, apiKey, opts) {
           }
         } catch (e) {}
         try { if (typeof refreshWsCard === 'function') refreshWsCard(); } catch (e) {}
+      }
+      // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图。
+      // P0-4 真机修正：必须在 ownedFinish 门之外——并行时代后台完成的 run 不持
+      // 全局所有权，门内触发会被静默跳过（真机报障：生成视图未出现）。
+      // 可见性/去重由 chatGenerativeAutoRender 自守；用户切回会话时由
+      // switchSession 的补渲染入口兜底。
+      if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
+        try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
       }
     }
   }
@@ -17975,7 +18054,7 @@ function obStepHtml(id) {
       '<div class="ob-alt">使用本地模型（Ollama 等）？<a href="#" id="obLocal">跳过 Key，直接选本地服务 →</a></div>';
   }
   return '<div class="ob-hero"><div class="ob-logo ok">✓</div>' +
-    '<h2>准备就绪</h2><p>在下方输入框开始提问吧。输入 /plan 可让 Agent 先出计划再执行。</p>' +
+    '<h2>准备就绪</h2><p>直接在输入框开始提问即可。输入 /plan 可让 Agent 先出计划再执行。</p>' +
     '<div class="ob-tips">' +
     ['Enter 发送 · Shift+Enter 换行', '支持拖入图片/文件', '随时点 header 放大镜试用浏览器搜索']
       .map(t => '<div class="ob-tip">' + t + '</div>').join('') + '</div></div>';
@@ -18008,7 +18087,16 @@ function obWireStep(id) {
       obFinish();
     };
     const input = obRoot.querySelector('#obKey');
-    if (input) setTimeout(() => input.focus(), 80);
+    if (input) {
+      // 修复（R1-UX[1]）：原只绑「测试连接」——用户粘贴 Key 后直接「下一步」，
+      // Key 静默丢失（首条消息即报「请先填入 API Key」）。实时同步到主设置链。
+      input.addEventListener('input', () => {
+        const apiKeyEl = document.getElementById('apiKey');
+        if (apiKeyEl) apiKeyEl.value = String(input.value || '').trim();
+        if (typeof queueSaveConfig === 'function') queueSaveConfig();
+      });
+      setTimeout(() => input.focus(), 80);
+    }
   }
 }
 
@@ -18080,6 +18168,19 @@ function obFinish() {
   if (typeof MOTION !== 'undefined' && !MOTION.instant()) {
     MOTION.onAnimEnd(obRoot, 'animationend', MOTION.compOut()).then(done);
   } else done();
+  // 修复（R1-UX[2]）：向导承诺「在下方输入框开始提问」——落点必须与之一致：
+  // 收起新建任务选择屏（恢复输入框可见），关闭仍然叠着设置窗（本地路径除外，
+  // obLocal 本来就跳设置面板继续配置）。
+  if (typeof _setNewChatScreenVisible === 'function') {
+    try { _setNewChatScreenVisible(false); } catch (e) {}
+  }
+  const cameFromLocal = obRoot && obRoot.dataset && obRoot.dataset.obLocal === '1';
+  if (!cameFromLocal && typeof toggleSettings === 'function') {
+    const panel = document.getElementById('settingsPanel');
+    if (panel && panel.classList.contains('show')) {
+      try { toggleSettings(); } catch (e) {}
+    }
+  }
   // 完成后刷新空态引导/头部状态（既有钩子）
   if (typeof navRenderHeaderStatus === 'function') navRenderHeaderStatus();
   if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
@@ -20823,7 +20924,13 @@ function newSession() {
       <div class="empty-icon">✦</div>
       <h2>开始和 Harbor 聊天</h2>
       <p>支持文字、图片、视频、文本文件 · 历史记录自动保存</p>
+      <div class="empty-guide" id="emptyGuide">
+        <div class="eg-step"><b>1</b>选来源<button type="button" class="modal-btn" onclick="navGuidePickSource()">去选择<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
+        <div class="eg-step"><b>2</b>填 Key<button type="button" class="modal-btn" onclick="navGuideFillKey()">去填写<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
+        <div class="eg-step"><b>3</b>发问<button type="button" class="modal-btn" disabled>在下方输入框</button></div>
+      </div>
     </div>`;
+  if (typeof navUpdateEmptyGuide === 'function') { try { navUpdateEmptyGuide(); } catch (e) {} }
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
@@ -20887,6 +20994,10 @@ function switchSession(id, silent) {
     }
   }
   refreshWsCard();
+  // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）
+  if (typeof chatAutoRenderPendingFor === 'function') {
+    try { chatAutoRenderPendingFor(id); } catch (e) {}
+  }
 }
 /** 修复 ㉘：抽出的历史回放渲染（switchSession / regenerate 共用——原 regenerate 只回放 user，历史 assistant 消失） */
 function renderChatHistory(s) {
@@ -20944,6 +21055,10 @@ function renderChatHistory(s) {
         if (contentEl && contentEl.dataset) contentEl.dataset.midx = i;   // 修复 UX-3（v1.4）：stamp 源消息下标，供会话搜索跳转定位（dataset 防御）
         addMsgActions(contentEl, text);
         enhanceCodeBlocks(contentEl);
+        // 生成式UI（P0-4 重做）：消息携带 uiSpec 时重建内联可交互视图（跨重启持久）
+        if (m.uiSpec && typeof mountChatUiSpecFromMessage === 'function') {
+          try { mountChatUiSpecFromMessage(contentEl, m); } catch (e) {}
+        }
         if (m.__compactCard || m.__archiveCard) renderCompactCard(box, s, m);   // 修复 UX-1（v1.4）：压缩/归档卡片（token 对比+恢复原文）
       }
     }
@@ -21795,6 +21910,12 @@ async function sendMessage() {
   const activeSessionId = appState ? appState.currentSessionId : currentSessionId;
   const __crossRun = !!(activeRun && !activeRun.cancelled && activeRun.sessionId !== activeSessionId);
   if (activeRun && !activeRun.cancelled && !__crossRun) {
+    // R1-UX[7]：生成中零反馈让新用户以为卡住——一次性轻提示（节流）
+    if (typeof toast === 'function' && !sendMessage._busyToastAt) {
+      sendMessage._busyToastAt = Date.now();
+      toast('正在生成中，点红色停止键可中断', 'info');
+      setTimeout(() => { sendMessage._busyToastAt = 0; }, 8000);
+    }
     return;   // 当前会话已有活动 run，不启动第二 run
   }
   // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——__crossRun 时不再拦截

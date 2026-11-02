@@ -330,8 +330,7 @@
               </select></div>
             </div>
             <div class="set-hint">
-              在 <a href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys" target="_blank">智谱开放平台</a> 创建 Key 后粘贴即可。<br>
-              模型名 <code>glm-5.3-flash</code> 已内置。系统设定在缓存前缀内，后续轮按约 0.3 折计费。
+              系统设定在缓存前缀内，后续轮按约 0.3 折计费。Key 与端点统一在「连接与模型」配置。
             </div>
           </div>
 
@@ -376,7 +375,7 @@
             </div>
             <div class="set-hint">
               有新版本时右上角会出现更新提示；下载经 SHA256 校验，失败不影响当前版本，重启时自动替换并备份旧版。<br>
-              ⚠ 默认更新源为<b>占位地址</b>，正式分发前请在下方填入你的真实清单地址（manifest JSON：version/url/sha256/notes）。
+              未配置更新源时，检查更新将不可用；有新版本时右上角会出现提示。
             </div>
           </div>
 
@@ -404,7 +403,7 @@
           </div>
 
           <div class="set-block" data-group="工具与软件">
-            <div class="set-title">MCP 服务器（v1.3）</div>
+            <div class="set-title">MCP 服务器</div>
             <div class="set-hint" style="margin:2px 0 8px;">
               接入 Model Context Protocol 工具生态：stdio 本地服务器 / Streamable HTTP 远程服务器。<br>
               新服务器默认停用（opt-in）；启用前会测试连接；调用按档位确认，全程留审计。配置存于
@@ -421,7 +420,7 @@
           <!-- 实现 v1.6 T6：命令沙箱设置面板 + 状态灯（纯新增区块；新 id 全部唯一，
                接线既有 js_api sandbox_get_config/sandbox_save_config/sandbox_status） -->
           <div class="set-block" id="sandboxBlock" data-group="系统">
-            <div class="set-title">命令沙箱（v1.6）</div>
+            <div class="set-title">命令沙箱</div>
             <div class="set-hint" style="margin:2px 0 8px;">
               Windows Job Object 进程隔离：每次命令一个独立 Job，收编整棵进程树，句柄关闭即清剿（防孤儿）。<br>
               诚实边界：<b>网络不隔离、文件系统仅应用层校验</b>——沙箱不是绝对安全，敏感操作仍会先确认。
@@ -626,7 +625,7 @@
             <input type="file" id="fileInput" multiple hidden>
             <input type="file" id="zipInput" accept=".zip" multiple hidden>
             <button class="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">专家</button>
-            <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…" aria-label="消息输入"></textarea>
+            <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…（输入 /plan 可先出计划）" aria-label="消息输入"></textarea>
             <div class="expert-selection-chip" id="expertSelectionChip" aria-live="polite" hidden></div>
             <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="发送消息"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-send"/></svg></button>
           </div>
