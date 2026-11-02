@@ -41,3 +41,22 @@
 - 门禁:前端 5 组 83/83;build 幂等;CDP 直证 StatTile 挂载+密钥快照
 
 ## Round 3+(待续)
+
+## Round 3(完成,2026-11-03,提交 2ccf344/远端 38b2dfc)
+
+- 扫描:联动深审(主会话逐项实证)——服务端保存链 .passthrough()/payload 原文存储
+  → uiSpec round-trip 完整存活;enhanceCodeBlocks 后代查询 → .md-body 包装透明;
+  并行双 generateUiSpec 控制器独立无冲突
+- 升级(生成式UI):
+  1. 低危动作接线 copy/export/refresh(userGesture 门+permission 链,计划卡同口径)
+  2. refresh=同答案强制重生成(force 通道)
+  3. Checklist 可点击打卡(渲染器级视图态)+宿主层委托持久化写回 message.uiSpec
+- 真机验证(CDP 确定性注入):挂载→打卡→checkedCount=1→双向=0,全链通
+- 门禁:前端 5 组 83/83
+- 遗留:sequentialthinking 滥用的提示词节制(差分面影响待评估,主理人可先在
+  MCP 设置禁用该服务器)
+
+## Round 4+(待续)
+
+候选扫描域:D 漏洞域深扫(新代码面)、B Agent效果复扫(节制指导落地后)、
+C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
