@@ -167,6 +167,10 @@ function _sessionSaveSignature(s) {
     (s.expert && (s.expert.id || s.expert.name)) || '',
     (s._compactBackup && s._compactBackup.msgs && s._compactBackup.msgs.length) || '',
     (s.uiGenerative && s.uiGenerative.specs && s.uiGenerative.specs.length) || '',
+    // 生成式UI 视图变更计数（2026-11-03）：uiSpec 的写入/打卡只改消息对象内部，
+    // 不碰 updatedAt/消息数——不在这里记一笔，那次 saveSessions 会被「未变更短路」
+    // 直接跳过，重启后视图与打卡态全丢（真机实证）。
+    s._uiSpecRev || '',
   ].join('\u0001');
 }
 function _sessionSignatures(list) {

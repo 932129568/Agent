@@ -817,7 +817,11 @@
         "buildChatUiHost",
         "mountChatUiSpecFromMessage",
         "wireChatUiChecklistPersist",
-        "chatAutoHeuristicSpec"
+        "chatAutoHeuristicSpec",
+        "chatAutoQualityGate",
+        "chatAutoActionHandlers",
+        "chatAutoMarkSpecDirty",
+        "chatAutoShowMiniHint"
       ],
       "requires": [
         "UiGenerativeSettings",

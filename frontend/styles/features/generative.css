@@ -23,6 +23,10 @@ body.fx-off [data-entity-id],body.fx-off .ui-action-btn{transition:none}
 .ui-layout-single-column,.ui-layout-table-focus,.ui-layout-timeline{grid-template-columns:minmax(0,1fr)}
 .ui-layout-two-column{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ui-layout-card-grid{grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))}
+/* 2026-11-03 布局修复:card-grid 只该让「卡片块」并排。分节标题/清单/KPI 网格/
+   表格/正文都是整幅内容,必须横跨所有列——否则出现「标题挤在左栏、内容甩到右栏」
+   的错位(真机截图实证:四周健身计划的分节标题与卡片被拆成两列)。 */
+.ui-layout-card-grid > .ui-block:not(:has(.ui-card)){grid-column:1/-1}
 .ui-block{min-width:0;overflow-wrap:anywhere}
 .ui-block-children{display:grid;gap:12px;margin-top:12px;padding-left:12px;border-left:1px solid var(--border)}
 .ui-card{padding:16px;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-md)}
@@ -124,6 +128,9 @@ body.fx-off [data-entity-id],body.fx-off .ui-action-btn{transition:none}
 /* ---- Checklist：打卡清单 ---- */
 .ui-checklist{display:grid;gap:6px;padding:14px 16px;background:var(--card-bg);
   border:1px solid var(--border);border-radius:var(--ui-radius);box-shadow:var(--ui-shadow)}
+/* 计数徽标常显(无标题也有):点一下立刻能看到 1/3 → 2/3,这就是「点了有反应」 */
+.ui-checklist-head{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  font-weight:600;margin-bottom:4px}
 .ui-checklist-title{display:flex;justify-content:space-between;align-items:center;
   font-weight:600;margin-bottom:4px}
 .ui-checklist-count{color:var(--text-2);font-size:12px;font-weight:600;
@@ -184,6 +191,23 @@ body.fx-off .ui-progress-fill,body.fx-off .ui-stat-tile,body.fx-off .ui-card{tra
 .ui-chat-host-status:empty{display:none}
 .ui-chat-host-bar{flex-wrap:nowrap}
 .ui-chat-host-toggle{min-height:28px;padding:0 10px;font-size:12px;border-radius:var(--radius-xs)}
+/* 视图工具条(2026-11-03):「点了框框没反应」——只读视图必须有看得见、点得动、
+   有反馈的动作;复制/导出走本地只读动作,零后端。 */
+.ui-chat-host-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto;flex-wrap:nowrap}
+.ui-chat-host-act{background:var(--card-bg);border:1px solid var(--border);color:var(--text-2)}
+.ui-chat-host-act:hover{color:var(--text);border-color:var(--border-strong);background:var(--surface-2)}
+/* 低质 spec 的兜底入口:不铺满视图,只给一个小按钮,点了重转 */
+.ui-chat-host-mini{margin-top:10px;min-height:26px;padding:0 12px;font-size:12px;
+  border:1px dashed var(--border);border-radius:var(--radius-xs);background:transparent;
+  color:var(--text-2);cursor:pointer}
+.ui-chat-host-mini:hover{color:var(--text);border-color:var(--border-strong);
+  background:var(--ui-accent-soft)}
+/* 只读块不留「可点」残影:纯展示组件取消 hover 位移/描边,把交互感让给真按钮
+   (2026-11-03 主理人反馈「点框框只会变个颜色」——那就是被误读成按钮的 hover 态) */
+.ui-stat-tile:hover,.ui-card:hover{border-color:var(--border);transform:none;box-shadow:none}
+.ui-stat-tile,.ui-card{cursor:default}
+.ui-stat-tile:focus,.ui-card:focus{outline:2px solid var(--ui-accent);outline-offset:2px}
+.ui-timeline-item:hover{border-color:var(--border)}
 .ui-chat-host-body{padding:14px;max-height:70vh;overflow:auto}
 .ui-chat-host-body .ui-projection{font-size:14px}
 .ui-empty{padding:24px 16px;text-align:center;border:1px dashed var(--border);

@@ -409,6 +409,11 @@ function switchSession(id, silent) {
   // v4：切会话容器级过渡——先 .swapping 淡出（140ms in-soft），重建历史后再淡入（200ms out-soft）；
   // boot 首次（silent）与 fx-off/reduced-motion 降级直接重建，避免开屏空容器闪一下
   const box = document.getElementById('chatContainer');
+  // 生成式UI(2026-11-03)：切会话先摘掉所有内联视图宿主——包括生成中被打断、
+  // 目标会话本就没有该视图的残留（否则旧会话的视图会跟到新会话，点着像死框）。
+  try {
+    if (box) box.querySelectorAll('.ui-chat-host').forEach(node => { try { node.remove(); } catch (e) {} });
+  } catch (e) {}
   if (silent || (typeof MOTION !== 'undefined' && MOTION.instant())) {
     renderChatHistory(target);
   } else {

@@ -169,7 +169,13 @@ async function __main() {
     assert result['current'] is True
 
 
-def test_send_message_warns_when_another_session_has_active_run():
+def test_send_message_cross_session_is_parallel_without_warning():
+    """跨会话发送默认并行(主理人 2026-11-01 裁定,取代原「先提示再拦截」)。
+
+    原断言「另一个会话正在运行」已被产品决策删除:跨会话发送直接进并行 run。
+    这里守住新语义的两条不变量——不弹拦截提示、不被 isStreaming 全局标志挡回
+    (能走到读取输入框这一步即证明守卫已放行)。
+    """
     result = run_case(r'''
 globalThis.attachments = [];
 globalThis.isStreaming = true;
@@ -179,7 +185,11 @@ globalThis.toast = function(message){ toasts.push(String(message)); };
 globalThis.RunRegistry = {current: function(){ return {
   id: 1, sessionId: 'a', cancelled: false, background: true
 }; }};
-await sendMessage();
-return toasts;
+let inputRead = false;
+globalThis.document = { getElementById: function(){ inputRead = true;
+  return { value: 'x', classList: { add(){}, remove(){} }, scrollTop: 0, scrollHeight: 0 }; } };
+try { await sendMessage(); } catch (e) { /* 后续依赖未装载,只校验守卫放行 */ }
+return { toasts, inputRead };
 ''', ['frontend/src/chat/send.js'])
-    assert any('另一个会话正在运行' in message for message in result)
+    assert result['inputRead'] is True, '跨会话发送应放行到输入读取(并行),而非提前 return'
+    assert not any('另一个会话正在运行' in message for message in result['toasts'])

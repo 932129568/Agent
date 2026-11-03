@@ -370,10 +370,13 @@ registerUiComponent('Checklist', {
   keyboard: { focusable: false, behavior: 'read-order' }, responsive: { rule: 'vertical' },
   renderer(props, context) {
     const wrap = context.createElement('div', 'ui-checklist');
-    if (props.title) wrap.appendChild(context.createElement('div', 'ui-checklist-title', props.title));
     const done = props.items.filter(i => i.checked).length;
+    // 计数徽标常显:无标题的清单点一下也能看到 1/3 → 2/3(「点了有反应」)
+    const head = context.createElement('div', 'ui-checklist-head');
+    if (props.title) head.appendChild(context.createElement('span', 'ui-checklist-title', props.title));
     const badge = context.createElement('span', 'ui-checklist-count', done + '/' + props.items.length);
-    if (props.title) wrap.lastChild.appendChild(badge);
+    head.appendChild(badge);
+    wrap.appendChild(head);
     props.items.forEach((item, index) => {
       const row = context.createElement('div',
         'ui-checklist-item' + (item.checked ? ' ui-checked' : ''));
