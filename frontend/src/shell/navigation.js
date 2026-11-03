@@ -63,11 +63,12 @@ function navHighlight(zone) {
 /** 首次启动引导（一次性 toast；localStorage 标记，不污染 config.json）。 */
 function navFirstRunGuide() {
   let seen = false;
-  try { seen = localStorage.getItem('glm_nav_guide_v16') === '1'; } catch (e) { /* 无存储环境直接展示 */ }
+  try { seen = localStorage.getItem('glm_nav_guide_v18') === '1'; } catch (e) { /* 无存储环境直接展示 */ }
   if (seen) return;
-  try { localStorage.setItem('glm_nav_guide_v16', '1'); } catch (e) {}
+  try { localStorage.setItem('glm_nav_guide_v18', '1'); } catch (e) {}
   if (typeof toast === 'function') {
-    toast('新左侧导航已上线：对话 / 设置 / 审计 / 会话搜索 / 沙箱；原设置入口已并入「设置」', 'ok', { stay: true });
+    // Round 8 UI 重构后口径：单 rail + 工具箱二级菜单
+    toast('左侧栏：对话 / 历史 / 工作区 / 专家；分析 · 审计 · 搜索 · 沙箱已收进「工具箱」🧰', 'ok', { stay: true });
   }
 }
 
@@ -166,6 +167,30 @@ function navHideNotify() {
   if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-expanded', 'false');
 }
 
+/* ---- Round 8 UI 重构：工具箱二级弹出菜单（分析/审计/会话搜索/沙箱收纳） ---- */
+
+function toolsToggle(ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  const pop = document.getElementById('toolsPop');
+  const btn = document.getElementById('toolsBoxBtn');
+  if (!pop || !pop.style) return;
+  const open = pop.style.display === 'none' || !pop.style.display;
+  navHideNotify();
+  pop.style.display = open ? '' : 'none';
+  if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) {
+    const first = pop.querySelector('.mn-btn');
+    if (first && first.focus) first.focus();
+  } else if (btn && btn.focus) btn.focus();
+}
+
+function toolsHide() {
+  const pop = document.getElementById('toolsPop');
+  const btn = document.getElementById('toolsBoxBtn');
+  if (pop && pop.style) pop.style.display = 'none';
+  if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-expanded', 'false');
+}
+
 /** 聚焦时红点清零（条目保留在列表里可回看；旧导航与 rail 同步）。 */
 function navClearNotifyBadge() {
   ['navNotifyBadge', 'railNotifyBadge'].forEach(id => {
@@ -192,15 +217,28 @@ function navInit() {
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     const pop = document.getElementById('notifyPop');
-    if (!pop || pop.style.display === 'none') return;
-    navHideNotify();
-    const btn = document.getElementById('railNotifyBtn');
-    if (btn && btn.focus) btn.focus();
+    if (pop && pop.style.display !== 'none') {
+      navHideNotify();
+      const btn = document.getElementById('railNotifyBtn');
+      if (btn && btn.focus) btn.focus();
+      return;
+    }
+    // Round 8：工具箱弹出层同语义收起
+    const tp = document.getElementById('toolsPop');
+    if (tp && tp.style.display !== 'none') {
+      toolsHide();
+      const tb = document.getElementById('toolsBoxBtn');
+      if (tb && tb.focus) tb.focus();
+    }
   });
   document.addEventListener('click', ev => {
     const pop = document.getElementById('notifyPop');
-    if (!pop || pop.style.display === 'none') return;
-    if (ev.target && ev.target.closest && ev.target.closest('#notifyPop,#railNotifyBtn')) return;
-    navHideNotify();
+    if (pop && pop.style.display !== 'none') {
+      if (!(ev.target && ev.target.closest && ev.target.closest('#notifyPop,#railNotifyBtn'))) navHideNotify();
+    }
+    const tp = document.getElementById('toolsPop');
+    if (tp && tp.style.display !== 'none') {
+      if (!(ev.target && ev.target.closest && ev.target.closest('#toolsPop,#toolsBoxBtn'))) toolsHide();
+    }
   });
 }

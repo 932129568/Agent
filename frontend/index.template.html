@@ -45,16 +45,24 @@
 
 <!-- C.1 · 左侧图标导航栏：对话 / 会话 / 分析 / 工作区 / 设置 + 底部余额与主题 -->
 <nav class="rail" id="rail" aria-label="主导航">
+  <!-- Round 8 UI 重构（对标 ChatGPT/Claude 单侧栏极简结构）：
+       ① 删除与 rail 5/6 重复的 main-nav 整层（杂乱主源）；
+       ② 低频工具（分析/审计/会话搜索/沙箱）收进「工具箱」二级弹出菜单；
+       ③ rail 收敛为 主链路(对话/历史/工作区/专家) + 工具箱 + 底部系统组。 -->
   <button class="rail-btn on" data-panel="chat" data-tip="对话" aria-label="对话" onclick="switchPanel('chat')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.2-.6L4 20.5l1.3-4a8 8 0 0 1-1.3-4.4A8.4 8.4 0 0 1 12.5 3.7 8.4 8.4 0 0 1 21 11.5z"/></svg></button>
   <button class="rail-btn" data-panel="sessions" data-tip="会话历史" aria-label="会话历史" onclick="switchPanel('sessions')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></button>
-  <button class="rail-btn" data-panel="analytics" data-tip="分析 · 成本与工具统计" aria-label="分析" onclick="switchPanel('analytics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v-4M12 15V7M17 15v-7"/></svg></button>
-  <button class="rail-btn" data-tip="审计日志" aria-label="审计日志" onclick="navSwitch('audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.5 3.1 7.8 7.5 9.5 4.4-1.7 7.5-5 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></svg></button>
-  <button class="rail-btn" data-tip="会话搜索" aria-label="会话搜索" onclick="navSwitch('search')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
   <button class="rail-btn" data-panel="workspace" data-tip="工作区与工具权限" aria-label="工作区与工具权限" onclick="switchPanel('workspace')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
   <button class="rail-btn" id="expertCenterBtn" data-tip="专家中心" aria-label="专家中心"><span aria-hidden="true">E</span></button>
-  <button class="rail-btn" data-tip="设置" aria-label="设置" onclick="switchPanel('chat');toggleSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-  <div class="rail-spacer"></div>
   <div class="rail-sep"></div>
+  <button class="rail-btn" id="toolsBoxBtn" data-tip="工具箱（分析 · 审计 · 搜索 · 沙箱）" aria-label="工具箱" aria-controls="toolsPop" aria-expanded="false" onclick="toolsToggle(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.1-2.1z"/></svg></button>
+  <div class="notify-pop" id="toolsPop" role="menu" aria-label="工具箱" style="display:none;">
+    <div class="notify-head"><span>工具箱</span></div>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();switchPanel('analytics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v-4M12 15V7M17 15v-7"/></svg>分析 · 成本与工具统计</button>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();navSwitch('audit')"><svg class="ui-icon"><use href="#i-audit"/></svg>审计日志</button>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();navSwitch('search')"><svg class="ui-icon"><use href="#i-search"/></svg>会话搜索</button>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();navSwitch('sandbox')"><svg class="ui-icon"><use href="#i-sandbox"/></svg>沙箱</button>
+  </div>
+  <div class="rail-spacer"></div>
   <button class="rail-btn" id="railNotifyBtn" data-tip="通知中心" aria-label="通知中心" aria-controls="notifyPop" aria-expanded="false" onclick="navToggleNotify()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="mn-badge rail-notify-badge" id="railNotifyBadge" style="display:none;">0</span></button>
   <div class="notify-pop" id="notifyPop" role="dialog" aria-label="通知中心" style="display:none;">
     <div class="notify-head"><span>通知中心</span><span id="notifyCount"></span></div>
@@ -63,20 +71,7 @@
   </div>
   <button class="rail-btn" data-tip="余额" aria-label="余额" onclick="openBilling()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2a2.8 2.8 0 0 0-2.8-1.7c-1.5 0-2.7.9-2.7 2.2 0 2.9 5.5 1.5 5.5 4.4 0 1.3-1.2 2.2-2.8 2.2a2.9 2.9 0 0 1-3-1.8M12 5.8v1.7M12 16.4v1.8"/></svg></button>
   <button class="rail-btn" id="themeBtn" data-tip="切换深色/浅色" aria-label="切换深色/浅色" onclick="toggleTheme()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg></button>
-</nav>
-
-<!-- 实现 v1.6 T11：左侧主导航（对话/设置/审计/会话搜索/沙箱 + T13 通知中心）。
-     纯新增元素（flex 布局自然参与，不影响既有三栏）；新 id 全部唯一。
-     直切口径：本导航为单一入口，原设置大按钮/33-set-nav 锚点 DOM 保留不删。 -->
-<nav class="main-nav" id="mainNav" aria-label="分区导航">
-  <div class="mn-title">分区</div>
-  <button class="mn-btn on" id="navBtnChat" onclick="navSwitch('chat')"><svg class="ui-icon"><use href="#i-chat"/></svg>对话</button>
-  <button class="mn-btn" id="navBtnSettings" onclick="navSwitch('settings')"><svg class="ui-icon"><use href="#i-settings"/></svg>设置</button>
-  <button class="mn-btn" id="navBtnAudit" onclick="navSwitch('audit')"><svg class="ui-icon"><use href="#i-audit"/></svg>审计</button>
-  <button class="mn-btn" id="navBtnSearch" onclick="navSwitch('search')"><svg class="ui-icon"><use href="#i-search"/></svg>会话搜索</button>
-  <button class="mn-btn" id="navBtnSandbox" onclick="navSwitch('sandbox')"><svg class="ui-icon"><use href="#i-sandbox"/></svg>沙箱</button>
-  <div class="mn-spacer"></div>
-  <button class="mn-btn" id="navBtnNotify" onclick="navToggleNotify()"><svg class="ui-icon"><use href="#i-notify"/></svg>通知<span class="mn-badge" id="navNotifyBadge" style="display:none;">0</span></button>
+  <button class="rail-btn" data-tip="设置" aria-label="设置" onclick="switchPanel('chat');toggleSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </nav>
 
 <aside class="sidebar" id="sidebar">
@@ -111,9 +106,9 @@
     <div class="header-left">
       <button class="icon-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="折叠/展开侧栏" aria-label="折叠/展开侧栏" aria-expanded="true"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
       <div class="header-title" id="headerTitle">glm-5.3-flash</div>
-      <!-- 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。 -->
+      <!-- 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。
+           Round 8：删静态装饰徽标「多模态 Agent」（无用定义的 UI 版）。 -->
       <div class="header-status" id="headerStatusZone"></div>
-      <div class="header-badge">多模态 Agent</div>
     </div>
     <div class="header-right">
       <button class="icon-btn" id="shortcutsBtn" title="快捷键与命令（?）" onclick="scOpen()">

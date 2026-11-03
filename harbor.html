@@ -636,6 +636,12 @@ body.fx-off .set-content .set-block.active{animation:none}
   font-size:10px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;margin-left:auto;}
 .notify-pop{position:absolute;left:calc(100% + 8px);bottom:48px;width:264px;max-height:340px;overflow:auto;z-index:1000;
   background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:8px;}
+/* Round 8 UI 重构：工具箱二级弹出层——按钮在 rail 上部（第 5 位），通知层的
+   bottom:48 定位会让它飘到左下角；改锚顶部（rail padding 12 + 4×(44+gap)）。
+   菜单 svg 显式尺寸：分析项内联 svg 无 class，默认尺寸会撑爆行高。 */
+#toolsPop{bottom:auto;top:212px;width:240px;}
+#toolsPop .mn-btn svg{width:16px;height:16px;flex:none;}
+#toolsPop .mn-btn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rail-notify-badge{position:absolute;top:1px;right:0;margin:0;pointer-events:none;}
 #notifyClearBtn{min-height:44px;justify-content:center;}
 .rail-btn:focus-visible,.wsq-chip:focus-visible,.ws-section-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
@@ -3759,16 +3765,24 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
 
 <!-- C.1 · 左侧图标导航栏：对话 / 会话 / 分析 / 工作区 / 设置 + 底部余额与主题 -->
 <nav class="rail" id="rail" aria-label="主导航">
+  <!-- Round 8 UI 重构（对标 ChatGPT/Claude 单侧栏极简结构）：
+       ① 删除与 rail 5/6 重复的 main-nav 整层（杂乱主源）；
+       ② 低频工具（分析/审计/会话搜索/沙箱）收进「工具箱」二级弹出菜单；
+       ③ rail 收敛为 主链路(对话/历史/工作区/专家) + 工具箱 + 底部系统组。 -->
   <button class="rail-btn on" data-panel="chat" data-tip="对话" aria-label="对话" onclick="switchPanel('chat')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.2-.6L4 20.5l1.3-4a8 8 0 0 1-1.3-4.4A8.4 8.4 0 0 1 12.5 3.7 8.4 8.4 0 0 1 21 11.5z"/></svg></button>
   <button class="rail-btn" data-panel="sessions" data-tip="会话历史" aria-label="会话历史" onclick="switchPanel('sessions')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></button>
-  <button class="rail-btn" data-panel="analytics" data-tip="分析 · 成本与工具统计" aria-label="分析" onclick="switchPanel('analytics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v-4M12 15V7M17 15v-7"/></svg></button>
-  <button class="rail-btn" data-tip="审计日志" aria-label="审计日志" onclick="navSwitch('audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.5 3.1 7.8 7.5 9.5 4.4-1.7 7.5-5 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></svg></button>
-  <button class="rail-btn" data-tip="会话搜索" aria-label="会话搜索" onclick="navSwitch('search')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
   <button class="rail-btn" data-panel="workspace" data-tip="工作区与工具权限" aria-label="工作区与工具权限" onclick="switchPanel('workspace')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
   <button class="rail-btn" id="expertCenterBtn" data-tip="专家中心" aria-label="专家中心"><span aria-hidden="true">E</span></button>
-  <button class="rail-btn" data-tip="设置" aria-label="设置" onclick="switchPanel('chat');toggleSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-  <div class="rail-spacer"></div>
   <div class="rail-sep"></div>
+  <button class="rail-btn" id="toolsBoxBtn" data-tip="工具箱（分析 · 审计 · 搜索 · 沙箱）" aria-label="工具箱" aria-controls="toolsPop" aria-expanded="false" onclick="toolsToggle(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.1-2.1z"/></svg></button>
+  <div class="notify-pop" id="toolsPop" role="menu" aria-label="工具箱" style="display:none;">
+    <div class="notify-head"><span>工具箱</span></div>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();switchPanel('analytics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v-4M12 15V7M17 15v-7"/></svg>分析 · 成本与工具统计</button>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();navSwitch('audit')"><svg class="ui-icon"><use href="#i-audit"/></svg>审计日志</button>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();navSwitch('search')"><svg class="ui-icon"><use href="#i-search"/></svg>会话搜索</button>
+    <button type="button" class="mn-btn" role="menuitem" onclick="toolsHide();navSwitch('sandbox')"><svg class="ui-icon"><use href="#i-sandbox"/></svg>沙箱</button>
+  </div>
+  <div class="rail-spacer"></div>
   <button class="rail-btn" id="railNotifyBtn" data-tip="通知中心" aria-label="通知中心" aria-controls="notifyPop" aria-expanded="false" onclick="navToggleNotify()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="mn-badge rail-notify-badge" id="railNotifyBadge" style="display:none;">0</span></button>
   <div class="notify-pop" id="notifyPop" role="dialog" aria-label="通知中心" style="display:none;">
     <div class="notify-head"><span>通知中心</span><span id="notifyCount"></span></div>
@@ -3777,20 +3791,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
   </div>
   <button class="rail-btn" data-tip="余额" aria-label="余额" onclick="openBilling()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2a2.8 2.8 0 0 0-2.8-1.7c-1.5 0-2.7.9-2.7 2.2 0 2.9 5.5 1.5 5.5 4.4 0 1.3-1.2 2.2-2.8 2.2a2.9 2.9 0 0 1-3-1.8M12 5.8v1.7M12 16.4v1.8"/></svg></button>
   <button class="rail-btn" id="themeBtn" data-tip="切换深色/浅色" aria-label="切换深色/浅色" onclick="toggleTheme()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg></button>
-</nav>
-
-<!-- 实现 v1.6 T11：左侧主导航（对话/设置/审计/会话搜索/沙箱 + T13 通知中心）。
-     纯新增元素（flex 布局自然参与，不影响既有三栏）；新 id 全部唯一。
-     直切口径：本导航为单一入口，原设置大按钮/33-set-nav 锚点 DOM 保留不删。 -->
-<nav class="main-nav" id="mainNav" aria-label="分区导航">
-  <div class="mn-title">分区</div>
-  <button class="mn-btn on" id="navBtnChat" onclick="navSwitch('chat')"><svg class="ui-icon"><use href="#i-chat"/></svg>对话</button>
-  <button class="mn-btn" id="navBtnSettings" onclick="navSwitch('settings')"><svg class="ui-icon"><use href="#i-settings"/></svg>设置</button>
-  <button class="mn-btn" id="navBtnAudit" onclick="navSwitch('audit')"><svg class="ui-icon"><use href="#i-audit"/></svg>审计</button>
-  <button class="mn-btn" id="navBtnSearch" onclick="navSwitch('search')"><svg class="ui-icon"><use href="#i-search"/></svg>会话搜索</button>
-  <button class="mn-btn" id="navBtnSandbox" onclick="navSwitch('sandbox')"><svg class="ui-icon"><use href="#i-sandbox"/></svg>沙箱</button>
-  <div class="mn-spacer"></div>
-  <button class="mn-btn" id="navBtnNotify" onclick="navToggleNotify()"><svg class="ui-icon"><use href="#i-notify"/></svg>通知<span class="mn-badge" id="navNotifyBadge" style="display:none;">0</span></button>
+  <button class="rail-btn" data-tip="设置" aria-label="设置" onclick="switchPanel('chat');toggleSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </nav>
 
 <aside class="sidebar" id="sidebar">
@@ -3825,9 +3826,9 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
     <div class="header-left">
       <button class="icon-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="折叠/展开侧栏" aria-label="折叠/展开侧栏" aria-expanded="true"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
       <div class="header-title" id="headerTitle">glm-5.3-flash</div>
-      <!-- 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。 -->
+      <!-- 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。
+           Round 8：删静态装饰徽标「多模态 Agent」（无用定义的 UI 版）。 -->
       <div class="header-status" id="headerStatusZone"></div>
-      <div class="header-badge">多模态 Agent</div>
     </div>
     <div class="header-right">
       <button class="icon-btn" id="shortcutsBtn" title="快捷键与命令（?）" onclick="scOpen()">
@@ -11333,11 +11334,12 @@ function navHighlight(zone) {
 /** 首次启动引导（一次性 toast；localStorage 标记，不污染 config.json）。 */
 function navFirstRunGuide() {
   let seen = false;
-  try { seen = localStorage.getItem('glm_nav_guide_v16') === '1'; } catch (e) { /* 无存储环境直接展示 */ }
+  try { seen = localStorage.getItem('glm_nav_guide_v18') === '1'; } catch (e) { /* 无存储环境直接展示 */ }
   if (seen) return;
-  try { localStorage.setItem('glm_nav_guide_v16', '1'); } catch (e) {}
+  try { localStorage.setItem('glm_nav_guide_v18', '1'); } catch (e) {}
   if (typeof toast === 'function') {
-    toast('新左侧导航已上线：对话 / 设置 / 审计 / 会话搜索 / 沙箱；原设置入口已并入「设置」', 'ok', { stay: true });
+    // Round 8 UI 重构后口径：单 rail + 工具箱二级菜单
+    toast('左侧栏：对话 / 历史 / 工作区 / 专家；分析 · 审计 · 搜索 · 沙箱已收进「工具箱」🧰', 'ok', { stay: true });
   }
 }
 
@@ -11436,6 +11438,30 @@ function navHideNotify() {
   if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-expanded', 'false');
 }
 
+/* ---- Round 8 UI 重构：工具箱二级弹出菜单（分析/审计/会话搜索/沙箱收纳） ---- */
+
+function toolsToggle(ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  const pop = document.getElementById('toolsPop');
+  const btn = document.getElementById('toolsBoxBtn');
+  if (!pop || !pop.style) return;
+  const open = pop.style.display === 'none' || !pop.style.display;
+  navHideNotify();
+  pop.style.display = open ? '' : 'none';
+  if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) {
+    const first = pop.querySelector('.mn-btn');
+    if (first && first.focus) first.focus();
+  } else if (btn && btn.focus) btn.focus();
+}
+
+function toolsHide() {
+  const pop = document.getElementById('toolsPop');
+  const btn = document.getElementById('toolsBoxBtn');
+  if (pop && pop.style) pop.style.display = 'none';
+  if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-expanded', 'false');
+}
+
 /** 聚焦时红点清零（条目保留在列表里可回看；旧导航与 rail 同步）。 */
 function navClearNotifyBadge() {
   ['navNotifyBadge', 'railNotifyBadge'].forEach(id => {
@@ -11462,16 +11488,29 @@ function navInit() {
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     const pop = document.getElementById('notifyPop');
-    if (!pop || pop.style.display === 'none') return;
-    navHideNotify();
-    const btn = document.getElementById('railNotifyBtn');
-    if (btn && btn.focus) btn.focus();
+    if (pop && pop.style.display !== 'none') {
+      navHideNotify();
+      const btn = document.getElementById('railNotifyBtn');
+      if (btn && btn.focus) btn.focus();
+      return;
+    }
+    // Round 8：工具箱弹出层同语义收起
+    const tp = document.getElementById('toolsPop');
+    if (tp && tp.style.display !== 'none') {
+      toolsHide();
+      const tb = document.getElementById('toolsBoxBtn');
+      if (tb && tb.focus) tb.focus();
+    }
   });
   document.addEventListener('click', ev => {
     const pop = document.getElementById('notifyPop');
-    if (!pop || pop.style.display === 'none') return;
-    if (ev.target && ev.target.closest && ev.target.closest('#notifyPop,#railNotifyBtn')) return;
-    navHideNotify();
+    if (pop && pop.style.display !== 'none') {
+      if (!(ev.target && ev.target.closest && ev.target.closest('#notifyPop,#railNotifyBtn'))) navHideNotify();
+    }
+    const tp = document.getElementById('toolsPop');
+    if (tp && tp.style.display !== 'none') {
+      if (!(ev.target && ev.target.closest && ev.target.closest('#toolsPop,#toolsBoxBtn'))) toolsHide();
+    }
   });
 }
 
@@ -11817,8 +11856,10 @@ function msgRecall(msgEl, text) {
 }
 
 /* ===== frontend/src/agent/router.js ===== */
-/* 实现 v1.6 T5②：EFFICIENCY_PROMPT 增补两条——GitHub Models/免费层限额策略
- * （RPM/RPD 敏感：合并轮次、禁全库扫描）+ MCP 工具铁律（只信最新一条结果）。 */
+/* 实现 v1.6 T5②：EFFICIENCY_PROMPT——省 token 铁律 + MCP 工具铁律。
+ * Round 8 提示词瘦身：删【源】GitHub Models 免费层硬编码段（现支持任意端点，
+ * 特定端点限额数字对其余端点纯噪音），保留端点无关的【限流】429 行为规则。
+ * 本常量是 prompt_get('efficiency') 的逐字节回落值（test_prompts_w0 锁定）。 */
 const EFFICIENCY_PROMPT = `【执行铁律——每条都是为了省 token, 逐条硬性执行】
 【读】附件标注"已完整注入"的文件禁止 read_file; 其他文件用 read_file 一次读全(上限2万行/24万字符), 仅当返回带 hint 才按 offset 续读。文件原文一旦进入上下文就保留到会话结束, 严禁重读/复查/跳读确认。严禁用 run_command/run_powershell(type/Get-Content/ReadAllText) 绕路读文件——read_file 一次读全且结果永久保留在上下文，绕路读到的反而被截断。
 【答】一条消息里的多个问题合并为一轮处理, 一次性输出全部结果; 工具调用轮次禁止输出任何文字; 最终回复只给结果本身, 不复述任务、不写开场白和总结、不贴大段原文(引用写"文件:行号"), 未改动的代码禁止重复输出。
@@ -11826,7 +11867,7 @@ const EFFICIENCY_PROMPT = `【执行铁律——每条都是为了省 token, 逐
 【轮】读类工具能并行就在同一条消息并行发起(写类除外, 串行等上一个返回); 能一轮完成绝不拆多轮; 信息不足时把全部疑问合并成一条一次问清, 禁止挤牙膏式追问。
 【验】验证用一条命令+明确判据, 禁止开放式全库扫描; 改完只报一行结论。
 【截图】截图画面自动附在下一轮输入, 无需描述; 返回"与上次一致"直接沿用上次分析。
-【源】GitHub Models 免费层限额敏感(约 15 RPM/150 RPD): 读类能并行就并行、合并轮次, 禁全库扫描式验证; 429 时按人话提示等待, 禁止原命令重试轰炸。
+【限流】429/限额提示时按人话告知等待时长, 禁止原命令立即重试轰炸。
 【MCP】工具结果只信最新一条: 同名工具重复调用以最后一次返回为准, 旧结果过期不引用; 参数不得臆造, 缺参先问清再调。`;
 
 /* ========== 工具精准路由：按问题域筛选，不全量下发 ========== */

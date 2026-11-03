@@ -528,6 +528,12 @@ body.fx-off .set-content .set-block.active{animation:none}
   font-size:10px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;margin-left:auto;}
 .notify-pop{position:absolute;left:calc(100% + 8px);bottom:48px;width:264px;max-height:340px;overflow:auto;z-index:1000;
   background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:8px;}
+/* Round 8 UI 重构：工具箱二级弹出层——按钮在 rail 上部（第 5 位），通知层的
+   bottom:48 定位会让它飘到左下角；改锚顶部（rail padding 12 + 4×(44+gap)）。
+   菜单 svg 显式尺寸：分析项内联 svg 无 class，默认尺寸会撑爆行高。 */
+#toolsPop{bottom:auto;top:212px;width:240px;}
+#toolsPop .mn-btn svg{width:16px;height:16px;flex:none;}
+#toolsPop .mn-btn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rail-notify-badge{position:absolute;top:1px;right:0;margin:0;pointer-events:none;}
 #notifyClearBtn{min-height:44px;justify-content:center;}
 .rail-btn:focus-visible,.wsq-chip:focus-visible,.ws-section-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}

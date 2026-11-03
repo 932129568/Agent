@@ -9,21 +9,9 @@
     },
     "efficiency": {
       "file": "efficiency.md",
-      "version": "1.0.0",
-      "sha256": "88a709ffafb5715f1c967868a3b75d21f5d3e08f1d06c82acd283af5c4a5005d",
-      "bytes": 1887
-    },
-    "plan-generate": {
-      "file": "plan-generate.md",
-      "version": "1.0.0",
-      "sha256": "c8fb8264964b25d07d70c6da553c17b30247bc8ac6c811be5516b960d50d175b",
-      "bytes": 329
-    },
-    "reflect": {
-      "file": "reflect.md",
-      "version": "1.0.0",
-      "sha256": "e1076bee92ded3b8c279ed2e6fd4fe0093ca088a6bebb18661b523ebe24df10c",
-      "bytes": 321
+      "version": "1.1.0",
+      "sha256": "1466312eb12e7cb4f198486be74c5010c6de67c0630dcbcce1de5b6074e40a1a",
+      "bytes": 1790
     },
     "system-base": {
       "file": "system-base.md",
@@ -31,59 +19,11 @@
       "sha256": "4541885196c0d691e48212ef6ee0e0f4e96238ff59b8f157ad4b2720df1c6616",
       "bytes": 355
     },
-    "system-local": {
-      "file": "system-local.md",
-      "version": "1.0.0",
-      "sha256": "7afd9a282de2b795685af6a65214491f2f516c3f0bbb8eab692ac053df3d3544",
-      "bytes": 264
-    },
-    "system-sandbox": {
-      "file": "system-sandbox.md",
-      "version": "1.0.0",
-      "sha256": "2a9a8174c1dc7a6e973ccf8e9257bc81504c5adf648bbd2fc6fb5fd0853ae40e",
-      "bytes": 326
-    },
     "system-ws-off": {
       "file": "system-ws-off.md",
       "version": "1.0.0",
       "sha256": "79ff1443f9511f75d3efe2a0587858fa8600dd1ac0d47b21c7b41f77000221ad",
       "bytes": 573
-    },
-    "understand": {
-      "file": "understand.md",
-      "version": "1.0.0",
-      "sha256": "5319f2316a2e9e485b0ca19b224015259d4913878fdd0c1aa84caa93dfacdab9",
-      "bytes": 301
-    },
-    "validate": {
-      "file": "validate.md",
-      "version": "1.0.0",
-      "sha256": "f2ece458b10c8472cd7ae04ee54a4485b97af4d2022ffbd2f64351c0d8c02c7f",
-      "bytes": 308
-    },
-    "browser-navigate": {
-      "file": "browser-navigate.md",
-      "version": "1.0.0",
-      "sha256": "faf3ebd515710b0a01b3330897770545008313771d6f35c21c321e2e60bdd117",
-      "bytes": 447
-    },
-    "browser-extract": {
-      "file": "browser-extract.md",
-      "version": "1.0.0",
-      "sha256": "ff78cc1bd9ec3fd660886c3aa43ab9e9c5fe6e0bf08aa16ea6ed33302449f3be",
-      "bytes": 401
-    },
-    "browser-click": {
-      "file": "browser-click.md",
-      "version": "1.0.0",
-      "sha256": "30eb0c6fc47d53762b69362eba25b0c9a3e623b4b14b061dc594942a28fc36ce",
-      "bytes": 484
-    },
-    "browser-fill": {
-      "file": "browser-fill.md",
-      "version": "1.0.0",
-      "sha256": "ee601da18e065a7bb35e29bd24946dc4802fa27d6191ef648bf7653db8c816ca",
-      "bytes": 450
     },
     "reader-extract": {
       "file": "reader-extract.md",

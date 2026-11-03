@@ -673,6 +673,8 @@
         "navRenderNotify",
         "navSwitch",
         "navToggleNotify",
+        "toolsHide",
+        "toolsToggle",
         "navUpdateEmptyGuide",
         "navZone"
       ],

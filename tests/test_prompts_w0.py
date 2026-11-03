@@ -19,12 +19,16 @@ SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 class TestLoader:
-    def test_all_fifteen_load(self):
-        # v1.9.0 T01：10 → 15（新增 browser-navigate/extract/click/fill/reader-extract 五提示词）
+    def test_all_five_load(self):
+        # Round 8 提示词瘦身：15 → 5——消费链审计证明 10 个提示词无任何 render/
+        # prompt_get 消费者（reflect/validate/understand/plan-generate/browser-*四件
+        # /system-local/system-sandbox），删除以绝噪音；保留=有真实消费链的 5 个。
         from backend.domains.providers import prompt_loader as pl
         pl.clear_cache()
         ids = pl.list_ids()
-        assert len(ids) == 15
+        assert len(ids) == 5, ids
+        assert set(ids) == {'system-base', 'system-ws-off', 'reader-extract',
+                            'efficiency', 'compact'}
         for pid in ids:
             text, ver = pl.load(pid)
             assert text and ver, pid
@@ -107,7 +111,7 @@ class TestJsApi:
     def test_prompt_get_ok(self, fresh_home):
         from backend.api import Api
         r = json.loads(Api().prompt_get('efficiency'))
-        assert r['ok'] is True and r['version'] == '1.0.0'
+        assert r['ok'] is True and r['version'] == '1.1.0'   # Round 8 瘦身 bump
         assert '省 token' in r['text']
 
     def test_prompt_get_unknown(self, fresh_home):
