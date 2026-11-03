@@ -186,6 +186,15 @@ function ipModelRender() {
       if (e.target.closest && e.target.closest('.mc-del')) return;
       const val = btn.getAttribute('data-val');
       if (sel) {
+        // Round 7 修复[5]：自定义模型值不在 modelSelect options 里（该区仅存
+        // localStorage，select 无对应 option）——直接 sel.value=val 会把下拉置
+        // 空，change 链路落盘 model:'auto' 静默覆盖原选择。无匹配则注入 option。
+        if (![...sel.options].some(o => o.value === val)) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = val;
+          sel.appendChild(opt);
+        }
         sel.value = val;
         // P1 复核修正：onModelChange 全项目不存在（typeof 守卫静默吞掉）——
         // 原选模型不派发 change 事件 → 设置区下拉标签/header 品牌位失步且
@@ -214,7 +223,12 @@ function ipModelRender() {
 /** 跳设置「连接与模型」块：切面板 → 滚动入视 → 一次性闪光定位。 */
 function ipGotoModelSettings() {
   // Harbor 无 settings 面板——设置是 chat 面板内的独立窗口（toggleSettings 打开）
-  if (typeof toggleSettings === 'function') toggleSettings();
+  // Round 7 修复[7]：toggleSettings 是切换语义——设置窗已开时调用反而把它关掉，
+  // 260ms 后的定位落在隐藏面板上（用户只看到设置关了）。仅在未开时打开。
+  const panel = ipEl('settingsPanel');
+  if (panel && !panel.classList.contains('show')) {
+    if (typeof toggleSettings === 'function') toggleSettings();
+  }
   setTimeout(() => {
     const block = ipEl('cmBlock');
     if (!block) return;

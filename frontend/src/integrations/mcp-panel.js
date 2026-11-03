@@ -578,7 +578,9 @@ async function mcpResRead(server, r, btn, row) {
   } finally {
     btn.disabled = false;
     btn.textContent = label;
-    mcpResBusyUri = '';
+    // Round 7 修复[6]：单槽被并发读取互相清零（A 完成清掉 B 的在途槽 → B 可被
+    // 重复点）——仅持有者本人清槽。
+    if (mcpResBusyUri === r.uri) mcpResBusyUri = '';
   }
 }
 

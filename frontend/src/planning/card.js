@@ -375,6 +375,22 @@ function planCardReject() {
   pcToast('已拒绝计划 · 对话继续', 'info');
 }
 
+/** Round 7 修复[4]：切会话拆除挂起批准卡——renderChatHistory 重建聊天区会把
+ * 待批准卡片从 DOM 摘走，planResolveApprove 悬挂（planModeRun 的 await 永不
+ * 落定，切回也不重挂）。switchSession 在重建前调用本函数：reject 挂起 Promise
+ * （对齐拒绝路径语义）并复位卡片引用，planModeRun 以「已拒绝」收尾。 */
+function planTeardownPendingApproval() {
+  const r = planResolveApprove;
+  planResolveApprove = null;
+  if (r) {
+    try { r.reject(new DOMException('会话已切换，计划批准已取消', 'AbortError')); } catch (e) {}
+  }
+  if (planCardEl) {
+    try { planCardEl.remove(); } catch (e) {}
+    planCardEl = null;
+  }
+}
+
 /** todo 步骤状态推进（agent loop 每个工具调用前后调用）。 */
 function planStepStatus(index, status) {
   const card = planCardEl;
@@ -396,6 +412,12 @@ function planFinish(summaryText, finalStatus = 'done') {
   const card = planCardEl;
   if (!card || !planCurrent) return;
   const terminalStatus = finalStatus === 'blocked' ? 'blocked' : 'done';
+  // Round 7 修复[1]：终态必须写回 planCurrent.status——批准时置 'running'（258 行）
+  // 后全项目无终态写点，run-controller 的 todo 推进门（status !== 'running' 即
+  // return）与 planFinishIfNatural 都依赖它；不复位则此后每次普通对话都会重放
+  // 收尾（重复 toast/摘要/plan_update）并继续推进已完成计划的步骤。
+  if (planCurrent.status === terminalStatus) return;   // 已收口，防重入
+  planCurrent.status = terminalStatus;
   const blocked = terminalStatus === 'blocked';
   const badge = pcEl('planBadge');
   if (badge) {

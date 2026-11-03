@@ -325,6 +325,26 @@ async function planModeRun(task) {
     pcToast('检查点创建失败（任务继续，但无法回滚）', 'warn');
   }
   // 以任务文本走原发送链（isStreaming 由 sendMessage 内部管理）
+  // Round 7 修复[3]：批准→执行之间有最长 60s 的 checkpoint_create await 窗口，
+  // 期间用户可发起新消息（此刻 isStreaming=false、无 activeRun，守卫放行）——
+  // 窗口闭合后这里的 sendMessage 会被忙守卫静默吞掉，计划卡永远停在「执行中」。
+  // 忙则把计划态复位回 approved 并明示用户，不再静默吞任务。
+  {
+    const _busy = (typeof RunRegistry !== 'undefined' && RunRegistry.current() && !RunRegistry.current().cancelled)
+      || ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming);
+    if (_busy) {
+      try {
+        await pcCall('plan_update', [full.task_id, 'approved'], 15000);
+      } catch (e) {}
+      const _ps = getCurrentSession();
+      if (_ps) _ps.plan = { task_id: full.task_id };
+      const _badge = document.getElementById('planBadge');
+      if (_badge) { _badge.className = 'plan-badge pending'; _badge.textContent = '待执行（忙）'; }
+      if (typeof pcToast === 'function') pcToast('当前有生成任务进行中，计划已保留；空闲后重新发送任务文本即可执行', 'warn');
+      saveSessions();
+      return;
+    }
+  }
   const input = document.getElementById('userInput');
   if (input) input.value = task;
   sendMessage();

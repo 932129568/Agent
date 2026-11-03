@@ -13893,7 +13893,9 @@ async function mcpResRead(server, r, btn, row) {
   } finally {
     btn.disabled = false;
     btn.textContent = label;
-    mcpResBusyUri = '';
+    // Round 7 修复[6]：单槽被并发读取互相清零（A 完成清掉 B 的在途槽 → B 可被
+    // 重复点）——仅持有者本人清槽。
+    if (mcpResBusyUri === r.uri) mcpResBusyUri = '';
   }
 }
 
@@ -17238,7 +17240,11 @@ async function loadSessions() {
     const prev = byId.get(s.id);
     if (!prev || (s.updatedAt || 0) > (prev.updatedAt || 0)) byId.set(s.id, s);
   });
-  put(local); put(backend);   // 同 id 时取 updatedAt 较新的一侧
+  // Round 7 时序修正：先 backend 后 local——两侧同 updatedAt 时（saveSessions
+  // 同一对象双写，必然相等）必须取**后端完整版**：本地镜像是配额投影（最近 24
+  // 条+正文 2k 截断），先入会让截断版压制完整版，且随后被写回后端=永久丢正文。
+  // W30 场景不受影响：后端写失败/读失败时本地新版靠 updatedAt 严格大于胜出。
+  put(backend); put(local);   // 同 id 时取 updatedAt 较新的一侧（平局=后端完整版）
   _sessionStateWrite([...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 60));
 }
 // 修复 建议㉜（三轮）：saveSessions 串行化——原并发调用可让旧快照后落盘覆盖新快照
@@ -17295,7 +17301,13 @@ function _sessionSaveSignature(s) {
     readKeys ? readKeys.length + ':' + readKeys[readKeys.length - 1] : '',
     s.worklogInjected === true ? 1 : '',
     s.__budgetWarned === true ? 1 : '',
-    (s.expert && (s.expert.id || s.expert.name)) || '',
+    // Round 7 修复[2]：expert.events 进签名——expert 对象实际只装事件日志
+    // （expert/events.js:8 唯一写法），原签名只认 expert.id/name（无人写入恒
+    // 空）→ journal appendOnce 后签名零变化，未变更短路整跳过，事件日志只能
+    // 搭载其他字段的变更落盘；纯事件轮（失败/取消早退、无 usage 端点）重启即丢。
+    (s.expert && s.expert.events && s.expert.events.length
+      ? s.expert.events.length + ':' + ((s.expert.events[s.expert.events.length - 1] || {}).eventId || '')
+      : (s.expert && (s.expert.id || s.expert.name)) || ''),
     (s._compactBackup && s._compactBackup.msgs && s._compactBackup.msgs.length) || '',
     (s.uiGenerative && s.uiGenerative.specs && s.uiGenerative.specs.length) || '',
     // 生成式UI 视图变更计数（2026-11-03）：uiSpec 的写入/打卡只改消息对象内部，
@@ -18226,6 +18238,22 @@ function planCardReject() {
   pcToast('已拒绝计划 · 对话继续', 'info');
 }
 
+/** Round 7 修复[4]：切会话拆除挂起批准卡——renderChatHistory 重建聊天区会把
+ * 待批准卡片从 DOM 摘走，planResolveApprove 悬挂（planModeRun 的 await 永不
+ * 落定，切回也不重挂）。switchSession 在重建前调用本函数：reject 挂起 Promise
+ * （对齐拒绝路径语义）并复位卡片引用，planModeRun 以「已拒绝」收尾。 */
+function planTeardownPendingApproval() {
+  const r = planResolveApprove;
+  planResolveApprove = null;
+  if (r) {
+    try { r.reject(new DOMException('会话已切换，计划批准已取消', 'AbortError')); } catch (e) {}
+  }
+  if (planCardEl) {
+    try { planCardEl.remove(); } catch (e) {}
+    planCardEl = null;
+  }
+}
+
 /** todo 步骤状态推进（agent loop 每个工具调用前后调用）。 */
 function planStepStatus(index, status) {
   const card = planCardEl;
@@ -18247,6 +18275,12 @@ function planFinish(summaryText, finalStatus = 'done') {
   const card = planCardEl;
   if (!card || !planCurrent) return;
   const terminalStatus = finalStatus === 'blocked' ? 'blocked' : 'done';
+  // Round 7 修复[1]：终态必须写回 planCurrent.status——批准时置 'running'（258 行）
+  // 后全项目无终态写点，run-controller 的 todo 推进门（status !== 'running' 即
+  // return）与 planFinishIfNatural 都依赖它；不复位则此后每次普通对话都会重放
+  // 收尾（重复 toast/摘要/plan_update）并继续推进已完成计划的步骤。
+  if (planCurrent.status === terminalStatus) return;   // 已收口，防重入
+  planCurrent.status = terminalStatus;
   const blocked = terminalStatus === 'blocked';
   const badge = pcEl('planBadge');
   if (badge) {
@@ -20190,6 +20224,15 @@ function ipModelRender() {
       if (e.target.closest && e.target.closest('.mc-del')) return;
       const val = btn.getAttribute('data-val');
       if (sel) {
+        // Round 7 修复[5]：自定义模型值不在 modelSelect options 里（该区仅存
+        // localStorage，select 无对应 option）——直接 sel.value=val 会把下拉置
+        // 空，change 链路落盘 model:'auto' 静默覆盖原选择。无匹配则注入 option。
+        if (![...sel.options].some(o => o.value === val)) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = val;
+          sel.appendChild(opt);
+        }
         sel.value = val;
         // P1 复核修正：onModelChange 全项目不存在（typeof 守卫静默吞掉）——
         // 原选模型不派发 change 事件 → 设置区下拉标签/header 品牌位失步且
@@ -20218,7 +20261,12 @@ function ipModelRender() {
 /** 跳设置「连接与模型」块：切面板 → 滚动入视 → 一次性闪光定位。 */
 function ipGotoModelSettings() {
   // Harbor 无 settings 面板——设置是 chat 面板内的独立窗口（toggleSettings 打开）
-  if (typeof toggleSettings === 'function') toggleSettings();
+  // Round 7 修复[7]：toggleSettings 是切换语义——设置窗已开时调用反而把它关掉，
+  // 260ms 后的定位落在隐藏面板上（用户只看到设置关了）。仅在未开时打开。
+  const panel = ipEl('settingsPanel');
+  if (panel && !panel.classList.contains('show')) {
+    if (typeof toggleSettings === 'function') toggleSettings();
+  }
   setTimeout(() => {
     const block = ipEl('cmBlock');
     if (!block) return;
@@ -21539,6 +21587,9 @@ function switchSession(id, silent) {
   try {
     if (box) box.querySelectorAll('.ui-chat-host').forEach(node => { try { node.remove(); } catch (e) {} });
   } catch (e) {}
+  // Round 7 修复[4]：待批准计划卡挂在聊天区里，重建前必须先解除挂起的批准
+  // Promise（否则 planModeRun 的 await 永久悬挂，切回也不重挂）。
+  try { if (typeof planTeardownPendingApproval === 'function') planTeardownPendingApproval(); } catch (e) {}
   if (silent || (typeof MOTION !== 'undefined' && MOTION.instant())) {
     renderChatHistory(target);
     // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）。
@@ -22812,6 +22863,26 @@ async function planModeRun(task) {
     pcToast('检查点创建失败（任务继续，但无法回滚）', 'warn');
   }
   // 以任务文本走原发送链（isStreaming 由 sendMessage 内部管理）
+  // Round 7 修复[3]：批准→执行之间有最长 60s 的 checkpoint_create await 窗口，
+  // 期间用户可发起新消息（此刻 isStreaming=false、无 activeRun，守卫放行）——
+  // 窗口闭合后这里的 sendMessage 会被忙守卫静默吞掉，计划卡永远停在「执行中」。
+  // 忙则把计划态复位回 approved 并明示用户，不再静默吞任务。
+  {
+    const _busy = (typeof RunRegistry !== 'undefined' && RunRegistry.current() && !RunRegistry.current().cancelled)
+      || ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming);
+    if (_busy) {
+      try {
+        await pcCall('plan_update', [full.task_id, 'approved'], 15000);
+      } catch (e) {}
+      const _ps = getCurrentSession();
+      if (_ps) _ps.plan = { task_id: full.task_id };
+      const _badge = document.getElementById('planBadge');
+      if (_badge) { _badge.className = 'plan-badge pending'; _badge.textContent = '待执行（忙）'; }
+      if (typeof pcToast === 'function') pcToast('当前有生成任务进行中，计划已保留；空闲后重新发送任务文本即可执行', 'warn');
+      saveSessions();
+      return;
+    }
+  }
   const input = document.getElementById('userInput');
   if (input) input.value = task;
   sendMessage();

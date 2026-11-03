@@ -107,7 +107,11 @@ async function loadSessions() {
     const prev = byId.get(s.id);
     if (!prev || (s.updatedAt || 0) > (prev.updatedAt || 0)) byId.set(s.id, s);
   });
-  put(local); put(backend);   // 同 id 时取 updatedAt 较新的一侧
+  // Round 7 时序修正：先 backend 后 local——两侧同 updatedAt 时（saveSessions
+  // 同一对象双写，必然相等）必须取**后端完整版**：本地镜像是配额投影（最近 24
+  // 条+正文 2k 截断），先入会让截断版压制完整版，且随后被写回后端=永久丢正文。
+  // W30 场景不受影响：后端写失败/读失败时本地新版靠 updatedAt 严格大于胜出。
+  put(backend); put(local);   // 同 id 时取 updatedAt 较新的一侧（平局=后端完整版）
   _sessionStateWrite([...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 60));
 }
 // 修复 建议㉜（三轮）：saveSessions 串行化——原并发调用可让旧快照后落盘覆盖新快照
@@ -164,7 +168,13 @@ function _sessionSaveSignature(s) {
     readKeys ? readKeys.length + ':' + readKeys[readKeys.length - 1] : '',
     s.worklogInjected === true ? 1 : '',
     s.__budgetWarned === true ? 1 : '',
-    (s.expert && (s.expert.id || s.expert.name)) || '',
+    // Round 7 修复[2]：expert.events 进签名——expert 对象实际只装事件日志
+    // （expert/events.js:8 唯一写法），原签名只认 expert.id/name（无人写入恒
+    // 空）→ journal appendOnce 后签名零变化，未变更短路整跳过，事件日志只能
+    // 搭载其他字段的变更落盘；纯事件轮（失败/取消早退、无 usage 端点）重启即丢。
+    (s.expert && s.expert.events && s.expert.events.length
+      ? s.expert.events.length + ':' + ((s.expert.events[s.expert.events.length - 1] || {}).eventId || '')
+      : (s.expert && (s.expert.id || s.expert.name)) || ''),
     (s._compactBackup && s._compactBackup.msgs && s._compactBackup.msgs.length) || '',
     (s.uiGenerative && s.uiGenerative.specs && s.uiGenerative.specs.length) || '',
     // 生成式UI 视图变更计数（2026-11-03）：uiSpec 的写入/打卡只改消息对象内部，

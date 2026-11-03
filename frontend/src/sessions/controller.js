@@ -414,6 +414,9 @@ function switchSession(id, silent) {
   try {
     if (box) box.querySelectorAll('.ui-chat-host').forEach(node => { try { node.remove(); } catch (e) {} });
   } catch (e) {}
+  // Round 7 修复[4]：待批准计划卡挂在聊天区里，重建前必须先解除挂起的批准
+  // Promise（否则 planModeRun 的 await 永久悬挂，切回也不重挂）。
+  try { if (typeof planTeardownPendingApproval === 'function') planTeardownPendingApproval(); } catch (e) {}
   if (silent || (typeof MOTION !== 'undefined' && MOTION.instant())) {
     renderChatHistory(target);
     // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）。
