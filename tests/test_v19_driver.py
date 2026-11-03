@@ -601,14 +601,13 @@ class TestToolsSchemaStrict:
 
     def test_three_part_description_lint(self):
         """M5.9：三段式描述 lint（触发|语义|排除——恰 2 个竖线）。
-        范围= v1.9 新工具（v1.8 既有工具文案契约锁定不改）。"""
+        范围= AGENT_TOOLS 全量（AGENTS.md §3 口径）。Round 6 起含 v1.8 三工具
+        （增量面仅名单锁定、无字节锁定，描述补齐三段式）；内置工具族仍受
+        legacy 逐字节差分锁定，不在本 lint 范围（记账簿 Round 6 备案）。"""
         from backend.tools_schema import AGENT_TOOLS
-        v19_names = {'browser_navigate', 'browser_extract', 'browser_click',
-                     'browser_fill', 'browser_screenshot', 'browser_close'}
         for t in AGENT_TOOLS:
             name = t['function']['name']
-            if name in v19_names:
-                assert t['function']['description'].count('|') == 2, name
+            assert t['function']['description'].count('|') == 2, name
 
 
 # ============================================================ 复核批次回归（2026-10-24 bug 扫描：12 项实证修复）

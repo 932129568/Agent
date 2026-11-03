@@ -27,7 +27,9 @@ _S_READ_MORE = {'type': 'function', 'function': {'name': 'read_more',
 # ---- v1.8.0 C 域：Agent 工具族（include_agent=True 时追加；R11 端点过滤见 build）----
 # browser_search / browser_open 请求字段照联调规范 §3.1；software_call 照 §3.2。
 _AGENT_BROWSER_SEARCH = {'type': 'function', 'function': {'name': 'browser_search',
-    'description': '浏览器搜索(受控次窗+正文提取+缓存;遇验证页返回 CAPTCHA_REQUIRED 等待人工)',
+    # 三段式对齐 AGENTS.md §3（M5.9 lint 口径=全 AGENT_TOOLS 恰 2 竖线；Round 6 补齐
+    # v1.8 三工具——增量面不受 legacy 逐字节锁定，仅名单锁定）
+    'description': '需要联网搜索资料或查最新信息时|受控次窗搜索+正文提取+缓存,遇验证页返回 CAPTCHA_REQUIRED 等待人工|已知网址直接抓取用 browser_open,GLM 端点走云端原生 web_search',
     'parameters': {'type': 'object', 'properties': {
         'query': {'type': 'string'}, 'engine': {'type': 'string'},
         'site': {'type': 'string'}, 'filetype': {'type': 'string'},
@@ -36,14 +38,13 @@ _AGENT_BROWSER_SEARCH = {'type': 'function', 'function': {'name': 'browser_searc
         'required': ['query']}}}
 
 _AGENT_BROWSER_OPEN = {'type': 'function', 'function': {'name': 'browser_open',
-    'description': '打开网页提取正文(readability/selector;超长截断落盘)',
+    'description': '已知URL要读取网页正文时|readability/selector 提取正文,超长自动截断落盘|要搜索发现页面用 browser_search,要点击/填表等交互用 browser_navigate 系',
     'parameters': {'type': 'object', 'properties': {
         'url': {'type': 'string'}, 'selector': {'type': 'string'},
         'max_chars': {'type': 'integer'}}, 'required': ['url']}}}
 
 _AGENT_SOFTWARE_CALL = {'type': 'function', 'function': {'name': 'software_call',
-    'description': '调用外部软件(git/ffmpeg/7z/python/node 等;action 按注册表,'
-                   '参数不符返回 SCHEMA_INVALID+修正示例)',
+    'description': '要用已注册的外部软件能力时(git/ffmpeg/7z/python/node 等)|action 按注册表执行,参数不符返回 SCHEMA_INVALID+修正示例|普通文件读写用内置文件工具,任意命令用 run_command',
     'parameters': {'type': 'object', 'properties': {
         'software': {'type': 'string'}, 'action': {'type': 'string'},
         'args': {'type': 'object'}, 'timeout': {'type': 'integer'},
