@@ -122,3 +122,24 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 ## Round 7+(待续)
 - 候选:图标 v3、D 域两条加固落地评估、C 域续扫(attachments/settings 深 处)、
   sequentialthinking 节制(差分面待评估,可先 MCP 设置禁用)
+
+## Round 7(完成,2026-11-04,提交 7a223ec/已推送)
+
+- 扫描:深层次+功能层面双域(主理人点名)。功能面=54 内联 handler 全量接线
+  核对(0 死按钮);深层面=主会话持久化链深扫 + 串行 agent 深审 planning/card
+  +chat 主路径+expert/collaboration+mcp-panel(7 发现全实证)
+- 修复(8 项,2 high/3 med/3 low):
+  1. [high] 双源合并平局取截断镜像→重启丢正文(改 backend 优先)
+  2. [high] planFinish 终态不复位 status→每次对话重放收尾(终态写回+防重入)
+  3. [med] 保存签名漏 expert.events→纯事件轮重启丢日志(签名加维度)
+  4. [med] 批准 60s 窗口无重入守卫→任务被静默吞(忙则复位计划态)
+  5. [med] 切会话悬挂批准 Promise(planTeardownPendingApproval)
+  6. [low] 自定义模型点击置空 modelSelect(注入 option)
+  7. [low] MCP busy 单槽并发清零(持有者校验)
+  8. [low] 设置跳转已开反关(先判 show)
+- 误报排除:session 顶层字段全量 grep→maxTurns/lastRunId 为 this. 误匹配
+- agent CLEAN:expert/collaboration 控制器、attachments、planning 澄清表单
+- 门禁:8 组 289/289;CDP 三项实证;manifest 同步
+
+## Round 8+(待续)
+- 候选:图标 v3、D 域加固落地、sequentialthinking 节制、后端 routes 深扫
