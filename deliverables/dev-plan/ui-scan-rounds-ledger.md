@@ -143,3 +143,18 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 
 ## Round 8+(待续)
 - 候选:图标 v3、D 域加固落地、sequentialthinking 节制、后端 routes 深扫
+
+## Round 8(完成,2026-11-04,已推送)
+
+- 扫描:主理人点名三线——功能正确性验证/提示词按 Agent 实际功能瘦身/UI 重构
+- 提示词:消费链穷举(15→5),10 个零消费者删除(reflect/validate/understand/
+  plan-generate/browser-*四件/system-local/system-sandbox);efficiency 删
+  GitHub Models 硬编码段(端点无关化),回落常量两端逐字节同步;reader-extract
+  安全规格回归保留
+- UI 重构:删 main-nav 重复层(杂乱主源);低频工具收进「工具箱」二级弹出菜单
+  (分析/审计/搜索/沙箱);rail 11→9;删 header 静态徽标;引导文案更新
+- CDP:结构/工具箱路由/Esc 收起全过;截图复核排版达标
+- 门禁:13 组 391+8 全绿
+
+## Round 9+(待续)
+- 候选:图标 v3、D 域加固、sequentialthinking 节制、后端 routes 深扫
