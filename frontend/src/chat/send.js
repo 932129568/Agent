@@ -18,6 +18,24 @@ async function sendMessage() {
   // 提示，runAgentLoop 入口自动升级为并行 run；isStreaming 全局标志由 run
   // 所有权管理（P0-3「并行」按钮路径同口径）
   if (!__crossRun && (appState ? appState.isStreaming : isStreaming)) return;
+  // 群聊协作（Beta）：群会话由 group.js 接管发送链（成员调度/交接/接力）
+  if (typeof groupHandleOutgoing === 'function') {
+    const _gSid = appState ? appState.currentSessionId : currentSessionId;
+    if (_gSid && typeof sessions !== 'undefined' && Array.isArray(sessions)) {
+      const _gs = sessions.find(x => x.id === _gSid);
+      if (_gs && _gs.group && Array.isArray(_gs.group.members)) {
+        const _gText = document.getElementById('userInput').value.trim();
+        if (_gText) {
+          document.getElementById('userInput').value = '';
+          if (appState) appState.attachments = [];
+          else attachments = [];
+          try { if (typeof renderPreview === 'function') renderPreview(); } catch (e) {}
+          await groupHandleOutgoing(_gText);
+        }
+        return;
+      }
+    }
+  }
   // 专家选择是一次性消费：回车与发送按钮都在真正普通发送之前走专家 run。
   if (typeof expertNextSelection !== 'undefined' && expertNextSelection) {
     return runExpertSelection();

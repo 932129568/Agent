@@ -376,6 +376,9 @@ function newSession() {
         <div class="eg-step"><b>2</b>填 Key<button type="button" class="modal-btn" onclick="navGuideFillKey()">去填写<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
         <div class="eg-step"><b>3</b>发问<button type="button" class="modal-btn" disabled>在下方输入框</button></div>
       </div>
+      <button type="button" class="group-beta-entry" onclick="groupWizardOpen()" title="配置多个大模型成员分工协作，靠交接文档接力完成任务">
+        👥 群聊协作 · 多模型接力 <span class="gb-beta">Beta</span>
+      </button>
     </div>`;
   if (typeof navUpdateEmptyGuide === 'function') { try { navUpdateEmptyGuide(); } catch (e) {} }
   renderSessionList();
@@ -419,6 +422,8 @@ function switchSession(id, silent) {
   try { if (typeof planTeardownPendingApproval === 'function') planTeardownPendingApproval(); } catch (e) {}
   if (silent || (typeof MOTION !== 'undefined' && MOTION.instant())) {
     renderChatHistory(target);
+    // 群聊协作（Beta）：历史重建后补成员标签 + 群工具条（非群会话会自动摘除工具条）
+    try { if (typeof groupAfterSessionRender === 'function') groupAfterSessionRender(target); } catch (e) {}
     // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）。
     // Round 5 时序修正：必须在 renderChatHistory **之后**——原先在函数尾部
     // 同步调用，而动画分支的历史重建要等 transitionend 回调，补渲染会挂进
@@ -433,6 +438,7 @@ function switchSession(id, silent) {
     MOTION.onAnimEnd(box, 'transitionend', MOTION.compOut()).then(() => {
       try {
         renderChatHistory(target);
+        try { if (typeof groupAfterSessionRender === 'function') groupAfterSessionRender(target); } catch (e) {}
         if (typeof chatAutoRenderPendingFor === 'function') {
           try { chatAutoRenderPendingFor(id); } catch (e) {}
         }

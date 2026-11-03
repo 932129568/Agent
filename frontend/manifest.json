@@ -1650,6 +1650,48 @@
       ]
     },
     {
+      "path": "frontend/src/group/group.js",
+      "provides": [
+        "GROUP_LIMITS",
+        "GROUP_PRESET_TEAM",
+        "groupAbort",
+        "groupAdvance",
+        "groupAfterSessionRender",
+        "groupCallModel",
+        "groupContextFor",
+        "groupCreate",
+        "groupHandleOutgoing",
+        "groupMemberAdd",
+        "groupMemberDel",
+        "groupMemberName",
+        "groupMemberRow",
+        "groupNextMember",
+        "groupPresetFill",
+        "groupPush",
+        "groupSessionOf",
+        "groupSpeak",
+        "groupToggleRelay",
+        "groupToolbarRefresh",
+        "groupToolbarRender",
+        "groupWizardClose",
+        "groupWizardOpen"
+      ],
+      "requires": [
+        "sessions",
+        "AppState",
+        "uiEndpointSnapshot",
+        "localModeActive",
+        "localProxyHeaders",
+        "ModelTransport",
+        "parseSseStream",
+        "ensureSession",
+        "saveSessions",
+        "addMessage",
+        "toast",
+        "renderChatHistory"
+      ]
+    },
+    {
       "path": "frontend/src/components/context-menu.js",
       "provides": [
         "setupContextMenu"

@@ -71,6 +71,22 @@ function normalizeSessions(raw) {
       }).filter(Boolean);
       if (specs.length) s.uiGenerative = { specs };
     }
+    // 群聊协作（Beta, Round 8 立项）：群配置跨重启保留——members/turn/phase/
+    // handoffs 缺一不可（丢了群聊退化成普通会话）。
+    if (x.group && typeof x.group === 'object' && Array.isArray(x.group.members)) {
+      s.group = {
+        members: x.group.members.filter(m => m && typeof m === 'object' && m.id && m.name)
+          .slice(0, 6).map(m => ({ id: String(m.id), name: String(m.name).slice(0, 12),
+            model: typeof m.model === 'string' ? m.model : '',
+            role: typeof m.role === 'string' ? m.role.slice(0, 2000) : '',
+            host: m.host === true })),
+        turn: typeof x.group.turn === 'string' ? x.group.turn : '',
+        phase: x.group.phase === 'running' ? 'paused' : (x.group.phase === 'paused' ? 'paused' : 'idle'),
+        round: Number(x.group.round) || 0,
+        autoRelay: x.group.autoRelay !== false,
+      };
+      if (s.group.members.length < 2) delete s.group;   // 成员残缺 → 退化普通会话
+    }
     return s;
   });
 }
