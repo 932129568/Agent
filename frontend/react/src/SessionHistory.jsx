@@ -84,6 +84,17 @@ function SessionItem({ session, active, onSelect }) {
             }}
           >并行</button>
         )}
+        {typeof window !== 'undefined' && typeof window.deleteSession === 'function' && (
+          <button
+            type="button"
+            className="i-session-del"
+            title="删除会话"
+            onClick={event => {
+              event.stopPropagation()
+              window.deleteSession(session.id)
+            }}
+          >✕</button>
+        )}
       </div>
     </div>
   )

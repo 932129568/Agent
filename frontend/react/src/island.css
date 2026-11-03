@@ -133,3 +133,12 @@
 .i-project > div { padding-left: 14px; }
 .i-parallel-btn { margin-left: auto; min-height: 22px; min-width: 44px; line-height: 20px; }
 .i-new-chat.inline { height: 30px; font-size: var(--fs-caption); margin: 4px 8px 8px; }
+
+/* 会话行删除钮(主理人反馈:历史会话没有删除入口)——hover 才显,hover 态红色 */
+.i-session-del { opacity: 0; margin-left: 2px; min-width: 22px; min-height: 22px; line-height: 20px;
+  padding: 0 4px; border: 0; background: transparent; color: var(--text-3, #999);
+  border-radius: var(--radius-xs, 6px); font-size: 12px; cursor: pointer;
+  transition: opacity var(--dur-fast, .12s), color var(--dur-fast, .12s), background var(--dur-fast, .12s); }
+.i-session:hover .i-session-del, .i-session:focus-within .i-session-del { opacity: 1; }
+.i-session-del:hover { color: var(--err, #e5484d); background: color-mix(in srgb, var(--err, #e5484d) 12%, transparent); }
+@media (hover: none) { .i-session-del { opacity: .7; } }

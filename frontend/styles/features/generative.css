@@ -178,6 +178,11 @@ body.fx-off .ui-progress-fill,body.fx-off .ui-stat-tile,body.fx-off .ui-card{tra
   padding:8px 14px;background:linear-gradient(90deg,var(--ui-accent-soft),var(--card-bg));
   border-bottom:1px solid var(--border)}
 .ui-chat-host-label{font-size:12.5px;font-weight:600;color:var(--text);letter-spacing:.01em}
+/* 生成状态(R1-UX:转换 10-40s 期间用户无进度感) */
+.ui-chat-host-status{font-size:12px;color:var(--text-2);margin-left:auto;margin-right:8px;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.ui-chat-host-status:empty{display:none}
+.ui-chat-host-bar{flex-wrap:nowrap}
 .ui-chat-host-toggle{min-height:28px;padding:0 10px;font-size:12px;border-radius:var(--radius-xs)}
 .ui-chat-host-body{padding:14px;max-height:70vh;overflow:auto}
 .ui-chat-host-body .ui-projection{font-size:14px}
