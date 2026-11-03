@@ -257,23 +257,133 @@ async function groupHandleOutgoing(text) {
   return true;
 }
 
-function groupPush(s, role, text, member) {
+/** 成员消息 = 折叠工作气泡（2026-11-04 主理人裁定：群里只显示简略内容，
+ * 点击气泡看全文）。working 态（呼吸点+实时字数）→ done 态（摘要行+可展开）。 */
+function groupHueOf(member) {
+  let h = 0;
+  const key = String((member && member.id) || '?');
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
+  return h;
+}
+
+function groupBriefOf(text) {
+  const clean = String(text || '').replace(/【交接文档】[\s\S]*$/, '').trim();
+  const line = clean.split('\n').map(l => l.trim()).filter(Boolean)[0] || '（查看全文）';
+  return line.length > 72 ? line.slice(0, 72) + '…' : line;
+}
+
+/** 挂载一个气泡（working/done 共用；历史重建也走这里保持形态一致）。 */
+function groupBubbleMount(container, member, text, state) {
+  const el = document.createElement('div');
+  el.className = 'gwb' + (state === 'working' ? ' working' : '') + (member && member.host ? ' host' : '');
+  const hue = groupHueOf(member);
+  const name = member ? ((member.host ? '★ ' : '') + member.name) : '群主';
+  const brief = state === 'working' ? '<span class="gwb-dots"><i></i><i></i><i></i></span> 正在整理输出…'
+    : groupBriefOf(text);
+  el.innerHTML =
+    '<div class="gwb-side"><div class="gwb-ava" style="--hue:' + hue + '">' +
+      (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div></div>' +
+    '<div class="gwb-main">' +
+      '<div class="gwb-head"><span class="gwb-name">' + name + '</span>' +
+        '<span class="gwb-state">' + (state === 'working' ? '工作中' : '已完成') + '</span></div>' +
+      '<div class="gwb-brief"></div>' +
+      '<div class="gwb-full" hidden></div>' +
+    '</div>' +
+    (state === 'working' ? '' : '<button type="button" class="gwb-toggle" aria-expanded="false">展开</button>');
+  const briefEl = el.querySelector('.gwb-brief');
+  const fullEl = el.querySelector('.gwb-full');
+  const toggleBtn = el.querySelector('.gwb-toggle');
+  if (state === 'working') {
+    el.__setBrief = t => { briefEl.innerHTML = '<span class="gwb-dots"><i></i><i></i><i></i></span> ' +
+      String(t || '').slice(0, 60); };
+    el.__finish = fullText => {
+      el.classList.remove('working');
+      el.querySelector('.gwb-state').textContent = '已完成';
+      briefEl.textContent = groupBriefOf(fullText);
+      fullEl.innerHTML = (typeof renderMd === 'function') ? renderMd(String(fullText || '')) : '';
+      groupFullHandoffCard(fullEl, fullText);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gwb-toggle';
+      btn.setAttribute('aria-expanded', 'false');
+      btn.textContent = '展开';
+      btn.addEventListener('click', () => {
+        const open = fullEl.hidden;
+        fullEl.hidden = !open;
+        el.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', String(open));
+        btn.textContent = open ? '收起' : '展开';
+      });
+      el.appendChild(btn);
+      el.__setBrief = null;
+      el.__finish = null;
+    };
+  } else {
+    fullEl.innerHTML = (typeof renderMd === 'function') ? renderMd(String(text || '')) : '';
+    groupFullHandoffCard(fullEl, text);
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const open = fullEl.hidden;
+        fullEl.hidden = !open;
+        el.classList.toggle('open', open);
+        toggleBtn.setAttribute('aria-expanded', String(open));
+        toggleBtn.textContent = open ? '收起' : '展开';
+      });
+    }
+  }
+  container.appendChild(el);
+  try { container.scrollTop = container.scrollHeight; } catch (e) {}
+  return el;
+}
+
+/** 交接文档生成式 UI 化（Round 9 升级点）：气泡展开区的【交接文档】小节
+ * 渲染为结构化卡（Callout 语义 + 键值行），零模型调用、纯本地解析。 */
+function groupFullHandoffCard(fullEl, text) {
+  const m = /【交接文档】\s*\n([\s\S]*)$/.exec(String(text || ''));
+  if (!m || !fullEl) return;
+  const lines = m[1].split('\n').map(l => l.trim()).filter(Boolean).slice(0, 8);
+  const rows = lines.map(l => {
+    const kv = /^[-*•]?\s*([^:：]{1,14})[:：]\s*(.+)$/.exec(l);
+    return kv ? { k: kv[1].trim(), v: kv[2].trim().slice(0, 300) } : null;
+  }).filter(Boolean);
+  if (!rows.length) return;
+  const card = document.createElement('div');
+  card.className = 'gwb-handoff';
+  card.innerHTML = '<div class="gwb-handoff-title">📋 交接文档</div>' +
+    rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k">' + r.k + '</span>' +
+      '<span class="gh-v"></span></div>').join('');
+  const vs = card.querySelectorAll('.gh-v');
+  rows.forEach((r, i) => {
+    const el = vs[i];
+    if (/^(前端|后端|UI设计|测试|主持人)$/.test(r.v) || r.k === '交接给') el.classList.add('gh-target');
+    el.textContent = r.v;
+  });
+  fullEl.appendChild(card);
+}
+
+function groupPush(s, role, text, member, opts) {
   const msg = { role, content: String(text || '') };
   if (member) msg.member = { id: member.id, name: member.name, host: !!member.host };
   s.messages.push(msg);
   s.updatedAt = Date.now();
-  const box = document.getElementById('chatContainer');
-  if (box && (typeof AppState === 'undefined' || AppState.currentSessionId === s.id)) {
-    const label = member ? (member.host ? '★' : '') + member.name : '群主';
-    const el = (typeof addMessage === 'function') ? addMessage(role, (role === 'assistant' ? '' : '') + text, {}) : null;
-    if (el) {
-      const tag = document.createElement('div');
-      tag.className = 'group-msg-tag' + (member ? '' : ' owner') + (msg.member && msg.member.host ? ' host' : '');
-      tag.textContent = label + ' · ' + (member ? (member.id) : '群主');
-      el.insertBefore(tag, el.firstChild);
-      if (role === 'assistant') el.classList.add('group-msg');
+  // skipDom：气泡已由 groupSpeak 的 working→finish 生命周期承担消息本体，
+  // 这里只入存储，避免双气泡（完成态气泡即消息）。
+  if (!(opts && opts.skipDom)) {
+    const box = document.getElementById('chatContainer');
+    if (box && (typeof AppState === 'undefined' || AppState.currentSessionId === s.id)) {
+      if (member) {
+        groupBubbleMount(box, member, String(text || ''), 'done');
+      } else {
+        const el = (typeof addMessage === 'function') ? addMessage(role, text, {}) : null;
+        if (el) {
+          const tag = document.createElement('div');
+          tag.className = 'group-msg-tag owner';
+          tag.textContent = '群主';
+          el.insertBefore(tag, el.firstChild);
+        }
+      }
+      try { box.scrollTop = box.scrollHeight; } catch (e) {}
     }
-    try { box.scrollTop = box.scrollHeight; } catch (e) {}
   }
   return msg;
 }
@@ -286,7 +396,8 @@ async function groupAdvance(sid) {
   if (m) await groupSpeak(s, m);
 }
 
-/** 成员发言：构建隔离上下文 → 调模型 → 入流 → 接力调度。 */
+/** 成员发言：工作气泡（简略态）→ 调模型（气泡内实时计数）→ 转完成态（可展开）
+ * → 接力调度。群里永不直接铺全文（主理人 2026-11-04 裁定）。 */
 async function groupSpeak(s, member) {
   const g = s.group;
   if (g.round >= GROUP_LIMITS.turnBudget) {
@@ -297,17 +408,28 @@ async function groupSpeak(s, member) {
     return;
   }
   const phase = document.getElementById('gbPhase');
-  if (phase) phase.textContent = member.name + ' 正在发言…';
+  if (phase) phase.textContent = member.name + ' 工作中…';
+  const box = document.getElementById('chatContainer');
+  let bubble = null;
+  if (box && (typeof AppState === 'undefined' || AppState.currentSessionId === s.id)) {
+    bubble = groupBubbleMount(box, member, '', 'working');
+  }
+  const tick = (n) => {
+    if (bubble && bubble.__setBrief) bubble.__setBrief('正在输出… ' + n + ' 字');
+  };
   const messages = groupContextFor(s, member);
   let text = '';
   try {
     text = await groupCallModel(s, member, messages, (delta) => {
-      // 轻量流式：只更新相位文本，避免逐帧重排整条消息（反馈快速 + 不闪）
-      if (phase) phase.textContent = member.name + ' 正在发言… ' + String(delta || '').length + ' 字';
+      groupSpeak._acc = (groupSpeak._acc || 0) + String(delta || '').length;
+      tick(groupSpeak._acc);
     });
+    groupSpeak._acc = 0;
   } catch (e) {
+    groupSpeak._acc = 0;
     text = '';
-    groupPush(s, 'assistant', '【' + member.name + ' 调用失败】' + (e && e.message ? e.message : e) + '；接力暂停，请检查该成员模型配置后点「继续接力」。', null);
+    if (bubble && bubble.__finish) bubble.__finish('【' + member.name + ' 调用失败】' + (e && e.message ? e.message : e));
+    else groupPush(s, 'assistant', '【' + member.name + ' 调用失败】' + (e && e.message ? e.message : e) + '；接力暂停。', null);
     g.phase = 'paused';
     g.turn = member.id;
     groupToolbarRefresh(s.id);
@@ -315,10 +437,15 @@ async function groupSpeak(s, member) {
     return;
   }
   const trimmedOut = String(text || '').trim() || '（空回复）';
-  groupPush(s, 'assistant', trimmedOut, member);
+  if (bubble && bubble.__finish) {
+    bubble.__finish(trimmedOut);
+    groupPush(s, 'assistant', trimmedOut, member, { skipDom: true });   // 气泡即消息本体
+  } else {
+    groupPush(s, 'assistant', trimmedOut, member);
+  }
   g.round = (g.round || 0) + 1;
   try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
-  // 接力调度：解析「交接给: X」→ 匹配成员；否则回主持人；轮数到顶暂停
+  // 接力调度
   const next = groupNextMember(s, member, trimmedOut);
   if (!next) {
     g.phase = 'paused';
@@ -332,17 +459,24 @@ async function groupSpeak(s, member) {
     groupToolbarRefresh(s.id);
     await groupSpeak(s, next);
   } else {
-    g.phase = g.phase === 'running' ? 'running' : g.phase;
     groupToolbarRefresh(s.id);
   }
 }
 
-/** 交接路由：优先「交接给: X」匹配（精确名→前缀名两步）；X 是自己 → 回主持人；
- * 解析失败回主持人；主持人发言后无明确交接 → 暂停等群主（规划已出）。 */
+/** 接力路由（2026-11-04 自由讨论版）：优先取文本中**最后一个 @成员名**（≠自己）
+ * ——支持互相讨论/反驳的对话流；否则「交接给: X」两步匹配；匹配自己回主持人；
+ * 主持人无明确指向 → 暂停等群主。 */
 function groupNextMember(s, from, out) {
   const g = s.group;
   if (g.round >= GROUP_LIMITS.turnBudget) return null;
-  const m = /交接给[:：]\s*([^\n]+)/.exec(String(out || ''));
+  const text = String(out || '');
+  const ats = text.match(/@([^\s@，,。；;！!？?"']{1,12})/g) || [];
+  for (let i = ats.length - 1; i >= 0; i--) {
+    const raw = ats[i].slice(1);
+    const hit = g.members.find(x => x.id !== from.id && (x.name === raw || raw.indexOf(x.name) === 0));
+    if (hit) return hit;
+  }
+  const m = /交接给[:：]\s*([^\n]+)/.exec(text);
   if (m) {
     const raw = m[1].replace(/[〈>《「」"'（）()，,。.\s]/g, '');
     if (raw) {
@@ -351,40 +485,43 @@ function groupNextMember(s, from, out) {
       if (hit) return hit;
     }
   }
-  if (from.host) return null;   // 主持人规划完且无明确交接 → 等群主
+  if (from.host) return null;   // 主持人无明确指向 → 等群主
   return g.members.find(x => x.host) || null;
 }
 
-/** 成员隔离上下文。 */
+/** 群聊感知上下文（2026-11-04 升级）：成员明确知道这是群聊、知道全部名册、
+ * 可以 @ 任何成员交流方案（含反驳）；群聊消息流以简略形式全量可见
+ * （他人消息 300 字截断——保持职责边界感），自己的历史全文。 */
 function groupContextFor(s, member) {
   const g = s.group;
-  const sys = '你是群聊协作中的成员「' + member.name + '」' + (member.host ? '（主持人）' : '') +
-    '。群主是人类的唯一代言人。其他成员的发言你只能通过【交接文档】看到。\n' +
-    '输出约定：每次发言以【交接文档】小节收尾，格式：\n【交接文档】\n- 交接给: <成员名>\n- 本次产出: <摘要>\n- 对下一棒的要求: <具体清单>\n- 风险与注意: <可空>\n' +
+  const roster = g.members.map(m =>
+    (m.host ? '★' : '·') + m.name + '（' + (m.host ? '主持人' : '成员') + (m.model ? '，模型 ' + m.model : '') + '）'
+  ).join('\n');
+  const sys = '你是群聊成员「' + member.name + '」' + (member.host ? '（主持人）' : '') +
+    '。这是一场多模型群聊协作，群主是人类。' +
+    '当前成员名册：\n' + roster + '\n' +
+    '\n交流规则：\n' +
+    '1. 对某位成员说话，用 @成员名 开头；可以自由讨论方案，支持或反驳都要有理有据。\n' +
+    '2. 只负责自己的职责范围，不替其他成员产出其职责内的内容；发现他人方案有问题时 @对方指出。\n' +
+    '3. 群主是唯一决策人，与群主指示冲突时以群主为准。\n' +
+    '4. 每次发言以【交接文档】小节收尾，格式：\n【交接文档】\n- 交接给: <成员名>\n- 本次产出: <摘要>\n- 对下一棒的要求: <具体清单>\n- 风险与注意: <可空>\n' +
     (member.role ? '\n你的身份与职责：\n' + member.role : '');
   const msgs = [{ role: 'system', content: sys }];
-  // 群主任务原文（第一条 user）
-  const firstUser = s.messages.find(m => m.role === 'user' && !m.member);
-  if (firstUser) msgs.push({ role: 'user', content: '【群主任务】' + String(firstUser.content).slice(0, GROUP_LIMITS.memberMsgChars) });
-  // 交接给自己的文档（最近 2 份）+ 指名给自己的消息
-  const forMe = s.messages.filter(m => m.role === 'assistant' && m.member && m.member.id !== member.id &&
-    String(m.content).indexOf('交接给') >= 0 &&
-    (() => { const mm = /交接给[:：]\s*([^\n]+)/.exec(String(m.content)); return mm && mm[1].indexOf(member.name) >= 0; })());
-  for (const h of forMe.slice(-2)) {
-    msgs.push({ role: 'user', content: '【来自 ' + h.member.name + ' 的交接文档】\n' + String(h.content).slice(0, GROUP_LIMITS.memberMsgChars) });
+  // 群聊消息流（简略视图：他人 300 字，群主 1200 字）
+  const stream = s.messages.slice(-24);
+  for (const m of stream) {
+    if (!m.member) {
+      msgs.push({ role: 'user', content: '【群主】' + String(m.content).slice(0, 1200) });
+      continue;
+    }
+    if (m.member.id === member.id) {
+      msgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: '【你（' + m.member.name + '）的发言】' + String(m.content).slice(0, GROUP_LIMITS.memberMsgChars) });
+    } else {
+      msgs.push({ role: 'user', content: '【' + m.member.name + '】' + String(m.content).slice(0, 300) });
+    }
   }
-  const atMe = s.messages.filter(m => m.role === 'user' && !m.member && s.messages.indexOf(m) > 0);
-  for (const a of atMe.slice(-2)) {
-    if (a === firstUser) continue;
-    msgs.push({ role: 'user', content: '【群主补充】' + String(a.content).slice(0, 1200) });
-  }
-  // 自己的历史（尾部截断）
-  const mine = s.messages.filter(m => m.member && m.member.id === member.id);
-  for (const m of mine.slice(-GROUP_LIMITS.memberHistoryTurns)) {
-    msgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: String(m.content).slice(0, GROUP_LIMITS.memberMsgChars) });
-  }
-  if (msgs.length === 1) msgs.push({ role: 'user', content: '【群主任务】（见系统提示）请开始。' });
+  if (msgs.length === 1) msgs.push({ role: 'user', content: '【群主】（见系统提示）请开始。' });
   return msgs;
 }
 
@@ -425,27 +562,28 @@ const groupAbort = { controller: new AbortController() };
 /* ---------- 会话切换/渲染联动 ---------- */
 
 function groupAfterSessionRender(s) {
-  // 群聊会话历史重建：给消息补成员标签 + 重建工具条
+  // 群聊会话历史重建：成员消息以**折叠工作气泡**形态重现（与实况一致），
+  // 群主消息保留原文 + 群主标签；非群会话自动摘除工具条。
   if (s && s.group) {
     groupToolbarRender(s);
     const box = document.getElementById('chatContainer');
     if (box) {
+      const els = box.querySelectorAll('.message');
       let i = 0;
-      box.querySelectorAll('.message').forEach(el => {
+      els.forEach(el => {
         const m = (s.messages || [])[i++];
-        if (!m || !m.member) {
-          if (m && m.role === 'user' && s.group) {
-            const tag = document.createElement('div');
-            tag.className = 'group-msg-tag owner';
-            tag.textContent = '群主';
-            el.insertBefore(tag, el.firstChild);
-          }
-          return;
+        if (!m) return;
+        const contentEl = el.querySelector('.content');
+        if (!contentEl) return;
+        if (m.member) {
+          contentEl.innerHTML = '';
+          groupBubbleMount(contentEl, m.member, String(m.content || ''), 'done');
+        } else if (m.role === 'user') {
+          const tag = document.createElement('div');
+          tag.className = 'group-msg-tag owner';
+          tag.textContent = '群主';
+          contentEl.insertBefore(tag, contentEl.firstChild);
         }
-        const tag = document.createElement('div');
-        tag.className = 'group-msg-tag' + (m.member.host ? ' host' : '');
-        tag.textContent = (m.member.host ? '★' : '') + m.member.name + ' · ' + m.member.id;
-        el.insertBefore(tag, el.firstChild);
       });
     }
   } else {
