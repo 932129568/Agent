@@ -185,6 +185,8 @@ function groupToolbarRender(s) {
   const anchor = document.getElementById('chatContainer');
   if (anchor) anchor.insertBefore(bar, anchor.firstChild);
   bar.querySelectorAll('.gb-chip').forEach(ch => {
+    groupBindLongPress(ch, () => groupManageOpen());   // 长按成员名 → 群聊管理
+    ch.title = '点击 @ 该成员 · 长按打开群聊管理';
     ch.addEventListener('click', () => {
       const m = g.members.find(x => x.id === ch.getAttribute('data-mid'));
       const input = document.getElementById('userInput');
@@ -272,7 +274,9 @@ function groupBriefOf(text) {
   return line.length > 72 ? line.slice(0, 72) + '…' : line;
 }
 
-/** 挂载一个气泡（working/done 共用；历史重建也走这里保持形态一致）。 */
+/** 挂载一个气泡（working/done 共用；历史重建也走这里保持形态一致）。
+ * done 态：整卡点击打开**独立详情页**（2026-11-04 主理人裁定：不在会话流里
+ * 原位展开）；气泡上的名字长按 500ms 打开群聊管理。 */
 function groupBubbleMount(container, member, text, state) {
   const el = document.createElement('div');
   el.className = 'gwb' + (state === 'working' ? ' working' : '') + (member && member.host ? ' host' : '');
@@ -284,56 +288,52 @@ function groupBubbleMount(container, member, text, state) {
     '<div class="gwb-side"><div class="gwb-ava" style="--hue:' + hue + '">' +
       (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div></div>' +
     '<div class="gwb-main">' +
-      '<div class="gwb-head"><span class="gwb-name">' + name + '</span>' +
+      '<div class="gwb-head"><span class="gwb-name" title="长按编辑该成员">' + name + '</span>' +
         '<span class="gwb-state">' + (state === 'working' ? '工作中' : '已完成') + '</span></div>' +
       '<div class="gwb-brief"></div>' +
       '<div class="gwb-full" hidden></div>' +
-    '</div>' +
-    (state === 'working' ? '' : '<button type="button" class="gwb-toggle" aria-expanded="false">展开</button>');
+      (state === 'done' ? '<div class="gwb-hint">点击查看完整内容</div>' : '') +
+    '</div>';
   const briefEl = el.querySelector('.gwb-brief');
   const fullEl = el.querySelector('.gwb-full');
-  const toggleBtn = el.querySelector('.gwb-toggle');
+  const nameEl = el.querySelector('.gwb-name');
+  // 长按名字 → 群聊管理（桌面：按住 500ms；移动/触屏同语义）
+  if (nameEl) groupBindLongPress(nameEl, () => groupManageOpen());
   if (state === 'working') {
     el.__setBrief = t => { briefEl.innerHTML = '<span class="gwb-dots"><i></i><i></i><i></i></span> ' +
       String(t || '').slice(0, 60); };
-    el.__finish = fullText => {
+    el.__finish = (fullText, meta) => {
       el.classList.remove('working');
       el.querySelector('.gwb-state').textContent = '已完成';
       briefEl.textContent = groupBriefOf(fullText);
-      fullEl.innerHTML = (typeof renderMd === 'function') ? renderMd(String(fullText || '')) : '';
-      groupFullHandoffCard(fullEl, fullText);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'gwb-toggle';
-      btn.setAttribute('aria-expanded', 'false');
-      btn.textContent = '展开';
-      btn.addEventListener('click', () => {
-        const open = fullEl.hidden;
-        fullEl.hidden = !open;
-        el.classList.toggle('open', open);
-        btn.setAttribute('aria-expanded', String(open));
-        btn.textContent = open ? '收起' : '展开';
-      });
-      el.appendChild(btn);
+      const hint = document.createElement('div');
+      hint.className = 'gwb-hint';
+      hint.textContent = '点击查看完整内容';
+      el.querySelector('.gwb-main').appendChild(hint);
+      el.classList.add('clickable');
+      el.addEventListener('click', () => groupDetailOpen(fullText, member, meta || null));
       el.__setBrief = null;
       el.__finish = null;
     };
   } else {
-    fullEl.innerHTML = (typeof renderMd === 'function') ? renderMd(String(text || '')) : '';
-    groupFullHandoffCard(fullEl, text);
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        const open = fullEl.hidden;
-        fullEl.hidden = !open;
-        el.classList.toggle('open', open);
-        toggleBtn.setAttribute('aria-expanded', String(open));
-        toggleBtn.textContent = open ? '收起' : '展开';
-      });
-    }
+    el.classList.add('clickable');
+    el.__fullText = String(text || '');
+    el.addEventListener('click', () => groupDetailOpen(el.__fullText, member, null));
   }
   container.appendChild(el);
   try { container.scrollTop = container.scrollHeight; } catch (e) {}
   return el;
+}
+
+/** 长按绑定（500ms；按下期间移动/抬起取消）。 */
+function groupBindLongPress(el, fn) {
+  if (!el) return;
+  let timer = null;
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener('mousedown', () => { cancel(); timer = setTimeout(() => { timer = null; fn(); }, 500); });
+  el.addEventListener('touchstart', () => { cancel(); timer = setTimeout(() => { timer = null; fn(); }, 500); }, { passive: true });
+  ['mouseup', 'mouseleave', 'touchend', 'touchcancel', 'mousemove'].forEach(ev =>
+    el.addEventListener(ev, cancel));
 }
 
 /** 交接文档生成式 UI 化（Round 9 升级点）：气泡展开区的【交接文档】小节
@@ -359,6 +359,154 @@ function groupFullHandoffCard(fullEl, text) {
     el.textContent = r.v;
   });
   fullEl.appendChild(card);
+}
+
+/* ---------- 气泡详情页（独立页面，打开↔返回，2026-11-04 主理人裁定） ---------- */
+
+function groupDetailOpen(text, member, meta) {
+  let page = document.getElementById('groupDetail');
+  if (page) page.remove();
+  const hue = groupHueOf(member);
+  page = document.createElement('div');
+  page.id = 'groupDetail';
+  page.className = 'gd-page';
+  page.innerHTML =
+    '<div class="gd-head">' +
+      '<button type="button" class="gd-back" id="gdBack">‹ 返回群聊</button>' +
+      '<div class="gd-id">' +
+        '<div class="gwb-ava" style="--hue:' + hue + '">' + (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div>' +
+        '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') + member.name) : '群主') +
+          (member && member.host ? ' · 主持人' : '') + '</div>' +
+        '<div class="gd-sub">' + (member && member.model ? member.model : (meta && meta.model) || '群聊发言') +
+          ' · 第 ' + ((meta && meta.round) || '—') + ' 轮</div></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="gd-body"><div class="gd-article"></div></div>';
+  const article = page.querySelector('.gd-article');
+  article.innerHTML = (typeof renderMd === 'function') ? renderMd(String(text || '')) : '';
+  groupFullHandoffCard(article, text);
+  document.body.appendChild(page);
+  document.body.classList.add('gd-lock');
+  void page.offsetWidth;   // 强制 reflow 后再加 show——入场过渡必播（同步可达）
+  page.classList.add('show');
+  const close = () => {
+    page.classList.remove('show');
+    document.body.classList.remove('gd-lock');
+    setTimeout(() => { try { page.remove(); } catch (e) {} }, 220);
+    document.removeEventListener('keydown', onEsc);
+  };
+  const onEsc = e => { if (e.key === 'Escape') close(); };
+  page.querySelector('#gdBack').addEventListener('click', close);
+  document.addEventListener('keydown', onEsc);
+  page.__close = close;
+  const body = page.querySelector('.gd-body');
+  if (body) body.scrollTop = 0;
+  return page;
+}
+
+/* ---------- 群聊管理（长按成员名打开：改身份/模型/增删成员） ---------- */
+
+function groupManageOpen() {
+  const sid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
+  const s = groupSessionOf(sid);
+  if (!s) { if (typeof toast === 'function') toast('请在群聊会话中操作', 'info'); return; }
+  let mask = document.getElementById('groupManage');
+  if (mask) mask.remove();
+  mask = document.createElement('div');
+  mask.id = 'groupManage';
+  mask.className = 'gw-mask show';
+  mask.innerHTML =
+    '<div class="gw-win gm-win" role="dialog" aria-label="群聊管理">' +
+      '<div class="gw-head"><b>群聊管理</b>' +
+        '<button type="button" class="icon-btn" id="gmClose" aria-label="关闭">✕</button></div>' +
+      '<div class="gw-sub">长按聊天里的成员名随时回到这里。修改身份或模型后，下一位成员发言即生效。</div>' +
+      '<div class="gw-mates" id="gmMates"></div>' +
+      '<div class="gw-foot">' +
+        '<button type="button" class="modal-btn" id="gmAdd">＋ 添加成员</button>' +
+        '<span style="flex:1"></span>' +
+        '<button type="button" class="modal-btn" id="gmCancel">取消</button>' +
+        '<button type="button" class="modal-btn primary" id="gmSave">保存</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(mask);
+  const box = mask.querySelector('#gmMates');
+  // DOM → members 同步（编辑期间任何重绘前必须先收值，否则丢用户输入——
+  // Round 11 实证：先改名字再点添加，重绘把名字重置、保存被空名拦截）
+  const syncDomToMembers = () => {
+    const rows = [...box.querySelectorAll('.gw-mate')];
+    for (let i = 0; i < rows.length && i < s.group.members.length; i++) {
+      const row = rows[i];
+      s.group.members[i].name = ((row.querySelector('.gw-name') || {}).value || '').trim().slice(0, 12);
+      s.group.members[i].model = ((row.querySelector('.gw-model') || {}).value || '').trim();
+      s.group.members[i].role = ((row.querySelector('.gw-role') || {}).value || '').slice(0, 2000);
+      s.group.members[i].host = !!((row.querySelector('.gw-host input') || {}).checked);
+    }
+  };
+  const render = () => {
+    box.innerHTML = s.group.members.map(m => groupMemberRow(
+      { name: m.name, model: m.model, role: m.role, host: m.host }, s.group.members.indexOf(m))).join('');
+    box.querySelectorAll('.gw-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.closest('.gw-mate').getAttribute('data-idx'));
+        if (s.group.members.length <= GROUP_LIMITS.membersMin) {
+          if (typeof toast === 'function') toast('群聊至少保留 ' + GROUP_LIMITS.membersMin + ' 名成员', 'warn');
+          return;
+        }
+        syncDomToMembers();
+        s.group.members.splice(idx, 1);
+        s.group.members.forEach((m, i) => { m.id = 'm' + (i + 1); });
+        if (!s.group.members.some(m => m.host) && s.group.members[0]) s.group.members[0].host = true;
+        if (!s.group.members.find(m => m.id === s.group.turn)) {
+          s.group.turn = (s.group.members.find(m => m.host) || s.group.members[0]).id;
+        }
+        render();
+      });
+    });
+  };
+  render();
+  const onGmEsc = e => {
+    if (e.key !== 'Escape') return;
+    gmCloseFn();
+  };
+  const gmCloseFn = () => {
+    document.removeEventListener('keydown', onGmEsc);
+    if (mask.parentNode) mask.remove();
+  };
+  document.addEventListener('keydown', onGmEsc);
+  mask.querySelector('#gmClose').addEventListener('click', gmCloseFn);
+  mask.querySelector('#gmCancel').addEventListener('click', gmCloseFn);
+  mask.querySelector('#gmAdd').addEventListener('click', () => {
+    if (s.group.members.length >= GROUP_LIMITS.membersMax) {
+      if (typeof toast === 'function') toast('群聊最多 ' + GROUP_LIMITS.membersMax + ' 名成员', 'warn');
+      return;
+    }
+    syncDomToMembers();   // 先收当前编辑值再增行，防重绘丢输入
+    s.group.members.push({ id: 'm' + (s.group.members.length + 1), name: '', model: '', role: '', host: false });
+    render();
+  });
+  mask.querySelector('#gmSave').addEventListener('click', () => {
+    const rows = [...box.querySelectorAll('.gw-mate')];
+    const next = [];
+    for (const row of rows) {
+      const name = ((row.querySelector('.gw-name') || {}).value || '').trim();
+      const model = ((row.querySelector('.gw-model') || {}).value || '').trim();
+      const role = ((row.querySelector('.gw-role') || {}).value || '').slice(0, 2000);
+      const host = !!((row.querySelector('.gw-host input') || {}).checked);
+      if (!name) { if (typeof toast === 'function') toast('有成员没有名字', 'warn'); return; }
+      next.push({ id: 'm' + (next.length + 1), name: name.slice(0, 12), model, role, host });
+    }
+    if (next.length < GROUP_LIMITS.membersMin) {
+      if (typeof toast === 'function') toast('至少需要 ' + GROUP_LIMITS.membersMin + ' 名成员', 'warn');
+      return;
+    }
+    if (!next.some(m => m.host)) { if (typeof toast === 'function') toast('请指定一名主持人', 'warn'); return; }
+    s.group.members = next;
+    if (!next.find(m => m.id === s.group.turn)) s.group.turn = (next.find(m => m.host) || next[0]).id;
+    try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
+    gmCloseFn();
+    groupToolbarRefresh(sid);
+    if (typeof toast === 'function') toast('群聊配置已保存', 'ok');
+  });
 }
 
 function groupPush(s, role, text, member, opts) {
@@ -438,7 +586,7 @@ async function groupSpeak(s, member) {
   }
   const trimmedOut = String(text || '').trim() || '（空回复）';
   if (bubble && bubble.__finish) {
-    bubble.__finish(trimmedOut);
+    bubble.__finish(trimmedOut, { round: (g.round || 0) + 1 });
     groupPush(s, 'assistant', trimmedOut, member, { skipDom: true });   // 气泡即消息本体
   } else {
     groupPush(s, 'assistant', trimmedOut, member);

@@ -58,8 +58,9 @@ win:
 nsis:
   oneClick: true
   perMachine: false
-  createDesktopShortcut: false
-  createStartMenuShortcut: false
+  # Round 11（主理人要求）：装完即用+桌面快捷方式；oneClick 默认 runAfterFinish=true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
   deleteAppDataOnUninstall: false
   uninstallDisplayName: Harbor
   artifactName: ${productName}-Setup-${version}.${ext}
