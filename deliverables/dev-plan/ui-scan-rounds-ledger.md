@@ -83,3 +83,25 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 
 门禁：99 模块 / 25883 行；生成式 6 组 + 会话状态组 91+8 全绿；commit `9ef8943` 已推送。
 遗留测试修正：并行默认化后「另一个会话正在运行」拦截已移除，用例改守新语义（不拦截、放行到输入读取）。
+
+## Round 5(完成,2026-11-03,提交 8330cb8/已推送)
+
+- 扫描:D 漏洞域 + C 前端功能正确性域(主会话自扫;并行 agent 撞 TPM 上限,
+  Round 1 经验重申:扫描类一律串行)
+- D 域结论:无高危。前端 innerHTML 全 sink 过 escape/常量;服务端执行面
+  (commands/update/dpapi/software/jail/logger/preload)逐面复核 CLEAN。
+  加固备忘:①browser 路由守卫 DNS TOCTOU(legacy 同口径)②回环服务无 Host
+  白名单(动态端口+JSON-only 已缓解)
+- C 域修复(3 处实证):
+  1. [high] chat-auto 调用被 Round 4 重构包回 ownedFinish 门内(括号深度实证)
+     → 并行后台视图再次静默跳过(P0-4 原 bug 复活)——移回门外
+  2. [med] switchSession 补渲染在历史重建前执行 → 挂进将销毁的旧 DOM——
+     移到两分支 renderChatHistory 之后
+  3. [med] mini 提示抽共用 chatAutoShowMiniHint + provides 同步
+- 误报排除:AppState 门面绑定同一顶层 let(非双状态树)
+- 真机:pending 入队→动画切回→新 DOM 挂载(hosts=1/checks=4)→持久化重建
+- 门禁:前端 13 组 92/92;build 幂等
+
+## Round 6+(待续)
+- 候选:B Agent 效果域(工具描述三段式 lint/sequentialthinking 节制)、
+  UI 图标域(应用图标 v3)、D 域两条加固备忘落地评估
