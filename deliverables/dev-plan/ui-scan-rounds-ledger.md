@@ -105,3 +105,20 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 ## Round 6+(待续)
 - 候选:B Agent 效果域(工具描述三段式 lint/sequentialthinking 节制)、
   UI 图标域(应用图标 v3)、D 域两条加固备忘落地评估
+
+## Round 6(完成,2026-11-03,提交见 git log/已推送)
+
+- 扫描:B Agent 效果域(工具描述三段式 lint 实跑+系统提示词引导面审计)
+- 修复:
+  1. v1.8 三 Agent 工具描述补齐三段式(browser_search/browser_open/software_call
+     ——0 竖线违规,描述退化=模型选错工具根因面);lint 从 v19 子集扩到
+     AGENT_TOOLS 全量(AGENTS.md §3 原口径)
+  2. 契约复核:默认路径逐字节差分零翻转;内置工具族受 legacy 锁定无法三段式化
+     ——AGENTS.md「已应用于既有工具族」与差分红线固有张力,以 CI lint 口径为准
+- 误报排除:提示词 manifest「漂移」= 二进制读假象,loader 文本模式与 manifest
+  口径一致,15 文件 round-trip 全部可追溯
+- 门禁:合并 10 组 217/217
+
+## Round 7+(待续)
+- 候选:图标 v3、D 域两条加固落地评估、C 域续扫(attachments/settings 深 处)、
+  sequentialthinking 节制(差分面待评估,可先 MCP 设置禁用)
