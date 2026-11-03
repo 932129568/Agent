@@ -1296,14 +1296,16 @@ async function runAgentLoop(s, apiKey, opts) {
         } catch (e) {}
         try { if (typeof refreshWsCard === 'function') refreshWsCard(); } catch (e) {}
       }
-      // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图。
-      // P0-4 真机修正：必须在 ownedFinish 门之外——并行时代后台完成的 run 不持
-      // 全局所有权，门内触发会被静默跳过（真机报障：生成视图未出现）。
-      // 可见性/去重由 chatGenerativeAutoRender 自守；用户切回会话时由
-      // switchSession 的补渲染入口兜底。
-      if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
-        try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
-      }
+    }
+    // 生成式UI（2026-11-02 主理人裁定）：回答落定后自动转换为可交互内联视图。
+    // P0-4 真机修正：必须在 ownedFinish 门**之外**——并行时代后台完成的 run 不持
+    // 全局所有权，门内触发会被静默跳过（真机报障：生成视图未出现）。
+    // Round 5 复审：Round 4 重构 finally 时该调用被包回门内（括号深度实证），
+    // 并行后台完成再次静默跳过——移回门外并留本注防再犯。
+    // 可见性/去重由 chatGenerativeAutoRender 自守；用户切回会话时由
+    // switchSession 的补渲染入口兜底。
+    if (!run.cancelled && typeof chatGenerativeAutoRender === 'function') {
+      try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
     }
   }
 }

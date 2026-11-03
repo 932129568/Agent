@@ -416,6 +416,13 @@ function switchSession(id, silent) {
   } catch (e) {}
   if (silent || (typeof MOTION !== 'undefined' && MOTION.instant())) {
     renderChatHistory(target);
+    // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）。
+    // Round 5 时序修正：必须在 renderChatHistory **之后**——原先在函数尾部
+    // 同步调用，而动画分支的历史重建要等 transitionend 回调，补渲染会挂进
+    // 即将被替换掉的旧 DOM，视图随重建消失（「切回来视图没了」的另一半根因）。
+    if (typeof chatAutoRenderPendingFor === 'function') {
+      try { chatAutoRenderPendingFor(id); } catch (e) {}
+    }
   } else {
     box.classList.add('swapping');
     // 修复 S14（三轮）：原 .swapping 移除与渲染同回调无 finally——渲染抛错
@@ -423,6 +430,9 @@ function switchSession(id, silent) {
     MOTION.onAnimEnd(box, 'transitionend', MOTION.compOut()).then(() => {
       try {
         renderChatHistory(target);
+        if (typeof chatAutoRenderPendingFor === 'function') {
+          try { chatAutoRenderPendingFor(id); } catch (e) {}
+        }
       } finally {
         void box.offsetWidth; box.classList.remove('swapping');
       }
@@ -446,10 +456,6 @@ function switchSession(id, silent) {
     }
   }
   refreshWsCard();
-  // 生成式UI：切回会话时补渲染后台完成的自动视图（chat-auto 待渲染队列）
-  if (typeof chatAutoRenderPendingFor === 'function') {
-    try { chatAutoRenderPendingFor(id); } catch (e) {}
-  }
 }
 /** 修复 ㉘：抽出的历史回放渲染（switchSession / regenerate 共用——原 regenerate 只回放 user，历史 assistant 消失） */
 function renderChatHistory(s) {
