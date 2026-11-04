@@ -2836,3 +2836,12 @@ body.gd-lock{overflow:hidden}
 .gm-win{width:min(720px,94vw)}
 .gm-win .gw-mate{transition:border-color .15s}
 .gm-win .gw-mate:hover{border-color:var(--border-strong)}
+
+/* Round 11 修「挤在中间」:历史重建的群聊消息包在 .message 里——content 收缩
+   宽度+消息大间距+飘远的时间戳让气泡又窄又散。群聊下:撑满/紧距/隐时间戳。 */
+.message.group-msg .content{display:block;width:100%;max-width:100%;padding:0;
+  background:transparent;border:none;box-shadow:none}
+.message.group-msg{margin:6px 0 !important}
+.message.group-msg .msg-time{display:none}
+.message.group-msg .avatar{display:none}
+.message.group-msg .msg-actions{display:none}

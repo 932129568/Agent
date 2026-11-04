@@ -282,21 +282,22 @@ function groupBubbleMount(container, member, text, state) {
   el.className = 'gwb' + (state === 'working' ? ' working' : '') + (member && member.host ? ' host' : '');
   const hue = groupHueOf(member);
   const name = member ? ((member.host ? '★ ' : '') + member.name) : '群主';
-  const brief = state === 'working' ? '<span class="gwb-dots"><i></i><i></i><i></i></span> 正在整理输出…'
-    : groupBriefOf(text);
   el.innerHTML =
     '<div class="gwb-side"><div class="gwb-ava" style="--hue:' + hue + '">' +
       (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div></div>' +
     '<div class="gwb-main">' +
       '<div class="gwb-head"><span class="gwb-name" title="长按编辑该成员">' + name + '</span>' +
         '<span class="gwb-state">' + (state === 'working' ? '工作中' : '已完成') + '</span></div>' +
-      '<div class="gwb-brief"></div>' +
+      '<div class="gwb-brief">' + (state === 'working'
+        ? '<span class="gwb-dots"><i></i><i></i><i></i></span> 正在整理输出…'
+        : '') + '</div>' +
       '<div class="gwb-full" hidden></div>' +
       (state === 'done' ? '<div class="gwb-hint">点击查看完整内容</div>' : '') +
     '</div>';
   const briefEl = el.querySelector('.gwb-brief');
   const fullEl = el.querySelector('.gwb-full');
   const nameEl = el.querySelector('.gwb-name');
+  if (state !== 'working') briefEl.textContent = groupBriefOf(text);   // done 摘要行
   // 长按名字 → 群聊管理（桌面：按住 500ms；移动/触屏同语义）
   if (nameEl) groupBindLongPress(nameEl, () => groupManageOpen());
   if (state === 'working') {
@@ -724,7 +725,12 @@ function groupAfterSessionRender(s) {
         const contentEl = el.querySelector('.content');
         if (!contentEl) return;
         if (m.member) {
+          // Round 11 修「挤在中间」：.message 的 content 是收缩宽度+大间距——
+          // 群聊 member 消息打 group-msg 类让气泡撑满、间距收紧、时间戳隐藏
+          // （时间在详情页头部有）。
+          el.classList.add('group-msg');
           contentEl.innerHTML = '';
+          contentEl.style.display = 'block';
           groupBubbleMount(contentEl, m.member, String(m.content || ''), 'done');
         } else if (m.role === 'user') {
           const tag = document.createElement('div');
