@@ -158,11 +158,14 @@ const PRESETS = {
  * 未命中 → 不猜，直接进手动输入态。 */
 const PROVIDER_HOT_MODELS = [
   { host: 'bigmodel.cn', models: [
-    { id: 'glm-5.3-flash', text: 'glm-5.3-flash（通用 · 更省钱）' },
-    { id: 'glm-5.3-flashx', text: 'glm-5.3-flashx（极速）' },
+    // Round 12 修复（2026-11-04）：与 PRESETS.glm 同步——原表里 glm-5.3-flash /
+    // glm-5.3-flashx / glm-4.7-flash 在 bigmodel.cn 不存在（1211），实时清单失败
+    // 时用它们兜底等于把「装完即失败」写死。
+    { id: 'glm-4.5-flash', text: 'glm-4.5-flash（免费 · 日常够用）' },
+    { id: 'glm-4-flash', text: 'glm-4-flash（免费 · 更省）' },
+    { id: 'glm-4.5', text: 'glm-4.5（付费 · 更强推理）' },
     { id: 'glm-4.6', text: 'glm-4.6（新一代）' },
-    { id: 'glm-4.5-air', text: 'glm-4.5-air（轻量）' },
-    { id: 'glm-4.7-flash', text: 'glm-4.7-flash（免费/普惠）' }
+    { id: 'glm-4.5-air', text: 'glm-4.5-air（轻量）' }
   ] },
   { host: 'deepseek.com', models: [
     { id: 'deepseek-flash', text: 'deepseek-flash（1M 上下文·低价）' },

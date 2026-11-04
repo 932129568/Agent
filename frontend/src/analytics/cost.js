@@ -132,7 +132,7 @@ function estimateNextCost(s) {
     ? estTokensCalibrated(text)
     : Math.ceil(chars / 1.7);
   const outputTokens = 1024;   // 假定一轮输出
-  const model = providerState.enabled ? (providerState.model || '') : (document.getElementById('modelSelect')?.value || 'glm-5.3-flash');
+  const model = providerState.enabled ? (providerState.model || '') : (document.getElementById('modelSelect')?.value || 'glm-4.5-flash');
   const p = providerPriceFor(model);
   const costIn = inputTokens * p.in / 1e6;
   const costOut = outputTokens * p.out / 1e6;

@@ -1,9 +1,13 @@
 /* ================= Token 统计 ================= */
 const MODEL_PRICE = {
-  'glm-5.3-flashx': { in: 2, out: 7, cache: 0.57 },
-  'glm-5.3-flash': { in: 0.8, out: 2.8, cache: 0.23 },
-  // 智谱官方免费/普惠模型：按 0 计价，避免回落至 5.3-flashx 付费表。
-  'glm-4.7-flash': { in: 0, out: 0, cache: 0 }
+  // Round 12（2026-11-04）：改为平台在售模型名。原 glm-5.3-flash / glm-5.3-flashx
+  // 在 bigmodel.cn 不存在，价格表永远查不到 → 费用显示全靠兜底价，失真。
+  'glm-4.5': { in: 4, out: 16, cache: 1 },
+  'glm-4.6': { in: 4, out: 16, cache: 1 },
+  'glm-4.5-air': { in: 0.8, out: 2, cache: 0.16 },
+  // 智谱官方免费/普惠模型：按 0 计价。
+  'glm-4.5-flash': { in: 0, out: 0, cache: 0 },
+  'glm-4-flash': { in: 0, out: 0, cache: 0 }
 };
 function calcUsage(messages) {
   let total = 0, cached = 0, cost = 0, costStdIn = 0, costCache = 0, costOut = 0;

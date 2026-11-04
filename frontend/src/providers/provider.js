@@ -134,7 +134,8 @@ function providerPriceFor(model) {
     const has = Number(p.in) > 0 || Number(p.out) > 0 || Number(p.cache) > 0;
     if (has) return { in: Number(p.in) || 0, out: Number(p.out) || 0, cache: Number(p.cache) || 0 };
   }
-  return MODEL_PRICE[model] || MODEL_PRICE['glm-5.3-flashx'];
+  // Round 12：兜底价目改为平台在售模型（原 glm-5.3-flashx 不存在，价格表也无此项）
+  return MODEL_PRICE[model] || MODEL_PRICE['glm-4.5-flash'] || MODEL_PRICE['glm-4.5'] || { in: 0, out: 0, cache: 0 };
 }
 
 /** 品牌位 / 会话头标题：显示当前生效模型名（手动态取文本框）。 */

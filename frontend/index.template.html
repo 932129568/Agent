@@ -79,7 +79,7 @@
     <div class="brand-logo">G</div>
     <div style="min-width:0">
       <div class="brand-name">Harbor</div>
-      <div class="brand-sub" id="brandModel">glm-5.3-flash</div>
+      <div class="brand-sub" id="brandModel">glm-4.5-flash</div>
     </div>
   </div>
 
@@ -105,7 +105,7 @@
   <header class="header">
     <div class="header-left">
       <button class="icon-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="折叠/展开侧栏" aria-label="折叠/展开侧栏" aria-expanded="true"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
-      <div class="header-title" id="headerTitle">glm-5.3-flash</div>
+      <div class="header-title" id="headerTitle">glm-4.5-flash</div>
       <!-- 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。
            Round 8：删静态装饰徽标「多模态 Agent」（无用定义的 UI 版）。 -->
       <div class="header-status" id="headerStatusZone"></div>
@@ -191,8 +191,9 @@
                 <div class="cm-pick" id="cmPick">
                   <select id="modelSelect">
                     <option value="auto" selected>智能档（按任务自动调节，最省）</option>
-                    <option value="glm-5.3-flash">glm-5.3-flash（通用 · 更省钱）</option>
-                    <option value="glm-5.3-flashx">glm-5.3-flashx（极速）</option>
+                    <option value="glm-4.5-flash">glm-4.5-flash（免费 · 日常够用）</option>
+                    <option value="glm-4-flash">glm-4-flash（免费 · 更省）</option>
+                    <option value="glm-4.5">glm-4.5（付费 · 更强推理）</option>
                   </select>
                   <div class="cm-manual" id="cmManual">
                     <input type="text" id="cmManualInput" placeholder="输入模型名，如 deepseek-v4.1" autocomplete="off" spellcheck="false">

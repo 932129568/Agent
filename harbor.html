@@ -3941,7 +3941,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
     <div class="brand-logo">G</div>
     <div style="min-width:0">
       <div class="brand-name">Harbor</div>
-      <div class="brand-sub" id="brandModel">glm-5.3-flash</div>
+      <div class="brand-sub" id="brandModel">glm-4.5-flash</div>
     </div>
   </div>
 
@@ -3967,7 +3967,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
   <header class="header">
     <div class="header-left">
       <button class="icon-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="折叠/展开侧栏" aria-label="折叠/展开侧栏" aria-expanded="true"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
-      <div class="header-title" id="headerTitle">glm-5.3-flash</div>
+      <div class="header-title" id="headerTitle">glm-4.5-flash</div>
       <!-- 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。
            Round 8：删静态装饰徽标「多模态 Agent」（无用定义的 UI 版）。 -->
       <div class="header-status" id="headerStatusZone"></div>
@@ -4053,8 +4053,9 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
                 <div class="cm-pick" id="cmPick">
                   <select id="modelSelect">
                     <option value="auto" selected>智能档（按任务自动调节，最省）</option>
-                    <option value="glm-5.3-flash">glm-5.3-flash（通用 · 更省钱）</option>
-                    <option value="glm-5.3-flashx">glm-5.3-flashx（极速）</option>
+                    <option value="glm-4.5-flash">glm-4.5-flash（免费 · 日常够用）</option>
+                    <option value="glm-4-flash">glm-4-flash（免费 · 更省）</option>
+                    <option value="glm-4.5">glm-4.5（付费 · 更强推理）</option>
                   </select>
                   <div class="cm-manual" id="cmManual">
                     <input type="text" id="cmManualInput" placeholder="输入模型名，如 deepseek-v4.1" autocomplete="off" spellcheck="false">
@@ -9677,11 +9678,14 @@ const PRESETS = {
  * 未命中 → 不猜，直接进手动输入态。 */
 const PROVIDER_HOT_MODELS = [
   { host: 'bigmodel.cn', models: [
-    { id: 'glm-5.3-flash', text: 'glm-5.3-flash（通用 · 更省钱）' },
-    { id: 'glm-5.3-flashx', text: 'glm-5.3-flashx（极速）' },
+    // Round 12 修复（2026-11-04）：与 PRESETS.glm 同步——原表里 glm-5.3-flash /
+    // glm-5.3-flashx / glm-4.7-flash 在 bigmodel.cn 不存在（1211），实时清单失败
+    // 时用它们兜底等于把「装完即失败」写死。
+    { id: 'glm-4.5-flash', text: 'glm-4.5-flash（免费 · 日常够用）' },
+    { id: 'glm-4-flash', text: 'glm-4-flash（免费 · 更省）' },
+    { id: 'glm-4.5', text: 'glm-4.5（付费 · 更强推理）' },
     { id: 'glm-4.6', text: 'glm-4.6（新一代）' },
-    { id: 'glm-4.5-air', text: 'glm-4.5-air（轻量）' },
-    { id: 'glm-4.7-flash', text: 'glm-4.7-flash（免费/普惠）' }
+    { id: 'glm-4.5-air', text: 'glm-4.5-air（轻量）' }
   ] },
   { host: 'deepseek.com', models: [
     { id: 'deepseek-flash', text: 'deepseek-flash（1M 上下文·低价）' },
@@ -12880,7 +12884,8 @@ function providerPriceFor(model) {
     const has = Number(p.in) > 0 || Number(p.out) > 0 || Number(p.cache) > 0;
     if (has) return { in: Number(p.in) || 0, out: Number(p.out) || 0, cache: Number(p.cache) || 0 };
   }
-  return MODEL_PRICE[model] || MODEL_PRICE['glm-5.3-flashx'];
+  // Round 12：兜底价目改为平台在售模型（原 glm-5.3-flashx 不存在，价格表也无此项）
+  return MODEL_PRICE[model] || MODEL_PRICE['glm-4.5-flash'] || MODEL_PRICE['glm-4.5'] || { in: 0, out: 0, cache: 0 };
 }
 
 /** 品牌位 / 会话头标题：显示当前生效模型名（手动态取文本框）。 */
@@ -20627,10 +20632,14 @@ function inputPlusInit() {
 /* ===== frontend/src/analytics/tokens.js ===== */
 /* ================= Token 统计 ================= */
 const MODEL_PRICE = {
-  'glm-5.3-flashx': { in: 2, out: 7, cache: 0.57 },
-  'glm-5.3-flash': { in: 0.8, out: 2.8, cache: 0.23 },
-  // 智谱官方免费/普惠模型：按 0 计价，避免回落至 5.3-flashx 付费表。
-  'glm-4.7-flash': { in: 0, out: 0, cache: 0 }
+  // Round 12（2026-11-04）：改为平台在售模型名。原 glm-5.3-flash / glm-5.3-flashx
+  // 在 bigmodel.cn 不存在，价格表永远查不到 → 费用显示全靠兜底价，失真。
+  'glm-4.5': { in: 4, out: 16, cache: 1 },
+  'glm-4.6': { in: 4, out: 16, cache: 1 },
+  'glm-4.5-air': { in: 0.8, out: 2, cache: 0.16 },
+  // 智谱官方免费/普惠模型：按 0 计价。
+  'glm-4.5-flash': { in: 0, out: 0, cache: 0 },
+  'glm-4-flash': { in: 0, out: 0, cache: 0 }
 };
 function calcUsage(messages) {
   let total = 0, cached = 0, cost = 0, costStdIn = 0, costCache = 0, costOut = 0;
@@ -20883,7 +20892,7 @@ function estimateNextCost(s) {
     ? estTokensCalibrated(text)
     : Math.ceil(chars / 1.7);
   const outputTokens = 1024;   // 假定一轮输出
-  const model = providerState.enabled ? (providerState.model || '') : (document.getElementById('modelSelect')?.value || 'glm-5.3-flash');
+  const model = providerState.enabled ? (providerState.model || '') : (document.getElementById('modelSelect')?.value || 'glm-4.5-flash');
   const p = providerPriceFor(model);
   const costIn = inputTokens * p.in / 1e6;
   const costOut = outputTokens * p.out / 1e6;
