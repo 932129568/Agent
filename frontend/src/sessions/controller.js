@@ -384,10 +384,10 @@ function newSession() {
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
-  // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  // R20/R24：后台 run 的截图保留（消费端按 sid 过滤兜底串图）；lastShotHash
+  // 是「同图不重截」指纹——新会话语义下应允许重截，故复位指纹但不动截图队列
   lastShotHash = null;
-  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
-  shotState = 'idle';
+  shotState = 'idle';   // 全局态仅剩兼容面；run 内已用 run.shotState（R24）
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲：补 rejection 处理（原只挡同步 throw）
     try { callApi('set_current_sid', [null]).catch(() => {}); } catch (e) {}   // 修复 ㊲：同上；后端借此清空会话信任态（含 MCP）
@@ -457,7 +457,7 @@ function switchSession(id, silent) {
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
   lastShotHash = null;
   if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
-  shotState = 'idle';
+  shotState = 'idle';   // 全局态仅剩兼容面；run 内已用 run.shotState（R24）
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）
@@ -489,6 +489,51 @@ function renderChatHistory(s) {
     box.appendChild(div);
     pendingTools = [];
   };
+  // R21 性能调度（实测 400 条 404ms）：视口外老消息走轻量渲染（纯文本形态，
+  // 保 .message 形状与 data-midx），IntersectionObserver 滚入视口 200px 内
+  // 再升级为完整渲染（renderMd+操作条+代码增强）。群聊会话不懒（气泡映射按
+  // .message 逐条对位）。
+  const total = (s.messages || []).length;
+  const lazyFrom = s.group ? total : Math.max(0, total - 50);
+  // 升级器：滚动/初始化时把视口内（±200px）的轻量节点升级为完整渲染。
+  // 不用 IntersectionObserver——被遮挡窗口 IO 不派发（R21 实测 ioFired=0），
+  // scroll 事件确定性触发。节流 120ms。
+  const upgradeInView = () => {
+    const lights = box.querySelectorAll('[data-lazyidx]');
+    if (!lights.length) return;
+    const vh = window.innerHeight || 800;
+    lights.forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.bottom < -200 || r.top > vh + 200) return;
+      const idx = Number(el.dataset.lazyidx);
+      const mm = (s.messages || [])[idx];
+      if (!mm || mm.role !== 'assistant') { delete el.dataset.lazyidx; return; }
+      const text = typeof mm.content === 'string' ? mm.content : '';
+      el.innerHTML = '<div class="md-body">' + renderMd(text) + '</div>';
+      addMsgActions(el, text);
+      enhanceCodeBlocks(el);
+      if (mm.uiSpec && typeof mountChatUiSpecFromMessage === 'function') {
+        try { mountChatUiSpecFromMessage(el, mm); } catch (e) {}
+      }
+      if (mm.__compactCard || mm.__archiveCard) renderCompactCard(box, s, mm);
+      delete el.dataset.lazyidx;
+    });
+  };
+  const onScrollLazy = () => {
+    if (onScrollLazy._t) return;
+    onScrollLazy._t = setTimeout(() => { onScrollLazy._t = null; upgradeInView(); }, 120);
+  };
+  box.addEventListener('scroll', onScrollLazy, { passive: true });
+  // 兜底轮询：被遮挡窗口不派发 scroll（R21 实测 scrollFired=0），interval 在
+  // 后台窗口最慢 1s 仍会触发；lazy 清零即自毁。
+  if (typeof setInterval === 'function' && typeof clearInterval === 'function') {
+    const lazyTimer = setInterval(() => {
+      if (!box.isConnected) { clearInterval(lazyTimer); return; }
+      if (!box.querySelector('[data-lazyidx]')) { clearInterval(lazyTimer); return; }
+      upgradeInView();
+    }, 400);
+  }
+
   (s.messages || []).forEach((m, i) => {
     if (m.role === 'user') {
       flushTools();
@@ -524,6 +569,17 @@ function renderChatHistory(s) {
       }
       if (text.trim()) {
         flushTools();
+        if (i < lazyFrom) {
+          // 轻量渲染：纯文本形态（老消息滚入视口时由 lightIO 升级）
+          const lite = addMessage('assistant', '', m.usage ? { usage: m.usage } : {});
+          if (lite) {
+            lite.dataset.midx = i;
+            lite.dataset.lazyidx = String(i);
+            lite.innerHTML = '<div class="md-body md-lite"></div>';
+            lite.querySelector('.md-lite').textContent = String(text).slice(0, 400);
+          }
+          return;   // forEach continue
+        }
         const extra = m.usage ? { usage: m.usage } : {};
         const contentEl = addMessage('assistant', text, extra);
         if (contentEl && contentEl.dataset) contentEl.dataset.midx = i;   // 修复 UX-3（v1.4）：stamp 源消息下标，供会话搜索跳转定位（dataset 防御）
@@ -540,6 +596,8 @@ function renderChatHistory(s) {
   flushTools();
   // R19 性能：batch 重建期 addMessage 不再逐条滚底——此处一次性归底
   try { box.scrollTop = box.scrollHeight; } catch (e) {}
+  // R21：重建完成立即做一次视口内升级（覆盖视口很大的场景）
+  try { upgradeInView(); } catch (e) {}
   // Round 16 resume：任务中断恢复横幅（runStatus=paused 且停在 assistant/tool）。
   // 继续 = runAgentLoop 重入（历史已配平，模型从挂起点续写）；放弃 = 收敛 completed。
   if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {

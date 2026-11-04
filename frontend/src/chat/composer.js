@@ -146,7 +146,7 @@ function ipModelRender() {
     '<div class="mc-item' + (m === cur ? ' on' : '') + '" data-val="' + esc(m) + '">' +
       '<span class="mc-name">' + esc(m) + '</span>' +
       (m === cur ? '<span class="mc-check">✓</span>' : '') +
-      '<button type="button" class="mc-del" data-del="' + esc(m) + '" title="删除该自定义模型">✕</button>' +
+      '<button type="button" class="mc-del" data-del="' + esc(m) + '" title="删除该自定义模型"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>' +
     '</div>').join('');
   const thinkingOptions = IP_THINKING_ORDER.map(v =>
     '<option value="' + v + '"' + (__modelPrefs.thinking === v ? ' selected' : '') + '>' +

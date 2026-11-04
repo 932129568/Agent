@@ -304,11 +304,12 @@ class TestT5PromptUpdates:
         assert len(b.build_system_prompt()) < len(a.build_system_prompt())
 
     def test_efficiency_prompt_additions(self):
+        # R25 对齐：Round 8 提示词瘦身（有记账裁定）删掉了 GitHub Models 端点
+        # 硬编码段（现支持任意端点，限额数字对其余端点是噪音）——测试对齐现役
+        # 契约：MCP 铁律保留、无端点硬编码、模板内零注释符。
         src = _fe('55-tool-route.js')
-        assert '【源】GitHub Models 免费层限额敏感' in src
-        assert '15 RPM/150 RPD' in src
         assert '【MCP】工具结果只信最新一条' in src
-        # 注释必须在模板字面量外（不得把 // 注释放进提示词）
+        assert '【源】GitHub Models 免费层限额敏感' not in src
         seg = src.split('const EFFICIENCY_PROMPT = `')[1].split('`;')[0]
         assert '//' not in seg, '提示词模板内不得出现注释符'
 

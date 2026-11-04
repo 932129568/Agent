@@ -164,6 +164,7 @@ async function __main() {
     assert result['projectSession']['projectWorkspace'] == project['workspace']
     assert result['currentSessionId'] == result['projectSession']['id']
     assert result['saveCount'] >= 1
+    import sys as _sys; print('WS_CALLS:', repr(result['wsCalls'])[:400], file=_sys.stderr)
     assert any(call['args'][0] == result['projectSession']['id'] and
                call['args'][1] == project['workspace'] and call['args'][2] is True
                for call in result['wsCalls'])

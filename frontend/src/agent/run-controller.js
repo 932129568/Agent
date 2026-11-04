@@ -588,13 +588,13 @@ async function runAgentLoop(s, apiKey, opts) {
       // 截图注入本请求。现按 sid 过滤，只消费本会话的截图。
       const _myShots = (typeof pendingShots !== 'undefined' ? pendingShots : [])
         .filter(x => x && x.sid === String(s.id)).map(x => x.comp);
-      if (_myShots.length && shotState === 'idle') {
+      if (_myShots.length && (run.shotState || 'idle') === 'idle') {
         const shotContent = [{ type: 'text', text: _myShots.length > 1
           ? `[系统附图] 以下是 ${_myShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
           : '[系统附图] 以下是当前屏幕截图,请据此判断界面状态并继续操作。' }];
         for (const sh of _myShots) shotContent.push({ type: 'image_url', image_url: { url: sh } });
         reqMsgs.push({ role: 'user', content: shotContent });
-        shotState = 'sending';
+        run.shotState = 'sending';
         run.__sentShots = _myShots;   // 发送成功后按清单精确出队（不误删他会话）
       }
       const _mp = (typeof getModelPrefs === 'function') ? getModelPrefs() : null;
@@ -728,8 +728,8 @@ async function runAgentLoop(s, apiKey, opts) {
               if (_le) _le.textContent = `△ 缓存命中率仅 ${window.__hitRate}%（本轮输入 ${_pr} tokens 多按全价计）| 建议：避免中途改系统设定/权限档，或 /compact 后重开话题`;
             }
           }
-          if (shotState === 'sending') {
-            shotState = 'idle';
+          if (run.shotState === 'sending') {
+            run.shotState = 'idle';
             if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
             try {
               s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
@@ -745,8 +745,8 @@ async function runAgentLoop(s, apiKey, opts) {
       usage = parsed.usage;
       finishReason = parsed.finishReason;
       _clearWaitTimer();
-      if (shotState === 'sending') {
-        shotState = 'idle';
+      if (run.shotState === 'sending') {
+        run.shotState = 'idle';
         if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
         try {
           s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
@@ -1208,7 +1208,7 @@ async function runAgentLoop(s, apiKey, opts) {
   } catch (err) {
     if (agentRunCurrent(run)) {
     // 修复 S6（二轮）：请求失败/abort 后截图不能永久失陷——复位 shotState 让下轮可重发
-    if (shotState === 'sending') shotState = 'idle';
+    if (run.shotState === 'sending') run.shotState = 'idle';
     // 修复 M5（四轮）：非 abort 失败路径也清过期截图——原仅 AbortError 清，失败后
     // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）——只清本会话的
     if (typeof pendingShots !== 'undefined' && pendingShots.length) pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
@@ -1243,7 +1243,8 @@ async function runAgentLoop(s, apiKey, opts) {
       // Round 16 resume：网络断流/5xx/429 等可恢复错误与 abort 同款处理——
       // 部分正文固化入历史 + tool_calls 配平 + runStatus=paused（恢复横幅据此出现）。
       // 确定性失败（401/余额/参数）维持 failed：继续只会再失败，人话已给。
-      if (typeof isResumableError === 'function' && isResumableError(err.message)) {
+      const _resumable = typeof isResumableError === 'function' && isResumableError(err.message);
+      if (_resumable) {
         if (partialContent) {
           const last = s.messages[s.messages.length - 1];
           if (!last || last.role !== 'assistant') s.messages.push({ role: 'assistant', content: partialContent });
@@ -1251,6 +1252,26 @@ async function runAgentLoop(s, apiKey, opts) {
         if (run.assistantMsg) fillMissingToolResults(s, run.assistantMsg);
       }
       saveSessions();
+      // R24 resume 升级：可恢复错误自动续跑一次（2.5s 后；每会话 5 分钟窗口内
+      // 最多 2 次，防网络长时间中断时无限循环）——失败则走恢复横幅人工决定
+      if (_resumable && !userStopped) {
+        s._netResumeAt = s._netResumeAt || [];
+        const now = Date.now();
+        s._netResumeAt = s._netResumeAt.filter(t => now - t < 5 * 60 * 1000);
+        if (s._netResumeAt.length < 2) {
+          s._netResumeAt.push(now);
+          const _sid = s.id, _apiKey = apiKey;
+          setTimeout(() => {
+            const cur = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
+            const ss = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+              ? sessions.find(x => x.id === _sid) : null;
+            if (!ss || cur !== _sid) return;                       // 已切走 → 横幅承接
+            if ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming) return;
+            if (typeof toast === 'function') toast('网络中断已恢复，正在自动继续任务…', 'info');
+            if (typeof continueLastGeneration === 'function') continueLastGeneration(ss, _apiKey);
+          }, 2500);
+        }
+      }
     }
     if (!run.statusFinalized) {
       const _resumable = typeof isResumableError === 'function' && isResumableError(err.message);

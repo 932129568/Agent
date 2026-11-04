@@ -81,11 +81,11 @@ class TestT10LocalRuntime:
     ③ tokens/s 速度显示（新增）；④ /api/tags 元数据徽标路径确认。"""
 
     def test_503_loading_backoff_in_place(self):
-        """① Ollama 503「model is loading」指数退避 2/4/8s（v1.5 B4 在位，锁定）。"""
+        # R22 对齐：本地模型冷加载退避延长为 6 档共 119s（7B-32B 冷启动 30-90s
+        # 很常见，原 3 档 14s 常常不够）；云端端点保持 3 档不变。
         src = _fe('45-request-debounce.js')
-        assert 'LOADING_BACKOFF = [2000, 4000, 8000]' in src
-        assert "resp.status === 503 && attempt < LOADING_BACKOFF.length" in src
-        assert '模型加载中' not in src or True   # 文案由 60-agent-loop 等待态呈现
+        assert 'LOADING_BACKOFF = isLocal ? [2000, 4000, 8000, 15000, 30000, 60000] : [2000, 4000, 8000]' in src
+        assert 'LOADING_BACKOFF[attempt]' in src
 
     def test_first_token_wait_state_in_place(self):
         """② 首字节 >5s 未到 → 「本地推理中（已等待 Ns）」每秒刷新（v1.5 B3 在位，锁定）。"""
@@ -212,11 +212,14 @@ class TestT11NavLayout:
     """T11：新左侧导航五分区切换（复用既有面板/浮层 DOM）+ 高亮 + 空态引导。"""
 
     def test_template_nav_added(self):
+        # R25 对齐：Round 8 IA 重构（有记账裁定）把 mainNav/navBtnX 五分区改为
+        # rail（对话/历史/工作区/专家）+ toolsPop 工具箱（分析/审计/搜索/沙箱）
+        # + notifyPop 通知中心。测试锁定现役导航契约。
         tpl = _tpl()
-        assert 'id="mainNav"' in tpl
-        for z in ('Chat', 'Settings', 'Audit', 'Search', 'Sandbox', 'Notify'):
-            assert ('id="navBtn%s"' % z) in tpl, '缺少导航按钮: ' + z
-        assert 'id="notifyPop"' in tpl and 'id="notifyList"' in tpl
+        for k in ('data-panel="chat"', 'data-panel="sessions"', 'data-panel="workspace"',
+                  'id="toolsBoxBtn"', 'id="toolsPop"', 'id="railNotifyBtn"',
+                  'id="notifyPop"', 'id="notifyList"'):
+            assert k in tpl, '缺少现役导航元素: ' + k
         assert 'id="emptyGuide"' in tpl and 'id="headerStatusZone"' in tpl
         # 老入口 DOM 不删（直切口径：契约红线）
         assert 'id="settingsPanel"' in tpl and 'id="setNav"' in tpl

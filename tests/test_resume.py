@@ -126,7 +126,10 @@ def test_run_controller_wires_resumable_error_path():
     src = RUN_CTRL.read_text(encoding='utf-8')
     assert 'isResumableError(err.message)' in src
     # error 路径（非 abort）也要固化部分正文 + 配平 + paused
-    assert 'if (typeof isResumableError === \'function\' && isResumableError(err.message)) {' in src
+    # R24 升级后：error 路径先归类（_resumable）再固化/配平/自动续跑
+    assert "const _resumable = typeof isResumableError === 'function' && isResumableError(err.message);" in src
+    assert 's._netResumeAt.push(now);' in src and 'continueLastGeneration(ss, _apiKey);' in src
+    assert "(err.name === 'AbortError' || userStopped || _resumable) ? 'paused' : 'failed'" in src
     assert "(err.name === 'AbortError' || userStopped || _resumable) ? 'paused' : 'failed'" in src
 
 

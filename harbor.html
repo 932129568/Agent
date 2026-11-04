@@ -2815,7 +2815,7 @@ body:not(.fx-off) *,body:not(.fx-off) *::before,body:not(.fx-off) *::after{
 /* ================= 群聊协作（Beta, 2026-11-04） ================= */
 .group-beta-entry{margin-top:18px;min-height:38px;padding:0 18px;border-radius:999px;
   border:1px dashed var(--border-strong);background:transparent;color:var(--text-2);
-  font-size:13px;cursor:pointer;transition:all .15s var(--ease-out-soft)}
+  font-size:13px;cursor:pointer;transition:color .15s var(--ease-out-soft),border-color .15s var(--ease-out-soft),background-color .15s var(--ease-out-soft),box-shadow .15s var(--ease-out-soft)}
 .group-beta-entry:hover{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
 .gb-beta{font-size:10px;font-weight:700;color:var(--primary);border:1px solid var(--primary);
   border-radius:999px;padding:1px 6px;margin-left:4px;vertical-align:1px}
@@ -2905,7 +2905,7 @@ body:not(.fx-off) *,body:not(.fx-off) *::before,body:not(.fx-off) *::after{
 @keyframes gwbOpen{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .gwb-toggle{align-self:center;flex:none;min-height:26px;padding:0 12px;font-size:11.5px;
   border:1px solid var(--border);border-radius:999px;background:var(--card-bg);color:var(--text-2);
-  cursor:pointer;transition:all .15s var(--ease-out-soft)}
+  cursor:pointer;transition:color .15s var(--ease-out-soft),border-color .15s var(--ease-out-soft),background-color .15s var(--ease-out-soft),box-shadow .15s var(--ease-out-soft)}
 .gwb-toggle:hover{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
 /* 交接文档生成式卡(气泡展开区内) */
 .gwb-handoff{margin-top:10px;border:1px solid color-mix(in srgb,var(--primary) 26%,var(--border));
@@ -2933,7 +2933,7 @@ body.fx-off .gwb-dots i,body.fx-off .gwb-state{animation:none}
   border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--card-bg),transparent)}
 .gd-back{min-height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--border);
   background:var(--card-bg);color:var(--text-2);font-size:13px;cursor:pointer;
-  transition:all .15s var(--ease-out-soft)}
+  transition:color .15s var(--ease-out-soft),border-color .15s var(--ease-out-soft),background-color .15s var(--ease-out-soft),box-shadow .15s var(--ease-out-soft)}
 .gd-back:hover{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
 .gd-id{display:flex;align-items:center;gap:10px}
 .gd-name{font-size:14.5px;font-weight:700;color:var(--text)}
@@ -3030,6 +3030,17 @@ body.gd-lock{overflow:hidden}
 /* Round 15 三批：群文件搜索命中高亮 */
 mark.gf-hit{background:color-mix(in srgb,var(--primary) 28%,transparent);color:var(--text);
   border-radius:3px;padding:0 2px}
+
+/* R21 懒渲染：视口外老消息的轻量形态（滚入 200px 内自动升级完整渲染） */
+.md-lite{color:var(--text-2);white-space:pre-wrap;overflow:hidden;display:-webkit-box;
+  -webkit-line-clamp:6;-webkit-box-orient:vertical}
+
+/* R23 UI：键盘可达性——focus-visible 统一焦点环（鼠标点击不显示，Tab 导航显示） */
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}
+.btn:focus-visible,.modal-btn:focus-visible,.icon-btn:focus-visible,.rail-btn:focus-visible,
+.session-item:focus-visible,.gf-item:focus-visible,.gb-chip:focus-visible{outline-offset:1px}
+/* 会话状态徽标对齐 sprite 尺寸 */
+.session-status .ui-icon{vertical-align:-2px}
 
 /* ===== frontend/styles/components.css ===== */
 /* W4A shared controls. Legacy remains only a compatibility layer below these rules. */
@@ -5561,7 +5572,7 @@ function toast(msg, type, opts) {
   t.innerHTML = '<span class="toast-ico">' + icon + '</span>' +
     '<span class="toast-msg"></span>' +
     (opts.detail ? '<button class="toast-more">明细</button>' : '') +
-    '<button class="toast-close" aria-label="关闭通知">✕</button>';
+    '<button class="toast-close" aria-label="关闭通知"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>';
   // v4：首行作粗体标题（长文案首行即摘要，短文案整体标题化）——
   // 修复旧版纯文本一坨、错误场景「请求失败」与详情无层次
   {
@@ -11813,9 +11824,77 @@ function paceFreeTier(signal, sleepAbortable) {
   return run;
 }
 
+/* R22 本地大模型调度：本地推理服务（Ollama/LM Studio 等）实际是单 GPU 串行，
+ * 并发请求只会造成 KV-cache 上下文切换与首 token 延迟恶化。前端按 endpoint
+ * 排队（FIFO），同端点一次只放一个请求在途；槽位在【响应流消费完毕】才释放
+ * （streaming 阶段才是 GPU 占用），云端端点不受限。 */
+const _localChains = new Map();   // endpoint -> Promise（链尾：前一个请求的槽位释放）
+
+function _acquireLocalSlot(epKey) {
+  const prev = _localChains.get(epKey) || Promise.resolve();
+  let release;
+  const gate = new Promise(res => { release = res; });
+  const slot = {
+    release: () => { if (release) { const r = release; release = null; r(); } },
+  };
+  _localChains.set(epKey, gate);
+  if (_localChains.size > 8) {   // 端点数兜底：淘汰最旧链（防御性，正常 ≤3 个端点）
+    const first = _localChains.keys().next().value;
+    if (first !== epKey) _localChains.delete(first);
+  }
+  return { wait: prev.then(() => undefined, () => undefined), slot };
+}
+
+/** 把响应体包一层：读尽/取消/出错时释放本地槽位（streaming 全程占槽）。 */
+function _wrapBodyWithSlotRelease(body, slot) {
+  if (!body || !slot) return body;
+  let released = false;
+  const rel = () => { if (!released) { released = true; slot.release(); } };
+  const wrapped = new ReadableStream({
+    async start(controller) {
+      const reader = body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+        try { controller.close(); } catch (e) {}
+      } catch (e) {
+        try { controller.error(e); } catch (e2) {}
+      } finally { rel(); }
+    },
+    cancel(reason) {
+      try { body.cancel(reason); } catch (e) {}
+      rel();
+    },
+  });
+  return wrapped;
+}
+
 /* 单一流式实现。endpoint 是非秘密 EndpointRef 快照/显式解析器；
  * apiKey 仅由调用方注入并放入 Authorization，不写日志、不读全局覆盖显式值。 */
 async function modelTransportStream(request, signal) {
+  const isLocalOuter = !!request.local;
+  if (!isLocalOuter) return _modelTransportStreamInner(request, signal);
+  // R22：本地端点——排队等槽 → 执行 → 流消费完释放
+  const epKey = String(typeof request.endpoint === 'function'
+    ? request.endpoint() : (request.endpoint || 'local'));
+  const { wait, slot } = _acquireLocalSlot(epKey);
+  try {
+    await wait;
+    if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const resp = await _modelTransportStreamInner(request, signal);
+    if (resp && resp.ok && resp.body) resp.body = _wrapBodyWithSlotRelease(resp.body, slot);
+    else slot.release();   // 非 ok（错误体走 text() 消费，不占 GPU）
+    return resp;
+  } catch (e) {
+    slot.release();          // 抛错路径（网络异常/构造失败）也释放
+    throw e;
+  }
+}
+
+async function _modelTransportStreamInner(request, signal) {
   const body = request.body || {};
   if (body && Array.isArray(body.messages) && typeof normalizeSystemMessages === 'function') {
     body.messages = normalizeSystemMessages(body.messages);
@@ -11831,7 +11910,9 @@ async function modelTransportStream(request, signal) {
   }
   let attempt = 0;
   let rateLimitAttempt = 0;
-  const LOADING_BACKOFF = [2000, 4000, 8000];
+  // R22：本地模型冷加载（大模型 30-90s 很常见）——3 档 14s 常常不够，
+  // 6 档共 119s 覆盖 7B-32B 模型冷启动
+  const LOADING_BACKOFF = isLocal ? [2000, 4000, 8000, 15000, 30000, 60000] : [2000, 4000, 8000];
   // 429 退避（2026-11-04 真机报障：换机装完即 429、原机正常）：智谱免费档为
   // **分钟级**配额/并发限制，原逻辑只重试 1 次且仅等 2 秒——秒级重试必然再次
   // 撞墙，用户观感就是「一装就废」。改为 3 次指数退避（4s/12s/30s 跨越配额
@@ -15075,13 +15156,13 @@ async function runAgentLoop(s, apiKey, opts) {
       // 截图注入本请求。现按 sid 过滤，只消费本会话的截图。
       const _myShots = (typeof pendingShots !== 'undefined' ? pendingShots : [])
         .filter(x => x && x.sid === String(s.id)).map(x => x.comp);
-      if (_myShots.length && shotState === 'idle') {
+      if (_myShots.length && (run.shotState || 'idle') === 'idle') {
         const shotContent = [{ type: 'text', text: _myShots.length > 1
           ? `[系统附图] 以下是 ${_myShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
           : '[系统附图] 以下是当前屏幕截图,请据此判断界面状态并继续操作。' }];
         for (const sh of _myShots) shotContent.push({ type: 'image_url', image_url: { url: sh } });
         reqMsgs.push({ role: 'user', content: shotContent });
-        shotState = 'sending';
+        run.shotState = 'sending';
         run.__sentShots = _myShots;   // 发送成功后按清单精确出队（不误删他会话）
       }
       const _mp = (typeof getModelPrefs === 'function') ? getModelPrefs() : null;
@@ -15215,8 +15296,8 @@ async function runAgentLoop(s, apiKey, opts) {
               if (_le) _le.textContent = `△ 缓存命中率仅 ${window.__hitRate}%（本轮输入 ${_pr} tokens 多按全价计）| 建议：避免中途改系统设定/权限档，或 /compact 后重开话题`;
             }
           }
-          if (shotState === 'sending') {
-            shotState = 'idle';
+          if (run.shotState === 'sending') {
+            run.shotState = 'idle';
             if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
             try {
               s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
@@ -15232,8 +15313,8 @@ async function runAgentLoop(s, apiKey, opts) {
       usage = parsed.usage;
       finishReason = parsed.finishReason;
       _clearWaitTimer();
-      if (shotState === 'sending') {
-        shotState = 'idle';
+      if (run.shotState === 'sending') {
+        run.shotState = 'idle';
         if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
         try {
           s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
@@ -15695,7 +15776,7 @@ async function runAgentLoop(s, apiKey, opts) {
   } catch (err) {
     if (agentRunCurrent(run)) {
     // 修复 S6（二轮）：请求失败/abort 后截图不能永久失陷——复位 shotState 让下轮可重发
-    if (shotState === 'sending') shotState = 'idle';
+    if (run.shotState === 'sending') run.shotState = 'idle';
     // 修复 M5（四轮）：非 abort 失败路径也清过期截图——原仅 AbortError 清，失败后
     // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）——只清本会话的
     if (typeof pendingShots !== 'undefined' && pendingShots.length) pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
@@ -15730,7 +15811,8 @@ async function runAgentLoop(s, apiKey, opts) {
       // Round 16 resume：网络断流/5xx/429 等可恢复错误与 abort 同款处理——
       // 部分正文固化入历史 + tool_calls 配平 + runStatus=paused（恢复横幅据此出现）。
       // 确定性失败（401/余额/参数）维持 failed：继续只会再失败，人话已给。
-      if (typeof isResumableError === 'function' && isResumableError(err.message)) {
+      const _resumable = typeof isResumableError === 'function' && isResumableError(err.message);
+      if (_resumable) {
         if (partialContent) {
           const last = s.messages[s.messages.length - 1];
           if (!last || last.role !== 'assistant') s.messages.push({ role: 'assistant', content: partialContent });
@@ -15738,6 +15820,26 @@ async function runAgentLoop(s, apiKey, opts) {
         if (run.assistantMsg) fillMissingToolResults(s, run.assistantMsg);
       }
       saveSessions();
+      // R24 resume 升级：可恢复错误自动续跑一次（2.5s 后；每会话 5 分钟窗口内
+      // 最多 2 次，防网络长时间中断时无限循环）——失败则走恢复横幅人工决定
+      if (_resumable && !userStopped) {
+        s._netResumeAt = s._netResumeAt || [];
+        const now = Date.now();
+        s._netResumeAt = s._netResumeAt.filter(t => now - t < 5 * 60 * 1000);
+        if (s._netResumeAt.length < 2) {
+          s._netResumeAt.push(now);
+          const _sid = s.id, _apiKey = apiKey;
+          setTimeout(() => {
+            const cur = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
+            const ss = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+              ? sessions.find(x => x.id === _sid) : null;
+            if (!ss || cur !== _sid) return;                       // 已切走 → 横幅承接
+            if ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming) return;
+            if (typeof toast === 'function') toast('网络中断已恢复，正在自动继续任务…', 'info');
+            if (typeof continueLastGeneration === 'function') continueLastGeneration(ss, _apiKey);
+          }, 2500);
+        }
+      }
     }
     if (!run.statusFinalized) {
       const _resumable = typeof isResumableError === 'function' && isResumableError(err.message);
@@ -19985,6 +20087,8 @@ async function saveConfig() {
     // P0-4 修正：HTTP 桥（Electron）同样持久化配置
     if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) await callApi('save_config', [cfg]);
   } catch (e) { toast('配置保存到本机失败：' + e.message, 'warn'); }   // v1.2 R3：静默吞错 → 可见
+  // R21：配置（含工具档/端点）变更 → 群聊工具面缓存失效
+  if (typeof groupToolsCacheReset === 'function') { try { groupToolsCacheReset(); } catch (e) {} }
 }
 
 /* ===== frontend/src/integrations/browser-driver.js ===== */
@@ -20728,7 +20832,7 @@ function ipModelRender() {
     '<div class="mc-item' + (m === cur ? ' on' : '') + '" data-val="' + esc(m) + '">' +
       '<span class="mc-name">' + esc(m) + '</span>' +
       (m === cur ? '<span class="mc-check">✓</span>' : '') +
-      '<button type="button" class="mc-del" data-del="' + esc(m) + '" title="删除该自定义模型">✕</button>' +
+      '<button type="button" class="mc-del" data-del="' + esc(m) + '" title="删除该自定义模型"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>' +
     '</div>').join('');
   const thinkingOptions = IP_THINKING_ORDER.map(v =>
     '<option value="' + v + '"' + (__modelPrefs.thinking === v ? ' selected' : '') + '>' +
@@ -22105,10 +22209,10 @@ function newSession() {
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
-  // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  // R20/R24：后台 run 的截图保留（消费端按 sid 过滤兜底串图）；lastShotHash
+  // 是「同图不重截」指纹——新会话语义下应允许重截，故复位指纹但不动截图队列
   lastShotHash = null;
-  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
-  shotState = 'idle';
+  shotState = 'idle';   // 全局态仅剩兼容面；run 内已用 run.shotState（R24）
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲：补 rejection 处理（原只挡同步 throw）
     try { callApi('set_current_sid', [null]).catch(() => {}); } catch (e) {}   // 修复 ㊲：同上；后端借此清空会话信任态（含 MCP）
@@ -22178,7 +22282,7 @@ function switchSession(id, silent) {
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
   lastShotHash = null;
   if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
-  shotState = 'idle';
+  shotState = 'idle';   // 全局态仅剩兼容面；run 内已用 run.shotState（R24）
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）
@@ -22210,6 +22314,51 @@ function renderChatHistory(s) {
     box.appendChild(div);
     pendingTools = [];
   };
+  // R21 性能调度（实测 400 条 404ms）：视口外老消息走轻量渲染（纯文本形态，
+  // 保 .message 形状与 data-midx），IntersectionObserver 滚入视口 200px 内
+  // 再升级为完整渲染（renderMd+操作条+代码增强）。群聊会话不懒（气泡映射按
+  // .message 逐条对位）。
+  const total = (s.messages || []).length;
+  const lazyFrom = s.group ? total : Math.max(0, total - 50);
+  // 升级器：滚动/初始化时把视口内（±200px）的轻量节点升级为完整渲染。
+  // 不用 IntersectionObserver——被遮挡窗口 IO 不派发（R21 实测 ioFired=0），
+  // scroll 事件确定性触发。节流 120ms。
+  const upgradeInView = () => {
+    const lights = box.querySelectorAll('[data-lazyidx]');
+    if (!lights.length) return;
+    const vh = window.innerHeight || 800;
+    lights.forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.bottom < -200 || r.top > vh + 200) return;
+      const idx = Number(el.dataset.lazyidx);
+      const mm = (s.messages || [])[idx];
+      if (!mm || mm.role !== 'assistant') { delete el.dataset.lazyidx; return; }
+      const text = typeof mm.content === 'string' ? mm.content : '';
+      el.innerHTML = '<div class="md-body">' + renderMd(text) + '</div>';
+      addMsgActions(el, text);
+      enhanceCodeBlocks(el);
+      if (mm.uiSpec && typeof mountChatUiSpecFromMessage === 'function') {
+        try { mountChatUiSpecFromMessage(el, mm); } catch (e) {}
+      }
+      if (mm.__compactCard || mm.__archiveCard) renderCompactCard(box, s, mm);
+      delete el.dataset.lazyidx;
+    });
+  };
+  const onScrollLazy = () => {
+    if (onScrollLazy._t) return;
+    onScrollLazy._t = setTimeout(() => { onScrollLazy._t = null; upgradeInView(); }, 120);
+  };
+  box.addEventListener('scroll', onScrollLazy, { passive: true });
+  // 兜底轮询：被遮挡窗口不派发 scroll（R21 实测 scrollFired=0），interval 在
+  // 后台窗口最慢 1s 仍会触发；lazy 清零即自毁。
+  if (typeof setInterval === 'function' && typeof clearInterval === 'function') {
+    const lazyTimer = setInterval(() => {
+      if (!box.isConnected) { clearInterval(lazyTimer); return; }
+      if (!box.querySelector('[data-lazyidx]')) { clearInterval(lazyTimer); return; }
+      upgradeInView();
+    }, 400);
+  }
+
   (s.messages || []).forEach((m, i) => {
     if (m.role === 'user') {
       flushTools();
@@ -22245,6 +22394,17 @@ function renderChatHistory(s) {
       }
       if (text.trim()) {
         flushTools();
+        if (i < lazyFrom) {
+          // 轻量渲染：纯文本形态（老消息滚入视口时由 lightIO 升级）
+          const lite = addMessage('assistant', '', m.usage ? { usage: m.usage } : {});
+          if (lite) {
+            lite.dataset.midx = i;
+            lite.dataset.lazyidx = String(i);
+            lite.innerHTML = '<div class="md-body md-lite"></div>';
+            lite.querySelector('.md-lite').textContent = String(text).slice(0, 400);
+          }
+          return;   // forEach continue
+        }
         const extra = m.usage ? { usage: m.usage } : {};
         const contentEl = addMessage('assistant', text, extra);
         if (contentEl && contentEl.dataset) contentEl.dataset.midx = i;   // 修复 UX-3（v1.4）：stamp 源消息下标，供会话搜索跳转定位（dataset 防御）
@@ -22261,6 +22421,8 @@ function renderChatHistory(s) {
   flushTools();
   // R19 性能：batch 重建期 addMessage 不再逐条滚底——此处一次性归底
   try { box.scrollTop = box.scrollHeight; } catch (e) {}
+  // R21：重建完成立即做一次视口内升级（覆盖视口很大的场景）
+  try { upgradeInView(); } catch (e) {}
   // Round 16 resume：任务中断恢复横幅（runStatus=paused 且停在 assistant/tool）。
   // 继续 = runAgentLoop 重入（历史已配平，模型从挂起点续写）；放弃 = 收敛 completed。
   if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {
@@ -22726,9 +22888,9 @@ function renderPreview() {
   attachments.forEach((a, i) => {
     const div = document.createElement('div');
     div.className = 'attach-item';
-    if (a.type === 'image') div.innerHTML = `<img src="${a.dataUrl}"><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})">✕</button>`;
-    else if (a.type === 'video') div.innerHTML = `<div class="file-icon">🎬<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})">✕</button>`;
-    else div.innerHTML = `<div class="file-icon">📄<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})">✕</button>`;
+    if (a.type === 'image') div.innerHTML = `<img src="${a.dataUrl}"><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>`;
+    else if (a.type === 'video') div.innerHTML = `<div class="file-icon">🎬<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>`;
+    else div.innerHTML = `<div class="file-icon">📄<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>`;
     // 增量入场：仅本次新增的项播 .enter
     if (!firstShow && i >= _attachCount) {
       div.classList.add('enter');
@@ -24464,17 +24626,27 @@ function groupContextFor(s, member) {
 
 /** 群聊成员的工具面：与主对话同源（后端 build_tools），受设置里的「工具档」约束。
  * 后端不可用/未开工具 → 返回空数组，成员退化为纯文本（旧行为），不报错中断接力。 */
+// R21 工具调用优化：工具面缓存——原实现每次成员发言都打一次 build_tools RPC
+// （群聊一轮接力 = N 次），面不随发言变化。按 (mode|endpoint) 缓存 60s；
+// 设置面板保存配置时由 saveConfig 侧的 groupToolsCacheReset 清空。
+let _gfToolsCache = { key: '', tools: null, at: 0 };
+function groupToolsCacheReset() { _gfToolsCache = { key: '', tools: null, at: 0 }; }
 async function groupLoadTools() {
   try {
     const el = document.getElementById('toolMode');
     const mode = (el && el.value) || 'full';
     if (mode === 'off' || mode === 'chat') return [];
     if (typeof callApi !== 'function' || typeof isGlmEndpoint !== 'function') return [];
+    const key = mode + '|' + (typeof isGlmEndpoint === 'function' ? isGlmEndpoint() : '');
+    if (_gfToolsCache.key === key && _gfToolsCache.tools &&
+        Date.now() - _gfToolsCache.at < 60000) return _gfToolsCache.tools;
     const role = mode === 'readonly' ? 'ro' : 'full';
     // include_agent=false：群聊里不挂浏览器/软件驱动（接力场景用不上，且确认档会打断流水线）
     const raw = await callApi('build_tools', [role, false, false, isGlmEndpoint()]);
     const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed : [];
+    const tools = Array.isArray(parsed) ? parsed : [];
+    _gfToolsCache = { key, tools, at: Date.now() };
+    return tools;
   } catch (e) { return []; }
 }
 

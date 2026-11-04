@@ -922,17 +922,27 @@ function groupContextFor(s, member) {
 
 /** 群聊成员的工具面：与主对话同源（后端 build_tools），受设置里的「工具档」约束。
  * 后端不可用/未开工具 → 返回空数组，成员退化为纯文本（旧行为），不报错中断接力。 */
+// R21 工具调用优化：工具面缓存——原实现每次成员发言都打一次 build_tools RPC
+// （群聊一轮接力 = N 次），面不随发言变化。按 (mode|endpoint) 缓存 60s；
+// 设置面板保存配置时由 saveConfig 侧的 groupToolsCacheReset 清空。
+let _gfToolsCache = { key: '', tools: null, at: 0 };
+function groupToolsCacheReset() { _gfToolsCache = { key: '', tools: null, at: 0 }; }
 async function groupLoadTools() {
   try {
     const el = document.getElementById('toolMode');
     const mode = (el && el.value) || 'full';
     if (mode === 'off' || mode === 'chat') return [];
     if (typeof callApi !== 'function' || typeof isGlmEndpoint !== 'function') return [];
+    const key = mode + '|' + (typeof isGlmEndpoint === 'function' ? isGlmEndpoint() : '');
+    if (_gfToolsCache.key === key && _gfToolsCache.tools &&
+        Date.now() - _gfToolsCache.at < 60000) return _gfToolsCache.tools;
     const role = mode === 'readonly' ? 'ro' : 'full';
     // include_agent=false：群聊里不挂浏览器/软件驱动（接力场景用不上，且确认档会打断流水线）
     const raw = await callApi('build_tools', [role, false, false, isGlmEndpoint()]);
     const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed : [];
+    const tools = Array.isArray(parsed) ? parsed : [];
+    _gfToolsCache = { key, tools, at: Date.now() };
+    return tools;
   } catch (e) { return []; }
 }
 

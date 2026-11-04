@@ -97,7 +97,7 @@ function toast(msg, type, opts) {
   t.innerHTML = '<span class="toast-ico">' + icon + '</span>' +
     '<span class="toast-msg"></span>' +
     (opts.detail ? '<button class="toast-more">明细</button>' : '') +
-    '<button class="toast-close" aria-label="关闭通知">✕</button>';
+    '<button class="toast-close" aria-label="关闭通知"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>';
   // v4：首行作粗体标题（长文案首行即摘要，短文案整体标题化）——
   // 修复旧版纯文本一坨、错误场景「请求失败」与详情无层次
   {

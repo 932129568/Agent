@@ -32,9 +32,77 @@ function paceFreeTier(signal, sleepAbortable) {
   return run;
 }
 
+/* R22 本地大模型调度：本地推理服务（Ollama/LM Studio 等）实际是单 GPU 串行，
+ * 并发请求只会造成 KV-cache 上下文切换与首 token 延迟恶化。前端按 endpoint
+ * 排队（FIFO），同端点一次只放一个请求在途；槽位在【响应流消费完毕】才释放
+ * （streaming 阶段才是 GPU 占用），云端端点不受限。 */
+const _localChains = new Map();   // endpoint -> Promise（链尾：前一个请求的槽位释放）
+
+function _acquireLocalSlot(epKey) {
+  const prev = _localChains.get(epKey) || Promise.resolve();
+  let release;
+  const gate = new Promise(res => { release = res; });
+  const slot = {
+    release: () => { if (release) { const r = release; release = null; r(); } },
+  };
+  _localChains.set(epKey, gate);
+  if (_localChains.size > 8) {   // 端点数兜底：淘汰最旧链（防御性，正常 ≤3 个端点）
+    const first = _localChains.keys().next().value;
+    if (first !== epKey) _localChains.delete(first);
+  }
+  return { wait: prev.then(() => undefined, () => undefined), slot };
+}
+
+/** 把响应体包一层：读尽/取消/出错时释放本地槽位（streaming 全程占槽）。 */
+function _wrapBodyWithSlotRelease(body, slot) {
+  if (!body || !slot) return body;
+  let released = false;
+  const rel = () => { if (!released) { released = true; slot.release(); } };
+  const wrapped = new ReadableStream({
+    async start(controller) {
+      const reader = body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+        try { controller.close(); } catch (e) {}
+      } catch (e) {
+        try { controller.error(e); } catch (e2) {}
+      } finally { rel(); }
+    },
+    cancel(reason) {
+      try { body.cancel(reason); } catch (e) {}
+      rel();
+    },
+  });
+  return wrapped;
+}
+
 /* 单一流式实现。endpoint 是非秘密 EndpointRef 快照/显式解析器；
  * apiKey 仅由调用方注入并放入 Authorization，不写日志、不读全局覆盖显式值。 */
 async function modelTransportStream(request, signal) {
+  const isLocalOuter = !!request.local;
+  if (!isLocalOuter) return _modelTransportStreamInner(request, signal);
+  // R22：本地端点——排队等槽 → 执行 → 流消费完释放
+  const epKey = String(typeof request.endpoint === 'function'
+    ? request.endpoint() : (request.endpoint || 'local'));
+  const { wait, slot } = _acquireLocalSlot(epKey);
+  try {
+    await wait;
+    if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const resp = await _modelTransportStreamInner(request, signal);
+    if (resp && resp.ok && resp.body) resp.body = _wrapBodyWithSlotRelease(resp.body, slot);
+    else slot.release();   // 非 ok（错误体走 text() 消费，不占 GPU）
+    return resp;
+  } catch (e) {
+    slot.release();          // 抛错路径（网络异常/构造失败）也释放
+    throw e;
+  }
+}
+
+async function _modelTransportStreamInner(request, signal) {
   const body = request.body || {};
   if (body && Array.isArray(body.messages) && typeof normalizeSystemMessages === 'function') {
     body.messages = normalizeSystemMessages(body.messages);
@@ -50,7 +118,9 @@ async function modelTransportStream(request, signal) {
   }
   let attempt = 0;
   let rateLimitAttempt = 0;
-  const LOADING_BACKOFF = [2000, 4000, 8000];
+  // R22：本地模型冷加载（大模型 30-90s 很常见）——3 档 14s 常常不够，
+  // 6 档共 119s 覆盖 7B-32B 模型冷启动
+  const LOADING_BACKOFF = isLocal ? [2000, 4000, 8000, 15000, 30000, 60000] : [2000, 4000, 8000];
   // 429 退避（2026-11-04 真机报障：换机装完即 429、原机正常）：智谱免费档为
   // **分钟级**配额/并发限制，原逻辑只重试 1 次且仅等 2 秒——秒级重试必然再次
   // 撞墙，用户观感就是「一装就废」。改为 3 次指数退避（4s/12s/30s 跨越配额

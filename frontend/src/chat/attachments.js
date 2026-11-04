@@ -154,9 +154,9 @@ function renderPreview() {
   attachments.forEach((a, i) => {
     const div = document.createElement('div');
     div.className = 'attach-item';
-    if (a.type === 'image') div.innerHTML = `<img src="${a.dataUrl}"><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})">✕</button>`;
-    else if (a.type === 'video') div.innerHTML = `<div class="file-icon">🎬<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})">✕</button>`;
-    else div.innerHTML = `<div class="file-icon">📄<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})">✕</button>`;
+    if (a.type === 'image') div.innerHTML = `<img src="${a.dataUrl}"><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>`;
+    else if (a.type === 'video') div.innerHTML = `<div class="file-icon">🎬<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>`;
+    else div.innerHTML = `<div class="file-icon">📄<span>${escapeHtml(a.name.slice(0, 8))}</span></div><button class="remove" aria-label="移除附件" onclick="removeAttachment(${i})"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-close"/></svg></button>`;
     // 增量入场：仅本次新增的项播 .enter
     if (!firstShow && i >= _attachCount) {
       div.classList.add('enter');
