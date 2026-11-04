@@ -124,7 +124,9 @@ function addMessage(role, content, extra) {
     <div class="content ${role === 'error' ? 'error' : ''}">${body}${extraHtml}</div>
     <span class="msg-time">${hm}</span>`;
   container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  // R19 性能（实测 400 条消息 1548ms → 根因=每条一次 scrollTop 写强制回流）：
+  // renderChatHistory 的 .batch 重建期不逐条滚底，由其收尾一次性滚动
+  if (!container.classList.contains('batch')) container.scrollTop = container.scrollHeight;
   // v4 配色重设计（用户反馈「气泡颜色太深」）：错误气泡前缀红字加粗、正文中性色——
   // 语义色收窄到标题（完整规则见模板 .message .content.error：中性卡+红色左边条）
   if (role === 'error') fillErrorBubble(div.querySelector('.content'), content);

@@ -531,6 +531,8 @@ function renderChatHistory(s) {
     }
   });
   flushTools();
+  // R19 性能：batch 重建期 addMessage 不再逐条滚底——此处一次性归底
+  try { box.scrollTop = box.scrollHeight; } catch (e) {}
   // Round 16 resume：任务中断恢复横幅（runStatus=paused 且停在 assistant/tool）。
   // 继续 = runAgentLoop 重入（历史已配平，模型从挂起点续写）；放弃 = 收敛 completed。
   if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {

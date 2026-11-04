@@ -19,9 +19,7 @@
     "desktop": "electron .",
     "dist:win": "electron-builder --win nsis --config electron-builder.yml"
   },
-  "dependencies": {
-    "zod": "4.6.7"
-  },
+  "dependencies": {},
   "devDependencies": {
     "electron": "^45.2.1",
     "electron-builder": "^26.18.0",
