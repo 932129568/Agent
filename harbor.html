@@ -23651,8 +23651,12 @@ function groupMemberName(s, mid) {
 /** sendMessage 前置拦截（send.js 在 group 会话调用本函数；返回 true=已接管）。
  * Round 15：**多目标 @**——原实现只取开头第一个 @，一次 @ 三人只有最后被记成
  * turn 的那位真正发言（主理人报障「一次性@多人时只有最后一个收到」）。现在
- * 取出全部被 @ 成员（去重保序），按名单顺序逐一发言；每位发言后再按接力路由
- * 继续（同一个人若已被 @ 过就不再重复抢答）。 */
+ * 取出全部被 @ 成员（去重保序），交给 groupSpeak 内部按 **打字顺序** 逐一发言。
+ * Round 15b：**@ 顺序保真**——原先外层循环把第一位交棒后就 break，后续顺序
+ * 由成员自己输出里的 @ 路由决定（后 @ 的反而先说话）。现在显式 @ 队列挂在
+ * g._mentionQueue，groupSpeak 每轮发言后**先吃队列再走自由路由**；队列耗尽
+ * 才恢复成员自由接力。autoRelay 关闭时队列照走（显式点名=群主指令，优先级
+ * 高于「自动接力」开关——开关只管模型自己拉链）。 */
 async function groupHandleOutgoing(text) {
   const sid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
   const s = groupSessionOf(sid);
@@ -23662,31 +23666,19 @@ async function groupHandleOutgoing(text) {
   if (!trimmed) return true;
   // 群主消息入流（member=null）
   groupPush(s, 'user', trimmed, null);
-  // @路由：显式点名（可多个）→ 依次发言；否则主持人
+  // @路由：显式点名（可多个，按出现顺序）→ 依次发言；否则主持人
   const mentioned = (typeof groupMentionTargets === 'function')
     ? groupMentionTargets(trimmed, s) : [];
   const queue = mentioned.length
     ? mentioned.slice()
     : [g.members.find(m => m.host) || g.members[0]];
   g.turn = queue[0].id;
+  g._mentionQueue = queue.slice(1);   // 余下名单：groupSpeak 逐位消费
   g.phase = 'running';
   g.round = 0;
   groupToolbarRefresh(sid);
   try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
-  const spoken = new Set();
-  for (const target of queue) {
-    if (g.phase !== 'running') break;
-    spoken.add(target.id);
-    g.turn = target.id;
-    await groupSpeak(s, target);
-    // groupSpeak 内部会按交接继续跑（自动接力接管后这里直接收工——链式调度
-    // 会把后面的人轮到）。只有接力停下（暂停/无人接手）而队列里还有人没开口时，
-    // 才由这里接力补发，保证「被叫到的人都至少回应一次」。
-    if (g.phase === 'running' && g.autoRelay) break;
-    if (!queue.some(m => !spoken.has(m.id))) break;
-    g.phase = 'running';
-    g.turn = queue.find(m => !spoken.has(m.id)).id;
-  }
+  await groupSpeak(s, queue[0]);
   return true;
 }
 
@@ -24046,8 +24038,12 @@ async function groupSpeak(s, member) {
       try { await groupArchiveHandoff(s, current, trimmedOut, g.round); } catch (e) {}
     }
     try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
-    // 接力调度
-    const next = groupNextMember(s, current, trimmedOut);
+    // 接力调度（Round 15b）：显式 @ 队列优先——群主点名顺序就是发言顺序，
+    // 队列耗尽后才交给成员自由路由（模型输出里的 @/交接）。
+    const viaQueue = Array.isArray(g._mentionQueue) && g._mentionQueue.length > 0;
+    const next = viaQueue
+      ? g._mentionQueue.shift()
+      : groupNextMember(s, current, trimmedOut);
     if (next === GROUP_OWNER) {
       // 成员点名要群主拍板：暂停并把问题**明确**交到人类手上（系统消息，非群主自述）
       g.phase = 'paused';
@@ -24068,7 +24064,9 @@ async function groupSpeak(s, member) {
     }
     g.turn = next.id;
     groupToolbarRefresh(s.id);
-    if (!(g.phase === 'running' && g.autoRelay)) return;
+    // viaQueue：群主显式点名的后续名单，不受「自动接力」开关限制——
+    // @ 了三个人，开关再关也得让三个人都说完（Round 15b 主理人裁定）
+    if (!(g.phase === 'running' && (g.autoRelay || viaQueue))) return;
     current = next;
   }
   } finally {

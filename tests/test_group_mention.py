@@ -106,34 +106,78 @@ def test_mention_targets_returns_all_mentioned_in_order():
     assert result['ownerOnly'] == []
 
 
-def test_multi_mention_makes_everyone_speak():
+def test_multi_mention_speaks_in_typed_order():
+    """主理人 Round 15b 报障：先 @ 的反而后说话。
+
+    真实链路：groupHandleOutgoing 种下 _mentionQueue → groupSpeak 每轮先吃
+    队列再走自由路由。成员自己的输出不含 @（不产生自由路由），发言顺序就
+    必须严格等于群主打字顺序。autoRelay 关闭也照走（显式点名优先于开关）。
+    """
     result = _boot(r"""
   const vmRun2 = function(code){ return __vm.runInContext(code, ctx); };
-  const spoken = [];
-  vmRun2("groupPush = function(){};");
+  vmRun2("groupPush = function(s, role, text, member){"
+       + " if (member) (globalThis.__spoke = globalThis.__spoke || []).push(member.name); };");
   vmRun2("groupToolbarRefresh = function(){};");
   vmRun2("saveSessions = function(){};");
-  vmRun2("groupSpeak = async function(s, m){ (globalThis.__spoke = globalThis.__spoke || []).push(m.name);"
-         + " s.group.round++; };");
-  await vmRun2('groupHandleOutgoing')('@前端 实现登录页，@测试 做验收，@UI设计 出稿件');
-  return {spoke: vmRun2('globalThis.__spoke || []')};
-""", 'multi_mention')
-    assert result['spoke'] == ['前端', '测试', 'UI设计'], result   # 按 @ 出现顺序，一个不少
+  vmRun2("groupBubbleMount = function(){ return null; };");
+  vmRun2("groupArchiveHandoff = async function(){};");
+  // 成员输出不带任何 @/交接 → 唯一的调度来源就是显式 @ 队列
+  vmRun2("groupCallModel = async function(s, m){ return m.name + ' 收到，完成。'; };");
+  vmRun2("sessions[0].group.autoRelay = false;");
+  await vmRun2('groupHandleOutgoing')('@前端 先做，然后 @测试 验收，最后 @UI设计 出稿');
+  return {spoke: vmRun2('globalThis.__spoke || []'),
+          queueLeft: vmRun2('sessions[0].group._mentionQueue || []').length};
+""", 'multi_mention_order')
+    assert result['spoke'] == ['前端', '测试', 'UI设计'], result
+    assert result['queueLeft'] == 0, result
 
 
-def test_multi_mention_without_relay_still_covers_all():
+def test_multi_mention_overrides_member_self_routing():
+    """成员自己 @ 了别人也不能插队：队列没吃完前自由路由不生效。"""
     result = _boot(r"""
   const vmRun2 = function(code){ return __vm.runInContext(code, ctx); };
-  vmRun2("groupPush = function(){};");
+  vmRun2("groupPush = function(s, role, text, member){"
+       + " if (member) (globalThis.__spoke = globalThis.__spoke || []).push(member.name); };");
   vmRun2("groupToolbarRefresh = function(){};");
   vmRun2("saveSessions = function(){};");
-  vmRun2("groupSpeak = async function(s, m){ (globalThis.__spoke = globalThis.__spoke || []).push(m.name);"
-         + " s.group.phase = 'paused'; };");
-  await vmRun2('groupHandleOutgoing')('@前端 和 @测试 一起看');
-  return {spoke: vmRun2('globalThis.__spoke || []')};
-""", 'multi_mention_paused')
-    # 每位发言后接力暂停，仍要把另一位补上
-    assert result['spoke'] == ['前端', '测试'], result
+  vmRun2("groupBubbleMount = function(){ return null; };");
+  vmRun2("groupArchiveHandoff = async function(){};");
+  // 每位成员都想抢着 @ 主持人——但队列优先，插不进来
+  vmRun2("groupCallModel = async function(s, m){ return '我先说，@主持人 听我的'; };");
+  vmRun2("sessions[0].group.autoRelay = true;");
+  await vmRun2('groupHandleOutgoing')('@UI设计 出稿，@前端 实现');
+  return {spoke: vmRun2('globalThis.__spoke || []'),
+          phase: vmRun2('sessions[0].group.phase')};
+""", 'multi_mention_override')
+    # 队列顺序不受成员自我路由影响；队列耗尽后自由路由恢复（前端 @主持人 →
+    # 主持人收尾后无指向暂停）
+    assert result['spoke'] == ['UI设计', '前端', '主持人'], result
+    assert result['phase'] == 'paused', result
+
+
+def test_single_mention_falls_back_to_free_relay():
+    """只 @ 一人（或没 @）：队列即空，自由路由照旧（不回归 Round 13 行为）。"""
+    result = _boot(r"""
+  const vmRun2 = function(code){ return __vm.runInContext(code, ctx); };
+  vmRun2("groupPush = function(s, role, text, member){"
+       + " if (member) (globalThis.__spoke = globalThis.__spoke || []).push(member.name); };");
+  vmRun2("groupToolbarRefresh = function(){};");
+  vmRun2("saveSessions = function(){};");
+  vmRun2("groupBubbleMount = function(){ return null; };");
+  vmRun2("groupArchiveHandoff = async function(){};");
+  vmRun2("sessions[0].group.autoRelay = true;");
+  // A 说完 @B；B 说完不再指名 → 回主持人（host）→ 无指向暂停
+  let n = 0;
+  vmRun2("groupCallModel = async function(s, m){"
+       + " if (m.name === '前端') return '交棒 @测试';"
+       + " if (m.name === '测试') return '我做完了，请主持人检视';"
+       + " return '检视通过'; };");
+  await vmRun2('groupHandleOutgoing')('@前端 开始做登录页');
+  return {spoke: vmRun2('globalThis.__spoke || []'),
+          phase: vmRun2('sessions[0].group.phase')};
+""", 'single_mention_relay')
+    assert result['spoke'] == ['前端', '测试', '主持人'], result
+    assert result['phase'] == 'paused', result
 
 
 def test_source_has_picker_wiring():
