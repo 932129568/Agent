@@ -531,6 +531,18 @@ function renderChatHistory(s) {
     }
   });
   flushTools();
+  // Round 16 resume：任务中断恢复横幅（runStatus=paused 且停在 assistant/tool）。
+  // 继续 = runAgentLoop 重入（历史已配平，模型从挂起点续写）；放弃 = 收敛 completed。
+  if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {
+    try {
+      resumeBannerMount(box, s, {
+        onContinue: () => {
+          const apiKey = (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '';
+          if (typeof continueLastGeneration === 'function') continueLastGeneration(s, apiKey);
+        },
+      });
+    } catch (e) {}
+  }
   // v4：两帧后摘 .batch——重建完成，此后新消息恢复正常入场动画
   requestAnimationFrame(() => requestAnimationFrame(() => box.classList.remove('batch')));
 }

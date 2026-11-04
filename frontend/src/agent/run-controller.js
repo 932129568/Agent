@@ -1241,11 +1241,22 @@ async function runAgentLoop(s, apiKey, opts) {
         runAddMessage(run, 'error', '请求失败: ' + shown);   // 修复 ㉗：循环未建气泡前出错不再砸在 null 上
       }
       if (agentRunVisible(run)) toast('请求失败', 'err', { detail: String(err.message || '').slice(0, 400) });
+      // Round 16 resume：网络断流/5xx/429 等可恢复错误与 abort 同款处理——
+      // 部分正文固化入历史 + tool_calls 配平 + runStatus=paused（恢复横幅据此出现）。
+      // 确定性失败（401/余额/参数）维持 failed：继续只会再失败，人话已给。
+      if (typeof isResumableError === 'function' && isResumableError(err.message)) {
+        if (partialContent) {
+          const last = s.messages[s.messages.length - 1];
+          if (!last || last.role !== 'assistant') s.messages.push({ role: 'assistant', content: partialContent });
+        }
+        if (run.assistantMsg) fillMissingToolResults(s, run.assistantMsg);
+      }
       saveSessions();
     }
     if (!run.statusFinalized) {
+      const _resumable = typeof isResumableError === 'function' && isResumableError(err.message);
       if (typeof setSessionRunStatus === 'function') {
-        setSessionRunStatus(s, (err.name === 'AbortError' || userStopped) ? 'paused' : 'failed');
+        setSessionRunStatus(s, (err.name === 'AbortError' || userStopped || _resumable) ? 'paused' : 'failed');
       }
       run.statusFinalized = true;
     }

@@ -937,6 +937,16 @@
       ]
     },
     {
+      "path": "frontend/src/agent/resume.js",
+      "provides": [
+        "isResumableError",
+        "persistResumeState",
+        "resumeBannerMount",
+        "shouldOfferResume"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/agent/run-registry.js",
       "provides": [
         "RunRegistry"

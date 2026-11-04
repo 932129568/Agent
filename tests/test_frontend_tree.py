@@ -54,6 +54,7 @@ EXPECTED_ORDER = [
     'frontend/src/generative/chat-auto.js',
     'frontend/src/integrations/mcp-panel.js',
     'frontend/src/agent/run-controller.js',
+    'frontend/src/agent/resume.js',
     'frontend/src/agent/run-registry.js',
     'frontend/src/integrations/mcp-exec.js',
     'frontend/src/search/panel.js',
@@ -121,7 +122,7 @@ def manifest():
 def test_exactly_58_modules_once_with_frozen_order_and_dependencies():
     entries = manifest()['scripts']
     paths = [entry['path'] for entry in entries]
-    assert len(paths) == len(set(paths)) == 103
+    assert len(paths) == len(set(paths)) == 104
     assert paths == EXPECTED_ORDER
     disk = {path.relative_to(ROOT).as_posix()
             for path in (ROOT / 'frontend' / 'src').rglob('*.js')}
@@ -141,7 +142,7 @@ def test_manifest_helper_resolves_every_new_path_without_duplicate_sources():
     for path in EXPECTED_ORDER:
         assert node_map[path] == path
         assert read_frontend_source(str(ROOT), path)
-    assert len(EXPECTED_ORDER) == 103
+    assert len(EXPECTED_ORDER) == 104
     assert len(LEGACY_SCRIPT_PATHS) == 57
     for old_name, new_path in LEGACY_SCRIPT_PATHS.items():
         assert read_frontend_source(str(ROOT), old_name) == \
