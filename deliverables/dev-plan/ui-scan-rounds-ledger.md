@@ -329,3 +329,50 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 - 门禁:provides 漏登记两度被 lint 拦下（_gfSearchTerms/groupFilesHighlight/
   GROUP_ALL_RE）后修正；群聊 6 套件 33 项绿；幂等/树序复验 97 绿
 - 交付物:桌面 Harbor-Setup-1.9.0.exe（三批版重打中）
+
+## Round 16(完成,2026-11-05,提交 907ab98,已推送)——Resume 机制
+
+- 立项(主理人):「完整实现 resume 机制，在全部功能场景中完整运用，中断后可接续且状态一致」
+- 盘点:截断续跑(≤5 次)与群聊接力恢复既有闭环;缺口=error 路径(网络断流)
+  丢部分正文/不配平/failed/无入口
+- 交付:agent/resume.js——isResumableError(网络/超时/5xx/429 可恢复,
+  401/403/400 确定性失败不弹)/shouldOfferResume/resumeBannerMount(⚡横幅+
+  继续任务/放弃,计划上下文异步增强 plan_get);run-controller error 路径
+  固化部分正文+fillMissingToolResults 配平+paused;renderChatHistory 挂横幅
+- 门禁:tests/test_resume.py 7 项;全量 1802 绿
+
+## Round 17(完成,2026-11-05)——全入口运行时健康扫描
+
+- 立项(主理人):「保证所有入口点击即可正常使用」
+- 交付:tools/entry_sweep.py(CDP 逐个真实点击+未捕获异常捕获+护栏跳过清单
+  +Esc 收尾);两遍 172 入口 BAD=0;抓出真实缺陷 toggleTheme ViewTransition
+  ready-promise 拒绝(窗口遮挡场景)→三通道抑制,修复后复扫 BAD=0
+- 备注:静态面另有子代理全清单(46+11 个 onclick 全有定义,零悬空)
+
+## Round 18(完成,2026-11-05)——图标系统重设计
+
+- 立项(主理人):「重新设计全部图标,风格偏 low;每区域独立设计逻辑」
+- 交付:sprite 15→35 symbol 全部自声明呈现属性;feather 高质量 path 升级
+  进 sprite;chrome 内联 SVG 18 处清零(theme/MSG_ICONS 同源化);高频 chrome
+  emoji 退役(👥📁📂⚡⤓);tests/test_icon_system.py 6 项门禁(自声明/零悬空/
+  零死 symbol/chrome 零内联/构建同步/emoji 退役)
+- 运行时体检:35 symbol/54 use/0 悬空/rail 全 sprite;复扫 BAD=0
+
+## Round 19(完成,2026-11-05,提交 75479ea,已推送)——一致性+依赖+性能
+
+- 交付:tests/test_api_surface_consistency.py(前端 callApi 全量 vs 后端签名
+  ——零悬空;死重依赖门禁,zod 全仓零引用已清 package.json+lockfile);
+  性能实测 CDP:400 条消息 renderChatHistory 1548ms→404ms(-74%),根因
+  addMessage 每条 scrollTop 强制回流→batch 重建期跳过+收尾一次归底
+  (滚底行为保持);boot 310ms;tests/test_perf_guards.py 防回退
+
+## Round 20(完成,2026-11-05,提交 0483284,已推送)——源码深度扫描与实证修复
+
+- 方法:只读子代理广撒网(6 类缺陷,排除既有门禁覆盖项)→主会话逐条实证
+- 战果:10 项候选 10/10 实证落地——XSS×3(工具名/交接卡键名/成员名模型)、
+  信任集跨会话泄漏(按 runSid 键控)、截图串会话(pendingShots 打 sid 标)、
+  配置丢失(签名漏 group)、uiConfirm 键名错配、_acc 并行污染、
+  getActiveRuns 重复定义、maxTokens NaN
+- 零发现声明:吞错/资源泄漏/前后端参数契约(~120 处逐一核对)
+- 门禁:tests/test_r20_scan_fixes.py 10 项;test_generative_registry zod
+  期望同步 {}
