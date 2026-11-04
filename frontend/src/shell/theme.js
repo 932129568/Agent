@@ -1,6 +1,7 @@
 /* ================= 主题 ================= */
-const THEME_ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-const THEME_ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>';
+// R18：主题图标走 sprite（i-sun/i-moon），与全站图标同源同描边
+const THEME_ICON_SUN = '<svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-sun"/></svg>';
+const THEME_ICON_MOON = '<svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-moon"/></svg>';
 function applyTheme(t) {
   document.body.classList.toggle('dark', t === 'dark');
   const b = document.getElementById('themeBtn');
@@ -11,7 +12,15 @@ function toggleTheme() {
   const apply = () => { applyTheme(t); try { localStorage.setItem('glm_theme', t); } catch (e) {} };
   // v4：主题切换表面过渡——原生 ViewTransition 优先（ Chromium ），否则 .theming 白名单过渡
   if (document.startViewTransition && typeof MOTION !== 'undefined' && !MOTION.prefersReduced()) {
-    try { document.startViewTransition(apply); return; } catch (e) {}
+    try {
+      // R17 扫描实证：连点主题键时并发 ViewTransition 会以 InvalidStateError 拒绝
+      //（unhandledrejection）——updateCallbackDone 失败时降级直切，finished 静默。
+      const vt = document.startViewTransition(apply);
+      if (vt && vt.updateCallbackDone) vt.updateCallbackDone.catch(() => { try { apply(); } catch (e) {} });
+      if (vt && vt.ready) vt.ready.catch(() => {});        // 窗口被遮挡/跳过时 ready 拒绝（R17 扫描实证）
+      if (vt && vt.finished) vt.finished.catch(() => {});
+      return;
+    } catch (e) {}
   }
   document.body.classList.add('theming');
   apply();

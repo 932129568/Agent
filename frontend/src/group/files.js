@@ -86,7 +86,7 @@ async function groupArchiveHandoff(s, member, text, roundNo) {
       s.groupFiles = (s.groupFiles || []);
       s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, round: r.round, size: r.size, mtime: r.mtime });
       if (s.groupFiles.length > 60) s.groupFiles = s.groupFiles.slice(-60);
-      // 工具栏「📁 群文件 N」即时刷新（原先要等下一次 render 才 +1）
+      // 工具栏「群文件 N」计数即时刷新（原先要等下一次 render 才 +1）
       try { if (typeof groupToolbarRefresh === 'function') groupToolbarRefresh(s.id); } catch (e) {}
       return r;
     }
@@ -136,14 +136,14 @@ function groupFilesOpen() {
   mask.innerHTML =
     '<div class="gf-panel" role="dialog" aria-label="群文件">' +
       '<div class="gf-head">' +
-        '<div class="gf-title">📁 群文件</div>' +
+        '<div class="gf-title"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-folder"/></svg> 群文件</div>' +
         '<button type="button" class="gf-x" id="gfClose" aria-label="关闭">×</button>' +
       '</div>' +
       '<div class="gf-desc">成员每次发言的【交接文档】都会自动归档到这里，文件名带「时间_成员_主题」，可按关键词检索。</div>' +
       '<div class="gf-dirrow">' +
         '<input class="gf-input" id="gfDir" spellcheck="false" placeholder="群文件目录（留空=默认 ~/.glm-chat/group_files）">' +
-        '<button type="button" class="gf-btn" id="gfBrowse">浏览…</button>' +
-        '<button type="button" class="gf-btn" id="gfOpenDir" title="在资源管理器中打开群文件夹">📂 打开</button>' +
+        '<button type="button" class="gf-btn" id="gfBrowse"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 浏览…</button>' +
+        '<button type="button" class="gf-btn" id="gfOpenDir" title="在资源管理器中打开群文件夹"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 打开</button>' +
         '<button type="button" class="gf-btn primary" id="gfSaveDir">保存目录</button>' +
       '</div>' +
       '<div class="gf-searchrow">' +

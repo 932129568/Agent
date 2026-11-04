@@ -51,7 +51,7 @@ function resumeBannerMount(box, s, actions) {
   el.className = 'resume-banner';
   if (el.setAttribute) el.setAttribute('role', 'status');   // DOM 桩安全
   el.innerHTML =
-    '<span class="rb-ico">⚡</span>' +
+    '<span class="rb-ico"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-bolt"/></svg></span>' +
     '<span class="rb-text"></span>' +
     '<span style="flex:1"></span>' +
     '<button type="button" class="rb-btn rb-continue">▸ 继续任务</button>' +
@@ -76,6 +76,24 @@ function resumeBannerMount(box, s, actions) {
   el.querySelector('.rb-dismiss').onclick = dismiss;
   el.__continue = onContinue;
   el.__dismiss = dismiss;
+  // 计划上下文增强（异步，不阻塞横幅）：会话挂着 plan.task_id 且计划处于
+  // approved/executing → 文案升级为计划视角（计划在哪个断点）。plan_get 本就是
+  // 「断线重连用」接口（M3-B1）；步进级回滚由 checkpoint_rollback 承接。
+  if (s.plan && s.plan.task_id && typeof callApi === 'function') {
+    try {
+      callApi('plan_get', [String(s.plan.task_id)], 15000).then(raw => {
+        const p = raw ? JSON.parse(raw) : null;
+        const plan = p && (p.plan || p);
+        if (!plan || !plan.steps) return;   // 横幅若已移除，写 textContent 无害（节点即弃）
+        if (plan.status !== 'approved' && plan.status !== 'executing') return;
+        const done = plan.steps.filter(x => x.status === 'done').length;
+        textEl.textContent = '计划「' + (plan.title || '任务') + '」执行至第 ' +
+          Math.min(done + 1, plan.steps.length) + '/' + plan.steps.length +
+          ' 步被中断，已完成步骤与检查点均保留';
+        el.__textEl = textEl;
+      }).catch(() => {});
+    } catch (e) {}
+  }
   // DOM 桩安全：真实容器 insertBefore；桩（无此方法）退化为 appendChild
   if (box.insertBefore) box.insertBefore(el, box.firstChild);
   else box.appendChild(el);

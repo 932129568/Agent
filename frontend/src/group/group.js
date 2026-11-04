@@ -312,10 +312,10 @@ function groupToolbarRender(s) {
   }).join('');
   bar.innerHTML =
     '<div class="gb-row">' +
-      '<span class="gb-title">👥 群聊 <span class="gb-beta">Beta</span></span>' + chips +
+      '<span class="gb-title"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-users"/></svg> 群聊 <span class="gb-beta">Beta</span></span>' + chips +
       '<span style="flex:1"></span>' +
       '<span class="gb-phase" id="gbPhase">' + (g.phase === 'running' ? '接力中 · 第 ' + (g.round || 0) + ' 轮' + qHint : g.phase === 'paused' ? '已暂停（第 ' + (g.round || 0) + ' 轮）' + qHint : '待群主下发任务') + '</span>' +
-      '<button type="button" class="modal-btn" id="gbFiles" title="群文件：交接文档仓库（可搜索/改目录）">📁 群文件' +
+      '<button type="button" class="modal-btn" id="gbFiles" title="群文件：交接文档仓库（可搜索/改目录）"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 群文件' +
         ((s.groupFiles && s.groupFiles.length) ? ' ' + s.groupFiles.length : '') + '</button>' +
       '<button type="button" class="modal-btn" id="gbPause" onclick="groupToggleRelay()">' +
         (g.phase === 'running' ? '⏸ 暂停接力' : '▶ 继续接力') + '</button>' +

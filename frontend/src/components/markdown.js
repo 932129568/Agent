@@ -185,12 +185,13 @@ document.addEventListener('click', (e) => {
   if (msg && !(e.target.closest && e.target.closest('.msg-actions'))) msg.classList.add('acting');
 });
 /* v4 极简操作图标（16px 线性 stroke 1.8，hover 才显色——克制） */
+// R18：消息操作图标走 sprite（i-copy/i-back/i-edit/i-regen/i-star），单描边来源
 const MSG_ICONS = {
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4H6.5A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></svg>',
-  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a7 7 0 1 1 2 4.9"/><path d="M3 5v5h5"/></svg>',
-  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-  regen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
-  fav: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z"/></svg>'
+  copy: '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-copy"/></svg>',
+  back: '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-back"/></svg>',
+  edit: '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-edit"/></svg>',
+  regen: '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-regen"/></svg>',
+  fav: '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-star"/></svg>'
 };
 
 /** 消息操作条（v4 极简：小图标悬停浮现）。

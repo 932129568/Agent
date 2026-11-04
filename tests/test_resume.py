@@ -133,3 +133,27 @@ def test_run_controller_wires_resumable_error_path():
 def test_render_hooks_banner():
     src = (ROOT / 'frontend' / 'src' / 'sessions' / 'controller.js').read_text(encoding='utf-8')
     assert 'shouldOfferResume(s)' in src and 'resumeBannerMount(box, s' in src
+
+
+def test_banner_plan_context_enrichment():
+    """挂 plan.task_id 的中断会话：横幅文案升级为计划视角（plan_get 异步增强）。"""
+    result = _run(r"""
+  const ctx2 = ctx;
+  __run(ctx2, "globalThis.__calls = []; globalThis.callApi = async function(name, args){"
+    + " globalThis.__calls.push({name: name, args: args});"
+    + " return JSON.stringify({ plan: { title: '重构登录页', status: 'executing',"
+    + " steps: [{status:'done'},{status:'doing'},{status:'todo'}] } }); };");
+  const script = `(function(){
+    const box = document.createElement('div');
+    const s = { runStatus: 'paused', plan: { task_id: 't1' },
+                messages: [{role:'user',content:'go'},{role:'assistant',content:'...'}] };
+    const b = resumeBannerMount(box, s, {});
+    return new Promise(function(res){
+      setTimeout(function(){ res({ text: b && b.__textEl ? b.__textEl.textContent : '',
+        calls: globalThis.__calls.length }); }, 30);
+    });
+  })()`;
+  return __vm.runInContext(script, ctx2);
+""", 'resume_plan')
+    assert '重构登录页' in result['text'] and '2/3' in result['text'], result
+    assert result['calls'] >= 1

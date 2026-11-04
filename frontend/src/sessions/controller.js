@@ -146,7 +146,7 @@ function migrateWorkingRunStatuses() {
 }
 function _sessionItemHtml(s, showActions) {
   const acts = showActions ? `<span class="session-acts">
-      <button class="session-exp" title="导出为 Markdown" aria-label="导出会话" data-sid="${escapeHtml(s.id)}">⤓</button>
+      <button class="session-exp" title="导出为 Markdown" aria-label="导出会话" data-sid="${escapeHtml(s.id)}"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-download"/></svg></button>
       <button class="session-del" aria-label="删除会话" title="删除会话" data-sid="${escapeHtml(s.id)}">✕</button>
     </span>` : '';
   return `<div class="session-item ${s.id === currentSessionId ? 'active' : ''}" data-sid="${escapeHtml(s.id)}" tabindex="0" role="button" aria-label="${escapeHtml(s.title || '新对话')}">
@@ -741,7 +741,7 @@ function ensureHistoryFoot() {
   const foot = document.createElement('div');
   foot.id = 'historyFoot';
   foot.className = 'history-foot';
-  foot.innerHTML = '<button class="history-dir-btn" id="historyDirBtn" title="选择历史记录存放文件夹">📁 历史目录</button>';
+  foot.innerHTML = '<button class="history-dir-btn" id="historyDirBtn" title="选择历史记录存放文件夹"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 历史目录</button>';
   if (list.parentNode) list.parentNode.appendChild(foot);
   const btn = document.getElementById('historyDirBtn');
   if (btn) btn.addEventListener('click', showHistoryDirPanel);
@@ -752,7 +752,8 @@ async function refreshHistoryFoot() {
   if (!btn) return;
   try {
     const r = JSON.parse(await callApi('history_dir_get', [], 20000) || '{}');
-    btn.textContent = r.dir ? '📁 ' + _shortDir(r.dir) : '📁 历史目录（默认）';
+    btn.innerHTML = r.dir ? '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> ' + _shortDir(r.dir)
+      : '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 历史目录（默认）';
     btn.title = r.dir ? ('历史存放：' + r.dir + '\n点击更改') : '历史存放：默认 ~/.glm-chat\n点击更改';
   } catch (e) { /* 后端旧版：保持默认文案 */ }
 }
