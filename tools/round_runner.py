@@ -15,6 +15,7 @@
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -76,14 +77,14 @@ def one_round(idx, full):
     rec['failures'] = failed_names
     for part in out.replace('\r', '\n').split('\n'):
         pt = part.strip()
-        if ' passed' in pt and ('failed' in pt or pt.endswith(' passed') or ' skipped' in pt):
-            import re
+        if ' passed' in pt or ' failed' in pt or 'error' in pt.lower():
             m = re.search(r'(\d+) passed', pt)
             f = re.search(r'(\d+) failed', pt)
-            if m:
-                rec['tests_passed'] = int(m.group(1))
-                rec['tests_failed'] = int(f.group(1)) if f else 0
-            break
+            e = re.search(r'(\d+) error', pt)
+            if m or f or e:
+                rec['tests_passed'] = int(m.group(1)) if m else 0
+                rec['tests_failed'] = (int(f.group(1)) if f else 0) + (int(e.group(1)) if e else 0)
+                break
 
     rec['duration_s'] = round(time.time() - t0, 1)
     ok = rec['build_ok'] and not rec['syntax_errors'] and rec['tests_passed'] is not None
