@@ -1661,10 +1661,12 @@
       "path": "frontend/src/group/group.js",
       "provides": [
         "GROUP_LIMITS",
+        "GROUP_OWNER",
         "GROUP_PRESET_TEAM",
         "groupAbort",
         "groupAdvance",
         "groupAfterSessionRender",
+        "groupBindEndpointRows",
         "groupBindLongPress",
         "groupBriefOf",
         "groupBubbleMount",
@@ -1675,16 +1677,20 @@
         "groupFullHandoffCard",
         "groupHandleOutgoing",
         "groupHueOf",
+        "groupLoadTools",
         "groupManageOpen",
         "groupMemberAdd",
         "groupMemberDel",
         "groupMemberName",
         "groupMemberRow",
         "groupNextMember",
+        "groupOwnerQuestion",
         "groupPresetFill",
         "groupPush",
+        "groupReadMemberRow",
         "groupSessionOf",
         "groupSpeak",
+        "groupStripEcho",
         "groupToggleRelay",
         "groupToolbarRefresh",
         "groupToolbarRender",
@@ -1704,6 +1710,70 @@
         "addMessage",
         "toast",
         "renderChatHistory"
+      ]
+    },
+    {
+      "path": "frontend/src/group/files.js",
+      "provides": [
+        "_gfSession",
+        "groupArchiveHandoff",
+        "groupFilesContextLines",
+        "groupFilesLoad",
+        "groupFilesMsg",
+        "groupFilesOpen",
+        "groupFilesRead",
+        "groupFilesRender",
+        "groupFilesSearch",
+        "groupFilesSync",
+        "groupHandoffFields",
+        "groupHandoffOf",
+        "groupHandoffTitle"
+      ],
+      "requires": [
+        "callApi",
+        "groupSessionOf",
+        "groupDetailOpen",
+        "saveSessions",
+        "toast"
+      ]
+    },
+    {
+      "path": "frontend/src/group/mention.js",
+      "provides": [
+        "_mention",
+        "groupMentionAccept",
+        "groupMentionBind",
+        "groupMentionHide",
+        "groupMentionMembers",
+        "groupMentionMove",
+        "groupMentionQuery",
+        "groupMentionRefresh",
+        "groupMentionShow",
+        "groupMentionTargets"
+      ],
+      "requires": [
+        "groupSessionOf"
+      ]
+    },
+    {
+      "path": "frontend/src/group/endpoints.js",
+      "provides": [
+        "GROUP_EP_SEP",
+        "groupCaptureEndpoint",
+        "groupEndpointCatalog",
+        "groupEndpointLabel",
+        "groupEnsureEndpoint",
+        "groupHydrateEndpoints",
+        "groupMemberEndpoint",
+        "groupModelSelectOptions",
+        "groupModelTarget"
+      ],
+      "requires": [
+        "providerState",
+        "chatCompletionsOf",
+        "PRESETS",
+        "connectHotModels",
+        "groupSessionOf"
       ]
     },
     {

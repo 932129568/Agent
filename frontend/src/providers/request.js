@@ -36,7 +36,7 @@ function paceFreeTier(signal, sleepAbortable) {
  * apiKey 仅由调用方注入并放入 Authorization，不写日志、不读全局覆盖显式值。 */
 async function modelTransportStream(request, signal) {
   const body = request.body || {};
-  if (body && Array.isArray(body.messages)) {
+  if (body && Array.isArray(body.messages) && typeof normalizeSystemMessages === 'function') {
     body.messages = normalizeSystemMessages(body.messages);
   }
   const isLocal = !!request.local;

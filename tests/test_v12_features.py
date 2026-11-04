@@ -286,6 +286,8 @@ class TestProviderService:
         assert r['ok'] is False and 'Key 无效' in r['error']
 
     def test_test_endpoint_1113_mapped(self, monkeypatch):
+        """Round 14（2026-11-04）：1113 人话重写——实测智谱按量欠费也报 1113，
+        且给出路（换免费 flash 系）。Coding Plan 分支保留（body 含 coding 特征）。"""
         import urllib.request
         import urllib.error
         body = json.dumps({'error': {'code': 1113}}).encode()
@@ -293,7 +295,14 @@ class TestProviderService:
             raise urllib.error.HTTPError('url', 400, 'Bad Request', {}, io.BytesIO(body))
         monkeypatch.setattr(urllib.request, 'urlopen', boom)
         r = json.loads(self._mk().test_endpoint('https://api.x.com/v1', 'sk-x', 'm1'))
-        assert r['ok'] is False and 'Coding Plan' in r['error']
+        assert r['ok'] is False and '1113' in r['error'] and 'glm-4.5-flash' in r['error']
+
+        body_cp = json.dumps({'error': {'code': '1113', 'message': 'Coding Plan not allowed'}}).encode()
+        def boom_cp(req, timeout=None):
+            raise urllib.error.HTTPError('url', 400, 'Bad Request', {}, io.BytesIO(body_cp))
+        monkeypatch.setattr(urllib.request, 'urlopen', boom_cp)
+        r2 = json.loads(self._mk().test_endpoint('https://api.x.com/v1', 'sk-x', 'm1'))
+        assert r2['ok'] is False and 'Coding Plan' in r2['error']
 
     def test_test_endpoint_missing_fields(self):
         svc = self._mk()

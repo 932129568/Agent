@@ -76,6 +76,9 @@ _V12_EXTRA = frozenset({
     # 不静默夹逼；get_api_info 零漂移同款隐身）
     'memory_delete', 'prompt_get', 'trace_new', 'local_readiness',
     'history_dir_get', 'history_dir_set', 'session_purge', 'memory_retrieve',
+    # Round 14：群文件（交接文档仓库）
+    'group_files_config_get', 'group_files_config_set', 'group_files_write',
+    'group_files_list', 'group_files_search',
     # v1.9.0 M1.9 占位（master-plan §6.2；转正时只改实现不改登记）
     'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
     'browser_screenshot', 'browser_close', 'get_platform_info',
@@ -136,6 +139,31 @@ class Api:
             self._native_ui.register(win, 'main',
                                      self._native_ui.begin_invoke_adapter(win), bootstrap=True)
         self._guard.arm()
+
+    # ============ 群文件：交接文档仓库（Round 14，2026-11-04 主理人立项）============
+    def group_files_config_get(self):
+        """群文件目录配置（root=实际使用目录，custom=False 表示默认 ~/.glm-chat/group_files）。"""
+        return self._group_files.get_config()
+
+    def group_files_config_set(self, cfg_json):
+        """设置群文件目录：{"root": "D:/harbor-group-files"}，空串恢复默认。"""
+        return self._group_files.save_config(cfg_json)
+
+    def group_files_write(self, group_id, group_name, member, title, content, meta_json='{}'):
+        """归档一份交接文档（.md），返回落盘路径与索引条目。"""
+        try:
+            meta = json.loads(meta_json or '{}')
+        except Exception:
+            meta = {}
+        return self._group_files.write(group_id, group_name, member, title, content, meta)
+
+    def group_files_list(self, group_id, group_name=''):
+        """列出某个群的群文件（最新在前）。"""
+        return self._group_files.list(group_id, group_name)
+
+    def group_files_search(self, group_id, query, limit=8):
+        """关键词检索群文件：标题/成员/交接对象/关键词/正文加权，返回命中片段。"""
+        return self._group_files.search(group_id, query, limit)
 
     # ============ 历史自选存放 + 真删（2026-10-21 用户需求）============
     def history_dir_get(self):

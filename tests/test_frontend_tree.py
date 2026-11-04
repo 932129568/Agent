@@ -82,6 +82,9 @@ EXPECTED_ORDER = [
     'frontend/src/agent/compact-command.js',
     'frontend/src/chat/send.js',
     'frontend/src/group/group.js',
+    'frontend/src/group/files.js',
+    'frontend/src/group/mention.js',
+    'frontend/src/group/endpoints.js',
     'frontend/src/components/context-menu.js',
     'frontend/src/expert/schemas.js',
     'frontend/src/expert/package-store.js',
@@ -118,7 +121,7 @@ def manifest():
 def test_exactly_58_modules_once_with_frozen_order_and_dependencies():
     entries = manifest()['scripts']
     paths = [entry['path'] for entry in entries]
-    assert len(paths) == len(set(paths)) == 100
+    assert len(paths) == len(set(paths)) == 103
     assert paths == EXPECTED_ORDER
     disk = {path.relative_to(ROOT).as_posix()
             for path in (ROOT / 'frontend' / 'src').rglob('*.js')}
@@ -138,7 +141,7 @@ def test_manifest_helper_resolves_every_new_path_without_duplicate_sources():
     for path in EXPECTED_ORDER:
         assert node_map[path] == path
         assert read_frontend_source(str(ROOT), path)
-    assert len(EXPECTED_ORDER) == 100
+    assert len(EXPECTED_ORDER) == 103
     assert len(LEGACY_SCRIPT_PATHS) == 57
     for old_name, new_path in LEGACY_SCRIPT_PATHS.items():
         assert read_frontend_source(str(ROOT), old_name) == \

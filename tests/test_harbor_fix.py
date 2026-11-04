@@ -387,6 +387,8 @@ class TestNormalizeWiring:
             '100-send.js': 'const planMsgs = normalizeSystemMessages(',
             # builder 只组装，transport 在发送前统一 normalizeSystemMessages。
             'request-builder.js': 'messages: options.messages',
+            # Round 14 群聊成员发言体：typeof 守卫归一化（单模块沙箱缺依赖自动跳过）
+            'group.js': "messages: (typeof normalizeSystemMessages === 'function') ? normalizeSystemMessages(convo) : convo",
         }
         for name, needle in covered.items():
             assert needle in _fe(name), '%s 未按约定接线: 期待 %r' % (name, needle)

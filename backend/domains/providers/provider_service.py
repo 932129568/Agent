@@ -156,10 +156,22 @@ def humanize_http_error(status, body=''):
                     '或手动输入其他模型名）')
         return '端点地址不存在（请检查 Base URL 是否需要 /v1 后缀）'
     if status == 429:
-        return '请求过于频繁或余额不足'
+        # 1113 优先：智谱把「余额不足」也报成 429，先于通用限流文案分流
+        if '1113' in str(body or ''):
+            pass    # 落到下方 1113 专属分支（带换模型出路）
+        else:
+            return '请求过于频繁（限流）：稍后重试，或改用免费 flash 系模型（限流额度更高）'
     # 修复 建议㉒（二轮）：307/308 重定向人话（禁重定向下端点配置了跳转时用户看得懂）
     if status in (307, 308):
         return '端点返回 %d 重定向（已禁跟随以防凭证跨域泄漏）；请在 Base URL 中直接填写最终地址' % status
-    if '1113' in body:
-        return 'GLM Coding Plan 仅限官方工具调用，API 直连请使用按量付费 Key'
+    # 1113 实测两种病因（2026-11-04 用户报障「glm-4.5 接不通」）：Coding Plan
+    # Key 直连被拒、或按量账户余额不足。二者都给出路：换免费 flash 系（同一
+    # 个 Key 下 glm-4.5-flash / glm-4-flash 可用），或去充值/Coding 专享 Key。
+    b13 = str(body or '')
+    if '1113' in b13:
+        if 'coding' in b13.lower():
+            return ('GLM Coding Plan Key 仅限官方工具调用，API 直连请换按量付费 Key；'
+                    '或直接改用免费模型 glm-4.5-flash / glm-4-flash（本 Key 即可用）')
+        return ('该模型需要账户余额（1113 余额不足）。同一 Key 下免费模型可直接用：'
+                '请切换 glm-4.5-flash / glm-4-flash；确需付费模型请到开放平台充值')
     return ''

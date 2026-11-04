@@ -33,6 +33,7 @@ from ..domains.workspace.cmd_service import CmdService
 from ..domains.workspace.file_service import FileService
 from ..domains.workspace.process_service import ProcessService
 from ..domains.workspace.sandbox_service import SandboxService
+from ..domains.workspace.group_files_service import GroupFilesService
 from ..domains.workspace.screenshot_service import ScreenshotService
 from ..domains.workspace.toolcache_service import ToolcacheService
 from ..domains.workspace.workspace_service import WorkspaceService
@@ -54,6 +55,7 @@ class ServiceContainer:
         'mcp_config', 'mcp', 'local', 'webdav', 'sandbox', 'software',
         'hybrid', 'reader', 'model_prefs', 'checkpoints', 'search', 'driver',
         'plans', 'session', 'operation', 'task_registry', 'scheduler', 'native_ui', 'expert',
+        'group_files',
     )
     API_ALIASES = {
         '_runtime': 'runtime', '_config': 'config', '_workspace': 'workspace',
@@ -66,7 +68,7 @@ class ServiceContainer:
         '_checkpoint': 'checkpoints', '_search': 'search', '_driver': 'driver',
         '_plan': 'plans', '_session': 'session', '_operation': 'operation',
         '_registry': 'task_registry', '_scheduler': 'scheduler', '_native_ui': 'native_ui',
-        '_expert': 'expert',
+        '_expert': 'expert', '_group_files': 'group_files',
     }
 
     def __init__(self):
@@ -117,6 +119,7 @@ class ServiceContainer:
         self.model_prefs = ModelPrefsService()
         self.checkpoints = CheckpointService()
         self.expert = ExpertPackageService()
+        self.group_files = GroupFilesService()   # Round 14：群聊交接文档仓库
         global _BUILTIN_EXPERTS_READY
         if not _BUILTIN_EXPERTS_READY:
             _BUILTIN_EXPERTS_READY = True

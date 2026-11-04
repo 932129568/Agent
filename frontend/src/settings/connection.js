@@ -28,7 +28,7 @@ const PRESETS = {
     models: [
       { id: 'glm-4.5-flash', text: 'glm-4.5-flash（免费 · 日常够用）' },
       { id: 'glm-4-flash', text: 'glm-4-flash（免费 · 更省）' },
-      { id: 'glm-4.5', text: 'glm-4.5（付费 · 更强推理）' }
+      { id: 'glm-4.5', text: 'glm-4.5（需余额/额度 · 更强推理）' }
     ]
   },
   deepseek: {
@@ -163,7 +163,7 @@ const PROVIDER_HOT_MODELS = [
     // 时用它们兜底等于把「装完即失败」写死。
     { id: 'glm-4.5-flash', text: 'glm-4.5-flash（免费 · 日常够用）' },
     { id: 'glm-4-flash', text: 'glm-4-flash（免费 · 更省）' },
-    { id: 'glm-4.5', text: 'glm-4.5（付费 · 更强推理）' },
+    { id: 'glm-4.5', text: 'glm-4.5（需余额/额度 · 更强推理）' },
     { id: 'glm-4.6', text: 'glm-4.6（新一代）' },
     { id: 'glm-4.5-air', text: 'glm-4.5-air（轻量）' }
   ] },
