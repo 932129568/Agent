@@ -288,3 +288,30 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 - 顺带修复:normalizeSystemMessages 裸引用 typeof 守卫(request.js/group.js)
 - 记账补遗:Round 14(群聊工具循环+@群主交还+系统消息区分+回声剥离)因
   会话中断未及时落账,已并入本条;test_v12_features 1113 契约同步更新
+
+## Round 15 优化批次(完成,2026-11-04/05,提交 6d9b175/2c2a9b0)
+
+- 立项(主理人):「继续优化一下这些功能」「继续进一步优化升级」
+- 交付(两批):
+  批一(6d9b175):
+  1. 持久化白名单补 group.endpoints+mentionQueue——根治重启后跨端点成员
+     集体报「缺端点」、点名接力断档;localStorage 镜像投影层剥 api_key
+     (W29 纪律不破:后端可存、镜像不落明文)
+  2. 跨端点 Key 同址复用:成员端点=当前配置端点 → 直接用当前 Key
+  3. 群文件面板「📂 打开」(group_files_open_dir,目录不存先建)+轮次展示
+  4. @ 选择器前缀命中优先+色环头像(与气泡同源 groupHueOf);归档即时刷新
+     工具栏计数
+  批二(2c2a9b0):
+  5. 群文件可删:group_files_delete(basename 归一+realpath 双保险锁群子目录)
+     +面板 ✕(uiConfirm 确认)
+  6. 成员行「测试」按钮:跨端点配置就地验证(端点+Key+模型一次实测)
+  7. 工具栏 phase 显示点名队列「→ 测试→UI设计…」
+  8. 详情页「⧉ 复制全文」三级降级(uiClipboard→navigator→set_clipboard)
+  9. @ 选择器行内显示成员模型
+- 门禁插曲:v18 幂等门禁拦下 manifest provides 漏登记(groupFilesDelete)——
+  管道吞退出码所致,门禁有效性实证
+- 验证:群聊 6 套件 31 项绿;构建幂等/树序/modern 复验 79 绿
+- 交付物:桌面 Harbor-Setup-1.9.0.exe(00:12 批一版;批二版重打中)
+
+## Round 16+(待续)
+- 候选:真机实测反馈、图标 v3、D 域加固、4 项预存在失败测试对齐
