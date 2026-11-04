@@ -217,5 +217,30 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
   返回/Esc/重复开关无泄漏)+截图复核
 - 门禁:10 组 308 绿;v3 打包含全部修复
 
-## Round 12+(待续)
-- 候选:真机实测反馈、图标 v3、D 域加固
+## Round 12(完成,2026-11-04,提交 7a83290/ccb393f/4a5f54d,已推送)
+
+- 立项(主理人):群聊气泡「挤在中间」布局修复 + 安装器自定义文件夹 +
+  **换机装完智谱免费模型必 429**(主理人断言:「就是你配置的问题」)
+- 交付:
+  1. 群聊气泡布局:历史重建消息加 group-msg 类,覆盖 `.message .content`
+     的 max-width:76% + 20px 底距 → 全宽气泡 + 6px 间距;摘要行空白修复
+     (done 态补 groupBriefOf);截图复核
+  2. 安装器:oneClick=false + allowToChangeInstallationDirectory=true +
+     perMachine=false → 向导式可选安装目录,装完自启,桌面/开始菜单快捷方式
+  3. 免费模型 429 根因链(三重):
+     a) 预设/兜底/价格表/模板静态下拉全是幽灵模型名(glm-5.3-flash 等,
+        平台不存在 → 1211);智能档取「第一个 *flash 选项」也命中幽灵名
+        → 全面换成 glm-4.5-flash / glm-4-flash / glm-4.5
+     b) 免费档误发 reasoning_effort/thinking(flash 系不支持)→ 免费档剔除
+     c) 免费档无节流:新增 paceFreeTier 全局串行 + 3.2s 最小间隔
+     d) 429 退避:1 次/2 秒 → 3 次指数退避(4s/12s/30s,跨配额窗口)+
+        遵循 Retry-After;余额/欠费类不重试直接报错
+- 验证:node vm 假 fetch 实证(免费模型 hasEffort=false/hasThinking=false/
+  waits=[3200];付费 glm-4.5 参数原样无等待;429 退避 calls=3 waits=[4000,12000]
+  status=200)+asar 内 harbor.html 反查(幽灵 option 已清零)+全量门禁
+- 门禁:全量 1762 绿 / 4 败为预存在测试漂移(git stash 对比实证:与本轮无关)
+- 交付物:桌面 Harbor-Setup-1.9.0.exe(226,075,134 B,11:40 重打,
+  sha256 da75ad1ae009a7a292b6e9bd7b7cf2c16025d04c0dbc314fdf4b9ef8cb388593)
+
+## Round 13+(待续)
+- 候选:真机实测反馈、图标 v3、D 域加固、4 项预存在失败测试对齐
