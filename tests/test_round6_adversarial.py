@@ -364,7 +364,7 @@ async function __main() {
   // ② 登记成功：进 Set，二次调用前端短路（不再弹窗/不再 guard_check）
   __trustThrows = false; __confirmCount = 0; __calls.length = 0;
   await agentGuardCheck('web_search', { query: 'q2' });
-  ok('reg_ok_trusted', agentTrusted.has('web_search:q2'));
+  ok('reg_ok_trusted', agentTrusted.has('|web_search:q2'));   // R20：信任集按 runSid 键控（无 sid=空键）
   const before = __calls.length;
   const r3 = await agentGuardCheck('web_search', { query: 'q2' });
   ok('reg_ok_shortcircuit', __confirmCount === 1
@@ -409,7 +409,7 @@ async function __main() {
   // ② 登记成功：进 Set 且短路
   __trustThrows = false; __confirmCount = 0;
   await guardCheckTool('clipboard_read', {});
-  ok('tool_reg_ok_trusted', guardTrusted.has('clipboard_read'));
+  ok('tool_reg_ok_trusted', guardTrusted.has('|clipboard_read'));   // R20 键控
   const r2 = await guardCheckTool('clipboard_read', {});
   ok('tool_reg_ok_shortcircuit', __confirmCount === 1
      && r2.blocked === null && r2.token === null);
@@ -1004,7 +1004,7 @@ class TestStaticRound5Verification:
         assert src.count('agentTrusted.clear()') == 2   # newSession + switchSession
         te = _fe('25-tool-exec.js')
         assert "await callApi('guard_session_trust', [op], 20000);" in te
-        assert 'agentTrusted.add(trustKey);' in te
+        assert re.search(r"agentTrusted\.add\(String\(runSid \|\| ''\) \+ '\|' \+ trustKey\);", te) or "agentTrusted.add(String(runSid || '') + '|' + trustKey);" in te   # R20 键控
 
     # ---- 项6：memoryPanelInit 挂载有 catch + 幂等 ----
     def test_item6_memory_panel_mount(self):

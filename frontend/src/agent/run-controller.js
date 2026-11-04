@@ -586,7 +586,8 @@ async function runAgentLoop(s, apiKey, opts) {
       const reqMsgs = normalizeSystemMessages([{ role: 'system', content: sysContent }, ...slimMsgs]);
       // R20 扫描修复：pendingShots 为跨 run 单例，原实现会把他会话/后台 run 的
       // 截图注入本请求。现按 sid 过滤，只消费本会话的截图。
-      const _myShots = pendingShots.filter(x => x && x.sid === String(s.id)).map(x => x.comp);
+      const _myShots = (typeof pendingShots !== 'undefined' ? pendingShots : [])
+        .filter(x => x && x.sid === String(s.id)).map(x => x.comp);
       if (_myShots.length && shotState === 'idle') {
         const shotContent = [{ type: 'text', text: _myShots.length > 1
           ? `[系统附图] 以下是 ${_myShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
@@ -729,7 +730,7 @@ async function runAgentLoop(s, apiKey, opts) {
           }
           if (shotState === 'sending') {
             shotState = 'idle';
-            pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
+            if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
             try {
               s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
               if (typeof runAddMessage === 'function') runAddMessage(run, 'user', '[已向 AI 发送当前屏幕截图]');
@@ -746,7 +747,7 @@ async function runAgentLoop(s, apiKey, opts) {
       _clearWaitTimer();
       if (shotState === 'sending') {
         shotState = 'idle';
-        pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
+        if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
         try {
           s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
           if (typeof runAddMessage === 'function') runAddMessage(run, 'user', '[已向 AI 发送当前屏幕截图]');
@@ -1210,7 +1211,7 @@ async function runAgentLoop(s, apiKey, opts) {
     if (shotState === 'sending') shotState = 'idle';
     // 修复 M5（四轮）：非 abort 失败路径也清过期截图——原仅 AbortError 清，失败后
     // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）——只清本会话的
-    if (pendingShots.length) pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
+    if (typeof pendingShots !== 'undefined' && pendingShots.length) pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
     if (_localWaitTimer) { clearInterval(_localWaitTimer); _localWaitTimer = null; }   // 修复 S15（三轮）：AbortError 路径也清本地等待定时器（原只清 else 分支，1s 定时器永久存活劫持状态行）
     if (err.name === 'AbortError') {
       // 修复 建议㉕（三轮）：abort/停止时清 pendingShots——原只复位 shotState，

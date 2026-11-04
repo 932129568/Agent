@@ -385,7 +385,9 @@ function newSession() {
   renderNewChatHistory();
   updateLiveTokenStat();
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
-  lastShotHash = null; pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid)); shotState = 'idle';
+  lastShotHash = null;
+  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
+  shotState = 'idle';
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲：补 rejection 处理（原只挡同步 throw）
     try { callApi('set_current_sid', [null]).catch(() => {}); } catch (e) {}   // 修复 ㊲：同上；后端借此清空会话信任态（含 MCP）
@@ -453,7 +455,9 @@ function switchSession(id, silent) {
   renderNewChatHistory();
   updateLiveTokenStat();
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
-  lastShotHash = null; pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid)); shotState = 'idle';
+  lastShotHash = null;
+  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
+  shotState = 'idle';
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）

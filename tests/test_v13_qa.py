@@ -920,7 +920,7 @@ const __origGuard = mcpGuardCheck;
   __uiConfirmResult = { ok: true, checked: true };
   g = await mcpGuardCheck('mcp__srv__tool', {});
   ok('session_trust', g.blocked === null && g.decision === 'session-trust'
-     && mcpTrusted.has('srv__tool'));
+     && mcpTrusted.has('|srv__tool'));   // R20 键控
   // 信任态命中 → 不再问后端
   __calls.length = 0;
   g = await mcpGuardCheck('mcp__srv__tool', {});

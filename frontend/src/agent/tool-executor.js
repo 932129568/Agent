@@ -129,7 +129,8 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
           const comp = await compressScreenshot(data.dataUrl);
           const dup = await shotDedup(comp);
           if (dup) return JSON.stringify({ok: true, path: data.path, info: dup});
-          pendingShots.push({ sid: String(runSid || ''), comp });   // R20：按会话标记，防并行/切换串图
+          if (typeof pendingShots === 'undefined') { /* 部分沙箱未载 state.js */ }
+          else pendingShots.push({ sid: String(runSid || ''), comp });   // R20：按会话标记，防并行/切换串图
           return JSON.stringify({ok: true, path: data.path, note: '截图已压缩，下一步将自动作为图片提供给你分析屏幕内容。', thumbnail: comp});
         }
         return JSON.stringify({error: data.error || '截图失败'});
