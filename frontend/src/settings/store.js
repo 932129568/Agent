@@ -7,7 +7,8 @@ function collectConfig() {
       document.getElementById('modelSelect').value || 'auto',
     temperature: parseFloat(document.getElementById('temperature').value),
     top_p: parseFloat(document.getElementById('topP').value),
-    max_tokens: parseInt(document.getElementById('maxTokens').value),
+    // R20 扫描修复：空输入/非数字 → NaN → JSON 序列化成 null 写脏 config.json
+    max_tokens: parseInt(document.getElementById('maxTokens').value, 10) || 4096,
     reasoning_effort: document.getElementById('reasoningEffort').value,
     system_prompt: document.getElementById('systemPrompt').value,
     enable_search: document.getElementById('enableSearch').checked,

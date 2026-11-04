@@ -303,12 +303,15 @@ function groupToolbarRender(s) {
   const qNames = (Array.isArray(g.mentionQueue) ? g.mentionQueue : [])
     .map(id => g.members.find(m => m.id === id)).filter(Boolean)
     .map(m => m.name);
-  const qHint = qNames.length ? ' → ' + qNames.slice(0, 3).join('→') + (qNames.length > 3 ? '…' : '') : '';
+  const qHint = qNames.length ? ' → ' + qNames.slice(0, 3).map(function (n) {
+    return String(n).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }).join('→') + (qNames.length > 3 ? '…' : '') : '';
   const chips = g.members.map(m => {
     const on = m.id === g.turn;
+    const chipName = String(m.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     return '<button type="button" class="gb-chip' + (on ? ' on' : '') + (m.host ? ' host' : '') +
       '" data-mid="' + m.id + '" title="' + (on ? '等待该成员发言' : '点击 @ 该成员') + '">' +
-      (m.host ? '★ ' : '') + m.name + (on ? ' ✍' : '') + '</button>';
+      (m.host ? '★ ' : '') + chipName + (on ? ' ✍' : '') + '</button>';
   }).join('');
   bar.innerHTML =
     '<div class="gb-row">' +
@@ -431,7 +434,8 @@ function groupBubbleMount(container, member, text, state) {
   const el = document.createElement('div');
   el.className = 'gwb' + (state === 'working' ? ' working' : '') + (member && member.host ? ' host' : '');
   const hue = groupHueOf(member);
-  const name = member ? ((member.host ? '★ ' : '') + member.name) : '群主';
+  const _nm = member ? String(member.name || '') : '';
+  const name = member ? ((member.host ? '★ ' : '') + _nm.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')) : '群主';
   el.innerHTML =
     '<div class="gwb-side"><div class="gwb-ava" style="--hue:' + hue + '">' +
       (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div></div>' +
@@ -451,8 +455,10 @@ function groupBubbleMount(container, member, text, state) {
   // 长按名字 → 群聊管理（桌面：按住 500ms；移动/触屏同语义）
   if (nameEl) groupBindLongPress(nameEl, () => groupManageOpen());
   if (state === 'working') {
-    el.__setBrief = t => { briefEl.innerHTML = '<span class="gwb-dots"><i></i><i></i><i></i></span> ' +
-      String(t || '').slice(0, 60); };
+    el.__setBrief = t => {   // R20 扫描修复：t 来自模型工具名，textContent 装配防注入
+      briefEl.innerHTML = '<span class="gwb-dots"><i></i><i></i><i></i></span> ';
+      briefEl.appendChild(document.createTextNode(String(t || '').slice(0, 60)));
+    };
     el.__finish = (fullText, meta) => {
       el.classList.remove('working');
       el.querySelector('.gwb-state').textContent = '已完成';
@@ -503,13 +509,15 @@ function groupFullHandoffCard(fullEl, text) {
   const card = document.createElement('div');
   card.className = 'gwb-handoff';
   card.innerHTML = '<div class="gwb-handoff-title">📋 交接文档</div>' +
-    rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k">' + r.k + '</span>' +
+    rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k"></span>' +
       '<span class="gh-v"></span></div>').join('');
   const vs = card.querySelectorAll('.gh-v');
+  const ks = card.querySelectorAll('.gh-k');
   rows.forEach((r, i) => {
     const el = vs[i];
     if (/^(前端|后端|UI设计|测试|主持人)$/.test(r.v) || r.k === '交接给') el.classList.add('gh-target');
     el.textContent = r.v;
+    if (ks[i]) ks[i].textContent = r.k;   // R20 扫描修复：键名来自模型正文，textContent 装配
   });
   fullEl.appendChild(card);
 }
@@ -528,7 +536,8 @@ function groupDetailOpen(text, member, meta) {
       '<button type="button" class="gd-back" id="gdBack">‹ 返回群聊</button>' +
       '<div class="gd-id">' +
         '<div class="gwb-ava" style="--hue:' + hue + '">' + (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div>' +
-        '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') + member.name) : '群主') +
+        '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') +
+          String(member.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) : '群主') +
           (member && member.host ? ' · 主持人' : '') + '</div>' +
         '<div class="gd-sub">' + (member && member.model ? member.model : (meta && meta.model) || '群聊发言') +
           ' · 第 ' + ((meta && meta.round) || '—') + ' 轮</div></div>' +
@@ -755,17 +764,16 @@ async function groupSpeak(s, member) {
     const messages = groupContextFor(s, current);
     let text = '';
     let toolSteps = 0;
+    let acc = 0;   // R20 扫描修复：模块级 _acc 被并行群会话共享，改为本次调用局部
     try {
       text = await groupCallModel(s, current, messages, (delta) => {
-        groupSpeak._acc = (groupSpeak._acc || 0) + String(delta || '').length;
-        tick(groupSpeak._acc);
+        acc += String(delta || '').length;
+        tick(acc);
       }, (name) => {
         toolSteps++;
         if (bubble && bubble.__setBrief) bubble.__setBrief('调用工具 ' + name + '（第 ' + toolSteps + ' 次）');
       });
-      groupSpeak._acc = 0;
     } catch (e) {
-      groupSpeak._acc = 0;
       text = '';
       if (bubble && bubble.__finish) bubble.__finish('【' + current.name + ' 调用失败】' + (e && e.message ? e.message : e));
       else groupPush(s, 'assistant', '【' + current.name + ' 调用失败】' + (e && e.message ? e.message : e) + '；接力暂停。', null);

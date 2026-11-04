@@ -384,7 +384,8 @@ function newSession() {
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
-  lastShotHash = null; pendingShots = []; shotState = 'idle';
+  // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  lastShotHash = null; pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid)); shotState = 'idle';
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲：补 rejection 处理（原只挡同步 throw）
     try { callApi('set_current_sid', [null]).catch(() => {}); } catch (e) {}   // 修复 ㊲：同上；后端借此清空会话信任态（含 MCP）
@@ -392,6 +393,7 @@ function newSession() {
   refreshWsCard();
 }
 function switchSession(id, silent) {
+  const __prevSid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;   // R20：截图按会话出队用
   const activeRun = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : null;
   const sessionList = (typeof AppState !== 'undefined') ? AppState.sessions : sessions;
   const target = sessionList.find(s => s.id === id);   // 先校验存在性再赋值
@@ -450,7 +452,8 @@ function switchSession(id, silent) {
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
-  lastShotHash = null; pendingShots = []; shotState = 'idle';
+  // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  lastShotHash = null; pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid)); shotState = 'idle';
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）

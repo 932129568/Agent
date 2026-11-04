@@ -228,14 +228,15 @@ def test_static_security_dependency_and_packaging_guards():
     package = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))
     lock = json.loads((ROOT / 'package-lock.json').read_text(encoding='utf-8'))
     assert package['private'] is True
-    assert package['dependencies'] == {'zod': '4.6.7'}
+    # R19：zod 全仓零引用已移除（死重），依赖面收敛为空
+    assert package['dependencies'] == {}
     # P0-4 桌面工具链（electron/electron-builder）入列——守卫白名单同步（T06 L0 复核修正）
     assert package['devDependencies'] == {
         'esbuild': '0.28.2',
         'electron': '^45.2.1',
         'electron-builder': '^26.18.0',
     }
-    assert lock['packages']['node_modules/zod']['version'] == '4.6.7'
+    assert 'node_modules/zod' not in lock.get('packages', {})
     assert lock['packages']['node_modules/esbuild']['version'] == '0.28.2'
     assert lock['packages']['node_modules/esbuild']['dev'] is True
     assert lock['packages']['node_modules/electron']['version'] == '45.2.1'
@@ -276,7 +277,7 @@ def test_bundle_bytes_sha_gzip_and_offline_builds_are_reproducible():
     assert report['bytes'] == len(bundle)
     assert report['sha256'] == digest1
     assert report['gzipBytes'] == gzip1
-    assert report['environment']['zod'] == '4.6.7'
+    assert report['environment']['zod'] in (None, '', '4.6.7')  # 兼容旧环境记录
     assert report['environment']['esbuild'] == '0.28.2'
     node_modules = ROOT / 'node_modules'
     offline = ROOT / 'node_modules.offline-test'

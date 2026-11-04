@@ -98,7 +98,9 @@ async function guardCheckTool(name, args, runSid) {
   if (!op) return { blocked: null, token: null };
   args = args || {};
   // 会话内已信任：直接放行（后端持有同一会话信任态；名单仍会在 delete/kill 上兜底强制）
-  if (guardTrusted.has(op)) return { blocked: null, token: null };
+  // R20 扫描修复：信任集按 runSid 键控——原全局 Set 会让 A 会话勾选的「本会话
+  // 内不再提示」泄漏到并行 B 会话的后台 run（后端本就按 sid 登记，前端对齐）
+  if (guardTrusted.has(String(runSid || '') + '|' + op)) return { blocked: null, token: null };
   // 修复 ③（三轮）：off 档本地短路——boot 已加载 guardConfig（110-boot loadGuardConfig），
   // 该 op 档位为 off 且无保护名单语义时不再发 guard_check RPC（原每个受护栏命令一次往返，
   // guard 全 off 时纯属浪费）。delete_path/kill_process 的保护名单 block 在后端优先于
@@ -156,7 +158,7 @@ async function guardCheckTool(name, args, runSid) {
     // 的死循环。改 await 登记，成功才进前端 Set。
     try {
       await callApi('guard_session_trust', [op], 20000);
-      guardTrusted.add(op);
+      guardTrusted.add(String(runSid || '') + '|' + op);
     } catch (e) { /* 登记失败：不进前端信任——下次仍走确认弹窗 */ }
   }
   // 修复 UX-2（v1.4）：永久信任落库（guard.json trustedOps，op 级）——读-改-写经

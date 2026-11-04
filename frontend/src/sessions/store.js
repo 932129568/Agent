@@ -203,6 +203,9 @@ function _sessionSaveSignature(s) {
     typeof s._spentTokens === 'number' ? s._spentTokens : '',
     // apiFrozen 是小型参数对象，直接序列化（每个会话仅一次，成本可忽略）
     s.apiFrozen ? JSON.stringify(s.apiFrozen) : '',
+    // R20 扫描修复：群聊配置改动（成员/端点 Key/点名队列）原不在签名里——
+    // 「未变更短路」命中 → 改完成员身份不发言直接关应用 → 重启全丢
+    s.group ? JSON.stringify(s.group) : '',
     readKeys ? readKeys.length + ':' + readKeys[readKeys.length - 1] : '',
     s.worklogInjected === true ? 1 : '',
     s.__budgetWarned === true ? 1 : '',

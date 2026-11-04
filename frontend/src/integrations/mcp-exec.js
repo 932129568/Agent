@@ -54,7 +54,7 @@ async function mcpGuardCheck(name, args, runSid) {
   // 修复 B5（v1.5）：local 模式会话信任降级为仅本任务有效——跨任务重新确认
   // （本地模型工具参数幻觉风险高，保守策略）
   const _localMode = (typeof localState !== 'undefined' && localState.mode);
-  if (!_localMode && mcpTrusted.has(trustKey)) return { blocked: null, decision: 'session-trust', token: null };
+  if (!_localMode && mcpTrusted.has(String(runSid || '') + '|' + trustKey)) return { blocked: null, decision: 'session-trust', token: null };   // R20：按 sid 键控
 
   let verdict = { action: 'confirm' };
   try {
@@ -107,7 +107,7 @@ async function mcpGuardCheck(name, args, runSid) {
   } catch (e) { /* 旧 exe 无此方法：留空按 legacy 直调（新后端会强制拦截并返回人话错误） */ }
   // 修复 S11（三轮）：写侧与读侧对称——local 模式勾选"不再提示"不写入 session 信任
   // （原无条件写入：读侧排除 local 但持久化后切云端预设会读到，免确认跨端点泄漏）
-  if (r.checked && !_localMode) mcpTrusted.add(trustKey);
+  if (r.checked && !_localMode) mcpTrusted.add(String(runSid || '') + '|' + trustKey);
   return { blocked: null, decision: r.checked ? 'session-trust' : 'allow', token };
 }
 

@@ -6014,7 +6014,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
           const comp = await compressScreenshot(data.dataUrl);
           const dup = await shotDedup(comp);
           if (dup) return JSON.stringify({ok: true, path: data.path, info: dup});
-          pendingShots.push(comp);
+          pendingShots.push({ sid: String(runSid || ''), comp });   // R20：按会话标记，防并行/切换串图
           return JSON.stringify({ok: true, path: data.path, note: '截图已压缩，下一步将自动作为图片提供给你分析屏幕内容。', thumbnail: comp});
         }
         return JSON.stringify({error: data.error || '截图失败'});
@@ -6255,7 +6255,7 @@ async function agentGuardCheck(op, detail, origin, runSid, realCallApi = callApi
     detail.target || detail.selector || '');
   const trustKey = op + ':' + (_isBrowserOp ? '' : target);
   const dangerous = detail.force_always === true;
-  if (!dangerous && agentTrusted.has(trustKey)) {
+  if (!dangerous && agentTrusted.has(String(runSid || '') + '|' + trustKey)) {   // R20：按 sid 键控
     return { blocked: null, decision: 'session-trust', token: null };
   }
   let verdict = { action: 'confirm' };
@@ -6331,7 +6331,7 @@ async function agentGuardCheck(op, detail, origin, runSid, realCallApi = callApi
     // 窗，绝不在前端假装信任。
     try {
       await callApi('guard_session_trust', [op], 20000);
-      agentTrusted.add(trustKey);
+      agentTrusted.add(String(runSid || '') + '|' + trustKey);
     } catch (e) { /* 登记失败：不进前端信任——下次仍走确认弹窗，由用户重新勾选重试 */ }
   }
   // 换一次性 confirm token（op 级；detail 摘要与后端 enforce 同口径）
@@ -6448,7 +6448,9 @@ async function guardCheckTool(name, args, runSid) {
   if (!op) return { blocked: null, token: null };
   args = args || {};
   // 会话内已信任：直接放行（后端持有同一会话信任态；名单仍会在 delete/kill 上兜底强制）
-  if (guardTrusted.has(op)) return { blocked: null, token: null };
+  // R20 扫描修复：信任集按 runSid 键控——原全局 Set 会让 A 会话勾选的「本会话
+  // 内不再提示」泄漏到并行 B 会话的后台 run（后端本就按 sid 登记，前端对齐）
+  if (guardTrusted.has(String(runSid || '') + '|' + op)) return { blocked: null, token: null };
   // 修复 ③（三轮）：off 档本地短路——boot 已加载 guardConfig（110-boot loadGuardConfig），
   // 该 op 档位为 off 且无保护名单语义时不再发 guard_check RPC（原每个受护栏命令一次往返，
   // guard 全 off 时纯属浪费）。delete_path/kill_process 的保护名单 block 在后端优先于
@@ -6506,7 +6508,7 @@ async function guardCheckTool(name, args, runSid) {
     // 的死循环。改 await 登记，成功才进前端 Set。
     try {
       await callApi('guard_session_trust', [op], 20000);
-      guardTrusted.add(op);
+      guardTrusted.add(String(runSid || '') + '|' + op);
     } catch (e) { /* 登记失败：不进前端信任——下次仍走确认弹窗 */ }
   }
   // 修复 UX-2（v1.4）：永久信任落库（guard.json trustedOps，op 级）——读-改-写经
@@ -14665,14 +14667,6 @@ function getActiveRuns() {
   }));
 }
 
-/** 全部在途 run 的快照（多任务面板数据源——前端本地运行时态，无新增 js_api）。 */
-function getActiveRuns() {
-  return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
-    sessionId: r.sessionId, title: r.session.title || '', status: r.status,
-    parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
-  }));
-}
-
 /** P0-3（Q5）：显式「并行运行」入口（React 岛按钮调用）——对指定会话启动 run
  * 而不取消其他会话在途 run；找不到会话/密钥时静默不动作（不破坏现有 UI）。 */
 async function harborStartParallelRun(sessionId) {
@@ -15076,13 +15070,17 @@ async function runAgentLoop(s, apiKey, opts) {
       // Qwen/Ollama 的 Jinja 模板直接 raise「System message must be at the beginning」→ 500。
       // 归一化把所有 system 合并成一条置于最前；只有一条 system 时原样返回（零行为变化）。
       const reqMsgs = normalizeSystemMessages([{ role: 'system', content: sysContent }, ...slimMsgs]);
-      if (pendingShots.length && shotState === 'idle') {
-        const shotContent = [{ type: 'text', text: pendingShots.length > 1
-          ? `[系统附图] 以下是 ${pendingShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
+      // R20 扫描修复：pendingShots 为跨 run 单例，原实现会把他会话/后台 run 的
+      // 截图注入本请求。现按 sid 过滤，只消费本会话的截图。
+      const _myShots = pendingShots.filter(x => x && x.sid === String(s.id)).map(x => x.comp);
+      if (_myShots.length && shotState === 'idle') {
+        const shotContent = [{ type: 'text', text: _myShots.length > 1
+          ? `[系统附图] 以下是 ${_myShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
           : '[系统附图] 以下是当前屏幕截图,请据此判断界面状态并继续操作。' }];
-        for (const sh of pendingShots) shotContent.push({ type: 'image_url', image_url: { url: sh } });
+        for (const sh of _myShots) shotContent.push({ type: 'image_url', image_url: { url: sh } });
         reqMsgs.push({ role: 'user', content: shotContent });
         shotState = 'sending';
+        run.__sentShots = _myShots;   // 发送成功后按清单精确出队（不误删他会话）
       }
       const _mp = (typeof getModelPrefs === 'function') ? getModelPrefs() : null;
       const _eff = (_mp && _mp.thinking && _mp.thinking !== 'auto') ? _mp.thinking : taskEffort;
@@ -15216,7 +15214,8 @@ async function runAgentLoop(s, apiKey, opts) {
             }
           }
           if (shotState === 'sending') {
-            shotState = 'idle'; pendingShots = [];
+            shotState = 'idle';
+            pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
             try {
               s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
               if (typeof runAddMessage === 'function') runAddMessage(run, 'user', '[已向 AI 发送当前屏幕截图]');
@@ -15232,7 +15231,8 @@ async function runAgentLoop(s, apiKey, opts) {
       finishReason = parsed.finishReason;
       _clearWaitTimer();
       if (shotState === 'sending') {
-        shotState = 'idle'; pendingShots = [];
+        shotState = 'idle';
+        pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
         try {
           s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
           if (typeof runAddMessage === 'function') runAddMessage(run, 'user', '[已向 AI 发送当前屏幕截图]');
@@ -15695,8 +15695,8 @@ async function runAgentLoop(s, apiKey, opts) {
     // 修复 S6（二轮）：请求失败/abort 后截图不能永久失陷——复位 shotState 让下轮可重发
     if (shotState === 'sending') shotState = 'idle';
     // 修复 M5（四轮）：非 abort 失败路径也清过期截图——原仅 AbortError 清，失败后
-    // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）
-    if (pendingShots.length) pendingShots = [];
+    // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）——只清本会话的
+    if (pendingShots.length) pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
     if (_localWaitTimer) { clearInterval(_localWaitTimer); _localWaitTimer = null; }   // 修复 S15（三轮）：AbortError 路径也清本地等待定时器（原只清 else 分支，1s 定时器永久存活劫持状态行）
     if (err.name === 'AbortError') {
       // 修复 建议㉕（三轮）：abort/停止时清 pendingShots——原只复位 shotState，
@@ -16025,7 +16025,7 @@ async function mcpGuardCheck(name, args, runSid) {
   // 修复 B5（v1.5）：local 模式会话信任降级为仅本任务有效——跨任务重新确认
   // （本地模型工具参数幻觉风险高，保守策略）
   const _localMode = (typeof localState !== 'undefined' && localState.mode);
-  if (!_localMode && mcpTrusted.has(trustKey)) return { blocked: null, decision: 'session-trust', token: null };
+  if (!_localMode && mcpTrusted.has(String(runSid || '') + '|' + trustKey)) return { blocked: null, decision: 'session-trust', token: null };   // R20：按 sid 键控
 
   let verdict = { action: 'confirm' };
   try {
@@ -16078,7 +16078,7 @@ async function mcpGuardCheck(name, args, runSid) {
   } catch (e) { /* 旧 exe 无此方法：留空按 legacy 直调（新后端会强制拦截并返回人话错误） */ }
   // 修复 S11（三轮）：写侧与读侧对称——local 模式勾选"不再提示"不写入 session 信任
   // （原无条件写入：读侧排除 local 但持久化后切云端预设会读到，免确认跨端点泄漏）
-  if (r.checked && !_localMode) mcpTrusted.add(trustKey);
+  if (r.checked && !_localMode) mcpTrusted.add(String(runSid || '') + '|' + trustKey);
   return { blocked: null, decision: r.checked ? 'session-trust' : 'allow', token };
 }
 
@@ -17812,6 +17812,9 @@ function _sessionSaveSignature(s) {
     typeof s._spentTokens === 'number' ? s._spentTokens : '',
     // apiFrozen 是小型参数对象，直接序列化（每个会话仅一次，成本可忽略）
     s.apiFrozen ? JSON.stringify(s.apiFrozen) : '',
+    // R20 扫描修复：群聊配置改动（成员/端点 Key/点名队列）原不在签名里——
+    // 「未变更短路」命中 → 改完成员身份不发言直接关应用 → 重启全丢
+    s.group ? JSON.stringify(s.group) : '',
     readKeys ? readKeys.length + ':' + readKeys[readKeys.length - 1] : '',
     s.worklogInjected === true ? 1 : '',
     s.__budgetWarned === true ? 1 : '',
@@ -19897,7 +19900,8 @@ function collectConfig() {
       document.getElementById('modelSelect').value || 'auto',
     temperature: parseFloat(document.getElementById('temperature').value),
     top_p: parseFloat(document.getElementById('topP').value),
-    max_tokens: parseInt(document.getElementById('maxTokens').value),
+    // R20 扫描修复：空输入/非数字 → NaN → JSON 序列化成 null 写脏 config.json
+    max_tokens: parseInt(document.getElementById('maxTokens').value, 10) || 4096,
     reasoning_effort: document.getElementById('reasoningEffort').value,
     system_prompt: document.getElementById('systemPrompt').value,
     enable_search: document.getElementById('enableSearch').checked,
@@ -22099,7 +22103,8 @@ function newSession() {
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
-  lastShotHash = null; pendingShots = []; shotState = 'idle';
+  // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  lastShotHash = null; pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid)); shotState = 'idle';
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲：补 rejection 处理（原只挡同步 throw）
     try { callApi('set_current_sid', [null]).catch(() => {}); } catch (e) {}   // 修复 ㊲：同上；后端借此清空会话信任态（含 MCP）
@@ -22107,6 +22112,7 @@ function newSession() {
   refreshWsCard();
 }
 function switchSession(id, silent) {
+  const __prevSid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;   // R20：截图按会话出队用
   const activeRun = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : null;
   const sessionList = (typeof AppState !== 'undefined') ? AppState.sessions : sessions;
   const target = sessionList.find(s => s.id === id);   // 先校验存在性再赋值
@@ -22165,7 +22171,8 @@ function switchSession(id, silent) {
   renderSessionList();
   renderNewChatHistory();
   updateLiveTokenStat();
-  lastShotHash = null; pendingShots = []; shotState = 'idle';
+  // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  lastShotHash = null; pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid)); shotState = 'idle';
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）
@@ -23832,12 +23839,15 @@ function groupToolbarRender(s) {
   const qNames = (Array.isArray(g.mentionQueue) ? g.mentionQueue : [])
     .map(id => g.members.find(m => m.id === id)).filter(Boolean)
     .map(m => m.name);
-  const qHint = qNames.length ? ' → ' + qNames.slice(0, 3).join('→') + (qNames.length > 3 ? '…' : '') : '';
+  const qHint = qNames.length ? ' → ' + qNames.slice(0, 3).map(function (n) {
+    return String(n).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }).join('→') + (qNames.length > 3 ? '…' : '') : '';
   const chips = g.members.map(m => {
     const on = m.id === g.turn;
+    const chipName = String(m.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     return '<button type="button" class="gb-chip' + (on ? ' on' : '') + (m.host ? ' host' : '') +
       '" data-mid="' + m.id + '" title="' + (on ? '等待该成员发言' : '点击 @ 该成员') + '">' +
-      (m.host ? '★ ' : '') + m.name + (on ? ' ✍' : '') + '</button>';
+      (m.host ? '★ ' : '') + chipName + (on ? ' ✍' : '') + '</button>';
   }).join('');
   bar.innerHTML =
     '<div class="gb-row">' +
@@ -23960,7 +23970,8 @@ function groupBubbleMount(container, member, text, state) {
   const el = document.createElement('div');
   el.className = 'gwb' + (state === 'working' ? ' working' : '') + (member && member.host ? ' host' : '');
   const hue = groupHueOf(member);
-  const name = member ? ((member.host ? '★ ' : '') + member.name) : '群主';
+  const _nm = member ? String(member.name || '') : '';
+  const name = member ? ((member.host ? '★ ' : '') + _nm.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')) : '群主';
   el.innerHTML =
     '<div class="gwb-side"><div class="gwb-ava" style="--hue:' + hue + '">' +
       (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div></div>' +
@@ -23980,8 +23991,10 @@ function groupBubbleMount(container, member, text, state) {
   // 长按名字 → 群聊管理（桌面：按住 500ms；移动/触屏同语义）
   if (nameEl) groupBindLongPress(nameEl, () => groupManageOpen());
   if (state === 'working') {
-    el.__setBrief = t => { briefEl.innerHTML = '<span class="gwb-dots"><i></i><i></i><i></i></span> ' +
-      String(t || '').slice(0, 60); };
+    el.__setBrief = t => {   // R20 扫描修复：t 来自模型工具名，textContent 装配防注入
+      briefEl.innerHTML = '<span class="gwb-dots"><i></i><i></i><i></i></span> ';
+      briefEl.appendChild(document.createTextNode(String(t || '').slice(0, 60)));
+    };
     el.__finish = (fullText, meta) => {
       el.classList.remove('working');
       el.querySelector('.gwb-state').textContent = '已完成';
@@ -24032,13 +24045,15 @@ function groupFullHandoffCard(fullEl, text) {
   const card = document.createElement('div');
   card.className = 'gwb-handoff';
   card.innerHTML = '<div class="gwb-handoff-title">📋 交接文档</div>' +
-    rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k">' + r.k + '</span>' +
+    rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k"></span>' +
       '<span class="gh-v"></span></div>').join('');
   const vs = card.querySelectorAll('.gh-v');
+  const ks = card.querySelectorAll('.gh-k');
   rows.forEach((r, i) => {
     const el = vs[i];
     if (/^(前端|后端|UI设计|测试|主持人)$/.test(r.v) || r.k === '交接给') el.classList.add('gh-target');
     el.textContent = r.v;
+    if (ks[i]) ks[i].textContent = r.k;   // R20 扫描修复：键名来自模型正文，textContent 装配
   });
   fullEl.appendChild(card);
 }
@@ -24057,7 +24072,8 @@ function groupDetailOpen(text, member, meta) {
       '<button type="button" class="gd-back" id="gdBack">‹ 返回群聊</button>' +
       '<div class="gd-id">' +
         '<div class="gwb-ava" style="--hue:' + hue + '">' + (member ? String(member.id || '').replace(/^m/, '') : '群') + '</div>' +
-        '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') + member.name) : '群主') +
+        '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') +
+          String(member.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) : '群主') +
           (member && member.host ? ' · 主持人' : '') + '</div>' +
         '<div class="gd-sub">' + (member && member.model ? member.model : (meta && meta.model) || '群聊发言') +
           ' · 第 ' + ((meta && meta.round) || '—') + ' 轮</div></div>' +
@@ -24284,17 +24300,16 @@ async function groupSpeak(s, member) {
     const messages = groupContextFor(s, current);
     let text = '';
     let toolSteps = 0;
+    let acc = 0;   // R20 扫描修复：模块级 _acc 被并行群会话共享，改为本次调用局部
     try {
       text = await groupCallModel(s, current, messages, (delta) => {
-        groupSpeak._acc = (groupSpeak._acc || 0) + String(delta || '').length;
-        tick(groupSpeak._acc);
+        acc += String(delta || '').length;
+        tick(acc);
       }, (name) => {
         toolSteps++;
         if (bubble && bubble.__setBrief) bubble.__setBrief('调用工具 ' + name + '（第 ' + toolSteps + ' 次）');
       });
-      groupSpeak._acc = 0;
     } catch (e) {
-      groupSpeak._acc = 0;
       text = '';
       if (bubble && bubble.__finish) bubble.__finish('【' + current.name + ' 调用失败】' + (e && e.message ? e.message : e));
       else groupPush(s, 'assistant', '【' + current.name + ' 调用失败】' + (e && e.message ? e.message : e) + '；接力暂停。', null);
@@ -24892,8 +24907,10 @@ async function groupFilesDelete(s, name) {
   // uiConfirm（R3 应用内确认框）优先；vm 沙箱/旧环境降级 window.confirm
   let ok = true;
   if (typeof uiConfirm === 'function') {
-    ok = await uiConfirm({ title: '删除群文件', message: '删除「' + name + '」？此操作不可恢复。',
-                           confirmText: '删除', danger: true });
+    // R20 扫描修复：uiConfirm 契约是 {title, body, okText}（原先是错键名 →
+    // 确认框正文恒空）
+    ok = await uiConfirm({ title: '删除群文件', body: '删除「' + name + '」？此操作不可恢复。',
+                           okText: '删除', danger: true });
   } else if (typeof window !== 'undefined' && window.confirm) {
     ok = window.confirm('删除群文件「' + name + '」？此操作不可恢复。');
   }

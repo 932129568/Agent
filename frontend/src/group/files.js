@@ -298,8 +298,10 @@ async function groupFilesDelete(s, name) {
   // uiConfirm（R3 应用内确认框）优先；vm 沙箱/旧环境降级 window.confirm
   let ok = true;
   if (typeof uiConfirm === 'function') {
-    ok = await uiConfirm({ title: '删除群文件', message: '删除「' + name + '」？此操作不可恢复。',
-                           confirmText: '删除', danger: true });
+    // R20 扫描修复：uiConfirm 契约是 {title, body, okText}（原先是错键名 →
+    // 确认框正文恒空）
+    ok = await uiConfirm({ title: '删除群文件', body: '删除「' + name + '」？此操作不可恢复。',
+                           okText: '删除', danger: true });
   } else if (typeof window !== 'undefined' && window.confirm) {
     ok = window.confirm('删除群文件「' + name + '」？此操作不可恢复。');
   }

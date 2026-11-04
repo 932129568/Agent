@@ -181,14 +181,6 @@ function getActiveRuns() {
   }));
 }
 
-/** 全部在途 run 的快照（多任务面板数据源——前端本地运行时态，无新增 js_api）。 */
-function getActiveRuns() {
-  return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
-    sessionId: r.sessionId, title: r.session.title || '', status: r.status,
-    parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
-  }));
-}
-
 /** P0-3（Q5）：显式「并行运行」入口（React 岛按钮调用）——对指定会话启动 run
  * 而不取消其他会话在途 run；找不到会话/密钥时静默不动作（不破坏现有 UI）。 */
 async function harborStartParallelRun(sessionId) {
@@ -592,13 +584,17 @@ async function runAgentLoop(s, apiKey, opts) {
       // Qwen/Ollama 的 Jinja 模板直接 raise「System message must be at the beginning」→ 500。
       // 归一化把所有 system 合并成一条置于最前；只有一条 system 时原样返回（零行为变化）。
       const reqMsgs = normalizeSystemMessages([{ role: 'system', content: sysContent }, ...slimMsgs]);
-      if (pendingShots.length && shotState === 'idle') {
-        const shotContent = [{ type: 'text', text: pendingShots.length > 1
-          ? `[系统附图] 以下是 ${pendingShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
+      // R20 扫描修复：pendingShots 为跨 run 单例，原实现会把他会话/后台 run 的
+      // 截图注入本请求。现按 sid 过滤，只消费本会话的截图。
+      const _myShots = pendingShots.filter(x => x && x.sid === String(s.id)).map(x => x.comp);
+      if (_myShots.length && shotState === 'idle') {
+        const shotContent = [{ type: 'text', text: _myShots.length > 1
+          ? `[系统附图] 以下是 ${_myShots.length} 张屏幕截图(按拍摄顺序),请据此操作。`
           : '[系统附图] 以下是当前屏幕截图,请据此判断界面状态并继续操作。' }];
-        for (const sh of pendingShots) shotContent.push({ type: 'image_url', image_url: { url: sh } });
+        for (const sh of _myShots) shotContent.push({ type: 'image_url', image_url: { url: sh } });
         reqMsgs.push({ role: 'user', content: shotContent });
         shotState = 'sending';
+        run.__sentShots = _myShots;   // 发送成功后按清单精确出队（不误删他会话）
       }
       const _mp = (typeof getModelPrefs === 'function') ? getModelPrefs() : null;
       const _eff = (_mp && _mp.thinking && _mp.thinking !== 'auto') ? _mp.thinking : taskEffort;
@@ -732,7 +728,8 @@ async function runAgentLoop(s, apiKey, opts) {
             }
           }
           if (shotState === 'sending') {
-            shotState = 'idle'; pendingShots = [];
+            shotState = 'idle';
+            pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
             try {
               s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
               if (typeof runAddMessage === 'function') runAddMessage(run, 'user', '[已向 AI 发送当前屏幕截图]');
@@ -748,7 +745,8 @@ async function runAgentLoop(s, apiKey, opts) {
       finishReason = parsed.finishReason;
       _clearWaitTimer();
       if (shotState === 'sending') {
-        shotState = 'idle'; pendingShots = [];
+        shotState = 'idle';
+        pendingShots = pendingShots.filter(x => !(run.__sentShots || []).includes(x.comp));
         try {
           s.messages.push({ role: 'user', content: '[已向 AI 发送当前屏幕截图]' });
           if (typeof runAddMessage === 'function') runAddMessage(run, 'user', '[已向 AI 发送当前屏幕截图]');
@@ -1211,8 +1209,8 @@ async function runAgentLoop(s, apiKey, opts) {
     // 修复 S6（二轮）：请求失败/abort 后截图不能永久失陷——复位 shotState 让下轮可重发
     if (shotState === 'sending') shotState = 'idle';
     // 修复 M5（四轮）：非 abort 失败路径也清过期截图——原仅 AbortError 清，失败后
-    // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）
-    if (pendingShots.length) pendingShots = [];
+    // pendingShots 残留会被附到下一个无关请求（[系统附图] 误导模型）——只清本会话的
+    if (pendingShots.length) pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
     if (_localWaitTimer) { clearInterval(_localWaitTimer); _localWaitTimer = null; }   // 修复 S15（三轮）：AbortError 路径也清本地等待定时器（原只清 else 分支，1s 定时器永久存活劫持状态行）
     if (err.name === 'AbortError') {
       // 修复 建议㉕（三轮）：abort/停止时清 pendingShots——原只复位 shotState，

@@ -129,7 +129,7 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
           const comp = await compressScreenshot(data.dataUrl);
           const dup = await shotDedup(comp);
           if (dup) return JSON.stringify({ok: true, path: data.path, info: dup});
-          pendingShots.push(comp);
+          pendingShots.push({ sid: String(runSid || ''), comp });   // R20：按会话标记，防并行/切换串图
           return JSON.stringify({ok: true, path: data.path, note: '截图已压缩，下一步将自动作为图片提供给你分析屏幕内容。', thumbnail: comp});
         }
         return JSON.stringify({error: data.error || '截图失败'});
@@ -370,7 +370,7 @@ async function agentGuardCheck(op, detail, origin, runSid, realCallApi = callApi
     detail.target || detail.selector || '');
   const trustKey = op + ':' + (_isBrowserOp ? '' : target);
   const dangerous = detail.force_always === true;
-  if (!dangerous && agentTrusted.has(trustKey)) {
+  if (!dangerous && agentTrusted.has(String(runSid || '') + '|' + trustKey)) {   // R20：按 sid 键控
     return { blocked: null, decision: 'session-trust', token: null };
   }
   let verdict = { action: 'confirm' };
@@ -446,7 +446,7 @@ async function agentGuardCheck(op, detail, origin, runSid, realCallApi = callApi
     // 窗，绝不在前端假装信任。
     try {
       await callApi('guard_session_trust', [op], 20000);
-      agentTrusted.add(trustKey);
+      agentTrusted.add(String(runSid || '') + '|' + trustKey);
     } catch (e) { /* 登记失败：不进前端信任——下次仍走确认弹窗，由用户重新勾选重试 */ }
   }
   // 换一次性 confirm token（op 级；detail 摘要与后端 enforce 同口径）
