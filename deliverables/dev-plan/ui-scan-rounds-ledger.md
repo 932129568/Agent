@@ -376,3 +376,22 @@ C 前端功能正确性、计划工具入工具面评估(主理人裁定项)
 - 零发现声明:吞错/资源泄漏/前后端参数契约(~120 处逐一核对)
 - 门禁:tests/test_r20_scan_fixes.py 10 项;test_generative_registry zod
   期望同步 {}
+
+## Round 21-25(完成,2026-11-05,提交 47f4e54)——新一轮升级优化
+
+- 立项(主理人):性能调度优化/本地大模型调度优化/工具调用优化/UI 优化/
+  完成遗留任务/resume 升级
+- 交付:
+  R21 性能调度+工具调用:懒渲染(视口外轻量+滚入升级,400 条 404→221ms,
+  1000 条 419ms,基线 1548ms 累计 -86%);IO/scroll 被遮挡窗口不派发(实证)
+  → 滚动+400ms 兜底轮询;群聊工具面缓存(60s TTL,saveConfig 失效)
+  R22 本地大模型调度:同端点 FIFO 串行队列(槽位=响应流消费完才释放);
+  冷加载退避 3 档 14s→6 档 119s
+  R23 UI:✕ glyph→i-close sprite(5 处);focus-visible 焦点环
+  R24 Resume 升级:shotState→run.shotState(遗留风险#1 清零);网络断流
+  自动续跑(2.5s,5 分钟窗口 ≤2 次,超限走横幅)
+  R25 遗留清零:v15 transition:all/v16 提示词+导航+503 契约对齐(均系
+  既往正式裁定后的漂移);windows-packaging=隔离 venv 补 Pillow;
+  newSession TDZ(__prevSid 误引)修复——project ws 绑定恢复
+- 门禁:全量 1827 passed / 0 failed / 3 skipped(历史首次零失败);
+  核心 runner 复验 2 轮绿
