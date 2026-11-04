@@ -19,7 +19,14 @@ function groupMentionMembers() {
   const sid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
   const s = (typeof groupSessionOf === 'function') ? groupSessionOf(sid) : null;
   if (!s || !s.group) return null;
-  const list = (s.group.members || []).map(m => ({ id: m.id, name: m.name, host: !!m.host }));
+  const list = (s.group.members || []).map(m => ({
+    id: m.id, name: m.name, host: !!m.host,
+    model: (function () {   // '端点::模型' 展示成 端点名·模型
+      const v = String(m.model || '');
+      const i = v.indexOf('::');
+      return i < 0 ? v : v.slice(i + 2) + ' @' + v.slice(0, i);
+    })(),
+  }));
   list.push({ id: '__owner__', name: '群主', host: false, owner: true });
   return list;
 }
@@ -61,10 +68,12 @@ function groupMentionShow(ta, hits) {
       '<span class="mp-ava' + (m.owner ? ' owner' : '') + '" style="' +
         (m.owner ? '' : '--mh:' + hueOf(m)) + '">' +
         (m.host ? '★' : (m.owner ? '群' : String(m.name || '?').slice(0, 1))) + '</span>' +
-      '<span class="mp-name"></span>' +
+      '<span class="mp-main"><span class="mp-name"></span>' +
+        (hits[i].model ? '<span class="mp-model"></span>' : '') + '</span>' +
       (m.host ? '<span class="mp-tag">主持人</span>' : (m.owner ? '<span class="mp-tag">交回人类</span>' : '')) +
     '</div>').join('');
   box.querySelectorAll('.mp-name').forEach((el, i) => { el.textContent = hits[i].name; });
+  box.querySelectorAll('.mp-model').forEach((el, i) => { el.textContent = hits[i].model; });
   box.querySelectorAll('.mp-item').forEach(el => {
     const pick = (ev) => { ev.preventDefault(); groupMentionAccept(ta, hits[Number(el.getAttribute('data-i'))]); };
     el.addEventListener('mousedown', pick);

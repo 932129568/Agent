@@ -1718,6 +1718,7 @@
         "_gfSession",
         "groupArchiveHandoff",
         "groupFilesContextLines",
+        "groupFilesDelete",
         "groupFilesLoad",
         "groupFilesMsg",
         "groupFilesOpen",

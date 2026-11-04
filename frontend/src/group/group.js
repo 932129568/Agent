@@ -125,6 +125,7 @@ function groupMemberRow(m, idx) {
       '<span class="gw-lab">端点Key</span>' +
       '<input class="gw-epkey" type="password" spellcheck="false" placeholder="跨端点模型需要该端点的 API Key" value="' +
         String(epKey).replace(/"/g, '&quot;') + '">' +
+      '<button type="button" class="gw-eptest" title="用该端点+Key+模型发一次测试请求">测试</button>' +
     '</div>' +
     '<div class="gw-mate-row"><span class="gw-lab">身份</span><textarea class="gw-role" rows="3" ' +
       'placeholder="该成员的职责与输出约定（建议要求以【交接文档】小节收尾）">' + String(m.role || '').replace(/</g, '&lt;') + '</textarea></div>' +
@@ -165,6 +166,38 @@ function groupBindEndpointRows(scope) {
     };
     sel.addEventListener('change', sync);
     sync();
+    // 「测试」按钮：就地验证 端点+Key+模型（跑 test_provider_endpoint）
+    const row2 = row.querySelector('.gw-eprow');
+    const testBtn = row.querySelector('.gw-eptest');
+    if (testBtn && row2 && !testBtn.getAttribute('data-bound')) {
+      testBtn.setAttribute('data-bound', '1');
+      testBtn.addEventListener('click', async () => {
+        const model = String(sel.value || '');
+        const i = model.indexOf('::');
+        if (i < 0) { if (typeof toast === 'function') toast('当前是当前端点模型，无需单独测试', 'info'); return; }
+        const epId = model.slice(0, i), m = model.slice(i + 2);
+        const s0 = (typeof AppState !== 'undefined') ? groupSessionOf(AppState.currentSessionId) : null;
+        const ep = (s0 && s0.group && s0.group.endpoints && s0.group.endpoints[epId]) || null;
+        const key = (row2.querySelector('.gw-epkey') || {}).value || (ep && ep.api_key) || '';
+        const base = (ep && ep.base_url) || null;
+        if (!base || !key) { if (typeof toast === 'function') toast('先填该端点的 Base URL / API Key', 'warn'); return; }
+        const old2 = testBtn.textContent;
+        testBtn.textContent = '测试中';
+        testBtn.disabled = true;
+        try {
+          const raw = await callApi('test_provider_endpoint', [base, key, m, 15, false], 25000);
+          const r = raw ? JSON.parse(raw) : null;
+          if (r && r.ok) {
+            if (typeof toast === 'function') toast('端点可用：' + m + (r.reply ? ' · 回复：' + r.reply : ''), 'ok');
+          } else if (typeof toast === 'function') toast('端点测试失败：' + ((r && r.error) || '未知错误'), 'err');
+        } catch (e) {
+          if (typeof toast === 'function') toast('端点测试失败：' + (e && e.message ? e.message : e), 'err');
+        } finally {
+          testBtn.textContent = old2;
+          testBtn.disabled = false;
+        }
+      });
+    }
   });
 }
 
@@ -266,6 +299,11 @@ function groupToolbarRender(s) {
   const bar = document.createElement('div');
   bar.id = 'groupToolbar';
   bar.className = 'group-bar';
+  // 点名队列预告（Round 15 优化）：群主一次 @ 多人时，工具栏直接展示后续顺序
+  const qNames = (Array.isArray(g.mentionQueue) ? g.mentionQueue : [])
+    .map(id => g.members.find(m => m.id === id)).filter(Boolean)
+    .map(m => m.name);
+  const qHint = qNames.length ? ' → ' + qNames.slice(0, 3).join('→') + (qNames.length > 3 ? '…' : '') : '';
   const chips = g.members.map(m => {
     const on = m.id === g.turn;
     return '<button type="button" class="gb-chip' + (on ? ' on' : '') + (m.host ? ' host' : '') +
@@ -276,7 +314,7 @@ function groupToolbarRender(s) {
     '<div class="gb-row">' +
       '<span class="gb-title">👥 群聊 <span class="gb-beta">Beta</span></span>' + chips +
       '<span style="flex:1"></span>' +
-      '<span class="gb-phase" id="gbPhase">' + (g.phase === 'running' ? '接力中 · 第 ' + (g.round || 0) + ' 轮' : g.phase === 'paused' ? '已暂停（第 ' + (g.round || 0) + ' 轮）' : '待群主下发任务') + '</span>' +
+      '<span class="gb-phase" id="gbPhase">' + (g.phase === 'running' ? '接力中 · 第 ' + (g.round || 0) + ' 轮' + qHint : g.phase === 'paused' ? '已暂停（第 ' + (g.round || 0) + ' 轮）' + qHint : '待群主下发任务') + '</span>' +
       '<button type="button" class="modal-btn" id="gbFiles" title="群文件：交接文档仓库（可搜索/改目录）">📁 群文件' +
         ((s.groupFiles && s.groupFiles.length) ? ' ' + s.groupFiles.length : '') + '</button>' +
       '<button type="button" class="modal-btn" id="gbPause" onclick="groupToggleRelay()">' +
@@ -495,6 +533,7 @@ function groupDetailOpen(text, member, meta) {
         '<div class="gd-sub">' + (member && member.model ? member.model : (meta && meta.model) || '群聊发言') +
           ' · 第 ' + ((meta && meta.round) || '—') + ' 轮</div></div>' +
       '</div>' +
+      '<button type="button" class="gd-copy" id="gdCopy" title="复制全文">⧉ 复制全文</button>' +
     '</div>' +
     '<div class="gd-body"><div class="gd-article"></div></div>';
   const article = page.querySelector('.gd-article');
@@ -516,6 +555,28 @@ function groupDetailOpen(text, member, meta) {
   page.__close = close;
   const body = page.querySelector('.gd-body');
   if (body) body.scrollTop = 0;
+  // 复制全文（主理人高频动作：把成员产出搬去别处）——uiClipboard 优先，
+  // 降级 navigator.clipboard，再降级后端 set_clipboard
+  const copyBtn = page.querySelector('#gdCopy');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const t = String(text || '');
+      let done = false;
+      try {
+        if (typeof uiClipboard === 'object' && uiClipboard && typeof uiClipboard.write === 'function') {
+          await uiClipboard.write(t); done = true;
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(t); done = true;
+        }
+      } catch (e) {}
+      if (!done && typeof callApi === 'function') {
+        try { await callApi('set_clipboard', [t]); done = true; } catch (e) {}
+      }
+      if (typeof toast === 'function') toast(done ? '已复制全文' : '复制失败', done ? 'ok' : 'err');
+      copyBtn.textContent = done ? '✓ 已复制' : '✕ 复制失败';
+      setTimeout(() => { copyBtn.textContent = '⧉ 复制全文'; }, 1500);
+    });
+  }
   return page;
 }
 

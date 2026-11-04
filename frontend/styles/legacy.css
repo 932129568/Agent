@@ -2902,3 +2902,19 @@ body.gd-lock{overflow:hidden}
 .mp-ava.owner{background:var(--text-3)}
 .mp-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mp-tag{font-size:11px;color:var(--primary);font-weight:700;white-space:nowrap}
+
+/* Round 15 优化补齐：@ 选择器模型行 / 群文件删除钮 / 详情页复制钮 / 成员端点测试 */
+.mp-main{flex:1;min-width:0}
+.mp-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-model{display:block;font-size:11px;color:var(--text-3);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.gf-item-del{flex:none;width:22px;height:22px;border:none;border-radius:6px;cursor:pointer;
+  background:transparent;color:var(--text-3);font-size:13px;line-height:1}
+.gf-item-del:hover{background:var(--err,#dc2626);color:#fff}
+.gd-copy{margin-left:auto;flex:none;padding:6px 12px;border:1px solid var(--border);border-radius:8px;
+  background:var(--card-bg);color:var(--text);font-size:12.5px;cursor:pointer}
+.gd-copy:hover{border-color:var(--primary);color:var(--primary)}
+.gw-eptest{flex:none;padding:7px 10px;border:1px solid var(--border);border-radius:8px;
+  background:var(--card-bg);color:var(--text);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.gw-eptest:hover{border-color:var(--primary);color:var(--primary)}
+.gw-eptest:disabled{opacity:.55;cursor:wait}

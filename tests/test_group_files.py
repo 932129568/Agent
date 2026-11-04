@@ -179,3 +179,25 @@ def test_open_dir_creates_and_reports(monkeypatch):
     r2 = _j(svc.open_dir('sess-x'))
     assert r2['ok'] is True and opened == [r2['dir']]
     assert 'g' in os.path.basename(r2['dir'])
+
+
+def test_delete_removes_file_and_index_entry(monkeypatch):
+    """删除：文件真删、索引摘除；越界/不存在/非法名拒绝。"""
+    import backend.domains.workspace.group_files_service as gf
+    from conftest import reset_home
+    from backend.api import Api
+    reset_home()
+    a = Api()
+    r = _j(a.group_files_write('sd', '群', '主持人', '待删文档', '正文', '{}'))
+    assert os.path.isfile(r['path'])
+    svc = gf.GroupFilesService()
+    # 路径逃逸被 basename 归一 → 任何穿越输入都删不到群目录外的东西
+    esc = _j(svc.delete('sd', '..' + chr(92) + '..' + chr(92) + 'x.md'))
+    assert 'error' in esc and 'ok' not in esc
+    # 不存在 → NOT_FOUND；非 .md → BAD_PARAMS
+    assert '[NOT_FOUND]' in _j(svc.delete('sd', 'nope.md'))['error']
+    assert '[BAD_PARAMS]' in _j(svc.delete('sd', 'not-md.txt'))['error']
+    out = _j(svc.delete('sd', r['name']))
+    assert out['ok'] is True and not os.path.isfile(r['path'])
+    lst = _j(a.group_files_list('sd', '群'))
+    assert all(f['name'] != r['name'] for f in lst['files'])

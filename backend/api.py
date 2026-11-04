@@ -79,6 +79,7 @@ _V12_EXTRA = frozenset({
     # Round 14：群文件（交接文档仓库）
     'group_files_config_get', 'group_files_config_set', 'group_files_write',
     'group_files_list', 'group_files_search', 'group_files_open_dir',
+    'group_files_delete',
     # v1.9.0 M1.9 占位（master-plan §6.2；转正时只改实现不改登记）
     'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
     'browser_screenshot', 'browser_close', 'get_platform_info',
@@ -164,6 +165,10 @@ class Api:
     def group_files_search(self, group_id, query, limit=8):
         """关键词检索群文件：标题/成员/交接对象/关键词/正文加权，返回命中片段。"""
         return self._group_files.search(group_id, query, limit)
+
+    def group_files_delete(self, group_id, name):
+        """删除一份群文件（限该群子目录内 .md；索引同步摘除）。"""
+        return self._group_files.delete(group_id, name)
 
     def group_files_open_dir(self, group_id=None):
         """资源管理器打开群文件目录（group_id 缺省=根目录；目录不存在先建）。"""

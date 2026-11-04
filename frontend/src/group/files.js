@@ -234,7 +234,8 @@ function groupFilesRender(files, hits) {
     el.className = 'gf-item';
     el.innerHTML =
       '<div class="gf-item-top"><span class="gf-item-title"></span>' +
-        (row.to ? '<span class="gf-item-to"></span>' : '') + '</div>' +
+        (row.to ? '<span class="gf-item-to"></span>' : '') +
+        '<span class="gf-item-del" title="删除这份群文件">✕</span></div>' +
       '<div class="gf-item-meta"></div>' +
       (row.snippet ? '<div class="gf-item-snippet"></div>' : '');
     el.querySelector('.gf-item-title').textContent = row.title || row.name;
@@ -243,8 +244,35 @@ function groupFilesRender(files, hits) {
       [row.member, row.round ? '第' + row.round + '轮' : '', row.time, row.name].filter(Boolean).join(' · ');
     if (row.snippet) el.querySelector('.gf-item-snippet').textContent = row.snippet;
     el.addEventListener('click', () => groupFilesRead(row.name));
+    el.querySelector('.gf-item-del').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      groupFilesDelete(s || _gfSession(), row.name);
+    });
     list.appendChild(el);
   });
+}
+
+/** 删除一份群文件（面板即时摘除；失败提示不吞）。 */
+async function groupFilesDelete(s, name) {
+  if (!s || !name) return;
+  // uiConfirm（R3 应用内确认框）优先；vm 沙箱/旧环境降级 window.confirm
+  let ok = true;
+  if (typeof uiConfirm === 'function') {
+    ok = await uiConfirm({ title: '删除群文件', message: '删除「' + name + '」？此操作不可恢复。',
+                           confirmText: '删除', danger: true });
+  } else if (typeof window !== 'undefined' && window.confirm) {
+    ok = window.confirm('删除群文件「' + name + '」？此操作不可恢复。');
+  }
+  if (!ok) return;
+  try {
+    const raw = await callApi('group_files_delete', [s.id, name], 20000);
+    const r = raw ? JSON.parse(raw) : null;
+    if (r && r.ok) {
+      s.groupFiles = (s.groupFiles || []).filter(f => f.name !== name);
+      groupFilesLoad(s);
+      groupFilesMsg('已删除：' + name, 'ok');
+    } else groupFilesMsg((r && r.error) || '删除失败');
+  } catch (e) { groupFilesMsg('删除失败：' + (e && e.message ? e.message : e)); }
 }
 
 async function groupFilesSearch(s) {

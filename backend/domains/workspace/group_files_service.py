@@ -225,6 +225,41 @@ class GroupFilesService:
                 meta[k.strip()] = v.strip()
         return meta
 
+    # ---------------- 删除 ----------------
+    def delete(self, group_id, name):
+        """删除一份群文件（必须位于该群的子目录内——防路径逃逸）。
+
+        索引同步摘除；_index.json 刷新失败不阻断删除（下次 list 会重建）。
+        """
+        fname = os.path.basename(str(name or ''))
+        if not fname.endswith('.md') or fname in ('.', '..'):
+            return err('[BAD_PARAMS] 文件名不合法')
+        d = _group_dir(self._root(), group_id)
+        path = os.path.join(d, fname)
+        # 双保险：realpath 必须仍在群子目录内
+        try:
+            if os.path.realpath(d) not in os.path.realpath(path):
+                return err('[BAD_PARAMS] 路径越界')
+        except Exception:
+            pass
+        if not os.path.isfile(path):
+            return err('[NOT_FOUND] 文件不存在或已删除')
+        try:
+            os.remove(path)
+        except Exception as e:
+            return err('[IO_ERROR] 删除失败：%s' % e)
+        # 索引摘除
+        try:
+            idx = os.path.join(d, INDEX_NAME)
+            with open(idx, 'r', encoding='utf-8') as f:
+                items = json.load(f)
+            if isinstance(items, list):
+                items = [x for x in items if x.get('name') != fname]
+                atomic_write_json(idx, items[-MAX_LIST:])
+        except Exception:
+            pass
+        return ok({'ok': True, 'name': fname})
+
     # ---------------- 打开目录 ----------------
     def open_dir(self, group_id=None):
         """在资源管理器中打开群文件目录（根目录或指定群的子目录）。
