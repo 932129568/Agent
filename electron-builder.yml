@@ -56,7 +56,12 @@ win:
       arch:
         - x64
 nsis:
-  oneClick: true
+  # Round 12（主理人要求）：可自定义安装目录——oneClick=false 走向导式安装
+  # （选目录→安装），allowToChangeInstallationDirectory 打开目录选择页；
+  # 仍保持 per-user（无需管理员）。runAfterFinish 保持 true：装完即启动。
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: true
   perMachine: false
   # Round 11（主理人要求）：装完即用+桌面快捷方式；oneClick 默认 runAfterFinish=true
   createDesktopShortcut: always

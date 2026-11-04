@@ -11681,7 +11681,13 @@ async function modelTransportStream(request, signal) {
   const isLocal = !!request.local;
   const sleepAbortable = ms => sleep(ms, signal);
   let attempt = 0;
+  let rateLimitAttempt = 0;
   const LOADING_BACKOFF = [2000, 4000, 8000];
+  // 429 退避（2026-11-04 真机报障：换机装完即 429、原机正常）：智谱免费档为
+  // **分钟级**配额/并发限制，原逻辑只重试 1 次且仅等 2 秒——秒级重试必然再次
+  // 撞墙，用户观感就是「一装就废」。改为 3 次指数退避（4s/12s/30s 跨越配额
+  // 窗口），并优先遵循服务端 Retry-After。
+  const RATE_LIMIT_BACKOFF = [4000, 12000, 30000];
   while (true) {
     try {
       const endpoint = (typeof request.endpoint === 'function')
@@ -11699,16 +11705,26 @@ async function modelTransportStream(request, signal) {
         attempt++;
         continue;
       }
-      if ((resp.status === 429 || resp.status >= 500) && attempt < 1) {
-        if (resp.status === 429) {
-          let body429 = '';
-          try { body429 = await resp.clone().text().catch(() => ''); } catch (e) { body429 = ''; }
-          if (/余额|欠费|arrears|insufficient|quota|exhaust|billing|账户|充值/i.test(body429)) {
-            return resp;
-          }
+      if (resp.status === 429) {
+        let body429 = '';
+        try { body429 = await resp.clone().text().catch(() => ''); } catch (e) { body429 = ''; }
+        // 余额/欠费类不是限流，重试无意义，立刻交回上层给准确提示
+        if (/余额|欠费|arrears|insufficient|quota|exhaust|billing|账户|充值/i.test(body429)) return resp;
+        if (rateLimitAttempt < RATE_LIMIT_BACKOFF.length) {
+          let ra = NaN;
+          try { ra = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')); } catch (e) {}
+          const waitMs = Number.isFinite(ra) && ra > 0
+            ? Math.min(60000, ra * 1000)
+            : RATE_LIMIT_BACKOFF[rateLimitAttempt];
+          rateLimitAttempt++;
+          await sleepAbortable(waitMs);
+          continue;
         }
+        return resp;
+      }
+      if (resp.status >= 500 && attempt < 1) {
         attempt++;
-        await sleepAbortable(resp.status === 429 ? 2000 : 1200);
+        await sleepAbortable(1200);
         continue;
       }
       return resp;
