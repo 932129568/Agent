@@ -201,3 +201,29 @@ def test_delete_removes_file_and_index_entry(monkeypatch):
     assert out['ok'] is True and not os.path.isfile(r['path'])
     lst = _j(a.group_files_list('sd', '群'))
     assert all(f['name'] != r['name'] for f in lst['files'])
+
+
+def test_archive_keywords_include_body_terms():
+    """关键词不再只靠标题：完整说明里的高频术语进 keywords（检索召回面）。"""
+    result = _run_node(r"""
+async function __main() {
+  const ctx = __ctx({callApi: async function(name, args){
+    globalThis.__calls = globalThis.__calls || [];
+    globalThis.__calls.push({name: name, args: args});
+    if (name === 'group_files_write') {
+      return JSON.stringify({path: 'D:/gf/b.md', name: 'x.md', title: 'T', member: '主持人', to: '', mtime: 1});
+    }
+    return '{}';
+  }, AbortController: AbortController});
+  __run(ctx, __fe('group.js'));
+  __run(ctx, __fe('files.js'));
+  const s = { id: 'sK', title: '群', messages: [], group: { members: [], round: 1 } };
+  const NL = String.fromCharCode(10);
+  await __vm.runInContext('groupArchiveHandoff', ctx)(s, { id: 'a', name: '主持人' },
+    '正文。' + NL + '【交接文档】' + NL + '- 交接给: 前端' + NL + '- 本次产出: 响应式栅格方案' + NL
+    + '- 完整说明: 采用响应式栅格，响应式断点三档，栅格八列；响应式优先移动端。', 2);
+  const call = (globalThis.__calls || []).find(c => c.name === 'group_files_write');
+  return {kw: JSON.parse(call.args[5]).keywords};
+}
+""", 'gf_kw')
+    assert '响应式' in result['kw'] and '栅格' in result['kw'], result

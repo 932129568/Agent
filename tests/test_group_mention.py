@@ -69,10 +69,12 @@ def test_mention_members_list_has_owner_and_members():
     result = _boot(r"""
   const list = vmRun('groupMentionMembers')();
   return {names: list.map(function(m){ return m.name; }),
-          owner: list.filter(function(m){ return m.owner; }).map(function(m){ return m.name; })};
+          owner: list.filter(function(m){ return m.owner; }).map(function(m){ return m.name; }),
+          all: list.filter(function(m){ return m.all; }).map(function(m){ return m.name; })};
 """, 'mention_members')
-    assert result['names'] == ['主持人', 'UI设计', '前端', '测试', '群主']
+    assert result['names'] == ['所有人', '主持人', 'UI设计', '前端', '测试', '群主']
     assert result['owner'] == ['群主']
+    assert result['all'] == ['所有人']
 
 
 def test_mention_accept_replaces_token_with_name_and_space():
@@ -183,3 +185,18 @@ def test_single_mention_falls_back_to_free_relay():
 def test_source_has_picker_wiring():
     assert 'groupMentionBind' in MENTION.read_text(encoding='utf-8')
     assert 'groupMentionTargets(trimmed, s)' in GROUP.read_text(encoding='utf-8')
+
+
+def test_mention_all_expands_to_roster_order():
+    """@所有人/@全体/@everyone → 全员按名册顺序，显式点名让位。"""
+    result = _boot(r"""
+  const GROUP = { members: [{name:'主持人',host:true},{name:'UI设计'},{name:'前端'},{name:'测试'}] };
+  const f = vmRun('groupMentionTargets');
+  const a = f('@所有人 开始自由讨论，重点是登录页', {group: GROUP}).map(function(m){ return m.name; });
+  const b = f('@全体 先自检，@前端 例外处理', {group: GROUP}).map(function(m){ return m.name; });
+  const c = f('@Everyone round table', {group: GROUP}).map(function(m){ return m.name; });
+  return {a: a, b: b, c: c};
+""", 'mention_all')
+    assert result['a'] == ['主持人', 'UI设计', '前端', '测试'], result
+    assert result['b'] == ['主持人', 'UI设计', '前端', '测试'], result
+    assert result['c'] == ['主持人', 'UI设计', '前端', '测试'], result

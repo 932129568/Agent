@@ -27,6 +27,7 @@ function groupMentionMembers() {
       return i < 0 ? v : v.slice(i + 2) + ' @' + v.slice(0, i);
     })(),
   }));
+  list.unshift({ id: '__all__', name: '所有人', host: false, all: true });
   list.push({ id: '__owner__', name: '群主', host: false, owner: true });
   return list;
 }
@@ -67,10 +68,12 @@ function groupMentionShow(ta, hits) {
     '<div class="mp-item' + (i === 0 ? ' on' : '') + '" data-i="' + i + '" role="option">' +
       '<span class="mp-ava' + (m.owner ? ' owner' : '') + '" style="' +
         (m.owner ? '' : '--mh:' + hueOf(m)) + '">' +
-        (m.host ? '★' : (m.owner ? '群' : String(m.name || '?').slice(0, 1))) + '</span>' +
+        (m.host ? '★' : (m.owner ? '群' : (m.all ? '∀' : String(m.name || '?').slice(0, 1)))) + '</span>' +
       '<span class="mp-main"><span class="mp-name"></span>' +
         (hits[i].model ? '<span class="mp-model"></span>' : '') + '</span>' +
-      (m.host ? '<span class="mp-tag">主持人</span>' : (m.owner ? '<span class="mp-tag">交回人类</span>' : '')) +
+      (m.host ? '<span class="mp-tag">主持人</span>' :
+        (m.owner ? '<span class="mp-tag">交回人类</span>' :
+         (m.all ? '<span class="mp-tag">全员点名</span>' : ''))) +
     '</div>').join('');
   box.querySelectorAll('.mp-name').forEach((el, i) => { el.textContent = hits[i].name; });
   box.querySelectorAll('.mp-model').forEach((el, i) => { el.textContent = hits[i].model; });
@@ -161,6 +164,8 @@ function groupMentionBind() {
 }
 
 /** 从一段群主输入里取出全部被 @ 的成员（去重、保持出现顺序）。 */
+const GROUP_ALL_RE = /^(所有人|全体|全员|大家|everyone|all)$/i;
+
 function groupMentionTargets(text, s) {
   const g = (s && s.group) || {};
   const members = (g.members || []).map((m, i) => Object.assign({ id: 'gm' + i }, m));
@@ -172,10 +177,13 @@ function groupMentionTargets(text, s) {
   const names = members.filter(m => m.name).sort((a, b) => b.name.length - a.name.length);
   const re = /@([^\s@]{1,24})/g;
   let mm;
+  let allFlag = false;
   while ((mm = re.exec(String(text || '')))) {
     const rest = mm[1];
+    if (GROUP_ALL_RE.test(rest)) { allFlag = true; continue; }   // @所有人 → 全员
     const hit = names.find(m => rest.indexOf(m.name) === 0);
     if (hit && !out.some(x => x.id === hit.id)) out.push(hit);
   }
+  if (allFlag) return members.slice();   // 全员按名册顺序，显式点名让位
   return out;
 }

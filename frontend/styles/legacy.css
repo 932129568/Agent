@@ -2918,3 +2918,7 @@ body.gd-lock{overflow:hidden}
   background:var(--card-bg);color:var(--text);font-size:12.5px;cursor:pointer;white-space:nowrap}
 .gw-eptest:hover{border-color:var(--primary);color:var(--primary)}
 .gw-eptest:disabled{opacity:.55;cursor:wait}
+
+/* Round 15 三批：群文件搜索命中高亮 */
+mark.gf-hit{background:color-mix(in srgb,var(--primary) 28%,transparent);color:var(--text);
+  border-radius:3px;padding:0 2px}

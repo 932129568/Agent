@@ -1715,10 +1715,12 @@
     {
       "path": "frontend/src/group/files.js",
       "provides": [
+        "_gfSearchTerms",
         "_gfSession",
         "groupArchiveHandoff",
         "groupFilesContextLines",
         "groupFilesDelete",
+        "groupFilesHighlight",
         "groupFilesLoad",
         "groupFilesMsg",
         "groupFilesOpen",
@@ -1741,6 +1743,7 @@
     {
       "path": "frontend/src/group/mention.js",
       "provides": [
+        "GROUP_ALL_RE",
         "_mention",
         "groupMentionAccept",
         "groupMentionBind",

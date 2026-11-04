@@ -62,10 +62,20 @@ async function groupArchiveHandoff(s, member, text, roundNo) {
   const fields = groupHandoffFields(handoff);
   const title = groupHandoffTitle(handoff, (member && member.name) + '的第 ' + (roundNo || 0) + ' 轮产出');
   // 关键词：标题分词 + 交接对象 + 成员名，供后续模型检索命中
+  // 关键词 = 显式字段词 + 交接正文高频词（「完整说明/要求」里的术语最常被后续
+  // 检索命中——只靠标题召回太窄）
+  const bodyText = String(handoff || '') || String(text || '');
+  const freq = {};
+  bodyText.split(/[^一-龥A-Za-z0-9]+/).forEach(w => {
+    const t = w.trim();
+    if (t.length >= 2 && t.length <= 12) freq[t] = (freq[t] || 0) + 1;
+  });
+  const hot = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 10);
   const kw = Array.from(new Set(
-    (title + ' ' + (fields.requirements || '') + ' ' + (fields.to || '') + ' ' + ((member && member.name) || ''))
+    (title + ' ' + (fields.requirements || '') + ' ' + (fields.to || '') + ' ' +
+     ((member && member.name) || '') + ' ' + hot.join(' '))
       .split(/[\s,，。;；、/]+/).map(x => x.trim()).filter(x => x.length >= 2)
-  )).slice(0, 12).join(' ');
+  )).slice(0, 16).join(' ');
   const meta = JSON.stringify({ to: fields.to || '', round: roundNo || 0, keywords: kw });
   try {
     const raw = await callApi('group_files_write', [
@@ -74,7 +84,7 @@ async function groupArchiveHandoff(s, member, text, roundNo) {
     const r = raw ? JSON.parse(raw) : null;
     if (r && r.path) {
       s.groupFiles = (s.groupFiles || []);
-      s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, round: r.round, mtime: r.mtime });
+      s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, round: r.round, size: r.size, mtime: r.mtime });
       if (s.groupFiles.length > 60) s.groupFiles = s.groupFiles.slice(-60);
       // 工具栏「📁 群文件 N」即时刷新（原先要等下一次 render 才 +1）
       try { if (typeof groupToolbarRefresh === 'function') groupToolbarRefresh(s.id); } catch (e) {}
@@ -108,7 +118,7 @@ async function groupFilesSync(s) {
     const r = raw ? JSON.parse(raw) : null;
     const files = (r && r.files) || [];
     s.groupFiles = files.map(f => ({
-      name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, mtime: f.mtime,
+      name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, size: f.size, mtime: f.mtime,
     }));
   } catch (e) { /* 后端旧版/不可用：群文件功能静默缺席，接力照常 */ }
 }
@@ -183,6 +193,30 @@ function groupFilesOpen() {
   groupFilesLoad(s);
 }
 
+let _gfSearchTerms = [];   // 最近一次搜索的分词（命中高亮用）
+
+/** 命中高亮：纯 DOM 构建（textContent 注入，杜绝片段内 HTML 逃逸）。 */
+function groupFilesHighlight(snippet, terms) {
+  const host = document.createElement('span');
+  const text = String(snippet || '');
+  const safe = (terms || []).filter(t => t && t.length >= 1).slice(0, 8)
+    .map(t => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!safe.length) { host.textContent = text; return host; }
+  const re = new RegExp('(' + safe.join('|') + ')', 'gi');
+  const reTest = new RegExp('^(' + safe.join('|') + ')$', 'i');
+  String(text).split(re).forEach(part => {
+    if (part && reTest.test(part)) {
+      const m = document.createElement('mark');
+      m.className = 'gf-hit';
+      m.textContent = part;
+      host.appendChild(m);
+    } else if (part) {
+      host.appendChild(document.createTextNode(part));
+    }
+  });
+  return host;
+}
+
 function groupFilesMsg(text, kind) {
   const el = document.getElementById('gfMsg');
   if (!el) return;
@@ -193,6 +227,7 @@ function groupFilesMsg(text, kind) {
 async function groupFilesLoad(s) {
   const list = document.getElementById('gfList');
   if (!list) return;
+  _gfSearchTerms = [];
   try {
     const cfgRaw = await callApi('group_files_config_get', [], 15000);
     const cfg = cfgRaw ? JSON.parse(cfgRaw) : null;
@@ -204,7 +239,7 @@ async function groupFilesLoad(s) {
     const raw = await callApi('group_files_list', [s.id, s.title || '群聊'], 20000);
     const r = raw ? JSON.parse(raw) : null;
     const files = (r && r.files) || [];
-    s.groupFiles = files.map(f => ({ name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, mtime: f.mtime }));
+    s.groupFiles = files.map(f => ({ name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, size: f.size, mtime: f.mtime }));
     groupFilesRender(files);
   } catch (e) {
     list.textContent = '读取群文件失败：' + (e && e.message ? e.message : e);
@@ -222,10 +257,12 @@ function groupFilesRender(files, hits) {
     ? files.map(h => ({
       name: h.name, title: h.title, member: h.member, to: h.to, round: h.round,
       time: h.mtime ? new Date(h.mtime * 1000).toLocaleString() : '', snippet: h.snippet,
+      size: h.size || 0,
     }))
     : files.map(f => ({
       name: f.name, title: f.title || f.name, member: f.member, to: f.to, round: f.round,
       time: f.mtime ? new Date(f.mtime * 1000).toLocaleString() : '', snippet: '',
+      size: f.size || 0,
     }));
   list.innerHTML = '';
   rows.forEach(row => {
@@ -238,11 +275,14 @@ function groupFilesRender(files, hits) {
         '<span class="gf-item-del" title="删除这份群文件">✕</span></div>' +
       '<div class="gf-item-meta"></div>' +
       (row.snippet ? '<div class="gf-item-snippet"></div>' : '');
+    const snippetEl = el.querySelector('.gf-item-snippet');
+    if (snippetEl) snippetEl.appendChild(groupFilesHighlight(row.snippet, _gfSearchTerms));
     el.querySelector('.gf-item-title').textContent = row.title || row.name;
     if (row.to) el.querySelector('.gf-item-to').textContent = '→ ' + row.to;
     el.querySelector('.gf-item-meta').textContent =
-      [row.member, row.round ? '第' + row.round + '轮' : '', row.time, row.name].filter(Boolean).join(' · ');
-    if (row.snippet) el.querySelector('.gf-item-snippet').textContent = row.snippet;
+      [row.member, row.round ? '第' + row.round + '轮' : '',
+       row.size ? Math.max(1, Math.round(row.size / 1024)) + 'KB' : '',
+       row.time, row.name].filter(Boolean).join(' · ');
     el.addEventListener('click', () => groupFilesRead(row.name));
     el.querySelector('.gf-item-del').addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -282,6 +322,7 @@ async function groupFilesSearch(s) {
     const raw = await callApi('group_files_search', [s.id, q.trim(), 20], 20000);
     const r = raw ? JSON.parse(raw) : null;
     if (r && r.hits) {
+      _gfSearchTerms = String(q.trim()).toLowerCase().split(/[\s,，。;；、]+/).filter(x => x.length >= 1);
       groupFilesRender(r.hits);
       groupFilesMsg(r.count ? ('找到 ' + r.count + ' 份相关文档') : '没有匹配的交接文档');
     } else groupFilesMsg((r && r.error) || '搜索失败');
