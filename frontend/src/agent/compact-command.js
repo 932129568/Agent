@@ -142,7 +142,9 @@ async function compactNow(s, apiKey, opts = {}) {
     // v1.2 R6 修复：压缩请求与主链路一致——自定义端点走 provider 地址与 Key，
     // 并剥离 GLM 专属字段（thinking）；此前硬编码 API_URL + thinking 会导致自定义端点压缩必失败。
     const _glm = isGlmEndpoint();
-    const _cmpModel = _glm ? 'glm-5.3-flash' : (providerState.model || 'glm-5.3-flash');
+    // Round 12：原兜底为平台上不存在的 glm-5.3-flash（1211）——压缩必然失败，
+    // 改为真实存在的免费档模型；自定义端点仍用其自身模型名。
+    const _cmpModel = _glm ? 'glm-4.5-flash' : (providerState.model || 'glm-4.5-flash');
     // W0 R19：压缩提示词改读 prompts/compact.md（版本化）；失败回落内置串
     // （与 prompts 文件渲染值逐字节一致，回落零行为差异）
     let _cmpPrompt = '把以下人机协作历史压缩成 ≤200 字工作纪要，必须保留: 任务目标、涉及文件路径、已做改动、未完成事项、关键结论、工具调用序列(工具名与关键参数摘要)。直接输出: \n\n';

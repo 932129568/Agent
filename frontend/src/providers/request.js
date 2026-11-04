@@ -8,6 +8,30 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   }, { once: true });
 });
 
+/* 免费档模型识别（2026-11-04 真机报障：同 Key 付费模型可用、免费模型 429）。
+ * 智谱免费档（glm-4-flash / glm-4.5-flash 等 *-flash）的 RPM/RPD 与并发显著
+ * 低于付费档：单轮 Agent 任务里连续工具轮次可在 1 分钟内打出十几条请求，
+ * 付费档无感、免费档立刻 429。识别后由下面的 pacer 做节流。 */
+const FREE_TIER_MODEL_RE = /(^|[-_/])flash([-_/]|$)|free/i;
+function isFreeTierModel(name) {
+  return FREE_TIER_MODEL_RE.test(String(name || ''));
+}
+
+/* 免费档请求节流：全局串行 + 最小间隔。付费/本地不走此队列（并发能力保留）。
+ * 目的是把「1 分钟内 15 条」摊平到免费档 RPM 之内，而不是靠 429 后再退避。 */
+const FREE_TIER_MIN_INTERVAL_MS = 3200;
+let _freeTierChain = Promise.resolve();
+let _freeTierLastStart = 0;
+function paceFreeTier(signal, sleepAbortable) {
+  const run = _freeTierChain.then(async () => {
+    const wait = Math.max(0, _freeTierLastStart + FREE_TIER_MIN_INTERVAL_MS - Date.now());
+    if (wait > 0) await sleepAbortable(wait);
+    _freeTierLastStart = Date.now();
+  });
+  _freeTierChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 /* 单一流式实现。endpoint 是非秘密 EndpointRef 快照/显式解析器；
  * apiKey 仅由调用方注入并放入 Authorization，不写日志、不读全局覆盖显式值。 */
 async function modelTransportStream(request, signal) {
@@ -17,6 +41,13 @@ async function modelTransportStream(request, signal) {
   }
   const isLocal = !!request.local;
   const sleepAbortable = ms => sleep(ms, signal);
+  // 免费模型：剔除思考档参数（flash 系不支持 reasoning_effort/thinking，
+  // 部分网关会因此返回参数错误或被误判为异常请求）+ 全局节流
+  if (!isLocal && isFreeTierModel(body.model)) {
+    if (body.thinking) delete body.thinking;
+    if (body.reasoning_effort) delete body.reasoning_effort;
+    try { await paceFreeTier(signal, sleepAbortable); } catch (e) { if (e && e.name === 'AbortError') throw e; }
+  }
   let attempt = 0;
   let rateLimitAttempt = 0;
   const LOADING_BACKOFF = [2000, 4000, 8000];

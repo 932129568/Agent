@@ -30,6 +30,26 @@ function collectConfig() {
  * 直接透传（不参与自动路由），推理力度由端点能力决定是否发送。
  */
 const HEAVY_HINTS = /重构|架构|调试|排查|报错|错误|异常|分析|实现|优化|设计|算法|推导|证明|方案|对比|性能|安全|迁移|兼容|代码|函数|接口|数据库|正则|并发|测试|部署|review/i;
+/* Round 12 修复（2026-11-04 真机报障：某机器免费模型必 429/付费端点可用）：
+ * 原智能档三档全硬编码 'glm-5.3-flash'——该模型名在平台上并不存在（代码注释
+ * 自己就记着「实测 glm-5.3-flash → GLM 400 1211」），auto 档必然失败或落到
+ * 网关异常分支。改为取当前 Key 实际可用的 flash 系模型：优先设置里已识别
+ * 清单中的第一个 *-flash，其次手动选中的模型，最后 glm-4.5-flash。 */
+const AUTO_TIER_FALLBACK_MODEL = 'glm-4.5-flash';
+function autoTierModel() {
+  try {
+    const sel = document.getElementById('modelSelect');
+    if (sel) {
+      for (const o of sel.options) {
+        const v = o.value || '';
+        if (v && v !== 'auto' && v !== '__group__' && v !== '__manual__' && /flash/i.test(v)) return v;
+      }
+    }
+  } catch (e) {}
+  const picked = (typeof connectModelValue === 'function') ? connectModelValue() : '';
+  if (picked && picked !== 'auto') return picked;
+  return AUTO_TIER_FALLBACK_MODEL;
+}
 function resolveModelEffort(text, hasAttach) {
   const picked = (typeof connectModelValue === 'function') ? connectModelValue() : '';
   const modelSel = picked || (document.getElementById('modelSelect') || {}).value || 'auto';
@@ -39,10 +59,11 @@ function resolveModelEffort(text, hasAttach) {
     return { model: modelSel, effort: effSel === 'auto' ? 'low' : effSel, auto: false, tier: '手动' };
   }
   const t = String(text || '');
+  const tierModel = autoTierModel();
   const heavy = !!hasAttach || HEAVY_HINTS.test(t) || t.length > 200;
-  if (heavy) return { model: 'glm-5.3-flash', effort: 'medium', auto: true, tier: '重任务' };
-  if (t.length > 40) return { model: 'glm-5.3-flash', effort: 'low', auto: true, tier: '标准' };
-  return { model: 'glm-5.3-flash', effort: 'off', auto: true, tier: '轻任务' };
+  if (heavy) return { model: tierModel, effort: 'medium', auto: true, tier: '重任务' };
+  if (t.length > 40) return { model: tierModel, effort: 'low', auto: true, tier: '标准' };
+  return { model: tierModel, effort: 'off', auto: true, tier: '轻任务' };
 }
 function sessionBudget() {
   const el = document.getElementById('sessionBudget');

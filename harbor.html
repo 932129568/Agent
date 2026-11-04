@@ -9541,10 +9541,13 @@ const PRESETS = {
   glm: {
     name: '智谱 GLM', base_url: 'https://open.bigmodel.cn/api/paas/v4',
     key_required: true, glm_capable: true, local: false, prices: null,
+    // Round 12 修复（2026-11-04）：原预设三个模型名（glm-5.3-flash / glm-5.3-flashx
+    // / glm-4.7-flash）在 bigmodel.cn 均不存在→选任一项都报 1211/异常，这正是
+    // 「换台机器一装就废」的根因之一。改为平台在售的免费/付费实义模型名。
     models: [
-      { id: 'glm-5.3-flash', text: 'glm-5.3-flash（通用 · 更省钱）' },
-      { id: 'glm-5.3-flashx', text: 'glm-5.3-flashx（极速）' },
-      { id: 'glm-4.7-flash', text: 'glm-4.7-flash（免费/普惠）' }
+      { id: 'glm-4.5-flash', text: 'glm-4.5-flash（免费 · 日常够用）' },
+      { id: 'glm-4-flash', text: 'glm-4-flash（免费 · 更省）' },
+      { id: 'glm-4.5', text: 'glm-4.5（付费 · 更强推理）' }
     ]
   },
   deepseek: {
@@ -11671,6 +11674,30 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   }, { once: true });
 });
 
+/* 免费档模型识别（2026-11-04 真机报障：同 Key 付费模型可用、免费模型 429）。
+ * 智谱免费档（glm-4-flash / glm-4.5-flash 等 *-flash）的 RPM/RPD 与并发显著
+ * 低于付费档：单轮 Agent 任务里连续工具轮次可在 1 分钟内打出十几条请求，
+ * 付费档无感、免费档立刻 429。识别后由下面的 pacer 做节流。 */
+const FREE_TIER_MODEL_RE = /(^|[-_/])flash([-_/]|$)|free/i;
+function isFreeTierModel(name) {
+  return FREE_TIER_MODEL_RE.test(String(name || ''));
+}
+
+/* 免费档请求节流：全局串行 + 最小间隔。付费/本地不走此队列（并发能力保留）。
+ * 目的是把「1 分钟内 15 条」摊平到免费档 RPM 之内，而不是靠 429 后再退避。 */
+const FREE_TIER_MIN_INTERVAL_MS = 3200;
+let _freeTierChain = Promise.resolve();
+let _freeTierLastStart = 0;
+function paceFreeTier(signal, sleepAbortable) {
+  const run = _freeTierChain.then(async () => {
+    const wait = Math.max(0, _freeTierLastStart + FREE_TIER_MIN_INTERVAL_MS - Date.now());
+    if (wait > 0) await sleepAbortable(wait);
+    _freeTierLastStart = Date.now();
+  });
+  _freeTierChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 /* 单一流式实现。endpoint 是非秘密 EndpointRef 快照/显式解析器；
  * apiKey 仅由调用方注入并放入 Authorization，不写日志、不读全局覆盖显式值。 */
 async function modelTransportStream(request, signal) {
@@ -11680,6 +11707,13 @@ async function modelTransportStream(request, signal) {
   }
   const isLocal = !!request.local;
   const sleepAbortable = ms => sleep(ms, signal);
+  // 免费模型：剔除思考档参数（flash 系不支持 reasoning_effort/thinking，
+  // 部分网关会因此返回参数错误或被误判为异常请求）+ 全局节流
+  if (!isLocal && isFreeTierModel(body.model)) {
+    if (body.thinking) delete body.thinking;
+    if (body.reasoning_effort) delete body.reasoning_effort;
+    try { await paceFreeTier(signal, sleepAbortable); } catch (e) { if (e && e.name === 'AbortError') throw e; }
+  }
   let attempt = 0;
   let rateLimitAttempt = 0;
   const LOADING_BACKOFF = [2000, 4000, 8000];
@@ -12858,7 +12892,7 @@ function updateBrandModel() {
     const v = sel ? String(sel.value || '') : '';
     txt = (v && v !== '__manual__' && v !== '__group__') ? v : '';
   }
-  if (!txt) txt = 'glm-5.3-flash';
+  if (!txt) txt = 'glm-4.5-flash';   // Round 12：品牌位兜底也用真实模型名
   const bm = document.getElementById('brandModel');
   const ht = document.getElementById('headerTitle');
   if (bm) bm.textContent = txt;
@@ -19622,6 +19656,26 @@ function collectConfig() {
  * 直接透传（不参与自动路由），推理力度由端点能力决定是否发送。
  */
 const HEAVY_HINTS = /重构|架构|调试|排查|报错|错误|异常|分析|实现|优化|设计|算法|推导|证明|方案|对比|性能|安全|迁移|兼容|代码|函数|接口|数据库|正则|并发|测试|部署|review/i;
+/* Round 12 修复（2026-11-04 真机报障：某机器免费模型必 429/付费端点可用）：
+ * 原智能档三档全硬编码 'glm-5.3-flash'——该模型名在平台上并不存在（代码注释
+ * 自己就记着「实测 glm-5.3-flash → GLM 400 1211」），auto 档必然失败或落到
+ * 网关异常分支。改为取当前 Key 实际可用的 flash 系模型：优先设置里已识别
+ * 清单中的第一个 *-flash，其次手动选中的模型，最后 glm-4.5-flash。 */
+const AUTO_TIER_FALLBACK_MODEL = 'glm-4.5-flash';
+function autoTierModel() {
+  try {
+    const sel = document.getElementById('modelSelect');
+    if (sel) {
+      for (const o of sel.options) {
+        const v = o.value || '';
+        if (v && v !== 'auto' && v !== '__group__' && v !== '__manual__' && /flash/i.test(v)) return v;
+      }
+    }
+  } catch (e) {}
+  const picked = (typeof connectModelValue === 'function') ? connectModelValue() : '';
+  if (picked && picked !== 'auto') return picked;
+  return AUTO_TIER_FALLBACK_MODEL;
+}
 function resolveModelEffort(text, hasAttach) {
   const picked = (typeof connectModelValue === 'function') ? connectModelValue() : '';
   const modelSel = picked || (document.getElementById('modelSelect') || {}).value || 'auto';
@@ -19631,10 +19685,11 @@ function resolveModelEffort(text, hasAttach) {
     return { model: modelSel, effort: effSel === 'auto' ? 'low' : effSel, auto: false, tier: '手动' };
   }
   const t = String(text || '');
+  const tierModel = autoTierModel();
   const heavy = !!hasAttach || HEAVY_HINTS.test(t) || t.length > 200;
-  if (heavy) return { model: 'glm-5.3-flash', effort: 'medium', auto: true, tier: '重任务' };
-  if (t.length > 40) return { model: 'glm-5.3-flash', effort: 'low', auto: true, tier: '标准' };
-  return { model: 'glm-5.3-flash', effort: 'off', auto: true, tier: '轻任务' };
+  if (heavy) return { model: tierModel, effort: 'medium', auto: true, tier: '重任务' };
+  if (t.length > 40) return { model: tierModel, effort: 'low', auto: true, tier: '标准' };
+  return { model: tierModel, effort: 'off', auto: true, tier: '轻任务' };
 }
 function sessionBudget() {
   const el = document.getElementById('sessionBudget');
@@ -22638,7 +22693,9 @@ async function compactNow(s, apiKey, opts = {}) {
     // v1.2 R6 修复：压缩请求与主链路一致——自定义端点走 provider 地址与 Key，
     // 并剥离 GLM 专属字段（thinking）；此前硬编码 API_URL + thinking 会导致自定义端点压缩必失败。
     const _glm = isGlmEndpoint();
-    const _cmpModel = _glm ? 'glm-5.3-flash' : (providerState.model || 'glm-5.3-flash');
+    // Round 12：原兜底为平台上不存在的 glm-5.3-flash（1211）——压缩必然失败，
+    // 改为真实存在的免费档模型；自定义端点仍用其自身模型名。
+    const _cmpModel = _glm ? 'glm-4.5-flash' : (providerState.model || 'glm-4.5-flash');
     // W0 R19：压缩提示词改读 prompts/compact.md（版本化）；失败回落内置串
     // （与 prompts 文件渲染值逐字节一致，回落零行为差异）
     let _cmpPrompt = '把以下人机协作历史压缩成 ≤200 字工作纪要，必须保留: 任务目标、涉及文件路径、已做改动、未完成事项、关键结论、工具调用序列(工具名与关键参数摘要)。直接输出: \n\n';
@@ -23148,7 +23205,7 @@ async function planGenerate(task) {
     const resp = await fetchGLMStream({
       apiKey: (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '',
       body: {
-        model: (typeof connectModelValue === 'function' && connectModelValue()) || 'glm-5.3-flash',
+        model: (typeof connectModelValue === 'function' && connectModelValue()) || 'glm-4.5-flash',   // Round 12：原兜底模型名不存在(1211)
         messages: planMsgs,
         temperature: 0.3, max_tokens: 800, stream: false
       }

@@ -22,10 +22,13 @@ const PRESETS = {
   glm: {
     name: '智谱 GLM', base_url: 'https://open.bigmodel.cn/api/paas/v4',
     key_required: true, glm_capable: true, local: false, prices: null,
+    // Round 12 修复（2026-11-04）：原预设三个模型名（glm-5.3-flash / glm-5.3-flashx
+    // / glm-4.7-flash）在 bigmodel.cn 均不存在→选任一项都报 1211/异常，这正是
+    // 「换台机器一装就废」的根因之一。改为平台在售的免费/付费实义模型名。
     models: [
-      { id: 'glm-5.3-flash', text: 'glm-5.3-flash（通用 · 更省钱）' },
-      { id: 'glm-5.3-flashx', text: 'glm-5.3-flashx（极速）' },
-      { id: 'glm-4.7-flash', text: 'glm-4.7-flash（免费/普惠）' }
+      { id: 'glm-4.5-flash', text: 'glm-4.5-flash（免费 · 日常够用）' },
+      { id: 'glm-4-flash', text: 'glm-4-flash（免费 · 更省）' },
+      { id: 'glm-4.5', text: 'glm-4.5（付费 · 更强推理）' }
     ]
   },
   deepseek: {

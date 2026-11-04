@@ -685,10 +685,16 @@
     {
       "path": "frontend/src/providers/request.js",
       "provides": [
+        "FREE_TIER_MIN_INTERVAL_MS",
+        "FREE_TIER_MODEL_RE",
+        "ModelTransport",
+        "_freeTierChain",
+        "_freeTierLastStart",
         "fetchGLMStream",
-        "sleep",
+        "isFreeTierModel",
         "modelTransportStream",
-        "ModelTransport"
+        "paceFreeTier",
+        "sleep"
       ],
       "requires": [
         "lastReqAt"
@@ -1310,7 +1316,9 @@
     {
       "path": "frontend/src/settings/store.js",
       "provides": [
+        "AUTO_TIER_FALLBACK_MODEL",
         "HEAVY_HINTS",
+        "autoTierModel",
         "collectConfig",
         "queueSaveConfig",
         "resolveModelEffort",

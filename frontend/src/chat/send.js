@@ -385,7 +385,7 @@ async function planGenerate(task) {
     const resp = await fetchGLMStream({
       apiKey: (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '',
       body: {
-        model: (typeof connectModelValue === 'function' && connectModelValue()) || 'glm-5.3-flash',
+        model: (typeof connectModelValue === 'function' && connectModelValue()) || 'glm-4.5-flash',   // Round 12：原兜底模型名不存在(1211)
         messages: planMsgs,
         temperature: 0.3, max_tokens: 800, stream: false
       }

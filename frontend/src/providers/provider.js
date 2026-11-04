@@ -146,7 +146,7 @@ function updateBrandModel() {
     const v = sel ? String(sel.value || '') : '';
     txt = (v && v !== '__manual__' && v !== '__group__') ? v : '';
   }
-  if (!txt) txt = 'glm-5.3-flash';
+  if (!txt) txt = 'glm-4.5-flash';   // Round 12：品牌位兜底也用真实模型名
   const bm = document.getElementById('brandModel');
   const ht = document.getElementById('headerTitle');
   if (bm) bm.textContent = txt;
