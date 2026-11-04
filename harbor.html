@@ -23266,7 +23266,8 @@ function planGenerateFallback(task) {
 
 const GROUP_LIMITS = Object.freeze({
   membersMin: 2, membersMax: 6,
-  turnBudget: 24,          // 单任务发言轮数上限（防无限接力），到顶自动暂停
+  // Round 13（2026-11-04 主理人裁定）：取消 24 轮接力上限，改为不限轮数——
+  // 群主随时可「暂停接力」，这就是唯一的停手开关。
   memberHistoryTurns: 12,  // 每成员上下文保留的最近消息条数
   memberMsgChars: 4000,    // 单条注入消息截断
 });
@@ -23464,6 +23465,7 @@ function groupToggleRelay() {
   if (!s) return;
   if (s.group.phase === 'running') {
     s.group.phase = 'paused';
+    groupSpeak._pausedSid = s.id;   // 在途循环据此立即退出（勿再开下一轮）
     // Round 8 自审修复：暂停必须真的中断在途请求——groupAbort 是模块级单例，
     // abort 后 renew（下一位成员调用用新 controller）。原先只有暂停语义、
     // 请求照跑，暂停按钮形同虚设。
@@ -23472,6 +23474,7 @@ function groupToggleRelay() {
     if (typeof toast === 'function') toast('接力已暂停（在途请求已中断）；群主可插话，点「继续接力」恢复', 'info');
   } else if (s.group.phase === 'paused') {
     s.group.phase = 'running';
+    if (groupSpeak._pausedSid === s.id) groupSpeak._pausedSid = null;
     if (typeof toast === 'function') toast('接力已恢复，下一位：' + groupMemberName(s, s.group.turn), 'info');
     void groupAdvance(sid);
   } else {
@@ -23801,69 +23804,75 @@ async function groupAdvance(sid) {
 }
 
 /** 成员发言：工作气泡（简略态）→ 调模型（气泡内实时计数）→ 转完成态（可展开）
- * → 接力调度。群里永不直接铺全文（主理人 2026-11-04 裁定）。 */
+ * → 接力调度。群里永不直接铺全文（主理人 2026-11-04 裁定）。
+ * Round 13：取消轮数上限。接力改为**迭代**而非递归——不限轮数后递归会持续
+ * 加深调用栈（几百轮即 RangeError），循环只占常量栈。群主随时可暂停。 */
 async function groupSpeak(s, member) {
   const g = s.group;
-  if (g.round >= GROUP_LIMITS.turnBudget) {
-    g.phase = 'paused';
-    groupPush(s, 'assistant', '【群聊调度】已连续 ' + GROUP_LIMITS.turnBudget + ' 轮，自动暂停。请群主检视后继续。', null);
-    groupToolbarRefresh(s.id);
-    try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
-    return;
-  }
-  const phase = document.getElementById('gbPhase');
-  if (phase) phase.textContent = member.name + ' 工作中…';
-  const box = document.getElementById('chatContainer');
-  let bubble = null;
-  if (box && (typeof AppState === 'undefined' || AppState.currentSessionId === s.id)) {
-    bubble = groupBubbleMount(box, member, '', 'working');
-  }
-  const tick = (n) => {
-    if (bubble && bubble.__setBrief) bubble.__setBrief('正在输出… ' + n + ' 字');
-  };
-  const messages = groupContextFor(s, member);
-  let text = '';
+  if (!g) return;
+  // 同一会话已有在途循环（继续接力/插话都会触发）→ 交给那个循环接手，避免并发双接力
+  if (groupSpeak._busySid === s.id) return;
+  groupSpeak._busySid = s.id;
+  if (groupSpeak._pausedSid === s.id) groupSpeak._pausedSid = null;   // 新发起的一轮不受旧暂停标志影响
   try {
-    text = await groupCallModel(s, member, messages, (delta) => {
-      groupSpeak._acc = (groupSpeak._acc || 0) + String(delta || '').length;
-      tick(groupSpeak._acc);
-    });
-    groupSpeak._acc = 0;
-  } catch (e) {
-    groupSpeak._acc = 0;
-    text = '';
-    if (bubble && bubble.__finish) bubble.__finish('【' + member.name + ' 调用失败】' + (e && e.message ? e.message : e));
-    else groupPush(s, 'assistant', '【' + member.name + ' 调用失败】' + (e && e.message ? e.message : e) + '；接力暂停。', null);
-    g.phase = 'paused';
-    g.turn = member.id;
-    groupToolbarRefresh(s.id);
-    try { if (typeof saveSessions === 'function') saveSessions(); } catch (e2) {}
-    return;
-  }
-  const trimmedOut = String(text || '').trim() || '（空回复）';
-  if (bubble && bubble.__finish) {
-    bubble.__finish(trimmedOut, { round: (g.round || 0) + 1 });
-    groupPush(s, 'assistant', trimmedOut, member, { skipDom: true });   // 气泡即消息本体
-  } else {
-    groupPush(s, 'assistant', trimmedOut, member);
-  }
-  g.round = (g.round || 0) + 1;
-  try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
-  // 接力调度
-  const next = groupNextMember(s, member, trimmedOut);
-  if (!next) {
-    g.phase = 'paused';
-    groupPush(s, 'assistant', '【群聊调度】接力已达上限（' + GROUP_LIMITS.turnBudget + ' 轮），自动暂停交还群主。', null);
-    groupToolbarRefresh(s.id);
+    let current = member;
+    while (current) {
+    if (g.phase !== 'running' || groupSpeak._pausedSid === s.id) return;   // 群主暂停/群被关闭
+    const phase = document.getElementById('gbPhase');
+    if (phase) phase.textContent = current.name + ' 工作中…';
+    const box = document.getElementById('chatContainer');
+    let bubble = null;
+    if (box && (typeof AppState === 'undefined' || AppState.currentSessionId === s.id)) {
+      bubble = groupBubbleMount(box, current, '', 'working');
+    }
+    const tick = (n) => {
+      if (bubble && bubble.__setBrief) bubble.__setBrief('正在输出… ' + n + ' 字');
+    };
+    const messages = groupContextFor(s, current);
+    let text = '';
+    try {
+      text = await groupCallModel(s, current, messages, (delta) => {
+        groupSpeak._acc = (groupSpeak._acc || 0) + String(delta || '').length;
+        tick(groupSpeak._acc);
+      });
+      groupSpeak._acc = 0;
+    } catch (e) {
+      groupSpeak._acc = 0;
+      text = '';
+      if (bubble && bubble.__finish) bubble.__finish('【' + current.name + ' 调用失败】' + (e && e.message ? e.message : e));
+      else groupPush(s, 'assistant', '【' + current.name + ' 调用失败】' + (e && e.message ? e.message : e) + '；接力暂停。', null);
+      g.phase = 'paused';
+      g.turn = current.id;
+      groupToolbarRefresh(s.id);
+      try { if (typeof saveSessions === 'function') saveSessions(); } catch (e2) {}
+      return;
+    }
+    const trimmedOut = String(text || '').trim() || '（空回复）';
+    if (bubble && bubble.__finish) {
+      bubble.__finish(trimmedOut, { round: (g.round || 0) + 1 });
+      groupPush(s, 'assistant', trimmedOut, current, { skipDom: true });   // 气泡即消息本体
+    } else {
+      groupPush(s, 'assistant', trimmedOut, current);
+    }
+    g.round = (g.round || 0) + 1;
     try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
-    return;
+    // 接力调度
+    const next = groupNextMember(s, current, trimmedOut);
+    if (!next) {
+      // 无人接手（主持人未指名 / 成员都指向自己）→ 交还群主
+      g.phase = 'paused';
+      groupPush(s, 'assistant', '【群聊调度】本轮没有明确交接对象，接力暂停，交还群主。可「继续接力」或直接发新指令。', null);
+      groupToolbarRefresh(s.id);
+      try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
+      return;
+    }
+    g.turn = next.id;
+    groupToolbarRefresh(s.id);
+    if (!(g.phase === 'running' && g.autoRelay)) return;
+    current = next;
   }
-  g.turn = next.id;
-  if (g.phase === 'running' && g.autoRelay) {
-    groupToolbarRefresh(s.id);
-    await groupSpeak(s, next);
-  } else {
-    groupToolbarRefresh(s.id);
+  } finally {
+    if (groupSpeak._busySid === s.id) groupSpeak._busySid = null;
   }
 }
 
@@ -23872,7 +23881,6 @@ async function groupSpeak(s, member) {
  * 主持人无明确指向 → 暂停等群主。 */
 function groupNextMember(s, from, out) {
   const g = s.group;
-  if (g.round >= GROUP_LIMITS.turnBudget) return null;
   const text = String(out || '');
   const ats = text.match(/@([^\s@，,。；;！!？?"']{1,12})/g) || [];
   for (let i = ats.length - 1; i >= 0; i--) {
