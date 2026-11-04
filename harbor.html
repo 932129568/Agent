@@ -3005,7 +3005,8 @@ body.gd-lock{overflow:hidden}
   font-size:13.5px;color:var(--text)}
 .mp-item:hover,.mp-item.on{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 .mp-ava{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:700;color:#fff;background:var(--primary);flex:none}
+  font-size:12px;font-weight:700;color:#fff;flex:none;
+  background:color-mix(in srgb,hsl(var(--mh,210) 65% 52%) 92%,#fff 8%)}
 .mp-ava.owner{background:var(--text-3)}
 .mp-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mp-tag{font-size:11px;color:var(--primary);font-weight:700;white-space:nowrap}
@@ -17516,6 +17517,28 @@ function normalizeSessions(raw) {
         round: Number(x.group.round) || 0,
         autoRelay: x.group.autoRelay !== false,
       };
+      // Round 15 优化①：跨端点 Key 快照必须跨重启保留——原白名单静默丢弃
+      // group.endpoints，重启后绑了 deepseek:: 的成员全部报「缺端点」。
+      // Key 与 config.json 同级信任域（后端 sessions.json），可存；localStorage
+      // 镜像在 _sessionsMirrorProjection 里剥 Key（W29 纪律不破）。
+      if (x.group.endpoints && typeof x.group.endpoints === 'object') {
+        const eps = {};
+        Object.keys(x.group.endpoints).forEach(k => {
+          const ep = x.group.endpoints[k];
+          if (ep && typeof ep === 'object' && ep.base_url) {
+            eps[k] = { name: String(ep.name || k).slice(0, 40),
+              base_url: String(ep.base_url).slice(0, 300),
+              api_key: String(ep.api_key || '').slice(0, 300) };
+          }
+        });
+        if (Object.keys(eps).length) s.group.endpoints = eps;
+      }
+      // Round 15 优化②：显式 @ 队列（成员 id 序列）跨重启保留——暂停后关应用，
+      // 重开「继续接力」仍按群主点名顺序把余下成员走完
+      if (Array.isArray(x.group.mentionQueue)) {
+        const q = x.group.mentionQueue.filter(id => typeof id === 'string' && id).slice(0, 6);
+        if (q.length) s.group.mentionQueue = q;
+      }
       if (s.group.members.length < 2) delete s.group;   // 成员残缺 → 退化普通会话
     }
     return s;
@@ -17659,6 +17682,9 @@ function _sessionsMirrorProjection(list) {
       if (v.type === 'image_url') return { type: 'text', text: '[图片]' };
       if (v.type === 'video_url') return { type: 'text', text: '[视频]' };
     }
+    // W29 纪律：localStorage 镜像永不落明文 Key（group.endpoints 的跨端点 Key
+    // 只存后端 sessions.json；本地镜像剥掉——丢镜像不丢安全）
+    if (key === 'api_key') return '';
     if (typeof v === 'string' && v.length > LOCAL_MIRROR_MAX_CHARS) {
       return v.slice(0, LOCAL_MIRROR_MAX_CHARS) + '…(镜像截断)';
     }
@@ -23654,7 +23680,7 @@ function groupMemberName(s, mid) {
  * 取出全部被 @ 成员（去重保序），交给 groupSpeak 内部按 **打字顺序** 逐一发言。
  * Round 15b：**@ 顺序保真**——原先外层循环把第一位交棒后就 break，后续顺序
  * 由成员自己输出里的 @ 路由决定（后 @ 的反而先说话）。现在显式 @ 队列挂在
- * g._mentionQueue，groupSpeak 每轮发言后**先吃队列再走自由路由**；队列耗尽
+ * g.mentionQueue，groupSpeak 每轮发言后**先吃队列再走自由路由**；队列耗尽
  * 才恢复成员自由接力。autoRelay 关闭时队列照走（显式点名=群主指令，优先级
  * 高于「自动接力」开关——开关只管模型自己拉链）。 */
 async function groupHandleOutgoing(text) {
@@ -23673,7 +23699,7 @@ async function groupHandleOutgoing(text) {
     ? mentioned.slice()
     : [g.members.find(m => m.host) || g.members[0]];
   g.turn = queue[0].id;
-  g._mentionQueue = queue.slice(1);   // 余下名单：groupSpeak 逐位消费
+  g.mentionQueue = queue.slice(1).map(m => m.id);   // 余下名单（id 序列，跨重启保留）
   g.phase = 'running';
   g.round = 0;
   groupToolbarRefresh(sid);
@@ -24040,9 +24066,10 @@ async function groupSpeak(s, member) {
     try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
     // 接力调度（Round 15b）：显式 @ 队列优先——群主点名顺序就是发言顺序，
     // 队列耗尽后才交给成员自由路由（模型输出里的 @/交接）。
-    const viaQueue = Array.isArray(g._mentionQueue) && g._mentionQueue.length > 0;
+    const viaQueue = Array.isArray(g.mentionQueue) && g.mentionQueue.length > 0;
+    const queuedId = viaQueue ? g.mentionQueue.shift() : null;
     const next = viaQueue
-      ? g._mentionQueue.shift()
+      ? (g.members.find(m => m.id === queuedId) || null)
       : groupNextMember(s, current, trimmedOut);
     if (next === GROUP_OWNER) {
       // 成员点名要群主拍板：暂停并把问题**明确**交到人类手上（系统消息，非群主自述）
@@ -24388,8 +24415,10 @@ async function groupArchiveHandoff(s, member, text, roundNo) {
     const r = raw ? JSON.parse(raw) : null;
     if (r && r.path) {
       s.groupFiles = (s.groupFiles || []);
-      s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, mtime: r.mtime });
+      s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, round: r.round, mtime: r.mtime });
       if (s.groupFiles.length > 60) s.groupFiles = s.groupFiles.slice(-60);
+      // 工具栏「📁 群文件 N」即时刷新（原先要等下一次 render 才 +1）
+      try { if (typeof groupToolbarRefresh === 'function') groupToolbarRefresh(s.id); } catch (e) {}
       return r;
     }
   } catch (e) { /* 归档失败不阻断接力：正文仍在会话流里 */ }
@@ -24420,7 +24449,7 @@ async function groupFilesSync(s) {
     const r = raw ? JSON.parse(raw) : null;
     const files = (r && r.files) || [];
     s.groupFiles = files.map(f => ({
-      name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, mtime: f.mtime,
+      name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, mtime: f.mtime,
     }));
   } catch (e) { /* 后端旧版/不可用：群文件功能静默缺席，接力照常 */ }
 }
@@ -24445,6 +24474,7 @@ function groupFilesOpen() {
       '<div class="gf-dirrow">' +
         '<input class="gf-input" id="gfDir" spellcheck="false" placeholder="群文件目录（留空=默认 ~/.glm-chat/group_files）">' +
         '<button type="button" class="gf-btn" id="gfBrowse">浏览…</button>' +
+        '<button type="button" class="gf-btn" id="gfOpenDir" title="在资源管理器中打开群文件夹">📂 打开</button>' +
         '<button type="button" class="gf-btn primary" id="gfSaveDir">保存目录</button>' +
       '</div>' +
       '<div class="gf-searchrow">' +
@@ -24467,6 +24497,14 @@ function groupFilesOpen() {
       const dir = r && (r.path || r.dir || r.folder);
       if (dir) mask.querySelector('#gfDir').value = dir;
     } catch (e) { groupFilesMsg('选择目录失败：' + (e && e.message ? e.message : e)); }
+  });
+  mask.querySelector('#gfOpenDir').addEventListener('click', async () => {
+    try {
+      const raw = await callApi('group_files_open_dir', [s.id], 20000);
+      const r = raw ? JSON.parse(raw) : null;
+      if (r && r.ok) groupFilesMsg('已打开：' + r.dir, 'ok');
+      else groupFilesMsg((r && r.error) || '打开失败');
+    } catch (e) { groupFilesMsg('打开失败：' + (e && e.message ? e.message : e)); }
   });
   mask.querySelector('#gfSaveDir').addEventListener('click', async () => {
     const root = mask.querySelector('#gfDir').value.trim();
@@ -24507,7 +24545,7 @@ async function groupFilesLoad(s) {
     const raw = await callApi('group_files_list', [s.id, s.title || '群聊'], 20000);
     const r = raw ? JSON.parse(raw) : null;
     const files = (r && r.files) || [];
-    s.groupFiles = files.map(f => ({ name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, mtime: f.mtime }));
+    s.groupFiles = files.map(f => ({ name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, mtime: f.mtime }));
     groupFilesRender(files);
   } catch (e) {
     list.textContent = '读取群文件失败：' + (e && e.message ? e.message : e);
@@ -24523,11 +24561,11 @@ function groupFilesRender(files, hits) {
   }
   const rows = hits
     ? files.map(h => ({
-      name: h.name, title: h.title, member: h.member, to: h.to,
+      name: h.name, title: h.title, member: h.member, to: h.to, round: h.round,
       time: h.mtime ? new Date(h.mtime * 1000).toLocaleString() : '', snippet: h.snippet,
     }))
     : files.map(f => ({
-      name: f.name, title: f.title || f.name, member: f.member, to: f.to,
+      name: f.name, title: f.title || f.name, member: f.member, to: f.to, round: f.round,
       time: f.mtime ? new Date(f.mtime * 1000).toLocaleString() : '', snippet: '',
     }));
   list.innerHTML = '';
@@ -24542,7 +24580,8 @@ function groupFilesRender(files, hits) {
       (row.snippet ? '<div class="gf-item-snippet"></div>' : '');
     el.querySelector('.gf-item-title').textContent = row.title || row.name;
     if (row.to) el.querySelector('.gf-item-to').textContent = '→ ' + row.to;
-    el.querySelector('.gf-item-meta').textContent = [row.member, row.time, row.name].filter(Boolean).join(' · ');
+    el.querySelector('.gf-item-meta').textContent =
+      [row.member, row.round ? '第' + row.round + '轮' : '', row.time, row.name].filter(Boolean).join(' · ');
     if (row.snippet) el.querySelector('.gf-item-snippet').textContent = row.snippet;
     el.addEventListener('click', () => groupFilesRead(row.name));
     list.appendChild(el);
@@ -24638,9 +24677,11 @@ function groupMentionShow(ta, hits) {
     _mention.el = box;
   }
   const box = _mention.el;
+  const hueOf = (typeof groupHueOf === 'function') ? groupHueOf : function () { return 210; };
   box.innerHTML = hits.map((m, i) =>
     '<div class="mp-item' + (i === 0 ? ' on' : '') + '" data-i="' + i + '" role="option">' +
-      '<span class="mp-ava' + (m.owner ? ' owner' : '') + '">' +
+      '<span class="mp-ava' + (m.owner ? ' owner' : '') + '" style="' +
+        (m.owner ? '' : '--mh:' + hueOf(m)) + '">' +
         (m.host ? '★' : (m.owner ? '群' : String(m.name || '?').slice(0, 1))) + '</span>' +
       '<span class="mp-name"></span>' +
       (m.host ? '<span class="mp-tag">主持人</span>' : (m.owner ? '<span class="mp-tag">交回人类</span>' : '')) +
@@ -24692,7 +24733,14 @@ function groupMentionRefresh(ta) {
   const all = groupMentionMembers();
   if (!all) { groupMentionHide(); return; }     // 非群聊会话：不介入
   const needle = q.query.trim();
-  const hits = all.filter(m => !needle || m.name.indexOf(needle) === 0 || m.name.indexOf(needle) > 0);
+  const lower = needle.toLowerCase();
+  const hits = all
+    .filter(m => !lower || m.name.toLowerCase().indexOf(lower) >= 0)
+    .sort((a, b) => {   // 前缀命中优先于中间命中（输入「U」时 UI设计 在前）
+      const pa = a.name.toLowerCase().indexOf(lower) === 0 ? 0 : 1;
+      const pb = b.name.toLowerCase().indexOf(lower) === 0 ? 0 : 1;
+      return pa - pb;
+    });
   if (!hits.length) { groupMentionHide(); return; }
   _mention.start = q.start;
   groupMentionShow(ta, hits);
@@ -24848,10 +24896,22 @@ function groupEnsureEndpoint(group, endpointId, baseUrl, apiKey) {
   const prev = group.endpoints[endpointId] || {};
   const base = String(baseUrl || prev.base_url || '').trim();
   if (!base) return false;
+  let key = String(apiKey == null ? (prev.api_key || '') : apiKey).trim();
+  if (!key) {
+    // base 与当前端点同址 → 快照直接带当前 Key（同 groupMemberEndpoint 的复用语义）
+    try {
+      const cur = (typeof providerState !== 'undefined' && providerState)
+        ? String(providerState.base_url || '').trim() : '';
+      if (cur && base === cur) {
+        const snap = (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : {};
+        if (snap.apiKey) key = String(snap.apiKey).trim();
+      }
+    } catch (e) {}
+  }
   group.endpoints[endpointId] = {
     name: groupEndpointLabel(endpointId),
     base_url: base,
-    api_key: String(apiKey == null ? (prev.api_key || '') : apiKey).trim(),
+    api_key: key,
   };
   return !!group.endpoints[endpointId].api_key;
 }
@@ -24862,7 +24922,19 @@ function groupEnsureEndpoint(group, endpointId, baseUrl, apiKey) {
 function groupMemberEndpoint(group, member) {
   const t = groupModelTarget(member && member.model);
   if (!t) return null;
-  const ep = (group && group.endpoints && group.endpoints[t.endpointId]) || null;
+  let ep = (group && group.endpoints && group.endpoints[t.endpointId]) || null;
+  // Round 15 优化：成员端点与当前配置端点同址 → 直接复用当前 Key，不再要求
+  // 手填（智谱下给成员绑 glm:: 模型，本就该零配置可用）
+  if (ep && !ep.api_key) {
+    try {
+      const cur = (typeof providerState !== 'undefined' && providerState)
+        ? String(providerState.base_url || '').trim() : '';
+      if (cur && String(ep.base_url || '').trim() === cur) {
+        const snap = (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : {};
+        if (snap.apiKey) ep = Object.assign({}, ep, { api_key: snap.apiKey });
+      }
+    } catch (e) { /* 取不到当前 Key → 维持缺 Key 报错路径 */ }
+  }
   return { endpointId: t.endpointId, model: t.model, ep: ep,
            missing: (!ep || !ep.base_url) ? 'endpoint' : (!ep.api_key ? 'key' : '') };
 }

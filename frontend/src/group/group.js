@@ -343,7 +343,7 @@ function groupMemberName(s, mid) {
  * 取出全部被 @ 成员（去重保序），交给 groupSpeak 内部按 **打字顺序** 逐一发言。
  * Round 15b：**@ 顺序保真**——原先外层循环把第一位交棒后就 break，后续顺序
  * 由成员自己输出里的 @ 路由决定（后 @ 的反而先说话）。现在显式 @ 队列挂在
- * g._mentionQueue，groupSpeak 每轮发言后**先吃队列再走自由路由**；队列耗尽
+ * g.mentionQueue，groupSpeak 每轮发言后**先吃队列再走自由路由**；队列耗尽
  * 才恢复成员自由接力。autoRelay 关闭时队列照走（显式点名=群主指令，优先级
  * 高于「自动接力」开关——开关只管模型自己拉链）。 */
 async function groupHandleOutgoing(text) {
@@ -362,7 +362,7 @@ async function groupHandleOutgoing(text) {
     ? mentioned.slice()
     : [g.members.find(m => m.host) || g.members[0]];
   g.turn = queue[0].id;
-  g._mentionQueue = queue.slice(1);   // 余下名单：groupSpeak 逐位消费
+  g.mentionQueue = queue.slice(1).map(m => m.id);   // 余下名单（id 序列，跨重启保留）
   g.phase = 'running';
   g.round = 0;
   groupToolbarRefresh(sid);
@@ -729,9 +729,10 @@ async function groupSpeak(s, member) {
     try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
     // 接力调度（Round 15b）：显式 @ 队列优先——群主点名顺序就是发言顺序，
     // 队列耗尽后才交给成员自由路由（模型输出里的 @/交接）。
-    const viaQueue = Array.isArray(g._mentionQueue) && g._mentionQueue.length > 0;
+    const viaQueue = Array.isArray(g.mentionQueue) && g.mentionQueue.length > 0;
+    const queuedId = viaQueue ? g.mentionQueue.shift() : null;
     const next = viaQueue
-      ? g._mentionQueue.shift()
+      ? (g.members.find(m => m.id === queuedId) || null)
       : groupNextMember(s, current, trimmedOut);
     if (next === GROUP_OWNER) {
       // 成员点名要群主拍板：暂停并把问题**明确**交到人类手上（系统消息，非群主自述）

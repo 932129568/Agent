@@ -225,6 +225,26 @@ class GroupFilesService:
                 meta[k.strip()] = v.strip()
         return meta
 
+    # ---------------- 打开目录 ----------------
+    def open_dir(self, group_id=None):
+        """在资源管理器中打开群文件目录（根目录或指定群的子目录）。
+
+        只开本服务自管的目录（root/group_files 与其群子目录），不收任意路径——
+        面窄到无需 guard 档确认。目录不存在时先建（用户点按钮就该看到文件夹）。
+        """
+        root = self._root()
+        d = _group_dir(root, group_id) if group_id else root
+        if not os.path.isdir(d):
+            try:
+                os.makedirs(d, exist_ok=True)
+            except Exception as e:
+                return err('[IO_ERROR] 目录创建失败：%s' % e)
+        try:
+            os.startfile(d)   # Windows 桌面应用专属；非 win 平台报错即返回
+        except Exception as e:
+            return err('[IO_ERROR] 无法打开目录：%s' % e)
+        return ok({'ok': True, 'dir': d})
+
     # ---------------- 检索 ----------------
     def search(self, group_id, query, limit=8):
         """关键词检索：标题/成员/交接对象/关键词/正文加权打分。

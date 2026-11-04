@@ -2897,7 +2897,8 @@ body.gd-lock{overflow:hidden}
   font-size:13.5px;color:var(--text)}
 .mp-item:hover,.mp-item.on{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 .mp-ava{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:700;color:#fff;background:var(--primary);flex:none}
+  font-size:12px;font-weight:700;color:#fff;flex:none;
+  background:color-mix(in srgb,hsl(var(--mh,210) 65% 52%) 92%,#fff 8%)}
 .mp-ava.owner{background:var(--text-3)}
 .mp-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mp-tag{font-size:11px;color:var(--primary);font-weight:700;white-space:nowrap}

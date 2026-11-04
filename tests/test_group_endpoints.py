@@ -125,3 +125,29 @@ def test_group_send_without_key_fails_loudly():
   return {err: err};
 """, 'ep_nokey')
     assert result['err'] and 'UI设计' in result['err'] and '端点' in result['err'], result
+
+
+def test_same_base_endpoint_reuses_current_key():
+    """成员端点与当前配置端点同址 → 自动复用当前 Key，不再要求手填。"""
+    result = _boot(r"""
+  const grp = { endpoints: { glm: { name:'智谱 GLM',
+    base_url: 'https://open.bigmodel.cn/api/paas/v4', api_key: '' } } };
+  vmRun('providerState.base_url = "https://open.bigmodel.cn/api/paas/v4";');
+  vmRun('uiEndpointSnapshot = function(){ return { endpoint:"x", apiKey:"sk-glm-current" }; };');
+  const r = vmRun('groupMemberEndpoint')(grp, { model: 'glm::glm-4.6' });
+  return {missing: r.missing, key: r.ep && r.ep.api_key};
+""", 'ep_reuse')
+    assert result['missing'] == ''
+    assert result['key'] == 'sk-glm-current'
+
+
+def test_different_base_still_requires_key():
+    result = _boot(r"""
+  const grp = { endpoints: { deepseek: { name:'DeepSeek',
+    base_url: 'https://api.deepseek.com/v1', api_key: '' } } };
+  vmRun('providerState.base_url = "https://open.bigmodel.cn/api/paas/v4";');
+  vmRun('uiEndpointSnapshot = function(){ return { endpoint:"x", apiKey:"sk-glm-current" }; };');
+  const r = vmRun('groupMemberEndpoint')(grp, { model: 'deepseek::deepseek-flash' });
+  return {missing: r.missing};
+""", 'ep_diff')
+    assert result['missing'] == 'key'

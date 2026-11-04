@@ -74,8 +74,10 @@ async function groupArchiveHandoff(s, member, text, roundNo) {
     const r = raw ? JSON.parse(raw) : null;
     if (r && r.path) {
       s.groupFiles = (s.groupFiles || []);
-      s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, mtime: r.mtime });
+      s.groupFiles.push({ name: r.name, path: r.path, title: r.title, member: r.member, to: r.to, round: r.round, mtime: r.mtime });
       if (s.groupFiles.length > 60) s.groupFiles = s.groupFiles.slice(-60);
+      // 工具栏「📁 群文件 N」即时刷新（原先要等下一次 render 才 +1）
+      try { if (typeof groupToolbarRefresh === 'function') groupToolbarRefresh(s.id); } catch (e) {}
       return r;
     }
   } catch (e) { /* 归档失败不阻断接力：正文仍在会话流里 */ }
@@ -106,7 +108,7 @@ async function groupFilesSync(s) {
     const r = raw ? JSON.parse(raw) : null;
     const files = (r && r.files) || [];
     s.groupFiles = files.map(f => ({
-      name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, mtime: f.mtime,
+      name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, mtime: f.mtime,
     }));
   } catch (e) { /* 后端旧版/不可用：群文件功能静默缺席，接力照常 */ }
 }
@@ -131,6 +133,7 @@ function groupFilesOpen() {
       '<div class="gf-dirrow">' +
         '<input class="gf-input" id="gfDir" spellcheck="false" placeholder="群文件目录（留空=默认 ~/.glm-chat/group_files）">' +
         '<button type="button" class="gf-btn" id="gfBrowse">浏览…</button>' +
+        '<button type="button" class="gf-btn" id="gfOpenDir" title="在资源管理器中打开群文件夹">📂 打开</button>' +
         '<button type="button" class="gf-btn primary" id="gfSaveDir">保存目录</button>' +
       '</div>' +
       '<div class="gf-searchrow">' +
@@ -153,6 +156,14 @@ function groupFilesOpen() {
       const dir = r && (r.path || r.dir || r.folder);
       if (dir) mask.querySelector('#gfDir').value = dir;
     } catch (e) { groupFilesMsg('选择目录失败：' + (e && e.message ? e.message : e)); }
+  });
+  mask.querySelector('#gfOpenDir').addEventListener('click', async () => {
+    try {
+      const raw = await callApi('group_files_open_dir', [s.id], 20000);
+      const r = raw ? JSON.parse(raw) : null;
+      if (r && r.ok) groupFilesMsg('已打开：' + r.dir, 'ok');
+      else groupFilesMsg((r && r.error) || '打开失败');
+    } catch (e) { groupFilesMsg('打开失败：' + (e && e.message ? e.message : e)); }
   });
   mask.querySelector('#gfSaveDir').addEventListener('click', async () => {
     const root = mask.querySelector('#gfDir').value.trim();
@@ -193,7 +204,7 @@ async function groupFilesLoad(s) {
     const raw = await callApi('group_files_list', [s.id, s.title || '群聊'], 20000);
     const r = raw ? JSON.parse(raw) : null;
     const files = (r && r.files) || [];
-    s.groupFiles = files.map(f => ({ name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, mtime: f.mtime }));
+    s.groupFiles = files.map(f => ({ name: f.name, path: f.path, title: f.title, member: f.member, to: f.to, round: f.round, mtime: f.mtime }));
     groupFilesRender(files);
   } catch (e) {
     list.textContent = '读取群文件失败：' + (e && e.message ? e.message : e);
@@ -209,11 +220,11 @@ function groupFilesRender(files, hits) {
   }
   const rows = hits
     ? files.map(h => ({
-      name: h.name, title: h.title, member: h.member, to: h.to,
+      name: h.name, title: h.title, member: h.member, to: h.to, round: h.round,
       time: h.mtime ? new Date(h.mtime * 1000).toLocaleString() : '', snippet: h.snippet,
     }))
     : files.map(f => ({
-      name: f.name, title: f.title || f.name, member: f.member, to: f.to,
+      name: f.name, title: f.title || f.name, member: f.member, to: f.to, round: f.round,
       time: f.mtime ? new Date(f.mtime * 1000).toLocaleString() : '', snippet: '',
     }));
   list.innerHTML = '';
@@ -228,7 +239,8 @@ function groupFilesRender(files, hits) {
       (row.snippet ? '<div class="gf-item-snippet"></div>' : '');
     el.querySelector('.gf-item-title').textContent = row.title || row.name;
     if (row.to) el.querySelector('.gf-item-to').textContent = '→ ' + row.to;
-    el.querySelector('.gf-item-meta').textContent = [row.member, row.time, row.name].filter(Boolean).join(' · ');
+    el.querySelector('.gf-item-meta').textContent =
+      [row.member, row.round ? '第' + row.round + '轮' : '', row.time, row.name].filter(Boolean).join(' · ');
     if (row.snippet) el.querySelector('.gf-item-snippet').textContent = row.snippet;
     el.addEventListener('click', () => groupFilesRead(row.name));
     list.appendChild(el);

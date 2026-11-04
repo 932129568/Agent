@@ -55,9 +55,11 @@ function groupMentionShow(ta, hits) {
     _mention.el = box;
   }
   const box = _mention.el;
+  const hueOf = (typeof groupHueOf === 'function') ? groupHueOf : function () { return 210; };
   box.innerHTML = hits.map((m, i) =>
     '<div class="mp-item' + (i === 0 ? ' on' : '') + '" data-i="' + i + '" role="option">' +
-      '<span class="mp-ava' + (m.owner ? ' owner' : '') + '">' +
+      '<span class="mp-ava' + (m.owner ? ' owner' : '') + '" style="' +
+        (m.owner ? '' : '--mh:' + hueOf(m)) + '">' +
         (m.host ? '★' : (m.owner ? '群' : String(m.name || '?').slice(0, 1))) + '</span>' +
       '<span class="mp-name"></span>' +
       (m.host ? '<span class="mp-tag">主持人</span>' : (m.owner ? '<span class="mp-tag">交回人类</span>' : '')) +
@@ -109,7 +111,14 @@ function groupMentionRefresh(ta) {
   const all = groupMentionMembers();
   if (!all) { groupMentionHide(); return; }     // 非群聊会话：不介入
   const needle = q.query.trim();
-  const hits = all.filter(m => !needle || m.name.indexOf(needle) === 0 || m.name.indexOf(needle) > 0);
+  const lower = needle.toLowerCase();
+  const hits = all
+    .filter(m => !lower || m.name.toLowerCase().indexOf(lower) >= 0)
+    .sort((a, b) => {   // 前缀命中优先于中间命中（输入「U」时 UI设计 在前）
+      const pa = a.name.toLowerCase().indexOf(lower) === 0 ? 0 : 1;
+      const pb = b.name.toLowerCase().indexOf(lower) === 0 ? 0 : 1;
+      return pa - pb;
+    });
   if (!hits.length) { groupMentionHide(); return; }
   _mention.start = q.start;
   groupMentionShow(ta, hits);

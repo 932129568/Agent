@@ -85,6 +85,28 @@ function normalizeSessions(raw) {
         round: Number(x.group.round) || 0,
         autoRelay: x.group.autoRelay !== false,
       };
+      // Round 15 优化①：跨端点 Key 快照必须跨重启保留——原白名单静默丢弃
+      // group.endpoints，重启后绑了 deepseek:: 的成员全部报「缺端点」。
+      // Key 与 config.json 同级信任域（后端 sessions.json），可存；localStorage
+      // 镜像在 _sessionsMirrorProjection 里剥 Key（W29 纪律不破）。
+      if (x.group.endpoints && typeof x.group.endpoints === 'object') {
+        const eps = {};
+        Object.keys(x.group.endpoints).forEach(k => {
+          const ep = x.group.endpoints[k];
+          if (ep && typeof ep === 'object' && ep.base_url) {
+            eps[k] = { name: String(ep.name || k).slice(0, 40),
+              base_url: String(ep.base_url).slice(0, 300),
+              api_key: String(ep.api_key || '').slice(0, 300) };
+          }
+        });
+        if (Object.keys(eps).length) s.group.endpoints = eps;
+      }
+      // Round 15 优化②：显式 @ 队列（成员 id 序列）跨重启保留——暂停后关应用，
+      // 重开「继续接力」仍按群主点名顺序把余下成员走完
+      if (Array.isArray(x.group.mentionQueue)) {
+        const q = x.group.mentionQueue.filter(id => typeof id === 'string' && id).slice(0, 6);
+        if (q.length) s.group.mentionQueue = q;
+      }
       if (s.group.members.length < 2) delete s.group;   // 成员残缺 → 退化普通会话
     }
     return s;
@@ -228,6 +250,9 @@ function _sessionsMirrorProjection(list) {
       if (v.type === 'image_url') return { type: 'text', text: '[图片]' };
       if (v.type === 'video_url') return { type: 'text', text: '[视频]' };
     }
+    // W29 纪律：localStorage 镜像永不落明文 Key（group.endpoints 的跨端点 Key
+    // 只存后端 sessions.json；本地镜像剥掉——丢镜像不丢安全）
+    if (key === 'api_key') return '';
     if (typeof v === 'string' && v.length > LOCAL_MIRROR_MAX_CHARS) {
       return v.slice(0, LOCAL_MIRROR_MAX_CHARS) + '…(镜像截断)';
     }

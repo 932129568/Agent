@@ -126,7 +126,7 @@ def test_multi_mention_speaks_in_typed_order():
   vmRun2("sessions[0].group.autoRelay = false;");
   await vmRun2('groupHandleOutgoing')('@前端 先做，然后 @测试 验收，最后 @UI设计 出稿');
   return {spoke: vmRun2('globalThis.__spoke || []'),
-          queueLeft: vmRun2('sessions[0].group._mentionQueue || []').length};
+          queueLeft: vmRun2('sessions[0].group.mentionQueue || []').length};
 """, 'multi_mention_order')
     assert result['spoke'] == ['前端', '测试', 'UI设计'], result
     assert result['queueLeft'] == 0, result

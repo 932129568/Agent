@@ -78,7 +78,7 @@ _V12_EXTRA = frozenset({
     'history_dir_get', 'history_dir_set', 'session_purge', 'memory_retrieve',
     # Round 14：群文件（交接文档仓库）
     'group_files_config_get', 'group_files_config_set', 'group_files_write',
-    'group_files_list', 'group_files_search',
+    'group_files_list', 'group_files_search', 'group_files_open_dir',
     # v1.9.0 M1.9 占位（master-plan §6.2；转正时只改实现不改登记）
     'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
     'browser_screenshot', 'browser_close', 'get_platform_info',
@@ -164,6 +164,10 @@ class Api:
     def group_files_search(self, group_id, query, limit=8):
         """关键词检索群文件：标题/成员/交接对象/关键词/正文加权，返回命中片段。"""
         return self._group_files.search(group_id, query, limit)
+
+    def group_files_open_dir(self, group_id=None):
+        """资源管理器打开群文件目录（group_id 缺省=根目录；目录不存在先建）。"""
+        return self._group_files.open_dir(group_id)
 
     # ============ 历史自选存放 + 真删（2026-10-21 用户需求）============
     def history_dir_get(self):

@@ -163,3 +163,19 @@ async function __main() {
     assert result['to'] == 'UI设计' and result['round'] == 3
     assert '分工' in result['kw']
     assert result['stored'] == 1
+
+
+def test_open_dir_creates_and_reports(monkeypatch):
+    """打开目录：不存在先建；os.startfile 收到确切目录路径。"""
+    import backend.domains.workspace.group_files_service as gf
+    opened = []
+    monkeypatch.setattr(gf.os, 'startfile', lambda p: opened.append(p))
+    svc = gf.GroupFilesService()
+    r = _j(svc.open_dir(None))
+    assert r['ok'] is True and os.path.isdir(r['dir'])
+    assert opened == [r['dir']]
+    # 指定群 → 开群子目录
+    opened.clear()
+    r2 = _j(svc.open_dir('sess-x'))
+    assert r2['ok'] is True and opened == [r2['dir']]
+    assert 'g' in os.path.basename(r2['dir'])

@@ -100,10 +100,22 @@ function groupEnsureEndpoint(group, endpointId, baseUrl, apiKey) {
   const prev = group.endpoints[endpointId] || {};
   const base = String(baseUrl || prev.base_url || '').trim();
   if (!base) return false;
+  let key = String(apiKey == null ? (prev.api_key || '') : apiKey).trim();
+  if (!key) {
+    // base 与当前端点同址 → 快照直接带当前 Key（同 groupMemberEndpoint 的复用语义）
+    try {
+      const cur = (typeof providerState !== 'undefined' && providerState)
+        ? String(providerState.base_url || '').trim() : '';
+      if (cur && base === cur) {
+        const snap = (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : {};
+        if (snap.apiKey) key = String(snap.apiKey).trim();
+      }
+    } catch (e) {}
+  }
   group.endpoints[endpointId] = {
     name: groupEndpointLabel(endpointId),
     base_url: base,
-    api_key: String(apiKey == null ? (prev.api_key || '') : apiKey).trim(),
+    api_key: key,
   };
   return !!group.endpoints[endpointId].api_key;
 }
@@ -114,7 +126,19 @@ function groupEnsureEndpoint(group, endpointId, baseUrl, apiKey) {
 function groupMemberEndpoint(group, member) {
   const t = groupModelTarget(member && member.model);
   if (!t) return null;
-  const ep = (group && group.endpoints && group.endpoints[t.endpointId]) || null;
+  let ep = (group && group.endpoints && group.endpoints[t.endpointId]) || null;
+  // Round 15 优化：成员端点与当前配置端点同址 → 直接复用当前 Key，不再要求
+  // 手填（智谱下给成员绑 glm:: 模型，本就该零配置可用）
+  if (ep && !ep.api_key) {
+    try {
+      const cur = (typeof providerState !== 'undefined' && providerState)
+        ? String(providerState.base_url || '').trim() : '';
+      if (cur && String(ep.base_url || '').trim() === cur) {
+        const snap = (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : {};
+        if (snap.apiKey) ep = Object.assign({}, ep, { api_key: snap.apiKey });
+      }
+    } catch (e) { /* 取不到当前 Key → 维持缺 Key 报错路径 */ }
+  }
   return { endpointId: t.endpointId, model: t.model, ep: ep,
            missing: (!ep || !ep.base_url) ? 'endpoint' : (!ep.api_key ? 'key' : '') };
 }
