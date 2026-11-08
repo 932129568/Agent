@@ -11,7 +11,7 @@
 |---|---|
 | 本轮提交 | 2 笔（feat 主批 / fix 卫生+锚点批）+ 打包产物（§6） |
 | 修复/新增 | 18 项（资源 3 + 桥侧 1 + 前端卫生 7 修 1 维持 + 工具链 7） |
-| 门禁 | build×2 一致 / 五契约 PASS / 锚点 **r41**（1260 符号）/ audit PASS / 桥侧 20 PASS / **pytest 1950 passed / 1 failed（预存遗留）/ 3 skipped** / **harbor:// 烟雾 origin OK** |
+| 门禁 | build×2 一致 / 五契约 PASS / 锚点 **r41**（1260 符号）/ audit PASS / 桥侧 20 PASS / **pytest 1951 passed / 0 failed / 3 skipped（首次零失败）** / **harbor:// 烟雾 origin OK** |
 
 ## 1. P1 两项收官
 
@@ -79,7 +79,7 @@ check_contract.py           → PASS（115 JS / 14 CSS）
 contract_diff --snapshot r41 → 115 模块/1260 符号；--compare → 漂移项: 无
 upgrade_audit.py            → 违规项: 无
 server/test/*.mjs ×20       → 全 PASS（contract-signatures 对 open_url 双参比对绿）
-pytest tests/ -q            → 1950 passed / 1 failed（预存遗留 windows-packaging）/ 3 skipped
+pytest tests/ -q            → **1951 passed / 0 failed / 3 skipped**（六轮以来首次零失败——预存遗留 windows-packaging 一并翻绿，见 §6）
 HARBOR_SMOKE=1 实跑          → origin OK（harbor://app/harbor.html）
 ```
 
