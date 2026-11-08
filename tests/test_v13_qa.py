@@ -121,7 +121,7 @@ class TestContractRedLines:
         declared = {n for n in _V12_EXTRA if n.startswith('mcp_')}
         assert actual == declared, '漏登记: %s；幽灵名: %s' % (
             sorted(actual - declared), sorted(declared - actual))
-        assert len(declared) == 13
+        assert len(declared) == 14   # R44：+mcp_search（渐进披露元工具，_V12_EXTRA）
         # v1.6 T12：三个 resources 方法在册
         assert {'mcp_list_resources', 'mcp_read_resource',
                 'mcp_save_subscriptions'} <= declared

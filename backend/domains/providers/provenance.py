@@ -11,10 +11,41 @@
 UTC 'Z' 后缀，秒级精度——与 hybrid/search/_utc_now 同款）。
 """
 import datetime
+import re
 
 # UNTRUSTED 包裹开/闭标记（开标记带来源三要素：URL/抓取时间/通道）
 UNTRUSTED_OPEN_FMT = '[UNTRUSTED DATA — 来源: {url} · 抓取于 {ts} · 通道: {channel}]'
 UNTRUSTED_CLOSE = '[END UNTRUSTED DATA]'
+
+# R44（F2d 改进⑫精简版）：提示注入「预筛标注」（spotlighting 精简版——只标注
+# 不阻断；认知沙箱/dual-LLM 属调研延伸）。模式库=中英常见指令覆盖指令句式，
+# 命中不改变内容一字（红线：包裹只增标记），只在载荷增注入嫌疑键。
+_INJECTION_PATTERNS = (
+    ('ignore_previous', re.compile(
+        r'ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?)'
+        r'|忽略(以上|之前|上面|先前)(的)?(所有)?(指令|提示|规则|设定)', re.I)),
+    ('role_override', re.compile(
+        r'you\s+are\s+now\s+(a|an)\b|act\s+as\s+(a|an)\s+(?!user)|从现在开始你(是|要扮演)'
+        r'|你现在(是|扮演)', re.I)),
+    ('system_prompt_probe', re.compile(
+        r'(reveal|show|print|repeat|输出|打印|泄露|告诉我)\s*(your|the|你的|您)?\s*'
+        r'(system\s+prompt|初始指令|系统提示)', re.I)),
+    ('exfil_instruction', re.compile(
+        r'(send|post|upload|exfiltrate|发送|上传|外传)\s*(this|the|这些)?\s*'
+        r'(content|data|conversation|内容|数据|对话)\s*(to|到|给)', re.I)),
+)
+
+
+def scan_injection(text):
+    """外部文本的提示注入嫌疑扫描（纯函数；标注型防御，不阻断）。
+
+    Returns:
+        list[str]: 命中的模式名（空列表=未见已知指令句式）。
+    """
+    t = str(text or '')
+    if not t:
+        return []
+    return [name for name, pat in _INJECTION_PATTERNS if pat.search(t)]
 
 
 def _utc_now():
@@ -70,6 +101,16 @@ def tag_payload(payload, source_url='', channel='', fetched_at='', source=None):
     if not isinstance(payload, dict):
         return payload
     payload['untrusted'] = True
+    # R44：注入嫌疑预筛（spotlighting 精简版）——扫描载荷文本字段，命中时
+    # 纯增 injection_suspect 键（不改内容一字；模型据此对外部内容降权）。
+    try:
+        blob = ' '.join(str(v) for k, v in payload.items()
+                        if isinstance(v, str) and k not in ('url',))
+        hits = scan_injection(blob)
+        if hits:
+            payload['injection_suspect'] = hits
+    except Exception:
+        pass    # 预筛失败不阻断 provenance 主语义
     prov = dict(source) if isinstance(source, dict) else {
         'url': str(source_url or ''),
         'channel': str(channel or ''),

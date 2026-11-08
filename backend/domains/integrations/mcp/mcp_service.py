@@ -362,6 +362,51 @@ class McpService:
     MAX_TOOLS_PER_SERVER = 50
     MAX_TOTAL_TOOLS = 200
 
+    def search_tools(self, query, limit=8):
+        """R44（F2d 改进⑤）：MCP 工具检索（mcp_search 元工具执行后端）。
+
+        工具面折叠后（>MCP_FOLD_THRESHOLD 只下发 mcp_search 元工具），模型经
+        本方法按相关度检索全量候选（**不受楼层闸限制**——渐进披露的价值就是
+        楼层闸截掉的工具仍可按需发现），返回完整条目（含 inputSchema 全文），
+        模型随后直接按净化函数名调用 mcp__xxx（执行层 mcpExecTool 与 schema
+        面解耦，动态名天然支持）。打分：子串命中（名×3/描述×1）+ 全 query 命中。
+        """
+        q = str(query or '').strip().lower()
+        if not q:
+            return {'ok': True, 'query': '', 'results': []}
+        enabled = {s['name'] for s in self._cfg.list_servers() if s.get('enabled')}
+        scored = []
+        with self._lock:
+            used = {}
+            for name in sorted(n for n, e in self._rt.items()
+                               if e.get('status') == 'ok' and n in enabled):
+                for tool in (self._rt.get(name) or {}).get('tools') or []:
+                    fname = self._unique_name(
+                        self.function_name(name, tool.get('name', '')), used)
+                    tname = str(tool.get('name') or '')
+                    desc = str(tool.get('description') or '')
+                    score = 0.0
+                    if q in tname.lower():
+                        score += 3.0
+                    if q in desc.lower():
+                        score += 1.0
+                    for tok in [t for t in re.split(r'[\s_\-]+', q) if len(t) >= 2]:
+                        if tok in tname.lower():
+                            score += 1.5
+                        if tok in desc.lower():
+                            score += 0.5
+                    if score <= 0:
+                        continue
+                    scored.append({'score': score, 'name': fname,
+                                   'server': name, 'tool': tname,
+                                   'description': '[MCP·%s] %s' % (name, desc),
+                                   'parameters': tool.get('inputSchema')
+                                                 or {'type': 'object',
+                                                     'properties': {}}})
+        scored.sort(key=lambda x: -x['score'])
+        return {'ok': True, 'query': q,
+                'results': scored[:max(1, int(limit or 8))]}
+
     def tool_schemas(self) -> list:
         """enabled 且 ok 的服务器 → OpenAI 函数定义（读缓存零 IO；stale/error 跳过）。
 

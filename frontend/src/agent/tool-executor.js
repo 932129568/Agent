@@ -120,6 +120,9 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // R42：记忆工具族——write 走 memory_remember（source='assistant' 走门控，
     // 敏感字段拒写）；search 走 memory_search（两源检索+频率/衰减重排序）
     if (name === 'memory_write')      return await callApi('memory_remember', [String(args.text || ''), 'assistant', true]);
+    // R44：MCP 渐进披露——检索元工具（折叠模式下发现工具，返回含 schema 条目，
+    // 模型随后直接按 name 调 mcp__xxx 走既有 mcpExecTool 动态执行）
+    if (name === 'mcp_search')        return await callApi('mcp_search', [String(args.query || ''), Math.min(20, Math.max(1, parseInt(args.limit, 10) || 8))]);
     if (name === 'memory_search')     return await callApi('memory_search', [String(args.query || ''), Math.min(20, Math.max(1, parseInt(args.limit, 10) || 8))]);
     if (name === 'clipboard_read')    return await callApi('get_clipboard', withToken([], guardToken));
     if (name === 'clipboard_write')   return await callApi('set_clipboard', withToken([args.text || ''], guardToken));

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Api 门面（对外契约层）：58 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
+"""Api 门面（对外契约层）：59 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
 R39 追加记忆面板逐条管理 memory_entries_list/memory_entry_erase/memory_entry_pin，
 均 _V12_EXTRA 隐身），
 签名/位置参数/返回协议逐字保持 v1.0.0。
@@ -103,7 +103,7 @@ _V12_EXTRA = frozenset({
     'memory_context_build', 'memory_remember', 'memory_erase',
     'memory_stats', 'memory_audit_query',
     'memory_entries_list', 'memory_entry_erase', 'memory_entry_pin',
-    'memory_search', 'notes_append', 'notes_get',
+    'memory_search', 'notes_append', 'notes_get', 'mcp_search',
 })
 
 
@@ -1728,6 +1728,13 @@ class Api:
     def mcp_check_tool(self, server, tool, arguments_json='{}'):
         """护栏定档：{action: allow/confirm/block, tier, tier_source, reason?}；落审计 check。"""
         return ok(self._mcp.check_tool(server, tool, self._mcp_parse_args(arguments_json)))
+
+    def mcp_search(self, query, limit=8):
+        """R44 MCP 工具检索（mcp_search 元工具执行后端；_V12_EXTRA 隐身）。
+
+        工具面折叠（>25 个 mcp__ 定义时）后的发现通道：返回含 inputSchema
+        全文的条目，模型随后直接按净化函数名调用 mcp__xxx。"""
+        return ok(self._mcp.search_tools(str(query or ''), limit))
 
     def mcp_call_tool(self, server, tool, arguments_json='{}', decision='deny', token=None):
         """执行 MCP 工具（decision 默认 deny；后端二次 enforce + 审计）。

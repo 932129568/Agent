@@ -117,6 +117,19 @@ _AGENT_MEMORY_TOOLS = (
             'required': ['query'], 'additionalProperties': False}}},
 )
 
+# ---- R44（F2d 改进⑤）：MCP 工具面渐进披露——工具数超阈值时不下发全部
+# mcp__ 定义（10-30% 上下文吞噬源，调研轮 29），改下发 mcp_search 元工具；
+# 模型检索到条目（含 inputSchema 全文）后直接按净化函数名调用 mcp__xxx
+# （执行层 mcpExecTool→mcp_call_tool 与 schema 面解耦，动态名天然支持）。
+MCP_FOLD_THRESHOLD = 25
+
+_AGENT_MCP_SEARCH = {'type': 'function', 'function': {'name': 'mcp_search',
+    'description': '需要调用MCP服务器工具但工具面只有本检索器时|按相关度检索全部MCP工具,返回含参数schema的完整条目,随后直接按name调用|工具面已直接列出的mcp__工具不必检索',
+    'parameters': {'type': 'object', 'properties': {
+        'query': {'type': 'string'},
+        'limit': {'type': 'integer'}},
+        'required': ['query'], 'additionalProperties': False}}}
+
 # include_agent=True 的增量全集（R11 过滤前）——L0-3 契约差分断言「增量恰为
 # browser_*/software_*/memory_* 工具族」即以此常量为基准（R42 起含记忆工具族）
 AGENT_TOOLS = (_AGENT_BROWSER_SEARCH, _AGENT_BROWSER_OPEN, _AGENT_SOFTWARE_CALL
@@ -282,7 +295,11 @@ def build(role='full', ws_on=True, mcp_tools=None, include_agent=False,
         ]
     # v1.3 MCP：仅 full 角色且调用方显式传入时尾部追加（默认路径零变化）
     if role == 'full' and mcp_tools:
-        tools += list(mcp_tools)
+        if len(mcp_tools) > MCP_FOLD_THRESHOLD:
+            # R44 渐进披露：超阈值 → 全部 mcp__ 定义折叠为 mcp_search 元工具
+            tools += [_AGENT_MCP_SEARCH]
+        else:
+            tools += list(mcp_tools)
     # v1.8.0 C 域：Agent 工具族（仅 full 角色且显式开启；R11 端点过滤）
     if role == 'full' and include_agent:
         agent = list(AGENT_TOOLS)
