@@ -21,6 +21,9 @@ MEMORY_PATH = os.path.join(CONFIG_DIR, 'memory.json')
 # R38（记忆模块 v2 接入）：SQLite 四层记忆库（R36 开发文档 §8.1；memory.json
 # 为 legacy 契约存储保持不动，本库为渐进增强层；迁移器一次性导入 legacy 条目）。
 MEMORY_DB_PATH = os.path.join(CONFIG_DIR, 'memory.db')
+# R42（结构化笔记）：压缩纪要跨压缩持久化（文件系统即上下文——2026 共识，
+# 调研轮 3/25）。独立 notes/ 目录，config.json 零污染。
+NOTES_DIR = os.path.join(CONFIG_DIR, 'notes')
 SESSION_WS_FILE = os.path.join(CONFIG_DIR, 'session_ws.json')
 RECENT_WS_FILE = os.path.join(CONFIG_DIR, 'recent_ws.json')
 WS_ENABLED_FILE = os.path.join(CONFIG_DIR, 'ws_enabled.json')

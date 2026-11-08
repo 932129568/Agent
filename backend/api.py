@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Api 门面（对外契约层）：54 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
+"""Api 门面（对外契约层）：57 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
 R39 追加记忆面板逐条管理 memory_entries_list/memory_entry_erase/memory_entry_pin，
 均 _V12_EXTRA 隐身），
 签名/位置参数/返回协议逐字保持 v1.0.0。
@@ -103,6 +103,7 @@ _V12_EXTRA = frozenset({
     'memory_context_build', 'memory_remember', 'memory_erase',
     'memory_stats', 'memory_audit_query',
     'memory_entries_list', 'memory_entry_erase', 'memory_entry_pin',
+    'memory_search', 'notes_append', 'notes_get',
 })
 
 
@@ -492,6 +493,10 @@ class Api:
         """
         r = self._config.session_purge(sid, task_ids_json)
         if r.get('ok'):
+            try:
+                self._notes.delete(sid)   # R42：purge 清会话笔记（不留孤儿）
+            except Exception as e:
+                self._log.warning('purge 后 notes 清理失败: %r', e)
             try:
                 self._workspace.delete_session_ws(sid)
             except Exception as e:
@@ -969,6 +974,24 @@ class Api:
 
     # ---- R38 记忆 v2（SQLite 四层库；_V12_EXTRA 隐身；引擎不可用安全降级）----
     _MEMORY_USER = 'local'          # 单用户规范身份（legacy 导入同款）
+
+    def memory_search(self, query, limit=8):
+        """R42 记忆工具面检索（memory_search 工具的执行后端；_V12_EXTRA 隐身）。
+
+        两源合并（memory.db + legacy memory.json），bigram 相关 × 频率强化
+        （命中→1.5x）× 时间衰减（≤7 天 1.5x / >30 天 0.3x）重排序；
+        profile 命中刷新衰减时钟（R16 语义）。引擎不可用回落 legacy-only。"""
+        r = self._memory_db.search(self._MEMORY_USER, str(query or ''), limit)
+        return ok(r)
+
+    # ---- R42：会话结构化笔记（NOTES；文件系统即上下文） ----
+    def notes_append(self, sid, text):
+        """追加会话笔记（compact 纪要落盘入口；notes/<sid>.md 独立文件）。"""
+        return self._notes.append(str(sid or ''), str(text or ''))
+
+    def notes_get(self, sid):
+        """读会话笔记全文（恢复/继续任务时前端注入系统段）。"""
+        return self._notes.get(str(sid or ''))
 
     def memory_remember(self, text, source='user', explicit=True,
                         attribute=None, session_id='legacy'):

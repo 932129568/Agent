@@ -568,9 +568,11 @@ class TestToolsSchemaStrict:
         by_name = {t['function']['name']: t['function']['parameters']
                    for t in AGENT_TOOLS}
         for n in ('browser_navigate', 'browser_extract', 'browser_click',
-                  'browser_fill', 'browser_screenshot', 'browser_close'):
+                  'browser_fill', 'browser_screenshot', 'browser_close',
+                  'memory_write', 'memory_search'):   # R42：记忆工具族同 strict
             p = by_name[n]
             assert p.get('additionalProperties') is False, n
+        assert by_name['memory_write']['properties']['kind']['enum'] ==             ['fact', 'preference', 'rule']
         assert by_name['browser_extract']['properties']['mode']['enum'] == \
             ['markdown', 'text', 'links']
         assert by_name['browser_navigate']['required'] == ['url']

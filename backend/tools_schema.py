@@ -92,10 +92,29 @@ _AGENT_BROWSER_DRIVER = (
             'required': [], 'additionalProperties': False}}},
 )
 
+# ---- R42：记忆工具族（memory_write / memory_search）——2026 前沿共识「记忆是
+# 模型主动读写的工具而非被动注入的库」（F2d/轮9：Claude memory tool+context
+# editing 组合较基线 +39%）。strict schema + 三段式（M5.3/M5.9 红线）；
+# 非 browser_ 前缀 → R11 GLM 端点过滤天然放行（记忆与端点无关）。
+_AGENT_MEMORY_TOOLS = (
+    {'type': 'function', 'function': {'name': 'memory_write',
+        'description': '需要长期记住的用户事实/偏好/项目约束时|写入长期记忆库(门控校验,敏感字段拒写,重复返回去重结果)|临时任务状态用计划卡,单次会话内容不要写入',
+        'parameters': {'type': 'object', 'properties': {
+            'text': {'type': 'string', 'description': '一句话事实（含主语与具体值）'},
+            'kind': {'type': 'string', 'enum': ['fact', 'preference', 'rule']}},
+            'required': ['text'], 'additionalProperties': False}}},
+    {'type': 'function', 'function': {'name': 'memory_search',
+        'description': '回答前怀疑长期记忆里有相关事实/偏好/约束时|按相关度检索记忆库,返回带来源/置信度/命中时间的条目|系统提示已注入的记忆不必重复检索,会话内近期上下文直接引用',
+        'parameters': {'type': 'object', 'properties': {
+            'query': {'type': 'string'},
+            'limit': {'type': 'integer'}},
+            'required': ['query'], 'additionalProperties': False}}},
+)
+
 # include_agent=True 的增量全集（R11 过滤前）——L0-3 契约差分断言「增量恰为
-# browser_*/software_* 工具族」即以此常量为基准
+# browser_*/software_*/memory_* 工具族」即以此常量为基准（R42 起含记忆工具族）
 AGENT_TOOLS = (_AGENT_BROWSER_SEARCH, _AGENT_BROWSER_OPEN, _AGENT_SOFTWARE_CALL
-               ) + _AGENT_BROWSER_DRIVER
+               ) + _AGENT_BROWSER_DRIVER + _AGENT_MEMORY_TOOLS
 
 
 def build(role='full', ws_on=True, mcp_tools=None, include_agent=False,

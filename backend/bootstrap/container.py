@@ -55,7 +55,7 @@ class ServiceContainer:
         'mcp_config', 'mcp', 'local', 'webdav', 'sandbox', 'software',
         'hybrid', 'reader', 'model_prefs', 'checkpoints', 'search', 'driver',
         'plans', 'session', 'operation', 'task_registry', 'scheduler', 'native_ui', 'expert',
-        'group_files', 'memory_db',
+        'group_files', 'memory_db', 'notes',
     )
     API_ALIASES = {
         '_runtime': 'runtime', '_config': 'config', '_workspace': 'workspace',
@@ -69,7 +69,7 @@ class ServiceContainer:
         '_plan': 'plans', '_session': 'session', '_operation': 'operation',
         '_registry': 'task_registry', '_scheduler': 'scheduler', '_native_ui': 'native_ui',
         '_expert': 'expert', '_group_files': 'group_files',
-        '_memory_db': 'memory_db',
+        '_memory_db': 'memory_db', '_notes': 'notes',
     }
 
     def __init__(self):
@@ -125,6 +125,9 @@ class ServiceContainer:
         self.checkpoints = CheckpointService()
         self.expert = ExpertPackageService()
         self.group_files = GroupFilesService()   # Round 14：群聊交接文档仓库
+        # R42：会话结构化笔记（压缩纪要跨压缩持久；notes/<sid>.md 独立文件）
+        from ..domains.workspace.notes_service import NotesService
+        self.notes = NotesService(logger=self._log)
         global _BUILTIN_EXPERTS_READY
         if not _BUILTIN_EXPERTS_READY:
             _BUILTIN_EXPERTS_READY = True

@@ -7519,6 +7519,10 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // 原不携带 token，guard.json 提档后 enforce_exec 必拒且无 UI 确认路径（提档即砖）。
     if (name === 'open_app')          return await callApi('open_app', withToken([pickPath(args)], guardToken));
     if (name === 'open_url')          return await callApi('open_url', [args.url]);
+    // R42：记忆工具族——write 走 memory_remember（source='assistant' 走门控，
+    // 敏感字段拒写）；search 走 memory_search（两源检索+频率/衰减重排序）
+    if (name === 'memory_write')      return await callApi('memory_remember', [String(args.text || ''), 'assistant', true]);
+    if (name === 'memory_search')     return await callApi('memory_search', [String(args.query || ''), Math.min(20, Math.max(1, parseInt(args.limit, 10) || 8))]);
     if (name === 'clipboard_read')    return await callApi('get_clipboard', withToken([], guardToken));
     if (name === 'clipboard_write')   return await callApi('set_clipboard', withToken([args.text || ''], guardToken));
     if (name === 'list_processes')    return await callApi('list_processes', [args.keyword || null]);
@@ -16693,7 +16697,7 @@ async function runAgentLoop(s, apiKey, opts) {
       // v1.3 R4：mcp__ 工具 bypass 路由裁剪（用户显式启用的外部工具不参与域路由）
       // v1.8.0 C 域：browser_*/software_* 同样 bypass（Agent 工具族由功能分级
       // 开关管控，不参与关键词域路由——「搜索/调软件」类意图关键词覆盖不全）
-      effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_)/.test(t.function.name));
+      effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_|memory_)/.test(t.function.name));
     }
     // 智能档：按任务复杂度自动选模型与推理力度（思考 token 按输出计价，轻任务应关思考）
     const _route = resolveModelEffort(routeText, routedSet.size > ROUTE_ALWAYS.length);
@@ -16807,7 +16811,7 @@ async function runAgentLoop(s, apiKey, opts) {
           const allowed = new Set([...routedSet, ...taskUsed]);
           // v1.3 R4：mcp__ 工具 bypass 路由裁剪（权限档热切换后同样放行）
           // v1.8.0 C 域：browser_*/software_* 同样 bypass（同首轮过滤口径）
-          effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_)/.test(t.function.name));
+          effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_|memory_)/.test(t.function.name));
         }
       }
       await compactHistory(s);
@@ -16821,6 +16825,15 @@ async function runAgentLoop(s, apiKey, opts) {
         // 自此激活：常驻 rule/preference 依旧恒注入，query 相关 top2 + 扩展库
         // 排序生效）。纯 legacy/无记忆用户输出逐字节不变（_memory_inject 空段回退）。
         const beSys = await callApi('build_system_prompt', [String(routeText || '').slice(0, 400)]);
+        // R42（结构化笔记）：会话 NOTES 注入（压缩纪要跨压缩持久；恢复/继续任务
+        // 场景由 compact 落盘的 notes/<sid>.md 供给）。尾部 4000 字，空文件零注入。
+        try {
+          const _notesRaw = await callApi('notes_get', [s.id], 5000);
+          const _notes = JSON.parse(_notesRaw || '{}');
+          if (_notes && _notes.ok && _notes.text) {
+            sysContent += '\n\n【会话笔记（NOTES，跨压缩持久）】\n' + String(_notes.text).slice(-4000);
+          }
+        } catch (e2) { /* 笔记缺失/桥接失败不阻塞主流程 */ }
         // W0 R19：执行铁律改读 prompts/efficiency.md（版本化）；失败回落前端
         // 内置常量（内容与 prompts 文件逐字节一致，回落零行为差异）
         let effText = EFFICIENCY_PROMPT;
@@ -25699,7 +25712,7 @@ async function compactNow(s, apiKey, opts = {}) {
     const _cmpModel = _glm ? 'glm-4.5-flash' : (providerState.model || 'glm-4.5-flash');
     // W0 R19：压缩提示词改读 prompts/compact.md（版本化）；失败回落内置串
     // （与 prompts 文件渲染值逐字节一致，回落零行为差异）
-    let _cmpPrompt = '把以下人机协作历史压缩成 ≤200 字工作纪要，必须保留: 任务目标、涉及文件路径、已做改动、未完成事项、关键结论、工具调用序列(工具名与关键参数摘要)。直接输出: \n\n';
+    let _cmpPrompt = '把以下人机协作历史压缩成 ≤250 字工作纪要。分类保留、分类丢弃——\n必须保留: 任务目标与用户显式约束、涉及文件路径、已做改动与关键实现细节、未解决错误与当前卡点(保留报错关键行)、关键结论、下一步动作。\n必须丢弃: 已成功处理完的工具输出原文、寒暄与重复确认、与任务无关的支线。\n直接输出: \n\n';
     try {
       const _cmpRaw = await callApi('prompt_get', ['compact']);
       const _cmp = JSON.parse(_cmpRaw || '{}');
@@ -25758,6 +25771,9 @@ async function compactNow(s, apiKey, opts = {}) {
     }
     // 重渲染后再追加提示（quietAdd 只进 DOM 不落库，若先 add 会被整段重建抹掉）
     quietAdd(`已压缩 ${dumpSrc.length} 条历史 → 1 份纪要，下轮请求输入将大幅下降。`);
+    // R42（结构化笔记）：纪要落盘 notes/<sid>.md——跨压缩/跨重启持久（文件即
+    // 上下文）；恢复/继续任务时经 notes_get 注入系统段。失败静默不阻断压缩。
+    try { callApi('notes_append', [s.id, summary]).catch(() => {}); } catch (e) {}
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 建议㉕（二轮）：补 rejection 处理（85 已修此处漏）
   } catch (e) {
     if (opts.quiet) { console.warn('自动压缩失败(静默跳过)', e);

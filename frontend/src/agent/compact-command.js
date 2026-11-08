@@ -151,7 +151,7 @@ async function compactNow(s, apiKey, opts = {}) {
     const _cmpModel = _glm ? 'glm-4.5-flash' : (providerState.model || 'glm-4.5-flash');
     // W0 R19：压缩提示词改读 prompts/compact.md（版本化）；失败回落内置串
     // （与 prompts 文件渲染值逐字节一致，回落零行为差异）
-    let _cmpPrompt = '把以下人机协作历史压缩成 ≤200 字工作纪要，必须保留: 任务目标、涉及文件路径、已做改动、未完成事项、关键结论、工具调用序列(工具名与关键参数摘要)。直接输出: \n\n';
+    let _cmpPrompt = '把以下人机协作历史压缩成 ≤250 字工作纪要。分类保留、分类丢弃——\n必须保留: 任务目标与用户显式约束、涉及文件路径、已做改动与关键实现细节、未解决错误与当前卡点(保留报错关键行)、关键结论、下一步动作。\n必须丢弃: 已成功处理完的工具输出原文、寒暄与重复确认、与任务无关的支线。\n直接输出: \n\n';
     try {
       const _cmpRaw = await callApi('prompt_get', ['compact']);
       const _cmp = JSON.parse(_cmpRaw || '{}');
@@ -210,6 +210,9 @@ async function compactNow(s, apiKey, opts = {}) {
     }
     // 重渲染后再追加提示（quietAdd 只进 DOM 不落库，若先 add 会被整段重建抹掉）
     quietAdd(`已压缩 ${dumpSrc.length} 条历史 → 1 份纪要，下轮请求输入将大幅下降。`);
+    // R42（结构化笔记）：纪要落盘 notes/<sid>.md——跨压缩/跨重启持久（文件即
+    // 上下文）；恢复/继续任务时经 notes_get 注入系统段。失败静默不阻断压缩。
+    try { callApi('notes_append', [s.id, summary]).catch(() => {}); } catch (e) {}
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 建议㉕（二轮）：补 rejection 处理（85 已修此处漏）
   } catch (e) {
     if (opts.quiet) { console.warn('自动压缩失败(静默跳过)', e);

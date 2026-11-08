@@ -117,6 +117,10 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
     // 原不携带 token，guard.json 提档后 enforce_exec 必拒且无 UI 确认路径（提档即砖）。
     if (name === 'open_app')          return await callApi('open_app', withToken([pickPath(args)], guardToken));
     if (name === 'open_url')          return await callApi('open_url', [args.url]);
+    // R42：记忆工具族——write 走 memory_remember（source='assistant' 走门控，
+    // 敏感字段拒写）；search 走 memory_search（两源检索+频率/衰减重排序）
+    if (name === 'memory_write')      return await callApi('memory_remember', [String(args.text || ''), 'assistant', true]);
+    if (name === 'memory_search')     return await callApi('memory_search', [String(args.query || ''), Math.min(20, Math.max(1, parseInt(args.limit, 10) || 8))]);
     if (name === 'clipboard_read')    return await callApi('get_clipboard', withToken([], guardToken));
     if (name === 'clipboard_write')   return await callApi('set_clipboard', withToken([args.text || ''], guardToken));
     if (name === 'list_processes')    return await callApi('list_processes', [args.keyword || null]);

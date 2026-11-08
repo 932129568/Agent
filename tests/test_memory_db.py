@@ -209,6 +209,36 @@ def test_api_entries_surface_and_mirror(fresh_home, tmp_path, monkeypatch):
     assert bad['ok'] is False and bad['error']['code'] == 'BAD_PARAMS'
 
 
+def test_memory_search_ranking_and_touch(mem_env):
+    """R42 记忆工具面检索：相关度 × 频率强化 × 时间衰减 + legacy 合并 + 命中刷新。"""
+    svc, jp = mem_env
+    svc.remember('s1', 'local', '部署脚本在 D 盘 deploy 目录', attribute='deploy')
+    svc.remember('s1', 'local', '数据备份在 E 盘 bak 目录', attribute='backup')
+    # preference 句式 → 画像层（有 access_count/last_accessed，频率强化生效面）
+    svc.remember('s1', 'local', '我喜欢用 PowerShell 写部署脚本')
+    # legacy 记忆合并进检索面
+    _write_legacy(jp, [{'text': '部署脚本备用路径在 C 盘 legacy-bin', 'kind': 'fact',
+                        'ts': '01-01 10:00'}])
+    r = svc.search('local', '部署脚本', 8)
+    assert r['ok'] and r['results'], r
+    texts = [x['text'] for x in r['results']]
+    assert any('deploy' in t for t in texts) and any('legacy-bin' in t for t in texts)
+    # 相关度首位是 db 侧精确相关条目
+    assert 'deploy' in r['results'][0]['text'] or 'legacy' in str(r['results'][0]['kind'])
+    # 无关 query 不返回低分噪音（sim=0 过滤）
+    r0 = svc.search('local', '完全无关量子飞船', 8)
+    assert r0['results'] == [], r0
+    # 空查询防御
+    assert svc.search('local', '', 8)['results'] == []
+    # 频率强化：重复检索命中画像层 → touch 刷 access_count → 分数单调不降
+    r1 = svc.search('local', '部署脚本', 8)
+    top1 = next((x for x in r1['results'] if x['kind'] == 'profile'), None)
+    r2 = svc.search('local', '部署脚本', 8)
+    top2 = next((x for x in r2['results'] if x['kind'] == 'profile'), None)
+    assert top1 and top2 and top1['text'] == top2['text']
+    assert top2['score'] >= top1['score'] - 1e-6
+
+
 def test_container_and_v12_registration():
     """容器装配 + API_ALIASES + _V12_EXTRA 登记（get_api_info 隐身铁律）。"""
     from backend.bootstrap.container import ServiceContainer

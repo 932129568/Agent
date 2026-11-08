@@ -97,13 +97,17 @@ class TestBuildToolsIncludeAgent:
         assert inc_names[len(base_names):] == AGENT_TOOL_NAMES
 
     def test_r11_endpoint_filtering_two_forms(self):
-        """R11：GLM 端点只留 software_call（browser_* 不进）；非 GLM 全量。"""
+        """R11：GLM 端点只留 software_call+memory_*（browser_* 不进）；非 GLM 全量。
+
+        R42 更新：memory_write/memory_search 与端点无关（2026 共识：记忆工具
+        不依赖端点能力），GLM 过滤（仅剥 browser_*）天然放行。"""
         base = json.loads(tools_schema.build('full', True))
         base_names = [t['function']['name'] for t in base]
         glm = json.loads(tools_schema.build('full', True, include_agent=True,
                                             is_glm_endpoint=True))
         assert [t['function']['name'] for t in glm] == \
-            base_names + ['software_call'], 'GLM 端点不得出现 browser_*'
+            base_names + ['software_call', 'memory_write', 'memory_search'], \
+            'GLM 端点不得出现 browser_*；memory_* 与端点无关应保留'
         non_glm = json.loads(tools_schema.build('full', True,
                                                 include_agent=True,
                                                 is_glm_endpoint=False))

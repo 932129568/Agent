@@ -31,6 +31,19 @@ Harbor 面向模型的工具经 `backend/tools_schema.py` 的 `build()` 输出
 `BrowserErrorCode` taxonomy：BAD_PARAMS/NAV_BLOCKED/SSRF_BLOCKED/TIMEOUT/
 SESSION_BUSY/SESSION_CLOSED/EXTRACT_EMPTY/…）。
 
+### 2.2 R42 记忆工具族（memory_write / memory_search）
+
+> 2026 共识（F2d 调研轮 9/26）：记忆是**模型主动读写的工具**而非被动注入的库。
+
+| 工具 | 确认档 | 要点 |
+|---|---|---|
+| `memory_write` | session | 走 `memory_remember` 门控（untrusted 零写入/敏感字段拒写/NOOP 幂等去重）；source=assistant；非 browser_ 前缀 → GLM 端点同样可用 |
+| `memory_search` | off（只读） | 两源检索（memory.db + legacy memory.json）；bigram 相关 × 频率强化(命中→1.5x) × 时间衰减(≤7 天 1.5x / >30 天 0.3x)；命中刷新衰减时钟 |
+
+路由 bypass：`memory_` 前缀不参与域裁剪（run-controller，同 browser_/software_
+先例）；NOTES 结构化笔记（notes/<sid>.md，压缩纪要跨压缩持久，恢复时经
+`notes_get` 注入系统段，`session_purge` 同步清除）同轮落地。
+
 ## 3. 工具描述三段式规范（consolidate lint）
 
 新增/修改面向模型的工具描述时，**description 必须是三段式**，竖线分隔：

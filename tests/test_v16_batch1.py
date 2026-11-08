@@ -315,7 +315,10 @@ class TestT5PromptUpdates:
 
     def test_compact_prompt_keeps_tool_sequence(self):
         src = _fe('97-compact.js')
-        assert '工具调用序列(工具名与关键参数摘要)' in src
+        # R42 断言更新：分类压缩重构了保留清单——原「工具调用序列」字样并入
+        # 「已做改动与关键实现细节」，并新增丢弃分类（已处理工具输出原文）
+        assert '已做改动与关键实现细节' in src
+        assert '必须丢弃' in src
 
     def test_local_mode_segment(self):
         src = _fe('60-agent-loop.js')

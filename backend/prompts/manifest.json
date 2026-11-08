@@ -3,9 +3,9 @@
   "prompts": {
     "compact": {
       "file": "compact.md",
-      "version": "1.0.0",
-      "sha256": "fb11f7500bf4e7d31e19d25bbeecaf83fbb20a29dafe4d2c0368dd7b3b7526f2",
-      "bytes": 229
+      "version": "1.1.0",
+      "sha256": "69c7a71b39b17dcc7f05c249e6ea72c7a69b7d9ec0f86eb1dff96e8ce5eedc38",
+      "bytes": 417
     },
     "efficiency": {
       "file": "efficiency.md",

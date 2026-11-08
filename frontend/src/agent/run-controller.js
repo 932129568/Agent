@@ -342,7 +342,7 @@ async function runAgentLoop(s, apiKey, opts) {
       // v1.3 R4：mcp__ 工具 bypass 路由裁剪（用户显式启用的外部工具不参与域路由）
       // v1.8.0 C 域：browser_*/software_* 同样 bypass（Agent 工具族由功能分级
       // 开关管控，不参与关键词域路由——「搜索/调软件」类意图关键词覆盖不全）
-      effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_)/.test(t.function.name));
+      effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_|memory_)/.test(t.function.name));
     }
     // 智能档：按任务复杂度自动选模型与推理力度（思考 token 按输出计价，轻任务应关思考）
     const _route = resolveModelEffort(routeText, routedSet.size > ROUTE_ALWAYS.length);
@@ -456,7 +456,7 @@ async function runAgentLoop(s, apiKey, opts) {
           const allowed = new Set([...routedSet, ...taskUsed]);
           // v1.3 R4：mcp__ 工具 bypass 路由裁剪（权限档热切换后同样放行）
           // v1.8.0 C 域：browser_*/software_* 同样 bypass（同首轮过滤口径）
-          effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_)/.test(t.function.name));
+          effectiveTools = effectiveTools.filter(t => !t.function || allowed.has(t.function.name) || t.function.name.startsWith('mcp__') || /^(browser_|software_|memory_)/.test(t.function.name));
         }
       }
       await compactHistory(s);
@@ -470,6 +470,15 @@ async function runAgentLoop(s, apiKey, opts) {
         // 自此激活：常驻 rule/preference 依旧恒注入，query 相关 top2 + 扩展库
         // 排序生效）。纯 legacy/无记忆用户输出逐字节不变（_memory_inject 空段回退）。
         const beSys = await callApi('build_system_prompt', [String(routeText || '').slice(0, 400)]);
+        // R42（结构化笔记）：会话 NOTES 注入（压缩纪要跨压缩持久；恢复/继续任务
+        // 场景由 compact 落盘的 notes/<sid>.md 供给）。尾部 4000 字，空文件零注入。
+        try {
+          const _notesRaw = await callApi('notes_get', [s.id], 5000);
+          const _notes = JSON.parse(_notesRaw || '{}');
+          if (_notes && _notes.ok && _notes.text) {
+            sysContent += '\n\n【会话笔记（NOTES，跨压缩持久）】\n' + String(_notes.text).slice(-4000);
+          }
+        } catch (e2) { /* 笔记缺失/桥接失败不阻塞主流程 */ }
         // W0 R19：执行铁律改读 prompts/efficiency.md（版本化）；失败回落前端
         // 内置常量（内容与 prompts 文件逐字节一致，回落零行为差异）
         let effText = EFFICIENCY_PROMPT;

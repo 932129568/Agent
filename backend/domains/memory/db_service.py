@@ -189,6 +189,98 @@ class MemoryDbService:
                 self._log.warning('build_context 失败: %r', e)
             return None
 
+    # ---- R42：记忆工具面检索（模型主动读；频率强化 + 久未用衰减） ----
+    def search(self, user_id, query, limit=8):
+        """长期记忆检索（memory_search 工具执行后端）。
+
+        合并两源：memory.db（profile+current facts）与 legacy memory.json。
+        打分 = bigram 相关度 × 频率强化(命中→最高 1.5x) × 时间衰减
+        （7 天内 1.5x / 30 天以上 0.3x——2026 共识重排序口径，调研轮 26）。
+        profile 命中刷新衰减时钟（R16 语义：命中即 touch）。
+        引擎不可用 → 仅 legacy 结果；全失败 → {'ok': False, 'results': []}。"""
+        q = str(query or '').strip()
+        if not q:
+            return {'ok': True, 'results': [], 'query': ''}
+        import time as _time
+        now = _time.time()
+        scored = []
+
+        def _score(text, sim, hits=0, last_hit=''):
+            base = float(sim)
+            if base <= 0.0:
+                return None
+            freq = 1.0 + 0.5 * min(1.0, float(hits or 0) / 10.0)
+            rec = 1.0
+            if last_hit:
+                try:
+                    from agent_memory.memory_store import utc_now_iso
+                    lh = _time.mktime(_time.strptime(
+                        str(last_hit)[:19], '%Y-%m-%dT%H:%M:%S'))
+                    age_days = (now - lh) / 86400.0
+                    rec = 1.5 if age_days <= 7 else (0.3 if age_days > 30 else 1.0)
+                except Exception:
+                    rec = 1.0
+            return base * freq * rec
+
+        mm = self.ensure_synced()
+        if mm is not None:
+            with self._lock:
+                from agent_memory.memory_store import _sim
+                touched = []
+                for r in mm.conn.execute(
+                        "SELECT key, value, source, weight, access_count,"
+                        " last_accessed FROM profile_kv WHERE user_id=?",
+                        (user_id,)):
+                    try:
+                        val = str(json.loads(r['value']))
+                    except Exception:
+                        val = str(r['value'])
+                    sc = _score(val, _sim(val, q), r['access_count'],
+                                r['last_accessed'])
+                    if sc is None:
+                        continue
+                    scored.append({'kind': 'profile', 'id': r['key'],
+                                   'text': val, 'source': r['source'],
+                                   'confidence': round(float(r['weight']), 2),
+                                   'score': round(sc, 4)})
+                    touched.append(r['key'])
+                for r in mm.conn.execute(
+                        "SELECT fact_id, attribute, value, tx_time"
+                        " FROM fact_records WHERE entity_id=? AND is_current=1",
+                        (user_id,)):
+                    try:
+                        val = str(json.loads(r['value']))
+                    except Exception:
+                        val = str(r['value'])
+                    sc = _score(val, _sim(val, q), 0, r['tx_time'])
+                    if sc is None:
+                        continue
+                    scored.append({'kind': 'fact', 'id': r['fact_id'],
+                                   'text': val, 'attribute': r['attribute'],
+                                   'score': round(sc, 4)})
+                if touched:
+                    mm.profiles.touch(user_id, touched)
+        # legacy memory.json 合并（用户既有记忆必须在检索面）
+        try:
+            with open(paths.MEMORY_PATH, encoding='utf-8') as f:
+                arr = json.load(f)
+            if isinstance(arr, list):
+                from agent_memory.memory_store import _sim as _sim2
+                for i, entry in enumerate(arr):
+                    text = str((entry or {}).get('text') or '') if isinstance(entry, dict) else str(entry or '')
+                    if not text.strip():
+                        continue
+                    sc = _score(text, _sim2(text, q))
+                    if sc is None:
+                        continue
+                    scored.append({'kind': 'legacy', 'index': i, 'text': text,
+                                   'source': 'user',
+                                   'confidence': 1.0, 'score': round(sc, 4)})
+        except Exception:
+            pass
+        scored.sort(key=lambda x: -x['score'])
+        return {'ok': True, 'query': q, 'results': scored[:max(1, int(limit or 8))]}
+
     def extras_block(self, user_id, session_id, query='', max_chars=600):
         """系统提示注入的「扩展段」：仅当 db 存在**非 legacy**记忆时返回非空。
 
