@@ -200,7 +200,13 @@ function _sessionSaveSignature(s) {
     s.autoResume || 0,
     (s.plan && s.plan.task_id) || '',
     s.projectId || '',
+    // R37 修复（D9）：projectName/projectWorkspace/_spentCost 也在持久化白名单
+    // 里（normalizeSessions），原签名漏记——单独改项目名/工作区/花费时被
+    // 「未变更短路」跳过落盘，重启回退。
+    s.projectName || '',
+    s.projectWorkspace || '',
     typeof s._spentTokens === 'number' ? s._spentTokens : '',
+    typeof s._spentCost === 'number' ? s._spentCost : '',
     // apiFrozen 是小型参数对象，直接序列化（每个会话仅一次，成本可忽略）
     s.apiFrozen ? JSON.stringify(s.apiFrozen) : '',
     // R20 扫描修复：群聊配置改动（成员/端点 Key/点名队列）原不在签名里——

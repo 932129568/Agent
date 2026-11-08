@@ -91,7 +91,12 @@ function uiStrictSchemaUnsupported(result) {
 
 function productionUiGenerate(options) {
   return async ({ messages, signal, onText, strictSchema }) => {
-    const endpoint = options.endpoint || createUiEndpointSnapshot();
+    // R37 修复（S4-4）：endpoint 支持**懒取函数**——mcp/memory 面板的 controller
+    // 常驻静态挂载，原快照在面板首次挂载时冻结，改 Key/切端点后 AI 生成永远
+    // 带旧密钥 401（对照组 chat-auto 每次新建所以没事）。函数形态每次生成时
+    // 现取；返回 undefined 回落即时快照。
+    const endpoint = (typeof options.endpoint === 'function'
+      ? options.endpoint() : options.endpoint) || createUiEndpointSnapshot();
     const execute = options.executor || ModelExecutor.execute;
     const run = async useStrict => execute({
       context: { messages, runId: options.runId || 'ui-generate',

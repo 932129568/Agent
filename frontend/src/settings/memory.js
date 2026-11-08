@@ -91,7 +91,7 @@ function memoryGenerativeEnsure(block) {
   const host = document.createElement('div'); host.className = 'memory-generative-host'; host.hidden = true;
   state.aiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'memory', host, button: ai, cancelButton: aiCancel,
-    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
+    endpoint: () => ((typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined),
     fallback: () => UiSpecFixtures.memory({ items: mmLastItems, revision: memoryReqSeq,
       error: mmLastError,
       sessionId: typeof AppState !== 'undefined' ? AppState.currentSessionId : 'current-session' }),

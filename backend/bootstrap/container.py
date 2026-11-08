@@ -178,8 +178,12 @@ class ServiceContainer:
         ):
             try:
                 result = closer()
-                if name in {'scheduler', 'native_ui'} and result.get('status') != 'OK':
-                    errors.append({'service': name, 'error': result})
+                # R37 修复（N16）：全量收集关闭结果——原只检查 scheduler/native_ui，
+                # driver/mcp/search/local_proxy 的失败被丢弃（关不干净无迹可寻）。
+                if isinstance(result, dict):
+                    status = result.get('status')
+                    if (status is not None and status != 'OK') or result.get('ok') is False:
+                        errors.append({'service': name, 'error': result})
             except Exception as error:
                 errors.append({'service': name, 'error': str(error)})
         return {'ok': not errors, 'errors': errors}

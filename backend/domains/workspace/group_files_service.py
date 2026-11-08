@@ -83,6 +83,20 @@ class GroupFilesService:
         root = str((data or {}).get('root') or '').strip()
         if root:
             root = os.path.expanduser(os.path.expandvars(root))
+            # R37 修复（N6）：root 安全校验（对齐 history_dir_set 的 W6/W9 口径）——
+            # 原无 realpath/敏感目录校验，可把群文件根指到 C:\Windows 等并经
+            # group_files_write 建目录写文件。
+            root = os.path.realpath(os.path.abspath(root))
+            sys_root = (os.environ.get('SYSTEMROOT') or 'C:\\Windows') \
+                .replace('/', '\\').rstrip('\\') or 'C:\\Windows'
+            drive = os.path.splitdrive(sys_root)[0].lower() or 'c:'
+            low = root.lower().rstrip('\\/')
+            for s in [drive + '\\' + n for n in (
+                    'windows', 'program files', 'program files (x86)',
+                    'programdata', '$recycle.bin', 'system volume information')] \
+                    + [sys_root.lower()]:
+                if low == s or low.startswith(s + '\\'):
+                    return err('[BAD_PARAMS] 不能使用系统目录：%s' % root)
             try:
                 os.makedirs(root, exist_ok=True)
             except Exception as e:

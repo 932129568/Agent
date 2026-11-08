@@ -295,8 +295,10 @@ function switchSession(id, silent) {
   renderNewChatHistory();
   updateLiveTokenStat();
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  // R37 修复（D4）：原过滤谓词与注释相反（保留 prevSid、删掉其余）——
+  // 现按注释语义：移除被离开会话的待发截图，其余会话保留。
   lastShotHash = null;
-  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
+  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !x || x.sid !== String(__prevSid));
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）
@@ -362,6 +364,10 @@ function renderChatHistory(s) {
     if (onScrollLazy._t) return;
     onScrollLazy._t = setTimeout(() => { onScrollLazy._t = null; upgradeInView(); }, 120);
   };
+  // R37 修复（D6）：innerHTML 重建清不掉 listener——先卸旧闭包再挂新的，
+  // 否则每次 renderChatHistory 净增一个监听器且闭包滞留整份旧会话历史（内存泄漏）。
+  if (box.__onScrollLazy) box.removeEventListener('scroll', box.__onScrollLazy);
+  box.__onScrollLazy = onScrollLazy;
   box.addEventListener('scroll', onScrollLazy, { passive: true });
   // 兜底轮询：被遮挡窗口不派发 scroll（R21 实测 scrollFired=0），interval 在
   // 后台窗口最慢 1s 仍会触发；lazy 清零即自毁。

@@ -283,6 +283,18 @@ class CmdService:
                 except Exception:
                     pass
             raise subprocess.TimeoutExpired(popen_args, timeout)
+        except Exception:
+            # R37 修复（N8）：communicate 其他异常路径原不 kill 不关管道——
+            # 子进程与句柄泄漏（与 TimeoutExpired 分支同口径收尾）。
+            _kill_tree(proc.pid)
+            try:
+                proc.communicate(timeout=5)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            raise
 
     @staticmethod
     def _dec(b):

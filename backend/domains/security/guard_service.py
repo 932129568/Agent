@@ -226,6 +226,14 @@ class GuardService:
                         isinstance(ab_loaded.get('limit'), int):
                     cfg['approval_budget'] = {'limit': ab_loaded['limit'],
                                               'used': 0, 'escalated': False}
+                # R37 修复（K6）：未知顶层键透传保留——原白名单重建后 _write_cfg_locked
+                # 整写回盘，未来版本/手工加的扩展键在下次 save_config 被无声抹掉
+                # （工程铁律「白名单透传防抹」同款；已知键内的非法值仍按设计剔除）。
+                _known_keys = {'tiers', 'protect_paths', 'protect_processes',
+                               'trustedOps', 'allow_rules', 'approval_budget'}
+                for _k, _v in data.items():
+                    if _k not in _known_keys and _k not in cfg:
+                        cfg[_k] = _v
         except FileNotFoundError:
             pass
         except Exception as e:

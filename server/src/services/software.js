@@ -296,15 +296,17 @@ export async function softwareCall(params, token = null) {
     return fail('BAD_PARAMS', 'args 必须是 JSON 对象', '例如 {"message": "fix: 描述"}')
   }
 
-  // ① api 层护栏（legacy 位置）：dangerous → force_always（未武装也强制 token）
+  // ① api 层护栏（legacy 位置）：对齐 Python api.py:1248-1252——**每次调用**
+  // 都过 enforceExec（read/mutate 走 session 档首用确认；dangerous 走
+  // force_always 未武装也强制 token）。原实现只拦 dangerous 且
+  // source='manual_test' 可整段旁路（source 由 AGENT_TOOLS schema 公开，
+  // 模型自带 manual_test 即免 token 执行任意脚本——P1 护栏缺口）。
   const risk = actionRisk(software, actionName)
-  if (risk === 'dangerous' && source !== 'manual_test') {
-    const refusal = await enforceExec('software_call',
-      { software, action: actionName, force_always: true }, token)
-    if (refusal) {
-      await guardAudit('software_call', { software, action: actionName, risk, source }, 'call', 'block')
-      return json({ ok: false, error: { code: 'CONFIRM_REQUIRED', message: refusal, op: 'software_call' } })
-    }
+  const refusal = await enforceExec('software_call',
+    { software, action: actionName, force_always: risk === 'dangerous' }, token)
+  if (refusal) {
+    await guardAudit('software_call', { software, action: actionName, risk, source }, 'call', 'block')
+    return json({ ok: false, error: { code: 'CONFIRM_REQUIRED', message: refusal, op: 'software_call' } })
   }
 
   // ③ 软件解析（%r 引号 + hint 可用清单）

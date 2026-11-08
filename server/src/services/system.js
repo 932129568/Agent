@@ -74,8 +74,17 @@ export async function listProcesses(keyword = null) {
   return okJson(rows.slice(0, 300))
 }
 
+/** R37 修复（S2-1 P1 命令注入）：参数以 PS 单引号字面量**内联**进脚本体——
+ * 原 args 作为独立 argv 跟在 -Command 后，无空白参数被 PS 解析器按裸词展开，
+ * `$( )` 子表达式被执行（活体 PoC：http://$(x).com → http://INJECTED.com），
+ * open_url/open_app/set_clipboard/pick_save_path 的载荷可越过 always 档
+ * 「用户确认的是 X」语义执行任意命令。PS 单引号内零插值（'' 转义单引号），
+ * 值面再无可执行语法。 */
+const psLiteral = v => `'` + String(v ?? '').replace(/'/g, `''`) + `'`
 async function ps(script, args = []) {
-  return run('powershell.exe', [...PS, `& { ${script} }`, ...args], {
+  let body = script
+  args.forEach((v, i) => { body = body.split(`$args[${i}]`).join(psLiteral(v)) })
+  return run('powershell.exe', [...PS, `& { ${body} }`], {
     maxBuffer: 64 * 1024 * 1024, timeout: 60000, windowsHide: true,
   })
 }

@@ -161,6 +161,10 @@ class NativeUiDispatcher:
                 entry.last_return_thread = threading.get_ident()
                 entry.history.append((stage, entry.created_thread,
                                       entry.last_execution_thread, entry.last_return_thread))
+                # R37 修复（N2）：ui_nudge 流式期间 ~800ms 一次，history 无上限
+                # 即慢性内存泄漏（单窗每小时 ~4500 条元组常驻）——环形截断保尾 64 条。
+                if len(entry.history) > 64:
+                    del entry.history[:-64]
                 return result
             except FutureTimeout as error:
                 self.quarantine(window)
@@ -179,6 +183,8 @@ class NativeUiDispatcher:
             entry.quarantined = True
             entry.history.append(('quarantine', entry.created_thread,
                                   threading.get_ident(), None))
+            if len(entry.history) > 64:          # R37（N2）：与 invoke 同口径截断
+                del entry.history[:-64]
 
     def destroy(self, window, timeout=5.0):
         """Wait for the final UI call before ordered cleanup; never kill a zombie."""

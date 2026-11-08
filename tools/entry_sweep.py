@@ -71,7 +71,7 @@ ENUM = r"""
     const key = onclick + '|' + label + '|' + el.className;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ label: label, onclick: onclick.slice(0, 120), cls: String(el.className).slice(0, 40) });
+    out.push({ label: label, onclick: onclick.slice(0, 120), cls: String(el.className).slice(0, 40), key: key });
   });
   return out;
 })()
@@ -120,6 +120,9 @@ def main():
             results.append({**ent, 'status': 'skipped'})
             continue
         before = ev(st, 'window.__sweepErrors.length', wait=3)
+        # R37 修复（S4-2）：按 ENUM 快照的**稳定 key** 寻址点击——原按快照下标
+        # 去点实时重查的 DOM 数组，页面动态变化即错位点击（护栏 skip 清单可被
+        # 错位绕过、错误归属错乱）。
         click_js = (
             '(function(){ const els = document.querySelectorAll('
             "'button, [onclick], [role=\"button\"], .icon-btn');"
@@ -128,23 +131,37 @@ def main():
             ' const label = String((el.textContent||"").trim()).slice(0,30);'
             ' const key = oc + "|" + label + "|" + el.className;'
             ' if (!seen.has(key)) { seen.add(key); arr.push(el); } });'
-            ' const el = arr[%d]; if (!el) return "gone";'
+            ' const el = arr.find(function(e){ return e.getAttribute && (e.getAttribute("onclick") || "") + "|"'
+            ' + String((e.textContent||"").trim()).slice(0,30) + "|" + e.className === %s; });'
+            ' if (!el) return "gone";'
             ' try { el.click(); return "clicked"; } catch(e) { return "throw:" + e.message; } })()'
-        ) % idx
+        ) % json.dumps(ent.get('key') or (ent['onclick'] + ' ' + ent['cls']))
         clicked = ev(st, click_js, wait=8)
         time.sleep(0.12)
         after = ev(st, 'window.__sweepErrors.length', wait=3)
         errs = []
-        if isinstance(after, int) and isinstance(before, int) and after > before:
+        # R37 修复（S4-3）：错误采集通道失灵（before/after 非整数，CDP 抖动/跳转
+        # 销毁上下文）不得判假 OK——降级为 'uncertain' 计入 BAD 侧，宁可误报
+        # 不可漏报。
+        readable = isinstance(after, int) and isinstance(before, int)
+        if readable and after > before:
             errs = ev(st, 'JSON.stringify(window.__sweepErrors.slice(%d))' % before, wait=5)
             if isinstance(errs, str):
                 try:
                     errs = json.loads(errs)
                 except Exception:
                     pass
-        results.append({**ent, 'status': 'ok' if clicked == 'clicked' and not errs
-                        else ('throw:' + str(clicked) if isinstance(clicked, str) and clicked.startswith('throw')
-                              else ('errors:' + json.dumps(errs, ensure_ascii=False) if errs else str(clicked)))})
+        if not readable:
+            status = 'uncertain:' + str(clicked)
+        elif clicked == 'clicked' and not errs:
+            status = 'ok'
+        elif isinstance(clicked, str) and clicked.startswith('throw'):
+            status = 'throw:' + str(clicked)
+        elif errs:
+            status = 'errors:' + json.dumps(errs, ensure_ascii=False)
+        else:
+            status = str(clicked)
+        results.append({**ent, 'status': status})
         # Esc 收尾：关掉本击可能打开的面板
         ev(st, "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));"
                "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));", wait=3)

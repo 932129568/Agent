@@ -564,7 +564,8 @@ function groupDetailOpen(text, member, meta) {
         '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') +
           String(member.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) : '群主') +
           (member && member.host ? ' · 主持人' : '') + '</div>' +
-        '<div class="gd-sub">' + (member && member.model ? member.model : (meta && meta.model) || '群聊发言') +
+        '<div class="gd-sub">' + ((member && member.model ? member.model : (meta && meta.model) || '群聊发言')
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) +
           ' · 第 ' + ((meta && meta.round) || '—') + ' 轮</div></div>' +
       '</div>' +
       '<button type="button" class="gd-copy" id="gdCopy" title="复制全文">⧉ 复制全文</button>' +

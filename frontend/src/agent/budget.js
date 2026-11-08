@@ -5,9 +5,18 @@
  * 状态按「一次 runAgentLoop 任务」为生命周期，进入循环前 resetCostDefense()。
  */
 
-let _cd = null;
-function resetCostDefense() {
-  _cd = { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 };
+let _cd = new Map();
+/* R37 修复（D5）：熔断状态原为模块单例——任一新 run 启动 resetCostDefense()
+ * 即清零其他并行 run 的循环/停滞计数，「同签名×3」「15 步无进展」两道成本
+ * 防线在 R31 不限并行语义下永远达不到阈值。现按 runSid 键控；无 sid 调用
+ * （legacy 测试/旧路径）落 '_' 桶，行为与旧单例一致。上限 64 桶防无界增长
+ * （LRU 语义：Map 迭代序=插入序，超限删最旧）。
+ * 自包含约束：v13 桩环境按函数粒度抽取拼装（tests/test_v13_qa.py:1076），
+ * 三个入口函数不得引用本模块其他符号（键逻辑内联）。 */
+function resetCostDefense(sid) {
+  if (!(_cd instanceof Map)) _cd = new Map();   // 桩环境自愈（外部预声明 null）
+  const k = (sid == null || sid === '') ? '_' : String(sid);
+  _cd.set(k, { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 });
 }
 
 /** 预算硬停检查点（每轮 fetch 前调用）。返回 {stop, spent, budget} 或 null。 */
@@ -21,24 +30,44 @@ function checkBudgetHardStop(s) {
 }
 
 /** 循环检测：登记本轮工具调用签名，第 3 次相同 → 返回 {loop:true, sig}。 */
-function registerToolSig(sig) {
-  if (!_cd) resetCostDefense();
-  const n = (_cd.sigCounts.get(sig) || 0) + 1;
-  _cd.sigCounts.set(sig, n);
+function registerToolSig(sig, sid) {
+  if (!(_cd instanceof Map)) _cd = new Map();   // 桩环境自愈
+  const k = (sid == null || sid === '') ? '_' : String(sid);
+  let cd = _cd.get(k);
+  if (!cd) {
+    if (_cd.size >= 64) {
+      const oldest = _cd.keys().next().value;
+      if (oldest !== undefined) _cd.delete(oldest);
+    }
+    cd = { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 };
+    _cd.set(k, cd);
+  }
+  const n = (cd.sigCounts.get(sig) || 0) + 1;
+  cd.sigCounts.set(sig, n);
   if (n >= 3) return { loop: true, count: n, sig };
   return null;
 }
 
 /** 无进展检测：连续 15 个工具轮次既无新产出（taskFacts 不增长）也无正文 → 返回 {stall:true}。 */
-function registerProgress(factsLen, contentLen) {
-  if (!_cd) resetCostDefense();
-  if (factsLen > _cd.lastFacts || contentLen > 0) {
-    _cd.lastFacts = Math.max(_cd.lastFacts, factsLen);
-    _cd.noProgressRounds = 0;
+function registerProgress(factsLen, contentLen, sid) {
+  if (!(_cd instanceof Map)) _cd = new Map();   // 桩环境自愈
+  const k = (sid == null || sid === '') ? '_' : String(sid);
+  let cd = _cd.get(k);
+  if (!cd) {
+    if (_cd.size >= 64) {
+      const oldest = _cd.keys().next().value;
+      if (oldest !== undefined) _cd.delete(oldest);
+    }
+    cd = { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 };
+    _cd.set(k, cd);
+  }
+  if (factsLen > cd.lastFacts || contentLen > 0) {
+    cd.lastFacts = Math.max(cd.lastFacts, factsLen);
+    cd.noProgressRounds = 0;
     return null;
   }
-  _cd.noProgressRounds++;
-  if (_cd.noProgressRounds >= 15) { _cd.noProgressRounds = 0; return { stall: true }; }
+  cd.noProgressRounds++;
+  if (cd.noProgressRounds >= 15) { cd.noProgressRounds = 0; return { stall: true }; }
   return null;
 }
 

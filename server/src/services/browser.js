@@ -17,8 +17,11 @@ const cursors = registerSidContainer('cursors', new Map())   // sid -> sessionId
 function cursorFor(sid) { return cursors.get(sid) || '' }
 function setCursor(id) { cursors.set(ctxSid(), id) }
 function clearCursorIf(id) {
+  // R37 修复（S2-11）：被关会话的 sid 游标**摘除**而非改指他人会话页——
+  // 原重指 [...sessions.keys()].at(-1)，A 关闭后持旧游标的会话 extract/click
+  // 会落到 unrelated 会话正打开的页面（跨会话泄漏）。
   for (const [sid, value] of cursors) {
-    if (value === id) cursors.set(sid, [...sessions.keys()].at(-1) || '')
+    if (value === id) cursors.delete(sid)
   }
 }
 const json = value => JSON.stringify(value)

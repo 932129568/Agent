@@ -32,8 +32,12 @@ function freezeBeforeCurrentTask(s) {
     }
   }
 }
-function buildMessagesForAPI(msgs) {
-  const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+function buildMessagesForAPI(msgs, sessionOverride) {
+  // R37 修复（D12）：冻结表按 **run 所属会话** 取——原恒读 getCurrentSession()
+  // （可见会话），后台 run 的冻结压缩静默失效（读不到自己的 apiFrozen，旧消息
+  // 全量重发）。唯一调用点 run-controller:464 已带 s；无 override 时回落旧口径。
+  const s = sessionOverride
+    || ((typeof getCurrentSession === 'function') ? getCurrentSession() : null);
   const frozen = s && s.apiFrozen ? s.apiFrozen : {};
   const out = [];
   for (const m of msgs) {

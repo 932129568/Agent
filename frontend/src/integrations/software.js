@@ -342,7 +342,10 @@ async function softwarePanelRunTest(name) {
       try { b = JSON.parse(g.blocked); } catch (e2) {}
       softwarePanelRenderTestOut({ ok: false, error: { code: 'USER_DENIED',
         message: (b && (b.info || b.error)) || '用户取消了本次调用' } });
-      return;                                    // swTesting 未置位（护栏在途前）
+      // R37 修复（S4-1）：swTesting 已在 :312 置位（原注释「未置位」与代码矛盾），
+      // 此 return 在 finally 之前——不复位则用户一次取消后「执行」按钮永久静默锁死。
+      swTesting = false;
+      return;
     }
     swGuardToken = g.token;
   }

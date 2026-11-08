@@ -177,6 +177,12 @@ async function boot() {
   })
   // UNTRUSTED DATA 纪律（红线 4 / §2.3）：禁 window.open 逃逸面
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // R37 修复（S2-14）：禁导航逃逸——window.open 已 deny，但 location/表单
+  // 导航仍可把宿主窗口带离 harbor.html（桥与 CSP 域外）。外链一律走后端
+  // open_url 的系统浏览器路径。
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!String(url || '').startsWith('file://')) event.preventDefault()
+  })
   win.on('closed', () => {
     win = null
     gracefulShutdown()

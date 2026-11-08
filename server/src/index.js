@@ -20,6 +20,10 @@ async function shutdown(signal) {
 
 process.on('SIGINT', () => { shutdown('SIGINT') })
 process.on('SIGTERM', () => { shutdown('SIGTERM') })
+// R37 修复（S2-15）：进程级兜底——单个游离 rejection 原会以未处理异常击穿
+// 进程（Electron 宿主下=整窗崩溃）。记录不退出：桌面单用户场景可用性优先。
+process.on('unhandledRejection', reason => { logger.error({ err: reason }, 'unhandledRejection') })
+process.on('uncaughtException', err => { logger.error({ err }, 'uncaughtException') })
 
 try {
   await app.listen({ host: config.HOST, port: config.PORT })

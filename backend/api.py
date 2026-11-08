@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Api 门面（对外契约层）：50 个 js_api 公开方法，签名/位置参数/返回协议逐字保持 v1.0.0。
+"""Api 门面（对外契约层）：51 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc），
+签名/位置参数/返回协议逐字保持 v1.0.0。
 
 红线（重构生命线）：
 1. 方法名、参数个数、位置顺序不变——前端 callApi 按位置传参。
@@ -177,10 +178,15 @@ class Api:
     # ============ 历史自选存放 + 真删（2026-10-21 用户需求）============
     def history_dir_get(self):
         """当前历史存放目录（''=默认 ~/.glm-chat/）+ sessions.json 实际路径。"""
-        envelope = TaskEnvelope.create(
-            'settings', 'history_dir_get', resourceKeys=('cfg:history',),
-            sessionId=self._runtime.get_current_sid() or '', timeout_ms=10000)
-        result = self._scheduler.submit(envelope).result(envelope.remaining())
+        try:
+            envelope = TaskEnvelope.create(
+                'settings', 'history_dir_get', resourceKeys=('cfg:history',),
+                sessionId=self._runtime.get_current_sid() or '', timeout_ms=10000)
+            result = self._scheduler.submit(envelope).result(envelope.remaining())
+        except Exception as e:
+            # R37 修复（N3）：调度器失败抛 TaskFailure 会穿透 js_api 桥（其余方法
+            # 均返回 JSON shape）——统一收口为结构化错误。
+            return err('读取历史目录失败: %s' % e)
         return ok(result)
 
     def history_dir_set(self, dir_path, migrate=False):
@@ -216,11 +222,15 @@ class Api:
             # pywebview SAVE_DIALOG = 30（FOLDER=10/OPEN=20/SAVE=30；字面量避免
             # api.py 顶层 import webview——无 GUI 环境 import 亦可失败）
             result = win.create_file_dialog(30, directory='', save_filename=default_name)
-            if result and len(result) > 0:
-                p = str(result[0])
+            # R37 修复（N1）：pywebview SAVE_DIALOG 返回**字符串路径**（FOLDER/OPEN
+            # 才是列表）——原 result[0] 取到路径首字符（'D:\x.md'→'D'），登记与
+            # 返回的 path 全错，导出落错位置。按 pick_folder 同款分支防御。
+            picked = result if isinstance(result, str) else (
+                str(result[0]) if isinstance(result, (list, tuple)) and len(result) > 0 else '')
+            if picked:
                 with self._export_paths_lock:
-                    self._export_paths.add(os.path.normcase(os.path.abspath(p)))
-                return ok({'ok': True, 'path': p})
+                    self._export_paths.add(os.path.normcase(os.path.abspath(picked)))
+                return ok({'ok': True, 'path': picked})
             return ok({'ok': False, 'path': ''})     # 用户取消
         except Exception as e:
             return err('保存对话框失败: %s' % e)
@@ -1498,7 +1508,15 @@ class Api:
             # 测试连接失败 → 回弹 enabled=false（配置已保存，保持停用）
             revert = dict(cfg)
             revert['enabled'] = False
-            self._mcp.save_server(name, revert, activate=False)
+            rv = self._mcp.save_server(name, revert, activate=False)
+            # R37 修复（K9）：回弹写失败原被弃置——磁盘残留 enabled=true 而连接
+            # 是坏的（「已启用但从未连通」假状态）。回弹失败须如实上报。
+            if rv.get('error'):
+                rv_msg = rv['error'] if isinstance(rv['error'], str) \
+                    else (rv['error'].get('message') or str(rv['error']))
+                return err('%s；且回弹停用写入失败（%s）——请手动停用该服务器'
+                           % (t['error'] if isinstance(t['error'], str)
+                              else (t['error'].get('message') or str(t['error'])), rv_msg))
             return err(t['error'])
         return ok({'ok': True, 'name': name, 'tools': t.get('tools') or []})
 

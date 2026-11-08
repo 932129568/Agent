@@ -26,6 +26,10 @@ export function setCurrentSid(sid) {
 export function setCwd(dir) {
   runtime.cwd = dir
   atomicWriteJson(RUNTIME_PATH, {
+    // R37 修复（S2-5）：以**盘上现值**为底合并写——workspace.js 同文件持有
+    // recentWs/wsEnabled 键，原 setCwd/setSessionCwd/setSessionWs 高频短形状
+    // 整写把它们静默抹掉（set_ws_enabled(false) 重启回真、recentWs 清零）。
+    ...readJsonIfExists(RUNTIME_PATH, {}),
     currentSid: runtime.currentSid,
     cwd: runtime.cwd,
     sessionWs: runtime.sessionWs,

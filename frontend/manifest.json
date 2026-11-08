@@ -1107,7 +1107,8 @@
         "harborTakeoverAwaitTerminal",
         "harborTakeoverNotify",
         "harborTakeoverStopPoll",
-        "harborTakeoverWaitResolve"
+        "harborTakeoverWaitResolve",
+        "WRITE_SEQ_TOOLS"
       ]
     },
     {

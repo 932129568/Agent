@@ -74,7 +74,9 @@ def test_pending_shots_tagged_by_session():
     assert 'pendingShots.push({ sid:' in ex
     assert 'x.sid === String(s.id)' in rc                     # 消费按会话过滤
     assert '!(run.__sentShots || []).includes(x.comp)' in rc  # 发送后精确出队
-    assert 'x.sid === String(__prevSid)' in ctl               # 切会话只清被离开会话
+    # R37 修复（D4）后断言更新：原实现谓词与注释相反（保留 prevSid、删其余），
+    # 测试字面量钉住的是缺陷行为；现按注释语义断言「移除被离开会话的截图」。
+    assert 'x.sid !== String(__prevSid)' in ctl               # 切会话只清被离开会话
     assert rc.count('getActiveRuns() {') == 1                 # 重复定义已清
 
 

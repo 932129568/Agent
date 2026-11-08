@@ -251,11 +251,13 @@ export async function checkpointRollback(taskId, wsDir = '', confirm = false) {
   if (!manifest) return json({ ok: false, error: { code: 'ROLLBACK_FAILED', message: `未找到检查点: ${taskId}（可能创建时超限降级为仅记录）` } })
   const ws = path.resolve(String(wsDir || manifest.ws_dir || ctxRoot()))
   const restored = []; const failed = []
+  // R37 修复（S2-2 P1 TDZ）：`deleted` 原在早退分支之后才声明——git 锚点
+  // 检查点（manifest.files 空）的回滚 100% 抛 ReferenceError → 500。
+  const deleted = []
   if (manifest.git_head && !(manifest.files || []).length) {
     return json({ ok: true, mode: 'git', restored, deleted, failed, verified: true,
       note: `锚点检查点（无声明文件），git HEAD=${manifest.git_head.slice(0, 8)}` })
   }
-  const deleted = []
   for (const item of manifest.files || []) {
     const rel = item.path; const full = safeJoin(ws, rel)
     if (!full) { failed.push(rel); continue }

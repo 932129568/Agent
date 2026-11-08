@@ -7413,7 +7413,10 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
   if (__isPy) {
     // pywebview 路径：全局 sid 切换；HTTP 桥（Electron）按 runSid 走
     // x-harbor-sid 请求头路由（P0-3），不触碰全局 activeSid
-    try { await callApi('set_current_sid', [currentSessionId]); } catch (e) {}
+    // R37 修复（P0 串话）：路由目标是 **run 所属会话**——原取全局 currentSessionId，
+    // 并行后台 run 每次工具调用都把后端会话切到「可见会话」，工具读写落进
+    // 别人会话的工作区（跨会话写盘）。
+    try { await callApi('set_current_sid', [runSid]); } catch (e) {}
   }
   args = args || {};   // 修复 ㊱：args 缺省兜底（原 pickPath 对 undefined 取属性虽不炸，但统一归一更稳）
   // v1.2 R2：破坏性操作护栏（delete/kill/剪贴板/截屏/命令执行 → 确认矩阵/保护名单）
@@ -11134,8 +11137,12 @@ function freezeBeforeCurrentTask(s) {
     }
   }
 }
-function buildMessagesForAPI(msgs) {
-  const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+function buildMessagesForAPI(msgs, sessionOverride) {
+  // R37 修复（D12）：冻结表按 **run 所属会话** 取——原恒读 getCurrentSession()
+  // （可见会话），后台 run 的冻结压缩静默失效（读不到自己的 apiFrozen，旧消息
+  // 全量重发）。唯一调用点 run-controller:464 已带 s；无 override 时回落旧口径。
+  const s = sessionOverride
+    || ((typeof getCurrentSession === 'function') ? getCurrentSession() : null);
   const frozen = s && s.apiFrozen ? s.apiFrozen : {};
   const out = [];
   for (const m of msgs) {
@@ -12194,9 +12201,18 @@ async function connectSaveAndTest() {
  * 状态按「一次 runAgentLoop 任务」为生命周期，进入循环前 resetCostDefense()。
  */
 
-let _cd = null;
-function resetCostDefense() {
-  _cd = { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 };
+let _cd = new Map();
+/* R37 修复（D5）：熔断状态原为模块单例——任一新 run 启动 resetCostDefense()
+ * 即清零其他并行 run 的循环/停滞计数，「同签名×3」「15 步无进展」两道成本
+ * 防线在 R31 不限并行语义下永远达不到阈值。现按 runSid 键控；无 sid 调用
+ * （legacy 测试/旧路径）落 '_' 桶，行为与旧单例一致。上限 64 桶防无界增长
+ * （LRU 语义：Map 迭代序=插入序，超限删最旧）。
+ * 自包含约束：v13 桩环境按函数粒度抽取拼装（tests/test_v13_qa.py:1076），
+ * 三个入口函数不得引用本模块其他符号（键逻辑内联）。 */
+function resetCostDefense(sid) {
+  if (!(_cd instanceof Map)) _cd = new Map();   // 桩环境自愈（外部预声明 null）
+  const k = (sid == null || sid === '') ? '_' : String(sid);
+  _cd.set(k, { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 });
 }
 
 /** 预算硬停检查点（每轮 fetch 前调用）。返回 {stop, spent, budget} 或 null。 */
@@ -12210,24 +12226,44 @@ function checkBudgetHardStop(s) {
 }
 
 /** 循环检测：登记本轮工具调用签名，第 3 次相同 → 返回 {loop:true, sig}。 */
-function registerToolSig(sig) {
-  if (!_cd) resetCostDefense();
-  const n = (_cd.sigCounts.get(sig) || 0) + 1;
-  _cd.sigCounts.set(sig, n);
+function registerToolSig(sig, sid) {
+  if (!(_cd instanceof Map)) _cd = new Map();   // 桩环境自愈
+  const k = (sid == null || sid === '') ? '_' : String(sid);
+  let cd = _cd.get(k);
+  if (!cd) {
+    if (_cd.size >= 64) {
+      const oldest = _cd.keys().next().value;
+      if (oldest !== undefined) _cd.delete(oldest);
+    }
+    cd = { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 };
+    _cd.set(k, cd);
+  }
+  const n = (cd.sigCounts.get(sig) || 0) + 1;
+  cd.sigCounts.set(sig, n);
   if (n >= 3) return { loop: true, count: n, sig };
   return null;
 }
 
 /** 无进展检测：连续 15 个工具轮次既无新产出（taskFacts 不增长）也无正文 → 返回 {stall:true}。 */
-function registerProgress(factsLen, contentLen) {
-  if (!_cd) resetCostDefense();
-  if (factsLen > _cd.lastFacts || contentLen > 0) {
-    _cd.lastFacts = Math.max(_cd.lastFacts, factsLen);
-    _cd.noProgressRounds = 0;
+function registerProgress(factsLen, contentLen, sid) {
+  if (!(_cd instanceof Map)) _cd = new Map();   // 桩环境自愈
+  const k = (sid == null || sid === '') ? '_' : String(sid);
+  let cd = _cd.get(k);
+  if (!cd) {
+    if (_cd.size >= 64) {
+      const oldest = _cd.keys().next().value;
+      if (oldest !== undefined) _cd.delete(oldest);
+    }
+    cd = { sigCounts: new Map(), noProgressRounds: 0, lastFacts: 0 };
+    _cd.set(k, cd);
+  }
+  if (factsLen > cd.lastFacts || contentLen > 0) {
+    cd.lastFacts = Math.max(cd.lastFacts, factsLen);
+    cd.noProgressRounds = 0;
     return null;
   }
-  _cd.noProgressRounds++;
-  if (_cd.noProgressRounds >= 15) { _cd.noProgressRounds = 0; return { stall: true }; }
+  cd.noProgressRounds++;
+  if (cd.noProgressRounds >= 15) { cd.noProgressRounds = 0; return { stall: true }; }
   return null;
 }
 
@@ -13911,8 +13947,10 @@ async function parseSseStream(stream, hooks) {
   let pending = '';
 
   const handleLine = line => {
-    if (!line.startsWith('data: ')) return;
-    const data = line.slice(6).trim();
+    // R37 修复（D17）：SSE 规范允许 `data:{...}`（冒号后无空格）——原只认带
+    // 空格形态，个别网关/供应商的整流内容被静默全丢。
+    if (!line.startsWith('data:')) return;
+    const data = (line.slice(5).startsWith(' ') ? line.slice(6) : line.slice(5)).trim();
     if (!data || data === '[DONE]') return;
     try {
       const json = JSON.parse(data);
@@ -14241,7 +14279,12 @@ function uiStrictSchemaUnsupported(result) {
 
 function productionUiGenerate(options) {
   return async ({ messages, signal, onText, strictSchema }) => {
-    const endpoint = options.endpoint || createUiEndpointSnapshot();
+    // R37 修复（S4-4）：endpoint 支持**懒取函数**——mcp/memory 面板的 controller
+    // 常驻静态挂载，原快照在面板首次挂载时冻结，改 Key/切端点后 AI 生成永远
+    // 带旧密钥 401（对照组 chat-auto 每次新建所以没事）。函数形态每次生成时
+    // 现取；返回 undefined 回落即时快照。
+    const endpoint = (typeof options.endpoint === 'function'
+      ? options.endpoint() : options.endpoint) || createUiEndpointSnapshot();
     const execute = options.executor || ModelExecutor.execute;
     const run = async useStrict => execute({
       context: { messages, runId: options.runId || 'ui-generate',
@@ -15359,7 +15402,7 @@ function mcpGenerativeEnsure(box) {
   const host = document.createElement('div'); host.className = 'mcp-generative-host'; host.hidden = true;
   state.aiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'mcp', host, button: ai, cancelButton: aiCancel,
-    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
+    endpoint: () => ((typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined),
     fallback: () => UiSpecFixtures.mcp({
       servers: typeof AppState !== 'undefined' ? AppState.mcpServers : mcpServers,
       revision: Math.max(mcpServersRevision, state.projection && state.projection.current
@@ -16323,7 +16366,9 @@ async function harborStartParallelRun(sessionId) {
       || (typeof sessions !== 'undefined' && Array.isArray(sessions)
         ? sessions.find(item => item.id === sessionId) : null);
     if (!s) return null;
-    const key = typeof apiKey !== 'undefined' ? apiKey : '';
+    // R37 修复（D7）：`apiKey` 在本模块从未声明，原恒取 ''——岛「并行」按钮
+    // 发起的 run 携带空 Key 必 401。改取当前端点快照密钥（与主发送链同源）。
+    const key = (typeof effectiveApiKey === 'function') ? (effectiveApiKey() || '') : '';
     return await runAgentLoopParallel(s, key);
   } catch (e) { return null; }
 }
@@ -16386,7 +16431,12 @@ function cancelActiveAgentLoop(sessionId) {
     ? RunRegistry.current((typeof sessionId === 'string') ? sessionId : undefined)
     : __agentActiveRun;
   if (!run) {
-    if (abortController) { try { abortController.abort(); } catch (e) {} }
+    // R37 修复（D2）：有 RunRegistry 的并行世界里「找不到目标 run」≠「杀最新 run」
+    // ——原无条件 abort 全局 abortController（已被最新 run 覆写），会误杀无关会话
+    // 的在途流。仅 legacy（无 RunRegistry）单活跃路径保留兜底 abort。
+    if (typeof RunRegistry === 'undefined' && abortController) {
+      try { abortController.abort(); } catch (e) {}
+    }
     return;
   }
   const wasVisible = agentRunVisible(run);
@@ -16420,7 +16470,10 @@ async function runAgentLoop(s, apiKey, opts) {
   const _sameSidRun = (typeof __agentRuns !== 'undefined') ? __agentRuns.get(s.id) : null;
   if (_sameSidRun && !_sameSidRun.cancelled) {
     cancelActiveAgentLoop(s.id);
-  } else if (typeof __agentRuns !== 'undefined' && __agentRuns.size > 0) {
+  } else if (typeof __agentRuns !== 'undefined'
+    && Array.from(__agentRuns.values()).some(r => r && r.sessionId !== s.id && !r.cancelled)) {
+    // R37 修复（D11）：判并行的口径改为「存在**其他会话**的未取消 run」——
+    // 原看 size>0，同会话旧 run 已 cancel 未 finish（等收尾）时重入被误标 parallel。
     parallel = true;   // 已有其他会话在跑 → 本 run 是并行实例（自动，无需用户操作）
   }
   const run = (typeof RunRegistry !== 'undefined') ? RunRegistry.start(s) : {
@@ -16450,15 +16503,16 @@ async function runAgentLoop(s, apiKey, opts) {
     try { await maybeAutoCompact(s); } catch (e) { console.warn(e); }  // 修复 ㊸：传会话对象（原传合成 {messages}）；压缩失败不中断主流程
     abortController = new AbortController();
     run.abortController = abortController;
-    resetCostDefense();   // v1.2 R4：每次任务重置循环/无进展计数
+    resetCostDefense(s.id);   // v1.2 R4 + R37（D5）：按 runSid 键控重置——并行 run 互不清零
     const sendBtn = document.getElementById('sendBtn');
+    // R37（D2）：abort 本 run 的 controller——原 abort 全局，并行下停 A 杀 B
     run.stopHandler = () => {
       // 修复（2026-10-18）：点暂停立即置位 + 立即视觉反馈（原只 abort fetch，
       // 工具执行阶段点下去像没反应——用户实测「点暂停时没有马上暂停」）
       userStopped = true;
       if (typeof setSessionRunStatus === 'function') setSessionRunStatus(s, 'paused');
       run.statusFinalized = true;
-      try { abortController.abort(); } catch (e) {}
+      try { (run.abortController || abortController).abort(); } catch (e) {}
       if (agentRunVisible(run)) setSendButtonVisual(sendBtn, 'pause');
       try { if (agentRunVisible(run) && typeof toast === 'function') toast('正在停止…（当前工具执行完即停）', 'warn'); } catch (e) {}
     };
@@ -16701,7 +16755,7 @@ async function runAgentLoop(s, apiKey, opts) {
       }
       await compactHistory(s);
       freezeBeforeCurrentTask(s);
-      const slimMsgs = shrinkHistoryForApi(buildMessagesForAPI(s.messages));
+      const slimMsgs = shrinkHistoryForApi(buildMessagesForAPI(s.messages, s));
       applyShrinkMarkers(s.messages);   // 修复 UX-1（v1.4）：发送副本瘦身透明化——每轮重算并打弱化标记
       let sysContent = EFFICIENCY_PROMPT + (sysPrompt ? '\n\n' + sysPrompt : '');
       let effTools = effectiveTools;
@@ -16762,6 +16816,10 @@ async function runAgentLoop(s, apiKey, opts) {
       // v1.2 R4：预算硬停检查点（每轮发起新请求前；进行中的工具调用已跑完）
       const hardStop = checkBudgetHardStop(s);
       if (hardStop) {
+        // R37 修复（D35）：硬停发生在**请求发出前**——此刻 shotState='sending'
+        // 只是装配态，截图并未真正消费；不复位会让 resume 后的本会话截图
+        // 永远不再注入（截图黑洞）。
+        if (run.shotState === 'sending') run.shotState = 'idle';
         if (agentRunVisible(run)) {
           showPausePanel(aiContent, s, 'budget', hardStop);
           toast('会话预算已用尽，已暂停发起新请求', 'warn');
@@ -16923,7 +16981,9 @@ async function runAgentLoop(s, apiKey, opts) {
           html += `<span>本会话约花费 <b>¥${_sessCost.cost.toFixed(4)}</b></span>`;
           div.innerHTML = html;
           aiContent.appendChild(div);
-          const _prevTurn = window.__turnTokens || 0;
+          // R37 修复（D22）：读侧加可见性门控——后台 run 的用量与全局「上一轮」
+          // 值没有可比性（可能属于别的会话），不触发突变提醒、也不读全局值。
+          const _prevTurn = agentRunVisible(run) ? (window.__turnTokens || 0) : 0;
           if (agentRunVisible(run)) window.__turnTokens = (u.total_tokens || 0);
           if (_prevTurn > 0 && u.total_tokens > _prevTurn * 1.5) {
             const tip = document.createElement('div');
@@ -17073,7 +17133,8 @@ async function runAgentLoop(s, apiKey, opts) {
         if (cc) cc.scrollTop = cc.scrollHeight;
       }
 
-      const WRITE_SEQ_TOOLS = ['write_file','append_file','search_replace','move_path','copy_path','delete_path'];
+      // R37 修复（D8）：写类串行工具清单改用 tool-runtime 顶层单源（manifest
+      // requires 已登记）——原模块内重复定义，两份口径可漂移。
       const toolResults = [];
       let batchPending = toolUis.slice();
       while (batchPending.length) {
@@ -17262,7 +17323,7 @@ async function runAgentLoop(s, apiKey, opts) {
         recentSigs.push(sig); if (recentSigs.length > 6) recentSigs.shift();
         // 修复 建议㉛（三轮）：lastToolSig 为死变量（只写不读），删除
         // v1.2 R4：循环熔断——同工具同参数 ×3（或交替模式）→ 暂停并询问，不再静默自动停止
-        const loopHit = registerToolSig(sig);
+        const loopHit = registerToolSig(sig, s.id);   // R37（D5）：键控到本 run
         if (loopHit || alternating) {
           if (agentRunVisible(run)) {
             showPausePanel(aiContent, s, 'loop', loopHit || { count: '交替', sig });
@@ -17271,7 +17332,7 @@ async function runAgentLoop(s, apiKey, opts) {
           return { stop: true, finished: true, naturalDone: false, status: 'loop' };
         }
         // v1.2 R4：连续 15 步无进展熔断
-        if (registerProgress(taskFacts.length, fullContent.length)) {
+        if (registerProgress(taskFacts.length, fullContent.length, s.id)) {
           if (agentRunVisible(run)) {
             showPausePanel(aiContent, s, 'stall', {});
             toast('连续多步无进展，已熔断暂停', 'warn');
@@ -17360,7 +17421,11 @@ async function runAgentLoop(s, apiKey, opts) {
     if (err.name === 'AbortError') {
       // 修复 建议㉕（三轮）：abort/停止时清 pendingShots——原只复位 shotState，
       // 待发截图残留致下一轮重发 + 重复 note 消息
-      if (pendingShots.length) pendingShots = [];
+      // R37 修复（D3）：abort 只清**本会话**的待发截图——原无差别清空全部
+      // 会话队列，B 会话已入队未消费的截图被 A 的停止键一起带走。
+      if (typeof pendingShots !== 'undefined' && pendingShots.length) {
+        pendingShots = pendingShots.filter(x => !x || x.sid !== String(s.id));
+      }
       // 修复 W21（二轮）：abort 时固化部分正文入历史（原流中气泡有字但 messages 无此消息，
       // 重开即丢）+ 清理「正在输入」动画残留
       if (partialContent) {
@@ -17452,7 +17517,10 @@ async function runAgentLoop(s, apiKey, opts) {
     const ownedFinish = (typeof RunRegistry !== 'undefined')
       ? RunRegistry.finish(run) : (__agentActiveRun === run);
     // P0-3：run 结束时从自身注册表摘除（不论是否视窗 run——并行实例互不影响）
-    if (__agentRuns.get(run.sessionId) === run) __agentRuns.delete(run.sessionId);
+    // R37（D18）：裸引用补 typeof 守卫（同函数 ：167/:170 均有守卫，单模块 harness 一致性）
+    if (typeof __agentRuns !== 'undefined' && __agentRuns.get(run.sessionId) === run) {
+      __agentRuns.delete(run.sessionId);
+    }
     if (ownedFinish) {
       if (typeof RunRegistry === 'undefined') __agentActiveRun = null;
       // R31：流式态按「当前可见会话是否仍有在途 run」重算。
@@ -18918,7 +18986,10 @@ async function softwarePanelRunTest(name) {
       try { b = JSON.parse(g.blocked); } catch (e2) {}
       softwarePanelRenderTestOut({ ok: false, error: { code: 'USER_DENIED',
         message: (b && (b.info || b.error)) || '用户取消了本次调用' } });
-      return;                                    // swTesting 未置位（护栏在途前）
+      // R37 修复（S4-1）：swTesting 已在 :312 置位（原注释「未置位」与代码矛盾），
+      // 此 return 在 finally 之前——不复位则用户一次取消后「执行」按钮永久静默锁死。
+      swTesting = false;
+      return;
     }
     swGuardToken = g.token;
   }
@@ -19673,7 +19744,13 @@ function _sessionSaveSignature(s) {
     s.autoResume || 0,
     (s.plan && s.plan.task_id) || '',
     s.projectId || '',
+    // R37 修复（D9）：projectName/projectWorkspace/_spentCost 也在持久化白名单
+    // 里（normalizeSessions），原签名漏记——单独改项目名/工作区/花费时被
+    // 「未变更短路」跳过落盘，重启回退。
+    s.projectName || '',
+    s.projectWorkspace || '',
     typeof s._spentTokens === 'number' ? s._spentTokens : '',
+    typeof s._spentCost === 'number' ? s._spentCost : '',
     // apiFrozen 是小型参数对象，直接序列化（每个会话仅一次，成本可忽略）
     s.apiFrozen ? JSON.stringify(s.apiFrozen) : '',
     // R20 扫描修复：群聊配置改动（成员/端点 Key/点名队列）原不在签名里——
@@ -21327,7 +21404,7 @@ function memoryGenerativeEnsure(block) {
   const host = document.createElement('div'); host.className = 'memory-generative-host'; host.hidden = true;
   state.aiController = typeof createUiGenerationController === 'function' ? createUiGenerationController({
     kind: 'memory', host, button: ai, cancelButton: aiCancel,
-    endpoint: (typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined,
+    endpoint: () => ((typeof uiEndpointSnapshot === 'function') ? uiEndpointSnapshot() : undefined),
     fallback: () => UiSpecFixtures.memory({ items: mmLastItems, revision: memoryReqSeq,
       error: mmLastError,
       sessionId: typeof AppState !== 'undefined' ? AppState.currentSessionId : 'current-session' }),
@@ -24454,8 +24531,10 @@ function switchSession(id, silent) {
   renderNewChatHistory();
   updateLiveTokenStat();
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
+  // R37 修复（D4）：原过滤谓词与注释相反（保留 prevSid、删掉其余）——
+  // 现按注释语义：移除被离开会话的待发截图，其余会话保留。
   lastShotHash = null;
-  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
+  if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => !x || x.sid !== String(__prevSid));
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）
@@ -24521,6 +24600,10 @@ function renderChatHistory(s) {
     if (onScrollLazy._t) return;
     onScrollLazy._t = setTimeout(() => { onScrollLazy._t = null; upgradeInView(); }, 120);
   };
+  // R37 修复（D6）：innerHTML 重建清不掉 listener——先卸旧闭包再挂新的，
+  // 否则每次 renderChatHistory 净增一个监听器且闭包滞留整份旧会话历史（内存泄漏）。
+  if (box.__onScrollLazy) box.removeEventListener('scroll', box.__onScrollLazy);
+  box.__onScrollLazy = onScrollLazy;
   box.addEventListener('scroll', onScrollLazy, { passive: true });
   // 兜底轮询：被遮挡窗口不派发 scroll（R21 实测 scrollFired=0），interval 在
   // 后台窗口最慢 1s 仍会触发；lazy 清零即自毁。
@@ -26511,7 +26594,8 @@ function groupDetailOpen(text, member, meta) {
         '<div><div class="gd-name">' + (member ? ((member.host ? '★ ' : '') +
           String(member.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) : '群主') +
           (member && member.host ? ' · 主持人' : '') + '</div>' +
-        '<div class="gd-sub">' + (member && member.model ? member.model : (meta && meta.model) || '群聊发言') +
+        '<div class="gd-sub">' + ((member && member.model ? member.model : (meta && meta.model) || '群聊发言')
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) +
           ' · 第 ' + ((meta && meta.round) || '—') + ' 轮</div></div>' +
       '</div>' +
       '<button type="button" class="gd-copy" id="gdCopy" title="复制全文">⧉ 复制全文</button>' +
@@ -27504,14 +27588,19 @@ function groupMentionShow(ta, hits) {
   box.innerHTML = hits.map((m, i) =>
     '<div class="mp-item' + (i === 0 ? ' on' : '') + '" data-i="' + i + '" role="option">' +
       '<span class="mp-ava' + (m.owner ? ' owner' : '') + '" style="' +
-        (m.owner ? '' : '--mh:' + hueOf(m)) + '">' +
-        (m.host ? '★' : (m.owner ? '群' : (m.all ? '∀' : String(m.name || '?').slice(0, 1)))) + '</span>' +
+        (m.owner ? '' : '--mh:' + hueOf(m)) + '"></span>' +
       '<span class="mp-main"><span class="mp-name"></span>' +
         (hits[i].model ? '<span class="mp-model"></span>' : '') + '</span>' +
       (m.host ? '<span class="mp-tag">主持人</span>' :
         (m.owner ? '<span class="mp-tag">交回人类</span>' :
          (m.all ? '<span class="mp-tag">全员点名</span>' : ''))) +
     '</div>').join('');
+  // R37 修复（D15）：头像字改 textContent 装配——原首字符直拼 innerHTML（成员名
+  // 间接来源），且本模块作用域无 escapeHtml（单模块 vm 桩环境 ReferenceError）。
+  box.querySelectorAll('.mp-ava').forEach((el, i) => {
+    const m = hits[i];
+    el.textContent = m.host ? '★' : (m.owner ? '群' : (m.all ? '∀' : String(m.name || '?').slice(0, 1)));
+  });
   box.querySelectorAll('.mp-name').forEach((el, i) => { el.textContent = hits[i].name; });
   box.querySelectorAll('.mp-model').forEach((el, i) => { el.textContent = hits[i].model; });
   box.querySelectorAll('.mp-item').forEach(el => {

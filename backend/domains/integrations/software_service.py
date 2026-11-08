@@ -794,6 +794,11 @@ class SoftwareService:
             if base is not None:
                 merged = json.loads(json.dumps(base))
                 merged.update(entry)
+                # R37 修复（K7）：user 条目经 _normalize 恒带 actions=[]——只想改
+                # exec 的用户会因空列表整键覆盖而清空预设动作面（software_call
+                # 全灭）。语义改为：user.actions 非空才覆盖；空 = 继承预设。
+                if not entry.get('actions') and base.get('actions'):
+                    merged['actions'] = json.loads(json.dumps(base['actions']))
                 reg[name] = merged
             else:
                 reg[name] = json.loads(json.dumps(entry))

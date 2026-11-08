@@ -33,11 +33,30 @@ export function readJsonIfExists(file, fallback) {
   }
 }
 
-/** 原子写：tmp + rename，崩溃不留半截 JSON（与 legacy atomic_write_json 同口径）。 */
+/** 原子写：tmp + rename，崩溃不留半截 JSON（与 legacy atomic_write_json 同口径）。
+ * R37 修复（S2-8）：对齐 Python fio.py 持久化强度——写后 fsync（掉电不留半截）、
+ * rename 遇 EBUSY/EPERM/EACCES（杀毒/索引器短暂占用目标）快速重试 5 次、
+ * 最终失败清理 tmp 再抛（不留垃圾文件）。 */
 export function atomicWriteJson(file, value) {
   ensureDir(path.dirname(file))
   const tmp = `${file}.${process.pid}.tmp`
   const text = JSON.stringify(value, null, 2)
-  fs.writeFileSync(tmp, text, 'utf8')
-  fs.renameSync(tmp, file)
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeFileSync(fd, text, 'utf8')
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      fs.renameSync(tmp, file)
+      return
+    } catch (error) {
+      if (attempt >= 4 || !['EBUSY', 'EPERM', 'EACCES'].includes(error.code)) {
+        try { fs.rmSync(tmp, { force: true }) } catch { /* 尽力清理 */ }
+        throw error
+      }
+    }
+  }
 }

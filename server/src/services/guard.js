@@ -155,7 +155,12 @@ function loadCfg() {
   try {
     data = JSON.parse(fs.readFileSync(GUARD_FILE, 'utf8'))
     if (!data || typeof data !== 'object' || Array.isArray(data)) data = {}
-  } catch { data = {} }
+  } catch {
+    // R37 修复（S2-9 对齐 Python）：损坏留 .bad 备份再回落默认——原静默归零，
+    // 随后任何 persistCfg 用默认覆盖落盘，用户档位/名单无声清零且无迹可寻。
+    try { if (fs.existsSync(GUARD_FILE)) fs.renameSync(GUARD_FILE, GUARD_FILE + '.bad') } catch { /* 尽力 */ }
+    data = {}
+  }
   const cfg = {
     tiers: { ...DEFAULT_TIERS },
     protect_paths: [],
@@ -189,15 +194,26 @@ function loadCfg() {
   return cfg
 }
 
-/** guard 写档：归一 cfg + 会话态落盘（used/escalated/hits）。 */
+/** guard 写档：归一 cfg + 会话态落盘（used/escalated/hits）。
+ * R37 修复（K6 Node 侧对齐）：未知顶层键透传保留——原白名单重建整写，
+ * 未来版本/手工扩展键在下次写档被无声抹掉（与 Python guard_service 同铁律）。 */
+const GUARD_KNOWN_KEYS = new Set(['tiers', 'protect_paths', 'protect_processes',
+  'trustedOps', 'allow_rules', 'approval_budget'])
 function persistCfg(cfg) {
-  const out = {
-    tiers: cfg.tiers,
-    protect_paths: cfg.protect_paths,
-    protect_processes: cfg.protect_processes,
-    trustedOps: cfg.trustedOps,
-    approval_budget: { limit: cfg.approval_budget.limit, used: sidBudget().used, escalated: sidBudget().escalated },
+  let prev = {}
+  try {
+    const d = JSON.parse(fs.readFileSync(GUARD_FILE, 'utf8'))
+    if (d && typeof d === 'object' && !Array.isArray(d)) prev = d
+  } catch { /* 损坏场景 loadCfg 已留 .bad */ }
+  const out = {}
+  for (const [k, v] of Object.entries(prev)) {
+    if (!GUARD_KNOWN_KEYS.has(k)) out[k] = v
   }
+  out.tiers = cfg.tiers
+  out.protect_paths = cfg.protect_paths
+  out.protect_processes = cfg.protect_processes
+  out.trustedOps = cfg.trustedOps
+  out.approval_budget = { limit: cfg.approval_budget.limit, used: sidBudget().used, escalated: sidBudget().escalated }
   if (cfg.allow_rules && cfg.allow_rules.length) {
     out.allow_rules = cfg.allow_rules.map(r => ({ ...r, hits: ruleHits.get(r.rule_id) ?? r.hits }))
   }

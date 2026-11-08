@@ -67,14 +67,19 @@ function groupMentionShow(ta, hits) {
   box.innerHTML = hits.map((m, i) =>
     '<div class="mp-item' + (i === 0 ? ' on' : '') + '" data-i="' + i + '" role="option">' +
       '<span class="mp-ava' + (m.owner ? ' owner' : '') + '" style="' +
-        (m.owner ? '' : '--mh:' + hueOf(m)) + '">' +
-        (m.host ? '★' : (m.owner ? '群' : (m.all ? '∀' : String(m.name || '?').slice(0, 1)))) + '</span>' +
+        (m.owner ? '' : '--mh:' + hueOf(m)) + '"></span>' +
       '<span class="mp-main"><span class="mp-name"></span>' +
         (hits[i].model ? '<span class="mp-model"></span>' : '') + '</span>' +
       (m.host ? '<span class="mp-tag">主持人</span>' :
         (m.owner ? '<span class="mp-tag">交回人类</span>' :
          (m.all ? '<span class="mp-tag">全员点名</span>' : ''))) +
     '</div>').join('');
+  // R37 修复（D15）：头像字改 textContent 装配——原首字符直拼 innerHTML（成员名
+  // 间接来源），且本模块作用域无 escapeHtml（单模块 vm 桩环境 ReferenceError）。
+  box.querySelectorAll('.mp-ava').forEach((el, i) => {
+    const m = hits[i];
+    el.textContent = m.host ? '★' : (m.owner ? '群' : (m.all ? '∀' : String(m.name || '?').slice(0, 1)));
+  });
   box.querySelectorAll('.mp-name').forEach((el, i) => { el.textContent = hits[i].name; });
   box.querySelectorAll('.mp-model').forEach((el, i) => { el.textContent = hits[i].model; });
   box.querySelectorAll('.mp-item').forEach(el => {

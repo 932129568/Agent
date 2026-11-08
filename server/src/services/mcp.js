@@ -57,38 +57,53 @@ async function closeRuntime(name) {
   try { await entry.transport.close() } catch {}
   return 1
 }
+// R37 修复（S2-10）：并发 connect 去重——原「先查后建」无锁，并发调用对同一
+// 服务器各建一个 client（connect 30s 窗口真实存在），先建者被 runtime 覆盖=
+// 孤儿 stdio 子进程泄漏。
+const connecting = new Map()
 async function connect(name, configOverride) {
   const cfg = configOverride || serverConfig(name)
   if (!cfg) throw new Error(`服务器不存在: ${name}`)
   if (!configOverride && !cfg.enabled) throw new Error(`MCP 服务器 ${name} 未启用`)
   const existing = runtime.get(name); if (existing && !configOverride) return existing
-  const client = new Client({ name: 'harbor-node', version: '1.0.0' }, { capabilities: {} })
-  let transport
-  if (cfg.url) {
-    const { values: headers } = await plainMapping(cfg.headers)
-    // 安全边界（_spawn_client 同款）：解密失败的密文串永不下发 HTTP 头
-    for (const [key, value] of Object.entries(headers)) {
-      if (typeof value === 'string' && value.startsWith(ENC_PREFIX)) headers[key] = ''
-    }
-    transport = new StreamableHTTPClientTransport(new URL(cfg.url), { requestInit: { headers, redirect: 'error' }, redirectPolicy: 'same-origin' })
-  } else {
-    const { values: plainEnv } = await plainMapping(cfg.env)
-    for (const [key, value] of Object.entries(plainEnv)) {
-      if (typeof value === 'string' && value.startsWith(ENC_PREFIX)) plainEnv[key] = ''
-    }
-    const env = { ...process.env, ...plainEnv }
-    transport = new StdioClientTransport({ command: cfg.command, args: cfg.args || [], env, cwd: cfg.cwd || process.cwd(), stderr: 'pipe' })
+  if (!configOverride) {
+    const inflight = connecting.get(name)
+    if (inflight) return inflight
   }
-  try {
-    await client.connect(transport, { timeout: 30000 })
-    const listed = await client.listTools(undefined, { timeout: Math.max(10000, (cfg.callTimeout || 60) * 1000) })
-    const entry = { client, transport, tools: listed.tools || [], resources: [], status: 'ok', last_error: '', server_info: client.getServerVersion() || {}, instructions: client.getInstructions() || '' }
-    if (!configOverride) runtime.set(name, entry)
-    return entry
-  } catch (error) {
-    await client.close().catch(() => {}); await transport.close().catch(() => {})
-    throw error
+  const attempt = (async () => {
+    const client = new Client({ name: 'harbor-node', version: '1.0.0' }, { capabilities: {} })
+    let transport
+    if (cfg.url) {
+      const { values: headers } = await plainMapping(cfg.headers)
+      // 安全边界（_spawn_client 同款）：解密失败的密文串永不下发 HTTP 头
+      for (const [key, value] of Object.entries(headers)) {
+        if (typeof value === 'string' && value.startsWith(ENC_PREFIX)) headers[key] = ''
+      }
+      transport = new StreamableHTTPClientTransport(new URL(cfg.url), { requestInit: { headers, redirect: 'error' }, redirectPolicy: 'same-origin' })
+    } else {
+      const { values: plainEnv } = await plainMapping(cfg.env)
+      for (const [key, value] of Object.entries(plainEnv)) {
+        if (typeof value === 'string' && value.startsWith(ENC_PREFIX)) plainEnv[key] = ''
+      }
+      const env = { ...process.env, ...plainEnv }
+      transport = new StdioClientTransport({ command: cfg.command, args: cfg.args || [], env, cwd: cfg.cwd || process.cwd(), stderr: 'pipe' })
+    }
+    try {
+      await client.connect(transport, { timeout: 30000 })
+      const listed = await client.listTools(undefined, { timeout: Math.max(10000, (cfg.callTimeout || 60) * 1000) })
+      const entry = { client, transport, tools: listed.tools || [], resources: [], status: 'ok', last_error: '', server_info: client.getServerVersion() || {}, instructions: client.getInstructions() || '' }
+      if (!configOverride) runtime.set(name, entry)
+      return entry
+    } catch (error) {
+      await client.close().catch(() => {}); await transport.close().catch(() => {})
+      throw error
+    }
+  })()
+  if (!configOverride) {
+    connecting.set(name, attempt)
+    attempt.catch(() => {}).finally(() => connecting.delete(name))
   }
+  return attempt
 }
 export async function mcpListServers() {
   const servers = Object.entries(data().mcpServers).map(([name, cfg]) => {

@@ -174,28 +174,37 @@ class ConfigService:
         """
         sid = str(sid or '')
         removed = {'sessions': 0, 'ws': 0, 'plans': 0, 'checkpoints': 0}
+        # R37 修复（K5）：错误如实上报——原子步骤失败仅 warning 仍返回 ok:True，
+        # 用户被告知「删干净」而磁盘残留 plan/checkpoint。errors 仅在非空时附加
+        # （空场景返回 shape 与旧契约逐字节一致）。
+        errors = []
         # R33：与 Electron/server 端共用的删除墓碑。两端共用 ~/.glm-chat，
         # Python 版删 sessions.json、Electron 版删 DB；任一端删除后，另一端
         # 启动时的 legacy 增量导入都必须跳过该 id，避免「删了又出现」。
+        # R37 修复（N10）：墓碑读-改-写全程持锁（原无锁，并发 purge 互覆丢墓碑）。
         try:
-            tomb_path = os.path.join(paths.CONFIG_DIR, 'deleted_session_ids.json')
-            tomb = []
-            if os.path.exists(tomb_path):
-                with open(tomb_path, encoding='utf-8') as f:
-                    tomb = json.load(f)
-                if not isinstance(tomb, list):
-                    tomb = []
-            if sid and sid not in tomb:
-                tomb.append(sid)
-                atomic_write_text(tomb_path, json.dumps(tomb, ensure_ascii=False))
+            with self._lock:
+                tomb_path = os.path.join(paths.CONFIG_DIR, 'deleted_session_ids.json')
+                tomb = []
+                if os.path.exists(tomb_path):
+                    with open(tomb_path, encoding='utf-8') as f:
+                        tomb = json.load(f)
+                    if not isinstance(tomb, list):
+                        tomb = []
+                if sid and sid not in tomb:
+                    tomb.append(sid)
+                    atomic_write_text(tomb_path, json.dumps(tomb, ensure_ascii=False))
         except Exception as e:
-            self._log.debug('purge 墓碑写入失败（可忽略）: %r', e)
+            errors.append('墓碑写入失败: %s' % e)
+            self._log.warning('purge 墓碑写入失败: %r', e)
         try:
             tasks = json.loads(task_ids_json or '[]')
             if not isinstance(tasks, list):
                 tasks = []
+                errors.append('task_ids 不是数组，关联计划/检查点未删除')
         except Exception:
             tasks = []
+            errors.append('task_ids 非法 JSON，关联计划/检查点未删除')
         # ① sessions.json 条目（保底——前端通常已 filter 过）
         # 复核修正：读-改-写全程持 self._lock（save_sessions 同口径）——原
         # 无锁，并发 purge+保存互覆丢会话条目
@@ -211,6 +220,7 @@ class ConfigService:
                             atomic_write_text(p, json.dumps(keep, ensure_ascii=False))
                             removed['sessions'] = len(arr) - len(keep)
         except Exception as e:
+            errors.append('sessions 条目删除失败: %s' % e)
             self._log.warning('purge sessions 失败: %r', e)
         # ② session_ws 绑定（直接删 session_ws.json 里的条目——workspace_service
         # 的 delete_session_ws 要 runtime 单例，此处保底路径直接操作文件）
@@ -230,7 +240,10 @@ class ConfigService:
         associated = purge_associated(tasks, logger=self._log)
         removed['plans'] = associated['plans']
         removed['checkpoints'] = associated['checkpoints']
-        return {'ok': True, 'sid': sid, 'removed': removed}
+        result = {'ok': True, 'sid': sid, 'removed': removed}
+        if errors:
+            result['errors'] = errors   # 仅非空时附加（旧契约 shape 保持不变）
+        return result
 
     # ---- 历史存放目录（history.json；独立文件，config.json 零污染）----
     @staticmethod
@@ -297,6 +310,13 @@ class ConfigService:
                         shutil.copy2(src, dst)
                         migrated = True
                         migrated_from = src
+                        # R37 修复（N17）：迁移后源文件改名退位——原 copy2 不删源，
+                        # 旧 sessions.json 残留原目录；再切回默认目录时旧数据（含
+                        # 已 purge 会话）整批复活。
+                        try:
+                            os.replace(src, src + '.migrated.bak')
+                        except Exception as e2:
+                            self._log.warning('迁移后源文件退位失败（残留可复活）: %r', e2)
                     except Exception as e:
                         return {'error': '迁移失败: %s' % e}
             self._save_history_cfg(norm)

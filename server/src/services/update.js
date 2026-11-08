@@ -103,7 +103,17 @@ async function downloadWorker(url, sha256, version) {
   let handle
   try {
     await fsp.mkdir(UPDATE_DIR, { recursive: true })
-    const response = await fetchNoRedirect(url, { signal: AbortSignal.timeout(30000) })
+    // R37 修复（S2-4）：AbortSignal.timeout(30s) 会罩住整个响应体读取——任何
+    // >30s 的下载必失败（30min DOWNLOAD_DEADLINE 沦为死代码）。改为连接阶段
+    // 30s 专用守卫（headers 到达即拆），正文由既有 30min deadline + 500MB 上限把关。
+    const connectCtl = new AbortController()
+    const connectTimer = setTimeout(() => connectCtl.abort(new Error('连接超时 30s')), 30000)
+    let response
+    try {
+      response = await fetchNoRedirect(url, { signal: connectCtl.signal })
+    } finally {
+      clearTimeout(connectTimer)
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     if (!response.body) throw new Error('更新响应没有内容')
     const total = Number(response.headers.get('content-length') || 0)

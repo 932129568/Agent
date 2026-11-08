@@ -22,7 +22,10 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
   if (__isPy) {
     // pywebview 路径：全局 sid 切换；HTTP 桥（Electron）按 runSid 走
     // x-harbor-sid 请求头路由（P0-3），不触碰全局 activeSid
-    try { await callApi('set_current_sid', [currentSessionId]); } catch (e) {}
+    // R37 修复（P0 串话）：路由目标是 **run 所属会话**——原取全局 currentSessionId，
+    // 并行后台 run 每次工具调用都把后端会话切到「可见会话」，工具读写落进
+    // 别人会话的工作区（跨会话写盘）。
+    try { await callApi('set_current_sid', [runSid]); } catch (e) {}
   }
   args = args || {};   // 修复 ㊱：args 缺省兜底（原 pickPath 对 undefined 取属性虽不炸，但统一归一更稳）
   // v1.2 R2：破坏性操作护栏（delete/kill/剪贴板/截屏/命令执行 → 确认矩阵/保护名单）

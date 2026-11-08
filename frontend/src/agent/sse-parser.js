@@ -12,8 +12,10 @@ async function parseSseStream(stream, hooks) {
   let pending = '';
 
   const handleLine = line => {
-    if (!line.startsWith('data: ')) return;
-    const data = line.slice(6).trim();
+    // R37 修复（D17）：SSE 规范允许 `data:{...}`（冒号后无空格）——原只认带
+    // 空格形态，个别网关/供应商的整流内容被静默全丢。
+    if (!line.startsWith('data:')) return;
+    const data = (line.slice(5).startsWith(' ') ? line.slice(6) : line.slice(5)).trim();
     if (!data || data === '[DONE]') return;
     try {
       const json = JSON.parse(data);
