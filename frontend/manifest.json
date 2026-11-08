@@ -80,6 +80,7 @@
         "hubIsEnabled",
         "hubMarketPoolItems",
         "hubMarketPools",
+        "hubMarketSections",
         "hubOpenMarket",
         "hubRenderMarket",
         "hubSetMarketCat",

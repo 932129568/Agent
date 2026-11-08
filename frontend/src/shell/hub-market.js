@@ -118,6 +118,13 @@ function hubCloseMarket() {
 function hubSetMarketTab(tab) {
   HUB_MARKET_STATE.tab = tab;
   HUB_MARKET_STATE.sub = (tab === 'expert') ? 'experts' : tab;
+  // R34：不同池的分区名完全不同（专家=技术工程/产品设计…，技能=官方内置/
+  // 开发者插件市场…，连接器=官方连接器）。切 tab 必须重置分区与搜索词，
+  // 否则旧分区会把新池筛成 0 项（用户实测技能/连接器页全空）。
+  HUB_MARKET_STATE.cat = '全部';
+  HUB_MARKET_STATE.q = '';
+  const search = document.getElementById('hmSearch');
+  if (search) search.value = '';
   document.querySelectorAll('#hmTabs [data-hm-tab]').forEach(b => {
     if (b.classList) b.classList.toggle('on', b.dataset && b.dataset.hmTab === tab);
   });
@@ -125,6 +132,7 @@ function hubSetMarketTab(tab) {
 }
 function hubSetMarketSub(sub) {
   HUB_MARKET_STATE.sub = sub;
+  HUB_MARKET_STATE.cat = '全部';
   hubRenderMarket();
 }
 function hubSetMarketCat(cat) {
@@ -142,6 +150,25 @@ function hubSetMarketQuery(q) {
 function hubToggleMine() {
   HUB_MARKET_STATE.mineOnly = !HUB_MARKET_STATE.mineOnly;
   hubRenderMarket();
+}
+
+/** R34：当前池的分区列表（不是写死的 15 个专家分类）。
+ *  专家/专家团按官方分类顺序排；技能/连接器用目录里真实的 section。 */
+function hubMarketSections() {
+  const cat = (typeof HUB_CATALOG !== 'undefined') ? HUB_CATALOG : {};
+  const seen = [];
+  hubMarketPoolItems().forEach(it => {
+    const n = it.section || '其他';
+    if (seen.indexOf(n) < 0) seen.push(n);
+  });
+  if (HUB_MARKET_STATE.tab === 'expert') {
+    const order = (cat.categories || []).map(c => c.name);
+    seen.sort((a, b) => {
+      const ia = order.indexOf(a), ib = order.indexOf(b);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+    });
+  }
+  return ['全部'].concat(seen);
 }
 
 /** 市场页主渲染。 */
@@ -174,10 +201,12 @@ function hubRenderMarket() {
     }).join('');
   }
 
-  // 分类标签
+  // 分类标签：随当前池变化（专家 15 类 / 技能 6 个市场分区 / 连接器 1 类）
+  const sections = hubMarketSections();
+  if (s.cat !== '全部' && sections.indexOf(s.cat) < 0) s.cat = '全部';
   const cats = document.getElementById('hmCats');
   if (cats) {
-    const list = ['全部'].concat((cat.categories || []).map(c => c.name));
+    const list = sections;
     cats.innerHTML = list.map(n =>
       '<button type="button" class="hm-cat' + (s.cat === n ? ' on' : '') +
       '" data-hm-cat="' + hmEsc(n) + '">' + hmEsc(n) + '</button>').join('');
@@ -222,7 +251,7 @@ function hubRenderMarket() {
   if (!shown.length) {
     grid.innerHTML = '<div class="hm-empty">' +
       (s.mineOnly ? '还没有启用任何条目，点「启用」后会出现在这里和会话页 + 菜单里。'
-                  : '没有匹配的条目，换个关键词或分区试试。') + '</div>';
+                  : '没有匹配的条目，换个关键词或点「全部」分区试试。') + '</div>';
   } else {
     grid.innerHTML = shown.map(it => {
       const on = (enabled[pool] || []).indexOf(String(it.id)) >= 0;
