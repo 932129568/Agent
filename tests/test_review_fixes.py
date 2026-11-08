@@ -147,7 +147,7 @@ const __SRC = %r;
 const __MANIFEST = %r;
 function __fe(name){
   const relative = __MANIFEST[name] || name;
-  return __fs.readFileSync(__SRC + '/' + relative, 'utf8');
+  return String(relative).split(',').map(function(r){ return __fs.readFileSync(__SRC + '/' + r, 'utf8'); }).join('\n');
 }
 """ % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)
 

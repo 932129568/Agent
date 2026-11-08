@@ -66,6 +66,22 @@ LEGACY_SCRIPT_PATHS = {
 }
 
 
+# R28 模块级重构：大模块拆出「前置子模块」后，vm 沙箱仍按单文件/旧名加载，
+# 需要按加载顺序把「前置依赖 + 原模块」一起提供，才能还原拆分前的完整符号面。
+# 键为原模块路径，值为必须先行加载的前置子模块路径列表。
+MODULE_FAMILIES = {
+    'frontend/src/settings/connection.js': ['frontend/src/settings/connection-presets.js'],
+    'frontend/src/search/panel.js': ['frontend/src/search/panel-state.js'],
+    'frontend/src/agent/run-controller.js': ['frontend/src/agent/run-controller-utils.js'],
+    'frontend/src/sessions/controller.js': ['frontend/src/sessions/controller-meta.js'],
+}
+
+
+def family_paths(relative):
+    """模块族按加载顺序的路径列表（前置依赖在前，原模块在后）。"""
+    return MODULE_FAMILIES.get(relative, []) + [relative]
+
+
 def load_manifest(root):
     """Load and minimally validate the frontend manifest from *root*."""
     filename = os.path.join(root, 'frontend', 'manifest.json')
@@ -95,10 +111,16 @@ def resolve_script(root, name):
 
 
 def read_frontend_source(root, name):
-    """Read one frontend module through the manifest rather than disk layout."""
+    """读取一个前端模块；若属于拆分后的模块族，按加载顺序拼接前置依赖 + 原模块。
+
+    这样按旧名/基名/完整路径做的「单模块 vm 沙箱」断言，看到的符号面与拆分前一致。
+    """
     relative = resolve_script(root, name)
-    with open(os.path.join(root, *relative.split('/')), 'r', encoding='utf-8') as source:
-        return source.read()
+    parts = []
+    for rel in family_paths(relative):
+        with open(os.path.join(root, *rel.split('/')), 'r', encoding='utf-8') as source:
+            parts.append(source.read())
+    return '\n'.join(parts)
 
 
 def read_frontend_styles(root):
@@ -121,18 +143,24 @@ def read_frontend_template_with_styles(root):
 
 
 def frontend_node_map(root):
-    """Return exact paths and unambiguous basename aliases for Node harnesses."""
+    """Return exact paths and unambiguous basename aliases for Node harnesses.
+
+    R28：模块族的值改为以逗号分隔的多路径串（前置依赖在前）；Node harness 的
+    ``__fe`` 负责按逗号拆分后顺序拼接，从而还原拆分前的完整模块源码。
+    """
     result = {}
     for relative in script_paths(root):
-        result[relative] = relative
+        bundle = ','.join(family_paths(relative))
+        result[relative] = bundle
         basename = relative.rsplit('/', 1)[-1]
-        if basename in result and result[basename] != relative:
+        if basename in result and result[basename] != bundle:
             result[basename] = None
         else:
-            result[basename] = relative
+            result[basename] = bundle
     for legacy, relative in LEGACY_SCRIPT_PATHS.items():
-        if legacy in result and result[legacy] != relative:
+        bundle = ','.join(family_paths(relative))
+        if legacy in result and result[legacy] != bundle:
             result[legacy] = None
         else:
-            result[legacy] = relative
+            result[legacy] = bundle
     return {key: value for key, value in result.items() if value is not None}

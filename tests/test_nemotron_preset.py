@@ -39,12 +39,12 @@ async function __main() {
     assert result['order'].index('nemotron') == 4
     assert result['hot'][0]['id'] == MODEL_ID
     assert result['hot'][0]['badge'] == '262k'
-    connection = CONNECTION.read_text(encoding='utf-8')
+    connection = read_frontend_source(str(ROOT), '36-connect.js')
     assert "ctx_window: 262144, tool_capable: true" in connection
 
 
 def test_nemotron_preset_is_in_template_and_source_has_no_key():
-    connection = CONNECTION.read_text(encoding='utf-8')
+    connection = read_frontend_source(str(ROOT), '36-connect.js')
     template = TEMPLATE.read_text(encoding='utf-8')
     assert '<option value="nemotron">Nemotron 3 Ultra 550B</option>' in template
     assert 'https://legui.xyz/v1' in connection

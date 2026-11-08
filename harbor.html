@@ -9680,7 +9680,7 @@ function buildMessagesForAPI(msgs) {
   return out;
 }
 
-/* ===== frontend/src/settings/connection.js ===== */
+/* ===== frontend/src/settings/connection-presets.js ===== */
 /* ================= 连接与模型 · 完全单端点状态机（v4 合并块） =================
  * 设计出处：deliverables/design/v4/connect-merge-design.md（D1 完全单端点 / D2 防抖识别 /
  * D3 条件显隐 / D4 价格字段 / D5 存储单源化）。
@@ -9904,6 +9904,8 @@ let connectIdentifyTimer = null;  // 防抖定时器
  * 否则「自定义」来回切一次 URL 就被清空 = 用户数据丢失）。
  * 只记与预设默认值不同的值，避免把默认值也塞进记忆。会话级（不落盘）。 */
 const PRESET_BASE_MEMO = {};
+
+/* ===== frontend/src/settings/connection.js ===== */
 
 /* ================= 预设元信息 ================= */
 
@@ -14606,7 +14608,7 @@ function mcpMappingToText(map) {
   return Object.keys(map || {}).map(k => k + '=' + (map[k] == null ? '' : map[k])).join('\n');
 }
 
-/* ===== frontend/src/agent/run-controller.js ===== */
+/* ===== frontend/src/agent/run-controller-utils.js ===== */
 /* ================= Agent 主循环 ================= */
 function setSendButtonVisual(button, state) {
   if (!button) return;
@@ -14668,6 +14670,8 @@ function fillMissingToolResults(s, assistantMsg) {
     return;
   }
 }
+
+/* ===== frontend/src/agent/run-controller.js ===== */
 
 /* ================= v1.8.0 C 域：人工接管等待态（联调规范 §2.4） =================
  * executeToolRaw 检出 CAPTCHA_REQUIRED → fail-fast 返回带 suspended:true 的
@@ -16335,7 +16339,7 @@ async function mcpExecTool(name, args, decision, token) {
   }
 }
 
-/* ===== frontend/src/search/panel.js ===== */
+/* ===== frontend/src/search/panel-state.js ===== */
 /* ================= 搜索面板（v1.8.0 B 域 U1，实现 v1.8.0 B2） =================
  * #searchPanel + .sp-*（纯新增 DOM，UI 契约只增不改——check_contract 验）：
  * 结果列表 / 原文预览 / 缓存来源标注 / 人工接管区 / 阶段 pill + 进度。
@@ -16391,6 +16395,8 @@ let searchTakeoverId = null;   // 当前接管会话（captcha 态非空）
 let searchLastPayload = null;  // 最近一次成功载荷（原文预览/重渲染用）
 let spStatsSeq = 0;            // 脚注统计 last-wins（同 searchReqSeq 先例）
 let spTakeoverWarned = false;  // 当前接管会话是否已做过 TTL 到期预警（每会话一次）
+
+/* ===== frontend/src/search/panel.js ===== */
 
 /* ---------- typeof 守卫取值（§2.5：vm 沙箱无 DOM 不炸） ---------- */
 function searchPanelEl() {
@@ -21967,12 +21973,20 @@ async function unbindSession() {
   }
 }
 
-/* ===== frontend/src/sessions/controller.js ===== */
+/* ===== frontend/src/sessions/controller-meta.js ===== */
 /* ================= 会话管理 ================= */
 const PROJECTS_KEY = 'glm_projects';
 let projects = [];
 let _taskGroupCollapsed = false;
 const _collapsedProjects = new Set();
+const RUN_STATUS_META = {
+  working: { label: '进行中', title: '会话正在运行' },
+  completed: { label: '已完成', title: '会话已完成' },
+  paused: { label: '已暂停', title: '会话已暂停' },
+  failed: { label: '运行失败', title: '会话运行失败' },
+};
+
+/* ===== frontend/src/sessions/controller.js ===== */
 
 async function continueInNewSession() {
   const s = getCurrentSession();
@@ -22078,12 +22092,6 @@ function _newChatGroupsData() {
     .map(project => ({ project, sessions: sorted.filter(s => s.projectId === project.id) }));
   return { tasks, spaces };
 }
-const RUN_STATUS_META = {
-  working: { label: '进行中', title: '会话正在运行' },
-  completed: { label: '已完成', title: '会话已完成' },
-  paused: { label: '已暂停', title: '会话已暂停' },
-  failed: { label: '运行失败', title: '会话运行失败' },
-};
 function _runStatusHtml(s) {
   const status = s && s.runStatus;
   const meta = RUN_STATUS_META[status];

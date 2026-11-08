@@ -21,7 +21,8 @@ const __fs = require('fs');
 const __sand = { console: console, window: {} };
 __sand.window = __sand;
 const __ctx = __vm.createContext(__sand);
-function __fe(name){ return __fs.readFileSync(%r + '/' + ((%r)[name] || name), 'utf8'); }
+function __readBundle(rel){ return String(rel).split(',').map(function(r){ return __fs.readFileSync(%r + '/' + r, 'utf8'); }).join('\\n'); }
+function __fe(name){ return __readBundle(((%r)[name] || name)); }
 function __run(code){ __vm.runInContext(code, __ctx, { timeout: 20000 }); }
 function __vmEval(fnSrc){ return __vm.runInContext('(function(){' + fnSrc + '})()', __ctx, { timeout: 20000 }); }
 """ % (PROJECT_ROOT.replace(os.sep, '/'), frontend_node_map(PROJECT_ROOT),)

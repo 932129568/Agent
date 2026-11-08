@@ -473,17 +473,26 @@
       "requires": []
     },
     {
+      "path": "frontend/src/settings/connection-presets.js",
+      "provides": [
+        "PRESETS",
+        "PROVIDER_HOT_MODELS",
+        "CONNECT_PRESET_ORDER",
+        "CONNECT_LOCAL_IDS",
+        "CONNECT_DEBOUNCE_MS",
+        "CONNECT_AUTO_IDENTIFY",
+        "CONNECT_MANUAL_VALUE",
+        "CONNECT_GROUP_VALUE",
+        "connectPreset",
+        "connectIdentifySeq",
+        "connectIdentifyTimer",
+        "PRESET_BASE_MEMO"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/settings/connection.js",
       "provides": [
-        "CONNECT_AUTO_IDENTIFY",
-        "CONNECT_DEBOUNCE_MS",
-        "CONNECT_GROUP_VALUE",
-        "CONNECT_LOCAL_IDS",
-        "CONNECT_MANUAL_VALUE",
-        "CONNECT_PRESET_ORDER",
-        "PRESETS",
-        "PRESET_BASE_MEMO",
-        "PROVIDER_HOT_MODELS",
         "applyProviderConfig",
         "collectProviderConfig",
         "connectApiKeyInput",
@@ -503,14 +512,11 @@
         "connectHotModels",
         "connectIdentifyLabel",
         "connectIdentifyNow",
-        "connectIdentifySeq",
-        "connectIdentifyTimer",
         "connectInit",
         "connectIsLocalPreset",
         "connectLoadFromConfig",
         "connectModelValue",
         "connectOnModelChange",
-        "connectPreset",
         "connectPresetByLocalUrl",
         "connectPresetByUrl",
         "connectPresetGridInit",
@@ -536,7 +542,19 @@
         "callApi",
         "providerState",
         "toast",
-        "localState"
+        "localState",
+        "PRESETS",
+        "PROVIDER_HOT_MODELS",
+        "CONNECT_PRESET_ORDER",
+        "CONNECT_LOCAL_IDS",
+        "CONNECT_DEBOUNCE_MS",
+        "CONNECT_AUTO_IDENTIFY",
+        "CONNECT_MANUAL_VALUE",
+        "CONNECT_GROUP_VALUE",
+        "connectPreset",
+        "connectIdentifySeq",
+        "connectIdentifyTimer",
+        "PRESET_BASE_MEMO"
       ]
     },
     {
@@ -893,6 +911,15 @@
       ]
     },
     {
+      "path": "frontend/src/agent/run-controller-utils.js",
+      "provides": [
+        "setSendButtonVisual",
+        "streamSpeedText",
+        "fillMissingToolResults"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/agent/run-controller.js",
       "provides": [
         "__agentActiveRun",
@@ -902,7 +929,6 @@
         "runAddMessage",
         "syncAgentRunUiForSession",
         "cancelActiveAgentLoop",
-        "fillMissingToolResults",
         "harborMaybeAwaitTakeover",
         "harborTakeoverAwaitTerminal",
         "harborTakeoverNotify",
@@ -910,8 +936,6 @@
         "harborTakeoverWaitResolve",
         "planFinishIfNatural",
         "runAgentLoop",
-        "streamSpeedText",
-        "setSendButtonVisual",
         "__agentRuns",
         "runAgentLoopParallel",
         "getActiveRunSid",
@@ -935,7 +959,10 @@
         "ModelTransport",
         "ModelExecutor",
         "createToolRuntime",
-        "registerUiToolResult"
+        "registerUiToolResult",
+        "setSendButtonVisual",
+        "streamSpeedText",
+        "fillMissingToolResults"
       ]
     },
     {
@@ -979,18 +1006,30 @@
       ]
     },
     {
-      "path": "frontend/src/search/panel.js",
+      "path": "frontend/src/search/panel-state.js",
       "provides": [
-        "SP_FEATURE_KEY",
-        "SP_PHASE_TEXT",
         "SP_POLL_INTERVAL_MS",
-        "SP_SEARCH_TIMEOUT_MS",
-        "SP_STATS_TIMEOUT_MS",
         "SP_STATUS_TIMEOUT_MS",
+        "SP_SEARCH_TIMEOUT_MS",
         "SP_TAKEOVER_TIMEOUT_MS",
+        "SP_STATS_TIMEOUT_MS",
         "SP_TAKEOVER_TTL_S",
         "SP_TAKEOVER_WARN_LEAD_S",
+        "SP_PHASE_TEXT",
+        "SP_FEATURE_KEY",
+        "searchReqSeq",
+        "searchPanelState",
+        "searchPollTimer",
+        "searchTakeoverId",
         "searchLastPayload",
+        "spStatsSeq",
+        "spTakeoverWarned"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/search/panel.js",
+      "provides": [
         "searchPanelClose",
         "searchPanelEl",
         "searchPanelHideTakeover",
@@ -1005,26 +1044,36 @@
         "searchPanelSetState",
         "searchPanelShowTakeover",
         "searchPanelStartPolling",
-        "searchPanelState",
         "searchPanelStopPolling",
         "searchPanelTakeoverAction",
         "searchPanelToggleFold",
         "searchPanelWire",
-        "searchPollTimer",
-        "searchReqSeq",
-        "searchTakeoverId",
         "spCallApi",
         "spEl",
         "spEsc",
         "spFeatureEnabled",
         "spManualOpen",
-        "spStatsSeq",
-        "spTakeoverWarned",
         "spToast"
       ],
       "requires": [
         "callApi",
-        "toast"
+        "toast",
+        "SP_POLL_INTERVAL_MS",
+        "SP_STATUS_TIMEOUT_MS",
+        "SP_SEARCH_TIMEOUT_MS",
+        "SP_TAKEOVER_TIMEOUT_MS",
+        "SP_STATS_TIMEOUT_MS",
+        "SP_TAKEOVER_TTL_S",
+        "SP_TAKEOVER_WARN_LEAD_S",
+        "SP_PHASE_TEXT",
+        "SP_FEATURE_KEY",
+        "searchReqSeq",
+        "searchPanelState",
+        "searchPollTimer",
+        "searchTakeoverId",
+        "searchLastPayload",
+        "spStatsSeq",
+        "spTakeoverWarned"
       ]
     },
     {
@@ -1522,12 +1571,20 @@
       ]
     },
     {
-      "path": "frontend/src/sessions/controller.js",
+      "path": "frontend/src/sessions/controller-meta.js",
       "provides": [
         "PROJECTS_KEY",
-        "RUN_STATUS_META",
-        "_bindSessionGroups",
+        "projects",
+        "_taskGroupCollapsed",
         "_collapsedProjects",
+        "RUN_STATUS_META"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/sessions/controller.js",
+      "provides": [
+        "_bindSessionGroups",
         "_dayGroup",
         "_escId",
         "_hdBusy",
@@ -1541,7 +1598,6 @@
         "_sessionItemHtml",
         "_setNewChatScreenVisible",
         "_shortDir",
-        "_taskGroupCollapsed",
         "closeProjectModal",
         "continueInNewSession",
         "createProjectFromModal",
@@ -1560,7 +1616,6 @@
         "pickProjectFolder",
         "projectById",
         "projectUiInit",
-        "projects",
         "refreshHistoryFoot",
         "renderChatHistory",
         "renderNewChatHistory",
@@ -1584,7 +1639,12 @@
         "addMessage",
         "callApi",
         "toast",
-        "AppState"
+        "AppState",
+        "PROJECTS_KEY",
+        "projects",
+        "_taskGroupCollapsed",
+        "_collapsedProjects",
+        "RUN_STATUS_META"
       ]
     },
     {

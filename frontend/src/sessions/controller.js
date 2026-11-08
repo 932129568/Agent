@@ -1,8 +1,3 @@
-/* ================= 会话管理 ================= */
-const PROJECTS_KEY = 'glm_projects';
-let projects = [];
-let _taskGroupCollapsed = false;
-const _collapsedProjects = new Set();
 
 async function continueInNewSession() {
   const s = getCurrentSession();
@@ -108,12 +103,6 @@ function _newChatGroupsData() {
     .map(project => ({ project, sessions: sorted.filter(s => s.projectId === project.id) }));
   return { tasks, spaces };
 }
-const RUN_STATUS_META = {
-  working: { label: '进行中', title: '会话正在运行' },
-  completed: { label: '已完成', title: '会话已完成' },
-  paused: { label: '已暂停', title: '会话已暂停' },
-  failed: { label: '运行失败', title: '会话运行失败' },
-};
 function _runStatusHtml(s) {
   const status = s && s.runStatus;
   const meta = RUN_STATUS_META[status];

@@ -35,6 +35,7 @@ EXPECTED_ORDER = [
     'frontend/src/settings/navigation.js',
     'frontend/src/settings/local-model.js',
     'frontend/src/agent/context-freeze.js',
+    'frontend/src/settings/connection-presets.js',
     'frontend/src/settings/connection.js',
     'frontend/src/agent/budget.js',
     'frontend/src/settings/webdav.js',
@@ -53,10 +54,12 @@ EXPECTED_ORDER = [
     'frontend/src/providers/provider.js',
     'frontend/src/generative/chat-auto.js',
     'frontend/src/integrations/mcp-panel.js',
+    'frontend/src/agent/run-controller-utils.js',
     'frontend/src/agent/run-controller.js',
     'frontend/src/agent/resume.js',
     'frontend/src/agent/run-registry.js',
     'frontend/src/integrations/mcp-exec.js',
+    'frontend/src/search/panel-state.js',
     'frontend/src/search/panel.js',
     'frontend/src/integrations/software.js',
     'frontend/src/providers/hybrid.js',
@@ -77,6 +80,7 @@ EXPECTED_ORDER = [
     'frontend/src/analytics/cost.js',
     'frontend/src/analytics/panel.js',
     'frontend/src/core/utils.js',
+    'frontend/src/sessions/controller-meta.js',
     'frontend/src/sessions/controller.js',
     'frontend/src/chat/attachments.js',
     'frontend/src/agent/text-compress.js',
@@ -122,7 +126,7 @@ def manifest():
 def test_exactly_58_modules_once_with_frozen_order_and_dependencies():
     entries = manifest()['scripts']
     paths = [entry['path'] for entry in entries]
-    assert len(paths) == len(set(paths)) == 104
+    assert len(paths) == len(set(paths)) == 108
     assert paths == EXPECTED_ORDER
     disk = {path.relative_to(ROOT).as_posix()
             for path in (ROOT / 'frontend' / 'src').rglob('*.js')}
@@ -140,9 +144,9 @@ def test_exactly_58_modules_once_with_frozen_order_and_dependencies():
 def test_manifest_helper_resolves_every_new_path_without_duplicate_sources():
     node_map = frontend_node_map(str(ROOT))
     for path in EXPECTED_ORDER:
-        assert node_map[path] == path
+        assert node_map[path].split(',')[-1] == path
         assert read_frontend_source(str(ROOT), path)
-    assert len(EXPECTED_ORDER) == 104
+    assert len(EXPECTED_ORDER) == 108
     assert len(LEGACY_SCRIPT_PATHS) == 57
     for old_name, new_path in LEGACY_SCRIPT_PATHS.items():
         assert read_frontend_source(str(ROOT), old_name) == \

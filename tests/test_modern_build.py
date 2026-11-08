@@ -73,7 +73,7 @@ def test_current_manifest_build_is_byte_deterministic():
     assert first.returncode == 0 and second.returncode == 0
     assert digest1 == digest2
     manifest = json.loads((ROOT / 'frontend' / 'manifest.json').read_text(encoding='utf-8'))
-    assert len(manifest["scripts"]) == 104
+    assert len(manifest["scripts"]) == 108
     assert manifest['styles'] == [
         'frontend/styles/tokens.css', 'frontend/styles/base.css',
         'frontend/styles/legacy.css', 'frontend/styles/components.css',
