@@ -397,8 +397,10 @@ function updateSessionTitle(text) {
  * （sessions 条目 + ws 绑定 + plan json + checkpoint 目录）。
  */
 
-/* 历史目录 UI 样式已由模板 index.template.html:1991-2029 官方样式承载
- * （变量均已定义）——原 _hdStyle IIFE 动态注入与模板样式冲突，删除。 */
+/* 历史目录 UI 样式由 frontend/styles/legacy.css 与 frontend/styles/components.css
+ * 承载（R41 修复 D14：原注释锚点 index.template.html:1991-2029 不存在——
+ * 模板仅 1015 行且无 history-dir/hd- 样式，样式实居两 CSS 文件）
+ * ——原 _hdStyle IIFE 动态注入与模板样式冲突，删除。 */
 
 function ensureHistoryFoot() {
   if (document.getElementById('historyFoot')) return;

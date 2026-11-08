@@ -29,7 +29,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RECORD = ROOT / 'deliverables' / 'dev-plan' / 'scan-rounds.jsonl'
-LEGACY_NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
+# R41 修复（S4-12）：硬编码用户名路径 → 按 USERPROFILE 派生（保持末位回退语义）
+LEGACY_NODE = str(Path(os.environ.get('USERPROFILE', '')) / '.workbuddy' / 'binaries'
+                  / 'node' / 'versions' / 'node-v27.0.0-alpha.0.0.0-win-x64' / 'node.exe')
 
 CORE = [
     'tests/test_resume.py', 'tests/test_icon_system.py',
@@ -52,8 +54,15 @@ def resolve_node(explicit=None):
 
 def run(cmd, timeout):
     t0 = time.time()
-    p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout,
-                       errors='replace')
+    try:
+        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout,
+                           errors='replace')
+    except subprocess.TimeoutExpired as e:   # R41 修复（S4-13）：超时记账不炸轮
+        p = subprocess.CompletedProcess(cmd, returncode=-1,
+                                        stdout='', stderr='TIMEOUT: %s' % e)
+    except OSError as e:
+        p = subprocess.CompletedProcess(cmd, returncode=-1,
+                                        stdout='', stderr='OSERROR: %s' % e)
     return p, round(time.time() - t0, 1)
 
 

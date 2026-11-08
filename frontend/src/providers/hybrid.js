@@ -58,7 +58,7 @@ function hyToast(msg, kind) {
 function hyEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ---------- 挂载（设置区 #hybridBlock + 会话头部 #costSplit） ---------- */
@@ -409,7 +409,7 @@ async function hybridReadinessRun() {
     list.innerHTML = (r.items || []).map(it =>
       '<div class="rd-row"><span class="rd-dot ' + (it.ok ? 'ok' : 'miss') + '"></span>' +
       '<span class="rd-name">' + esc(it.name || '') + '</span>' +
-      '<span class="rd-score">' + it.score + '/' + it.max + '</span>' +
+      '<span class="rd-score">' + esc(it.score) + '/' + esc(it.max) + '</span>' +
       '<span class="rd-detail">' + esc(it.detail || '') + '</span></div>'
     ).join('') + ((r.suggestions || []).length
       ? '<div class="rd-sug">建议：' + esc(r.suggestions.join('；')) + '</div>' : '');

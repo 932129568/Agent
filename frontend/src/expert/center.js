@@ -258,14 +258,22 @@ function stopExpertRun() {
   return RunRegistry.cancel() !== null;
 }
 async function recoverExpertRun() {
+  // R41 修复（S4-15）：补 try/catch + 状态复位——原恢复流程任一环抛错
+  // （checkpoint 读档/recover 内部）直接 unhandled rejection，runPromise 挂死
   const checkpoint = expertCenterState.runResult && expertCenterState.runResult.checkpoint;
   if (!checkpoint || !expertCenterState.controller) return { status: 'recover_unavailable' };
-  expertCenterStatus('正在以新 run 恢复，旧工具不会重放…');
-  const result = await new ExpertRecovery(expertCenterState.controller).recover(checkpoint);
-  expertCenterState.runResult = result;
-  expertTimelineRefresh(result.runId);
-  expertCenterStatus('恢复状态：' + result.status + ' · parentRunId=' + result.parentRunId);
-  return result;
+  try {
+    expertCenterStatus('正在以新 run 恢复，旧工具不会重放…');
+    const result = await new ExpertRecovery(expertCenterState.controller).recover(checkpoint);
+    expertCenterState.runResult = result;
+    expertTimelineRefresh(result.runId);
+    expertCenterStatus('恢复状态：' + result.status + ' · parentRunId=' + result.parentRunId);
+    return result;
+  } catch (e) {
+    expertCenterState.runPromise = null;
+    expertCenterStatus('恢复失败：' + ((e && e.message) || e));
+    return { status: 'recover_failed', error: String((e && e.message) || e) };
+  }
 }
 function expertCenterKeydown(event) {
   if (!expertCenterState.open) return;

@@ -25,6 +25,7 @@ mcp.json / 106 SkillHub 中文热门技能 / 16 官方分类），修复 R32 只
 用法（本机、项目根目录）： python tools/build_hub_catalog.py
 """
 import json
+import os
 import re
 import sys
 import time
@@ -35,8 +36,10 @@ from hub_localize import (CJK, LINK_LABEL, connector_link, connector_section,
                           localize_connector, localize_skill)  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-WB = Path.home() / '.workbuddy'
-APP_RES = Path(r'F:\workbuddy\resources\app.asar.unpacked\resources')
+WB = Path(os.environ.get('HARBOR_WB_HOME', '') or (Path.home() / '.workbuddy'))
+# R41 修复（S4-11）：盘符硬编码 → 环境变量可覆写（默认值保留原语义）
+APP_RES = Path(os.environ.get('HARBOR_WB_APP_RES', '')
+               or r'F:\workbuddy\resources\app.asar.unpacked\resources')
 OUT = ROOT / 'frontend' / 'src' / 'shell' / 'hub-catalog.js'
 SNAPSHOT = ROOT / 'tools' / 'data' / 'hub-market-snapshot.json'
 PROBE = ROOT / 'tools' / 'data' / 'hub-mcp-probe.json'
@@ -155,6 +158,13 @@ GENERIC_EMOJI = {'agent': '🧑‍💼', 'team': '👥', 'skill': '⚡', 'connec
 def collect_experts():
     """专家市场全量：394 专家 + 54 专家团，附带 15 个官方分类与热门优先级。"""
     manifest_path = WB / 'app' / 'cache' / 'experts' / 'manifest.json'
+    # R41 修复（S4-10）：无守卫直读 WorkBuddy 缓存——非本机跑此脚本裸 traceback
+    if not manifest_path.is_file():
+        raise SystemExit(
+            'ERROR: WorkBuddy 专家缓存不存在：%s\n'
+            '本脚本依赖 WorkBuddy 本地缓存生成市场快照；非本机环境请改用'
+            '已提交的 frontend/src/shell/hub-catalog.js（内置离线快照），'
+            '或用 HARBOR_WB_HOME/HARBOR_WB_APP_RES 指向有效缓存。' % manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     categories = [
         {'id': c.get('id'), 'name': zh(c.get('name')), 'desc': clip(zh(c.get('description')), 90)}

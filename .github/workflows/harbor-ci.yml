@@ -111,6 +111,12 @@ jobs:
             echo "CDP 连接失败 → 降级（self-check 已通过）"
             exit 0
           fi
+          # R41 修复（S4-16）：0/2 以外的退出码（含脚本崩溃 traceback）原一律
+          # exit 0——三态区分：0=完成 / 2=CDP 降级 / 其它=崩溃判失败
+          if [ "$CODE" -ne 0 ] && [ "$CODE" -ne 2 ]; then
+            echo "entry_sweep 异常退出（code=$CODE，非 0/2 三态口径）→ 判失败"
+            exit 1
+          fi
           if [ "$CODE" -ne 0 ] && [ "${{ inputs.strict_sweep }}" = "true" ]; then
             echo "严格模式：存在 BAD 入口，判失败"
             exit 1

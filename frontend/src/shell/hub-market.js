@@ -297,7 +297,7 @@ function hubRenderMarket() {
         '</div>' +
         (meta ? '<div class="hm-link hm-link-' + hmEsc(meta.cls) + '" title="' +
           hmEsc(it.linkNote || meta.text) + '">' + hmEsc(meta.text) + '</div>' : '') +
-        '<p class="hm-card-desc">' + hmEsc(String(it.desc || '').slice(0, 62)) + '</p>' +
+        '<p class="hm-card-desc">' + hmEsc([...String(it.desc || '')].slice(0, 62).join('')) + '</p>' +
         '<div class="hm-card-tags">' + (it.tags || []).slice(0, 3).map(t =>
           '<span>' + hmEsc(t) + '</span>').join('') +
           (it.section ? '<span class="hm-card-sec">' + hmEsc(it.section) + '</span>' : '') + '</div>' +

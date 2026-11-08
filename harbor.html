@@ -5137,6 +5137,10 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
             <div><label>打开应用/链接</label><select id="guard_open_app" onchange="saveGuardSettings()">
               <option value="always" selected>每次确认</option><option value="session">会话内首次确认</option><option value="off">不拦截</option>
             </select></div>
+            <!-- R41（N11）：open_url 入矩阵后的档位 UI 出口（H8 同款） -->
+            <div><label>打开网页链接</label><select id="guard_open_url" onchange="saveGuardSettings()">
+              <option value="always" selected>每次确认</option><option value="session">会话内首次确认</option><option value="off">不拦截</option>
+            </select></div>
           </div>
           <label style="margin-top:12px;font-weight:400;color:var(--text-2);">保护名单 · 路径（每行一条，支持通配，如 C:\Users\*\Documents\**）</label>
           <textarea class="guard-txt" id="guardProtectPaths" rows="2" placeholder="C:\Users\*\Documents\**" onchange="saveGuardSettings()"></textarea>
@@ -5866,7 +5870,7 @@ function hubRenderSub() {
     '" data-hub-id="' + hubEsc(it.id) + '" title="' + hubEsc(it.desc || '') + '">' +
       '<span class="hub-item-emoji" aria-hidden="true">' + hubEsc(it.emoji || '⚡') + '</span>' +
       '<span class="hub-item-body"><span class="hub-item-name">' + hubEsc(it.name) + '</span>' +
-      '<span class="hub-item-desc">' + hubEsc(String(it.desc || '').slice(0, 46)) + '</span></span>' +
+      '<span class="hub-item-desc">' + hubEsc([...String(it.desc || '')].slice(0, 46).join('')) + '</span></span>' +
       (it.hot ? '<span class="hub-item-hot">热门</span>' : '') +
     '</button>').join('');
 }
@@ -6453,7 +6457,7 @@ function hubRenderMarket() {
         '</div>' +
         (meta ? '<div class="hm-link hm-link-' + hmEsc(meta.cls) + '" title="' +
           hmEsc(it.linkNote || meta.text) + '">' + hmEsc(meta.text) + '</div>' : '') +
-        '<p class="hm-card-desc">' + hmEsc(String(it.desc || '').slice(0, 62)) + '</p>' +
+        '<p class="hm-card-desc">' + hmEsc([...String(it.desc || '')].slice(0, 62).join('')) + '</p>' +
         '<div class="hm-card-tags">' + (it.tags || []).slice(0, 3).map(t =>
           '<span>' + hmEsc(t) + '</span>').join('') +
           (it.section ? '<span class="hm-card-sec">' + hmEsc(it.section) + '</span>' : '') + '</div>' +
@@ -6820,11 +6824,18 @@ CS.sync = function (sel) {
   const cur = sel.options[sel.selectedIndex];
   st.trigger.querySelector('.cs-label').textContent = cur ? cur.textContent : (sel.value || '未选择');
 };
-CS.syncAll = function () { CS.reg.forEach((st, sel) => CS.sync(sel)); };
+CS.syncAll = function () { CS.prune(); CS.reg.forEach((st, sel) => CS.sync(sel)); };
+/* R41 修复（S4-18）：断连 select 清扫——CS.reg 原只增不删，DOM 重建（设置面板
+ * 重挂/列表刷新）后旧 select 被强持泄漏。closeAllCS/syncAll 入口顺带清扫
+ * isConnected===false 的条目（vm 沙箱无 isConnected 时 undefined≠false 不误删）。*/
+CS.prune = function () {
+  CS.reg.forEach((st, sel) => { if (sel.isConnected === false) CS.reg.delete(sel); });
+};
 /* v4：下拉退场——open 的 wrap 加 .hiding 播 v4CsOut（140ms in-soft），
    动画结束（MOTION.onAnimEnd 双兜底）后移除 .open/.hiding；
    hiding 中重复调用直接返回（防重入）；Esc/外部点击路径不变 */
 function closeAllCS() {
+  CS.prune();
   CS.reg.forEach((st) => {
     const wrap = st.wrap;
     if (!wrap.classList.contains('open')) return;
@@ -7880,13 +7891,14 @@ const GUARD_OP_MAP = {
   run_command: 'run_command',
   run_powershell: 'run_powershell',
   run_admin_command: 'run_admin_command',
-  open_app: 'open_app'   // 修复 H8（四轮）：后端 W9 已纳入护栏矩阵，前端补映射——原缺位致提档即砖
+  open_app: 'open_app',   // 修复 H8（四轮）：后端 W9 已纳入护栏矩阵，前端补映射——原缺位致提档即砖
+  open_url: 'open_url'    // R41（N11）：后端已入矩阵，前端补映射（H8 同款，防提档即砖）
 };
 const GUARD_OP_LABEL = {
   delete_path: '删除文件/目录', kill_process: '结束进程',
   clipboard_write: '写入剪贴板', clipboard_read: '读取剪贴板', take_screenshot: '屏幕截图',
   run_command: '执行命令', run_powershell: '执行 PowerShell', run_admin_command: '管理员命令',
-  open_app: '打开应用/链接',
+  open_app: '打开应用/链接', open_url: '打开网页链接',   // R41（N11）
   // v1.9.0 M5：浏览器驱动六原语（审计查看器人话 op 名；拦截走 agentGuardCheck 分发支）
   browser_navigate: '浏览器导航', browser_extract: '页面提取',
   browser_click: '页面点击', browser_fill: '表单填充',
@@ -7909,6 +7921,7 @@ async function _guardDetailOf(op, args) {
     d.cmd = _c.trim() ? _c : String(args.command || '');
   }
   if (op === 'open_app') d.path = String(args.path || args.file_path || args.filename || args.target || '').trim();
+  if (op === 'open_url') d.url = String(args.url || '').trim();   // R41（N11）
   return d;
 }
 
@@ -7944,6 +7957,8 @@ async function _guardDescribe(op, args) {
   if (op === 'open_app')   // 修复 H8（四轮）：确认文案（原走兜底「确认操作」）
     return { title: '确认打开', body: 'AI 请求打开：\n' + String(d.path || '').slice(0, 300) +
       '\n将使用系统默认程序打开（bat/cmd 脚本会弹出控制台窗口）。', danger: true };
+  if (op === 'open_url')   // R41（N11）：确认文案
+    return { title: '确认打开网页', body: 'AI 请求用默认浏览器打开：\n' + String(d.url || '').slice(0, 300), danger: true };
   return { title: '确认操作', body: op, danger: false };
 }
 
@@ -8082,7 +8097,8 @@ function renderGuardSettings() {
     ['delete_path', '删除文件/目录'], ['kill_process', '结束进程'],
     ['clipboard_write', '写剪贴板'], ['clipboard_read', '读剪贴板'], ['take_screenshot', '截屏'],
     ['run_command', '执行命令'], ['run_powershell', 'PowerShell'], ['run_admin_command', '管理员命令'],
-    ['open_app', '打开应用/链接']   // 修复 H8（四轮）：档位 UI 补行
+    ['open_app', '打开应用/链接'],   // 修复 H8（四轮）：档位 UI 补行
+    ['open_url', '打开网页链接']   // R41（N11）：档位 UI 补行
   ];
   const tierName = { always: '每次确认', list: '仅保护名单', session: '会话内首次确认', off: '不拦截' };
   ops.forEach(([op, label]) => {
@@ -17635,6 +17651,7 @@ async function runAgentLoop(s, apiKey, opts) {
  * 状态一致性保证：继续 = runAgentLoop 重入。历史里 assistant.tool_calls 已被
  * fillMissingToolResults 配平（error 路径新增同样调用），模型看到的是合法
  * OpenAI 消息序列，从挂起点自然续写；不重发用户原文（防重复计费/重复执行）。
+ */
 
 /** 错误分类：可恢复（网络层/限流/服务端临时故障）返回 true。 */
 function isResumableError(msg) {
@@ -18759,7 +18776,7 @@ function swToast(msg, kind) {
 function swEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ---------- 面板骨架（纯新增 DOM；挂到设置面板 set-grid，sandboxBlock 同款模式） ---------- */
@@ -19227,7 +19244,7 @@ function hyToast(msg, kind) {
 function hyEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ---------- 挂载（设置区 #hybridBlock + 会话头部 #costSplit） ---------- */
@@ -19578,7 +19595,7 @@ async function hybridReadinessRun() {
     list.innerHTML = (r.items || []).map(it =>
       '<div class="rd-row"><span class="rd-dot ' + (it.ok ? 'ok' : 'miss') + '"></span>' +
       '<span class="rd-name">' + esc(it.name || '') + '</span>' +
-      '<span class="rd-score">' + it.score + '/' + it.max + '</span>' +
+      '<span class="rd-score">' + esc(it.score) + '/' + esc(it.max) + '</span>' +
       '<span class="rd-detail">' + esc(it.detail || '') + '</span></div>'
     ).join('') + ((r.suggestions || []).length
       ? '<div class="rd-sug">建议：' + esc(r.suggestions.join('；')) + '</div>' : '');
@@ -20042,7 +20059,7 @@ function ggToast(msg, kind) {
 function ggEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function ggFmtRemain(s) {
   const n = Math.max(0, parseInt(s || 0, 10) || 0);
@@ -21398,7 +21415,7 @@ function onboardingInit() {
 
 function obEsc(s) {
   return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ===== frontend/src/settings/memory.js ===== */
@@ -21547,7 +21564,7 @@ function mmFeatureEnabled() {
 function mmEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ---------- 条目归一（memory.json 元素可为任意 JSON 值） ---------- */
@@ -22190,7 +22207,7 @@ async function saveConfig() {
   function brwEsc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function brwToast(msg, kind) {
     if (typeof toast === 'function') toast(msg, kind || 'info');
@@ -23584,7 +23601,8 @@ function renderTrendChart(rows) {
     hLine.style.opacity = '1'; hDot.style.opacity = '1';
     const d = new Date(rows[bi].updatedAt || Date.now());
     tip.innerHTML = '<b>' + fmt(vals[bi]) + '</b><span>' + (d.getMonth() + 1) + '/' + d.getDate() +
-      ' · ' + (typeof escapeHtml === 'function' ? escapeHtml(String(rows[bi].title).slice(0, 18)) : String(rows[bi].title).slice(0, 18)) + '</span>';
+      ' · ' + (typeof escapeHtml === 'function' ? escapeHtml(String(rows[bi].title).slice(0, 18))
+        : String(rows[bi].title).slice(0, 18).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')) + '</span>';
     tip.style.opacity = '1';
     tip.style.left = Math.max(8, Math.min(92, p[0] / W * 100)) + '%';
     tip.style.top = Math.max(4, p[1] / H * 100) + '%';
@@ -24351,8 +24369,10 @@ function updateSessionTitle(text) {
  * （sessions 条目 + ws 绑定 + plan json + checkpoint 目录）。
  */
 
-/* 历史目录 UI 样式已由模板 index.template.html:1991-2029 官方样式承载
- * （变量均已定义）——原 _hdStyle IIFE 动态注入与模板样式冲突，删除。 */
+/* 历史目录 UI 样式由 frontend/styles/legacy.css 与 frontend/styles/components.css
+ * 承载（R41 修复 D14：原注释锚点 index.template.html:1991-2029 不存在——
+ * 模板仅 1015 行且无 history-dir/hd- 样式，样式实居两 CSS 文件）
+ * ——原 _hdStyle IIFE 动态注入与模板样式冲突，删除。 */
 
 function ensureHistoryFoot() {
   if (document.getElementById('historyFoot')) return;
@@ -30750,14 +30770,22 @@ function stopExpertRun() {
   return RunRegistry.cancel() !== null;
 }
 async function recoverExpertRun() {
+  // R41 修复（S4-15）：补 try/catch + 状态复位——原恢复流程任一环抛错
+  // （checkpoint 读档/recover 内部）直接 unhandled rejection，runPromise 挂死
   const checkpoint = expertCenterState.runResult && expertCenterState.runResult.checkpoint;
   if (!checkpoint || !expertCenterState.controller) return { status: 'recover_unavailable' };
-  expertCenterStatus('正在以新 run 恢复，旧工具不会重放…');
-  const result = await new ExpertRecovery(expertCenterState.controller).recover(checkpoint);
-  expertCenterState.runResult = result;
-  expertTimelineRefresh(result.runId);
-  expertCenterStatus('恢复状态：' + result.status + ' · parentRunId=' + result.parentRunId);
-  return result;
+  try {
+    expertCenterStatus('正在以新 run 恢复，旧工具不会重放…');
+    const result = await new ExpertRecovery(expertCenterState.controller).recover(checkpoint);
+    expertCenterState.runResult = result;
+    expertTimelineRefresh(result.runId);
+    expertCenterStatus('恢复状态：' + result.status + ' · parentRunId=' + result.parentRunId);
+    return result;
+  } catch (e) {
+    expertCenterState.runPromise = null;
+    expertCenterStatus('恢复失败：' + ((e && e.message) || e));
+    return { status: 'recover_failed', error: String((e && e.message) || e) };
+  }
 }
 function expertCenterKeydown(event) {
   if (!expertCenterState.open) return;

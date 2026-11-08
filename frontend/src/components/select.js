@@ -69,11 +69,18 @@ CS.sync = function (sel) {
   const cur = sel.options[sel.selectedIndex];
   st.trigger.querySelector('.cs-label').textContent = cur ? cur.textContent : (sel.value || '未选择');
 };
-CS.syncAll = function () { CS.reg.forEach((st, sel) => CS.sync(sel)); };
+CS.syncAll = function () { CS.prune(); CS.reg.forEach((st, sel) => CS.sync(sel)); };
+/* R41 修复（S4-18）：断连 select 清扫——CS.reg 原只增不删，DOM 重建（设置面板
+ * 重挂/列表刷新）后旧 select 被强持泄漏。closeAllCS/syncAll 入口顺带清扫
+ * isConnected===false 的条目（vm 沙箱无 isConnected 时 undefined≠false 不误删）。*/
+CS.prune = function () {
+  CS.reg.forEach((st, sel) => { if (sel.isConnected === false) CS.reg.delete(sel); });
+};
 /* v4：下拉退场——open 的 wrap 加 .hiding 播 v4CsOut（140ms in-soft），
    动画结束（MOTION.onAnimEnd 双兜底）后移除 .open/.hiding；
    hiding 中重复调用直接返回（防重入）；Esc/外部点击路径不变 */
 function closeAllCS() {
+  CS.prune();
   CS.reg.forEach((st) => {
     const wrap = st.wrap;
     if (!wrap.classList.contains('open')) return;

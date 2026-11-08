@@ -893,6 +893,10 @@
             <div><label>打开应用/链接</label><select id="guard_open_app" onchange="saveGuardSettings()">
               <option value="always" selected>每次确认</option><option value="session">会话内首次确认</option><option value="off">不拦截</option>
             </select></div>
+            <!-- R41（N11）：open_url 入矩阵后的档位 UI 出口（H8 同款） -->
+            <div><label>打开网页链接</label><select id="guard_open_url" onchange="saveGuardSettings()">
+              <option value="always" selected>每次确认</option><option value="session">会话内首次确认</option><option value="off">不拦截</option>
+            </select></div>
           </div>
           <label style="margin-top:12px;font-weight:400;color:var(--text-2);">保护名单 · 路径（每行一条，支持通配，如 C:\Users\*\Documents\**）</label>
           <textarea class="guard-txt" id="guardProtectPaths" rows="2" placeholder="C:\Users\*\Documents\**" onchange="saveGuardSettings()"></textarea>

@@ -36,7 +36,9 @@ def _latest_baseline():
         m = re.search(r'-r(\d+)\.json$', p.name)
         if m:
             items.append((int(m.group(1)), p))
-    assert items, '锚点链为空'
+    if not items:   # R41 修复（S4-19）：裸 assert → 显式 SystemExit 人话（import 期崩溃难读）
+        raise SystemExit('ERROR: 未找到契约锚点（deliverables/dev-plan/contract-baseline-r*.json）'
+                         '——锚点链为空，无法审计')
     return max(items, key=lambda x: x[0])[1]
 
 

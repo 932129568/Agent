@@ -143,7 +143,7 @@ function mmFeatureEnabled() {
 function mmEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ---------- 条目归一（memory.json 元素可为任意 JSON 值） ---------- */

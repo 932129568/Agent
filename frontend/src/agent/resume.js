@@ -21,6 +21,7 @@
  * 状态一致性保证：继续 = runAgentLoop 重入。历史里 assistant.tool_calls 已被
  * fillMissingToolResults 配平（error 路径新增同样调用），模型看到的是合法
  * OpenAI 消息序列，从挂起点自然续写；不重发用户原文（防重复计费/重复执行）。
+ */
 
 /** 错误分类：可恢复（网络层/限流/服务端临时故障）返回 true。 */
 function isResumableError(msg) {

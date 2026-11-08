@@ -65,7 +65,7 @@ function swToast(msg, kind) {
 function swEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ---------- 面板骨架（纯新增 DOM；挂到设置面板 set-grid，sandboxBlock 同款模式） ---------- */

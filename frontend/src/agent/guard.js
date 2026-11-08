@@ -20,13 +20,14 @@ const GUARD_OP_MAP = {
   run_command: 'run_command',
   run_powershell: 'run_powershell',
   run_admin_command: 'run_admin_command',
-  open_app: 'open_app'   // 修复 H8（四轮）：后端 W9 已纳入护栏矩阵，前端补映射——原缺位致提档即砖
+  open_app: 'open_app',   // 修复 H8（四轮）：后端 W9 已纳入护栏矩阵，前端补映射——原缺位致提档即砖
+  open_url: 'open_url'    // R41（N11）：后端已入矩阵，前端补映射（H8 同款，防提档即砖）
 };
 const GUARD_OP_LABEL = {
   delete_path: '删除文件/目录', kill_process: '结束进程',
   clipboard_write: '写入剪贴板', clipboard_read: '读取剪贴板', take_screenshot: '屏幕截图',
   run_command: '执行命令', run_powershell: '执行 PowerShell', run_admin_command: '管理员命令',
-  open_app: '打开应用/链接',
+  open_app: '打开应用/链接', open_url: '打开网页链接',   // R41（N11）
   // v1.9.0 M5：浏览器驱动六原语（审计查看器人话 op 名；拦截走 agentGuardCheck 分发支）
   browser_navigate: '浏览器导航', browser_extract: '页面提取',
   browser_click: '页面点击', browser_fill: '表单填充',
@@ -49,6 +50,7 @@ async function _guardDetailOf(op, args) {
     d.cmd = _c.trim() ? _c : String(args.command || '');
   }
   if (op === 'open_app') d.path = String(args.path || args.file_path || args.filename || args.target || '').trim();
+  if (op === 'open_url') d.url = String(args.url || '').trim();   // R41（N11）
   return d;
 }
 
@@ -84,6 +86,8 @@ async function _guardDescribe(op, args) {
   if (op === 'open_app')   // 修复 H8（四轮）：确认文案（原走兜底「确认操作」）
     return { title: '确认打开', body: 'AI 请求打开：\n' + String(d.path || '').slice(0, 300) +
       '\n将使用系统默认程序打开（bat/cmd 脚本会弹出控制台窗口）。', danger: true };
+  if (op === 'open_url')   // R41（N11）：确认文案
+    return { title: '确认打开网页', body: 'AI 请求用默认浏览器打开：\n' + String(d.url || '').slice(0, 300), danger: true };
   return { title: '确认操作', body: op, danger: false };
 }
 
@@ -222,7 +226,8 @@ function renderGuardSettings() {
     ['delete_path', '删除文件/目录'], ['kill_process', '结束进程'],
     ['clipboard_write', '写剪贴板'], ['clipboard_read', '读剪贴板'], ['take_screenshot', '截屏'],
     ['run_command', '执行命令'], ['run_powershell', 'PowerShell'], ['run_admin_command', '管理员命令'],
-    ['open_app', '打开应用/链接']   // 修复 H8（四轮）：档位 UI 补行
+    ['open_app', '打开应用/链接'],   // 修复 H8（四轮）：档位 UI 补行
+    ['open_url', '打开网页链接']   // R41（N11）：档位 UI 补行
   ];
   const tierName = { always: '每次确认', list: '仅保护名单', session: '会话内首次确认', off: '不拦截' };
   ops.forEach(([op, label]) => {

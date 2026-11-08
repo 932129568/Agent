@@ -121,7 +121,7 @@ function hubRenderSub() {
     '" data-hub-id="' + hubEsc(it.id) + '" title="' + hubEsc(it.desc || '') + '">' +
       '<span class="hub-item-emoji" aria-hidden="true">' + hubEsc(it.emoji || '⚡') + '</span>' +
       '<span class="hub-item-body"><span class="hub-item-name">' + hubEsc(it.name) + '</span>' +
-      '<span class="hub-item-desc">' + hubEsc(String(it.desc || '').slice(0, 46)) + '</span></span>' +
+      '<span class="hub-item-desc">' + hubEsc([...String(it.desc || '')].slice(0, 46).join('')) + '</span></span>' +
       (it.hot ? '<span class="hub-item-hot">热门</span>' : '') +
     '</button>').join('');
 }

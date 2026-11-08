@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures as cf
 import json
+import os
 import ssl
 import time
 import urllib.request
@@ -81,8 +82,11 @@ def main():
     targets = _targets()
     print('探测 HTTP 型 MCP 端点:', len(targets))
     ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    # R41 修复（S4-14）：证书校验默认开启——原无条件 CERT_NONE（MITM 可向探针
+    # 结果投毒）。仅 HARBOR_PROBE_INSECURE=1 显式降级（自签内网探针场景）。
+    if os.environ.get('HARBOR_PROBE_INSECURE') == '1':
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
     started = time.time()
     results = []
     with cf.ThreadPoolExecutor(max_workers=args.workers) as pool:

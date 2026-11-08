@@ -179,7 +179,8 @@ function renderTrendChart(rows) {
     hLine.style.opacity = '1'; hDot.style.opacity = '1';
     const d = new Date(rows[bi].updatedAt || Date.now());
     tip.innerHTML = '<b>' + fmt(vals[bi]) + '</b><span>' + (d.getMonth() + 1) + '/' + d.getDate() +
-      ' · ' + (typeof escapeHtml === 'function' ? escapeHtml(String(rows[bi].title).slice(0, 18)) : String(rows[bi].title).slice(0, 18)) + '</span>';
+      ' · ' + (typeof escapeHtml === 'function' ? escapeHtml(String(rows[bi].title).slice(0, 18))
+        : String(rows[bi].title).slice(0, 18).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')) + '</span>';
     tip.style.opacity = '1';
     tip.style.left = Math.max(8, Math.min(92, p[0] / W * 100)) + '%';
     tip.style.top = Math.max(4, p[1] / H * 100) + '%';

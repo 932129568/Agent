@@ -68,7 +68,7 @@ function ggToast(msg, kind) {
 function ggEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function ggFmtRemain(s) {
   const n = Math.max(0, parseInt(s || 0, 10) || 0);
