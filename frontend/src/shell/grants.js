@@ -35,6 +35,9 @@ const GG_SCOPES = [
 ];
 
 let grantReqSeq = 0;           // last-wins 请求序号（用户操作：创建/加规则/收回）
+let ggRulesSeq = 0;            // R40 修复（S4-5）：规则列表刷新独立序号——原共享
+                               // grantReqSeq，刷新 bump 序号会静默丢弃在途用户
+                               // 操作响应（成功分支被跳过，按钮态停在 pending）
 let ggStatusSeq = 0;           // 状态轮询独立序号（复核修正：原与用户操作共享
                                // grantReqSeq，30s 校准 bump 序号会静默丢弃在途
                                // 用户操作响应——成功分支被跳过时定时器不启动）
@@ -363,10 +366,10 @@ async function guardGrantRevoke() {
 
 /* ---------- 白名单管理 ---------- */
 async function guardGrantRulesRefresh() {
-  const seq = ++grantReqSeq;
+  const seq = ++ggRulesSeq;
   try {
     const raw = await ggCallApi('guard_rule_list', [], GG_STATUS_TIMEOUT_MS);
-    if (seq !== grantReqSeq) return;
+    if (seq !== ggRulesSeq) return;
     const d = JSON.parse(raw || '{}');
     if (d && d.ok) {
       ggRules = d.rules || [];

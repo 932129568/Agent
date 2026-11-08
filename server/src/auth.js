@@ -27,7 +27,11 @@ const kysely = new Kysely({
 
 const secret = process.env.AUTH_SECRET || ''
 if (config.AUTH_ENABLED === 'true' && secret.length < 32) {
-  log.warn('AUTH_ENABLED=true 但 AUTH_SECRET 缺失或过短（<32 字符），生产环境必须设置')
+  // R40 修复（S2-21）：fail-fast 拒绝启动——原仅 warn 后回落固定 dev 密钥，
+  // 显式开启认证却得到「人人皆知的密钥」比不认证更危险（假性安全）。
+  throw new Error('AUTH_ENABLED=true 但 AUTH_SECRET 缺失或过短（<32 字符）——'
+    + '拒绝以固定 dev 密钥启动。请设置强随机的 AUTH_SECRET（openssl rand -base64 48），'
+    + '或显式关闭 AUTH_ENABLED。')
 }
 
 export const auth = betterAuth({

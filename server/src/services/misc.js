@@ -260,6 +260,11 @@ export async function historyDirSet(dirPath, migrate = false) {
       // 迁移源取当前生效库（W9 口径）；目标已存在 → 跳过不覆盖（migrated 保持 false）
       if (!fs.existsSync(targetDb)) {
         try {
+          // R40 修复（S2-6）：拷贝前对活体库做 WAL checkpoint(TRUNCATE)——
+          // 原直接 copyFileSync，已提交事务还在 -wal 文件里，拷出的 .db 缺
+          // 尾部事务（目标库静默丢数据）。checkpoint 失败仍拷（退化为原行为）。
+          const { prisma } = await import('../db.js')
+          await prisma.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)')
           fs.copyFileSync(sourceDb, targetDb)
           // 复制 DB 文件 → 物化导出 sessions.json 到目标目录（legacy 可读副本）
           await materializeSessions(path.join(target, 'sessions.json'))
