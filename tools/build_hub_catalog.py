@@ -1,32 +1,45 @@
 # -*- coding: utf-8 -*-
-"""从本机 WorkBuddy 市场缓存采集「全量专家 / 专家团 / 各分区技能 / 连接器」，
+"""从 WorkBuddy 市场全量快照采集「专家 / 专家团 / 技能 / 连接器」，
 生成 Harbor 前端内置目录模块 frontend/src/shell/hub-catalog.js。
 
-数据来源（全部离线、只读本机缓存）：
-  - app/cache/experts/manifest.json            专家市场全量清单（448 条，15 分类）
-  - builtin-expert-recommendations/curated-experts.json  官方热门推荐（60 条，带 priority）
-  - .skill-list-cache.json                    已安装/内置技能（65 条）
-  - codebuddy-plugins-official marketplace.json  官方插件市场（206 条）
-  - cb_teams_marketplace marketplace.json       协作与团队市场（29 条）
-  - workbuddy-builtin/skills                    官方内置技能（23 条）
-  - workbuddy-connector-plugins-official       官方连接器（17 条）
-  - experts/plugins/*/plugin.json              用户已下载的专家包（补充真实 persona）
+R35 变更：目录来源升级为**在线市场全量快照** tools/data/hub-market-snapshot.json
+（由 tools/fetch_hub_market.py 采集，628 连接器含中文 display 元数据与真实
+mcp.json / 106 SkillHub 中文热门技能 / 16 官方分类），修复 R32 只有本机缓存
+（17 连接器、大量英文描述）导致的「不全 + 英文」问题。
+
+数据来源（快照 + 本机专家缓存，全部离线、只读）：
+  - tools/data/hub-market-snapshot.json   在线市场全量（离线固化，入库）
+  - app/cache/experts/manifest.json       专家市场全量清单（448 条，15 分类）
+  - builtin-expert-recommendations/curated-experts.json  官方热门推荐（60 条）
+  - .skill-list-cache.json / marketplace.json / workbuddy-builtin/skills  本机技能补充
+  - outputs/hub-catalog-cache/experts      CDN 专家人格原文（可选）
 
 产物是纯静态 JS 数据 + 查询函数，Harbor 运行时不依赖本机 WorkBuddy、不联网、
 不新增 js_api、不改 config.json。选中条目后由 hubCatalogPrompt() 生成一次性
 角色/工作流指令注入下一次发送的系统提示。
 
+连接器额外带 mcp（真实 MCP 服务器配置）与 link（可用性分级）字段，
+由 frontend/src/shell/hub-market.js 的 hubConnectorInstall() 落进
+~/.glm-chat/mcp_servers.json，经既有 MCP 运行时真正调用（不新增 js_api）。
+
 用法（本机、项目根目录）： python tools/build_hub_catalog.py
 """
 import json
 import re
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hub_localize import (CJK, LINK_LABEL, connector_link, connector_section,
+                          localize_connector, localize_skill)  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 WB = Path.home() / '.workbuddy'
 APP_RES = Path(r'F:\workbuddy\resources\app.asar.unpacked\resources')
 OUT = ROOT / 'frontend' / 'src' / 'shell' / 'hub-catalog.js'
+SNAPSHOT = ROOT / 'tools' / 'data' / 'hub-market-snapshot.json'
+PROBE = ROOT / 'tools' / 'data' / 'hub-mcp-probe.json'
 PERSONA_CACHE = ROOT / 'outputs' / 'hub-catalog-cache' / 'experts'
 
 
@@ -225,6 +238,16 @@ SECTION_EMOJI = {
     '个人已装 · 热门': '⭐', '官方内置': '🧩', '连接器技能': '🔌',
     '插件技能': '📦', '技能市场': '🛒', 'SkillHub': '🎯',
     '开发者插件市场': '💻', '协作与团队市场': '🤝',
+    '办公协同': '🏢', '开发工具': '💻', '投资理财': '💰',
+    '效率工具': '⚙️', '内容创作': '✍️', '信息资讯': '📰',
+    '教育学习': '📚', '数据分析': '📊', '网站部署': '🚀',
+    '生活服务': '🌱', '商业运营': '📈', '知识与学习': '🧠',
+    '健康医疗': '🏥', 'OPC·一人公司': '🧑‍💼', '双十一': '🛍️',
+}
+CONN_SECTION_EMOJI = {
+    '官方公开': '✅', '金融数据': '💹', '办公协同': '🏢', '开发工具': '💻',
+    '知识与检索': '🔎', '商业信息': '🏛️', '电商零售': '🛒',
+    '设计创作': '🎨', '生活服务': '🌱', '企业专属': '🔒', '更多服务': '🔗',
 }
 
 
@@ -244,16 +267,19 @@ def resolve_skill_md(source):
     return found[0] if found else None
 
 
-def add_skill(skills, seen, ident, name, desc, section, tags=None, hot=0, source=None):
+def add_skill(skills, seen, ident, name, desc, section, tags=None, hot=0, source=None,
+              alias='', uses=0):
     key = str(ident or name).lower()
     if key in seen:
         return
     seen.add(key)
+    zh_name, zh_desc = localize_skill(name, desc, section)
     item = {
-        'id': str(ident or name), 'name': clip(name, 60),
-        'desc': clip(desc, 160), 'emoji': SECTION_EMOJI.get(section, '⚡'),
+        'id': str(ident or name), 'name': clip(zh_name, 60),
+        'alias': clip(alias, 60) if alias and alias != zh_name else '',
+        'desc': clip(zh_desc, 160), 'emoji': SECTION_EMOJI.get(section, '⚡'),
         'section': section, 'tags': [str(t) for t in (tags or [])][:3],
-        'hot': hot, 'init': '', 'kind': 'skill',
+        'hot': hot, 'uses': uses, 'init': '', 'kind': 'skill',
     }
     md = resolve_skill_md(source)
     if md:
@@ -267,8 +293,29 @@ def add_skill(skills, seen, ident, name, desc, section, tags=None, hot=0, source
     skills.append(item)
 
 
+def load_snapshot():
+    """R35：在线市场全量快照（离线固化、入库）。缺失时报错，不静默降级。"""
+    if not SNAPSHOT.is_file():
+        raise SystemExit('缺少市场快照：请先运行 python tools/fetch_hub_market.py')
+    return json.loads(SNAPSHOT.read_text(encoding='utf-8'))
+
+
+SNAPSHOT_DATA = None
+PROBE_OK_IDS = set()
+SKILL_CAT_NAME = {}
+
+
 def collect_skills():
     skills, seen = [], set()
+    # ⓪ R35：SkillHub 在线市场首屏中文热门（106 条，带真实使用量 / 16 官方分类）
+    #    排在前面，保证「综合」排序时用户先看到 WorkBuddy 市场里的真实热门技能。
+    for row in SNAPSHOT_DATA.get('skills', []):
+        cats = [SKILL_CAT_NAME.get(c) for c in row.get('categories', [])]
+        cats = [c for c in cats if c and c != '全部'][:2]
+        section = cats[0] if cats else '技能市场'
+        add_skill(skills, seen, row['id'], row['name'], row['desc'],
+                  section, cats, hot=row.get('hot') or 0,
+                  alias=row.get('alias') or '', uses=row.get('uses') or 0)
     # ① 已安装 / 内置技能（含中文描述与示例）
     cache_path = WB / '.skill-list-cache.json'
     if cache_path.is_file():
@@ -318,19 +365,77 @@ def collect_skills():
     return skills
 
 
+def _slim_mcp(servers):
+    """精简 MCP 配置：只保留注册所需的字段，避免把 600KB 原始配置塞进前端。
+    secrets（headers/env 的实际值）不落目录：只保留键名与是否需要的标记。"""
+    if not isinstance(servers, dict):
+        return None
+    out = {}
+    for name, cfg in servers.items():
+        if not isinstance(cfg, dict):
+            continue
+        one = {}
+        for k in ('type', 'url', 'command', 'args'):
+            if cfg.get(k) is not None:
+                one[k] = cfg[k]
+        for k in ('headers', 'env'):
+            if isinstance(cfg.get(k), dict) and cfg[k]:
+                one[k + 'Keys'] = list(cfg[k].keys())[:8]
+        if one.get('url') or one.get('command'):
+            out[str(name)] = one
+    return out or None
+
+
 def collect_connectors():
-    path = (WB / 'plugins' / 'marketplaces' / 'workbuddy-connector-plugins-official'
-            / '.codebuddy-plugin' / 'marketplace.json')
-    out = []
-    if not path.is_file():
-        return out
-    for row in json.loads(path.read_text(encoding='utf-8')).get('plugins', []):
+    """R35：在线市场全量连接器（628），带中文元数据、真实 MCP 配置与可用性分级。
+
+    与 R32 的关键差别：目录项带 mcp / link 字段，前端 hubConnectorInstall()
+    可据此把配置注册进 Harbor 既有的 MCP 运行时（mcp_import_claude /
+    mcp_save_server / mcp_test_server），让模型真正调用外部服务工具；
+    link 分级如实标注「可直连 / 需授权 / 需本机依赖 / 仅目录」。
+    """
+    out, seen = [], set()
+    skipped = 0
+    for row in SNAPSHOT_DATA.get('connectors', []):
+        cid = str(row.get('id') or '')
+        if not cid or cid.lower() in seen:
+            continue
+        seen.add(cid.lower())
+        section = connector_section(row)
+        mcp = _slim_mcp(row.get('mcp'))
+        link, note = connector_link(row.get('mcp'), cid in PROBE_OK_IDS)
+        # 用户要求（R35 收口）：不能直连的直接去掉，市场里不留占位卡片。
+        # 只保留实测匿名握手成功、无需密钥的 MCP 端点。
+        if link != 'ready':
+            skipped += 1
+            continue
+        name, desc = localize_connector(
+            cid, row.get('nameZh', ''), row.get('nameEn', ''),
+            row.get('descZh', ''), row.get('descEn', ''), section)
+        alias = row.get('nameEn') or cid
+        examples = [str(x) for x in (row.get('examples') or []) if x][:3]
         out.append({
-            'id': str(row.get('name')), 'name': str(row.get('name')),
-            'desc': clip(row.get('description') or '', 140),
-            'emoji': GENERIC_EMOJI['connector'], 'section': '官方连接器',
-            'tags': [], 'hot': 0, 'init': '', 'kind': 'connector',
+            'id': cid, 'name': clip(name, 60),
+            'alias': clip(alias, 60) if alias and alias != name else '',
+            'desc': clip(desc, 150),
+            'emoji': CONN_SECTION_EMOJI.get(section, '🔗'),
+            'section': section,
+            'tags': [LINK_LABEL[link]] + [str(x) for x in (row.get('keywords') or [])][:2],
+            'hot': 100 if row.get('source') == '官方公开' else 0,
+            'init': clip(examples[0], 90) if examples else '',
+            'kind': 'connector',
+            'mcp': mcp, 'link': link, 'linkNote': note,
+            'examples': examples,
+            'directive': ensure_directive({
+                'name': name, 'desc': desc, 'tags': [LINK_LABEL[link]],
+                'init': examples[0] if examples else '',
+                'directive': '连接器「%s」：%s\n%s\n' % (name, desc, note) +
+                    ('典型用法：' + ' / '.join(examples) + '\n' if examples else '') +
+                    '若本次请求的工具列表中出现 mcp__ 前缀的该服务工具，请优先用它完成用户请求；' +
+                    '若没有，明确告知用户该连接器尚未接通，并说明接入方式与所需授权，不要假装已调用成功。',
+            }),
         })
+    print('  连接器收录 %d（实测可直连），移除非直连 %d' % (len(out), skipped))
     return out
 
 
@@ -380,10 +485,13 @@ function hubCatalogSections() {
 
 /** 生成选中条目的真实角色/工作流指令（发送时注入系统提示，点击即生效）。
  *  优先使用内置的真实人格原文或 SKILL.md 工作流（directive）；无原文者回落到
- *  市场元数据生成的结构化角色设定，保证目录里每一项都能真正改变模型行为。 */
+ *  市场元数据生成的结构化角色设定，保证目录里每一项都能真正改变模型行为。
+ *  R35：连接器不再返回空串 —— 注入能力说明与 mcp__ 工具调用约定，配合
+ *  hubConnectorInstall() 注册后的真实 MCP 工具，做到「点了我真的可以用」。 */
 function hubCatalogPrompt(item) {
-  if (!item || item.kind === 'connector') return '';
-  const label = item.kind === 'team' ? '专家团' : (item.kind === 'expert' ? '专家' : '技能');
+  if (!item) return '';
+  const label = item.kind === 'team' ? '专家团' : (item.kind === 'expert' ? '专家'
+    : item.kind === 'connector' ? '连接器' : '技能');
   const head = '【Harbor 内置目录 · 已启用「' + item.name + '」（' + label + '）】\\n';
   const body = item.directive || ('启用「' + item.name + '」：' + (item.desc || '') +
     ((item.tags && item.tags.length) ? '\\n常见用法：' + item.tags.join('、') : ''));
@@ -391,17 +499,42 @@ function hubCatalogPrompt(item) {
     ? '\\n\\n该角色的开场提问（用户可能据此发问）：' + item.init : '';
   return head + body + tail;
 }
+
+/** R35：取连接器的精简 MCP 配置（供注册进既有 MCP 运行时）。 */
+function hubCatalogMcp(id) {
+  const it = hubCatalogById('connectors', id);
+  return (it && it.mcp) ? it.mcp : null;
+}
+
+/** R35：连接器可用性分级（ready/auth/local/sse/catalog）。 */
+function hubCatalogLink(id) {
+  const it = hubCatalogById('connectors', id);
+  return it ? (it.link || 'catalog') : '';
+}
 """
 
 
 def main():
+    global SNAPSHOT_DATA, SKILL_CAT_NAME, PROBE_OK_IDS
+    SNAPSHOT_DATA = load_snapshot()
+    # R35：只有实测匿名握手成功的端点才「可直连」；其余按用户要求直接移出市场。
+    if PROBE.is_file():
+        PROBE_OK_IDS = set(json.loads(PROBE.read_text(encoding='utf-8')).get('okIds') or [])
+    else:
+        print('警告：缺少 tools/data/hub-mcp-probe.json，本轮不收录任何连接器')
+    SKILL_CAT_NAME = {c['id']: c['name'] for c in SNAPSHOT_DATA.get('skillCategories', [])}
     experts, teams, categories, curated = collect_experts()
     skills = collect_skills()
     connectors = collect_connectors()
+    links = {}
+    for it in connectors:
+        links[it['link']] = links.get(it['link'], 0) + 1
     catalog = {
-        'version': 'r32-' + time.strftime('%Y%m%d'),
-        'source': 'WorkBuddy 本机市场缓存全量（离线内置）',
+        'version': 'r35-' + time.strftime('%Y%m%d'),
+        'source': 'WorkBuddy 在线市场全量快照（离线内置）',
         'categories': categories,
+        'skillCategories': SNAPSHOT_DATA.get('skillCategories', []),
+        'linkLabels': LINK_LABEL,
         'hotIds': [k for k, _ in sorted(curated.items(), key=lambda x: -x[1])],
         'experts': experts, 'teams': teams,
         'skills': skills, 'connectors': connectors,
@@ -409,11 +542,15 @@ def main():
     body = json.dumps(catalog, ensure_ascii=False, separators=(',', ':'))
     OUT.write_text(TEMPLATE % {'version': catalog['version'], 'body': body}, encoding='utf-8')
     print('生成:', OUT, '%.1f KB' % (OUT.stat().st_size / 1024))
-    real = sum(1 for it in experts + teams + skills if it.get('directive'))
-    print('专家 %d / 专家团 %d / 技能 %d / 连接器 %d / 分类 %d / 热门 %d / 含真实指令 %d' % (
+    real = sum(1 for it in experts + teams + skills + connectors if it.get('directive'))
+    n_zh = sum(1 for it in skills + connectors if CJK.search(it['desc']))
+    print('专家 %d / 专家团 %d / 技能 %d / 连接器 %d / 分类 %d / 热门 %d / 含指令 %d' % (
         len(experts), len(teams), len(skills), len(connectors),
         len(categories), len(curated), real))
+    print('中文描述覆盖: %d/%d' % (n_zh, len(skills) + len(connectors)))
+    print('连接器可用性:', links)
     print('技能分区:', sorted({i['section'] for i in skills}))
+    print('连接器分区:', sorted({i['section'] for i in connectors}))
 
 
 if __name__ == '__main__':

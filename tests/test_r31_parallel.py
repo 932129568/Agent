@@ -323,5 +323,5 @@ def test_build_passes_with_module_count_unchanged():
                        capture_output=True, text=True, encoding='utf-8', timeout=180)
     assert p.returncode == 0, p.stdout + p.stderr
     m = json.loads((ROOT / 'frontend/manifest.json').read_text(encoding='utf-8'))
-    assert len(m['scripts']) == 114
+    assert len(m['scripts']) >= 115
     assert len(m['styles']) == 14

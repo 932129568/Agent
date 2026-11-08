@@ -126,7 +126,11 @@ def test_market_entry_and_page_dom():
     center = (ROOT / 'frontend' / 'src' / 'expert' / 'center.js').read_text(encoding='utf-8')
     assert "hubOpenMarket('expert')" in center
     m = json.loads((ROOT / 'frontend' / 'manifest.json').read_text(encoding='utf-8'))
-    assert len(m['scripts']) == 114 and len(m['styles']) == 14
+    # R35 起模块数随功能扩容（新增 hub-connector.js），这里校验下限与关键模块在列，
+    # 不再写死总数，避免每次新增模块都要改旧断言。
+    assert len(m['scripts']) >= 114 and len(m['styles']) == 14
+    by_path = {e['path'] for e in m['scripts']}
+    assert 'frontend/src/shell/hub-connector.js' in by_path
     by = {e['path']: e for e in m['scripts']}
     for sym in ('hubOpenMarket', 'hubToggleEnabled', 'hubEnabledItems', 'hubRenderMarket'):
         assert sym in by['frontend/src/shell/hub-market.js']['provides']

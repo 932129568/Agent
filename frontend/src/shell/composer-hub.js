@@ -148,11 +148,39 @@ function hubPick(kind, id) {
     return true;
   }
   if (kind === 'connectors') {
-    // 连接器不注入提示词：打开既有 MCP 服务器设置作为真实落点
-    if (typeof toggleSettings === 'function') toggleSettings();
-    const block = document.querySelector('.set-block[data-group="工具与软件"]');
-    if (block && block.scrollIntoView) { try { block.scrollIntoView({ block: 'center' }); } catch (e) {} }
-    if (typeof toast === 'function') toast('内置目录含 ' + id + '；请在「MCP 服务器」中添加对应服务', 'ok');
+    // R35：连接器不再是「只跳设置页」的占位。启用后注册进 MCP 运行时，
+    // 这里把它作为当前会话的已选能力记录 → hubDirectiveFor() 注入系统提示，
+    // 模型据 mcp__ 工具前缀调用真实外部服务；未接入时如实提示，不假装可用。
+    const item = (typeof hubCatalogById === 'function')
+      ? hubCatalogById('connectors', id) : null;
+    if (!item) return false;
+    if (typeof hubIsEnabled === 'function' && !hubIsEnabled(kind, id)) {
+      if (typeof toast === 'function') toast('请先在「功能市场」里启用「' + item.name + '」', 'warn');
+      return false;
+    }
+    HUB_STATE.picks[sid] = { kind: kind, id: id, item: item };
+    hubRenderChip();
+    const st = (typeof hubConnState === 'function') ? hubConnState(id) : null;
+    if (typeof toast === 'function') {
+      if (st && st.ok) toast('「' + item.name + '」已接入，本会话可直接调用其工具', 'ok');
+      else if (item.link === 'catalog' || item.link === 'sse') {
+        toast('「' + item.name + '」' + (item.linkNote || '暂无可连接配置') +
+          '；已作为角色说明注入，但不会调用外部服务', 'warn');
+      } else {
+        toast('「' + item.name + '」尚未接通；点市场里的「测试连接」或到设置完成授权', 'warn');
+      }
+    }
+    // 未接入且可接入：顺手触发一次真实注册（异步，结果由市场卡片显示）
+    if ((!st || !st.ok) && item.mcp && typeof hubConnectorInstall === 'function') {
+      Promise.resolve(hubConnectorInstall(id)).catch(() => {});
+    }
+    const input = document.getElementById('userInput');
+    if (input && !String(input.value || '').trim() && item.init) {
+      input.value = item.init;
+      if (input.dispatchEvent) {
+        try { input.dispatchEvent(new Event('input')); } catch (e) {}
+      }
+    }
     hubCloseMenu();
     return true;
   }
@@ -199,7 +227,8 @@ function hubRenderChip() {
   chip.innerHTML =
     '<span class="hub-chip-emoji" aria-hidden="true">' + hubEsc(it.emoji || '⚡') + '</span>' +
     '<span class="hub-chip-name">' + hubEsc(it.name) + '</span>' +
-    '<span class="hub-chip-tag">' + (it.kind === 'team' ? '专家团' : it.kind === 'expert' ? '专家' : '技能') + ' · 已启用</span>' +
+    '<span class="hub-chip-tag">' + (it.kind === 'team' ? '专家团' : it.kind === 'expert' ? '专家'
+      : it.kind === 'connector' ? '连接器' : '技能') + ' · 已启用</span>' +
     '<button type="button" class="hub-chip-fill" data-hub-act="fill" title="填入该角色的开场提问">试一下</button>' +
     '<button type="button" class="hub-chip-x" data-hub-act="clear" aria-label="退出该角色">✕</button>';
 }

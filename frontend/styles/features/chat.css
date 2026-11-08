@@ -418,6 +418,23 @@ body.fx-off .hub-menu,body.fx-off .hub-subpanel,body.fx-off .hub-all-card{box-sh
   font-size:11px;color:var(--text-3)}
 .hm-disable-all{border:0;background:transparent;color:var(--text-3);font:inherit;font-size:11px;cursor:pointer}
 .hm-disable-all:hover{color:var(--err)}
+/* R35：连接器可用性如实标注 + 分页 */
+.hm-conn-note{font-size:11px;color:var(--text-3);padding:0 2px 6px;line-height:1.5}
+.hm-link{font-size:10px;line-height:1.4;border-radius:var(--radius-sm);padding:3px 7px;
+  border:1px solid transparent;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-link-ready,.hm-link-ok{color:var(--ok);background:var(--primary-soft);border-color:var(--primary)}
+.hm-link-auth,.hm-link-local,.hm-link-busy{color:var(--warn);background:var(--chip-bg);border-color:var(--border)}
+.hm-link-error{color:var(--err);background:var(--chip-bg);border-color:var(--err)}
+.hm-link-off{color:var(--text-3);background:var(--chip-bg);border-color:var(--border)}
+.hm-card-foot-split{justify-content:space-between;align-items:center;gap:6px}
+.hm-test{border:0;background:transparent;color:var(--text-3);font:inherit;font-size:10px;
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px;padding:2px 0}
+.hm-test:hover{color:var(--primary)}
+.hm-pager{display:flex;align-items:center;gap:8px;color:var(--text-3)}
+.hm-pager button{border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--card-bg);color:var(--text-2);font:inherit;font-size:10px;padding:2px 8px;cursor:pointer}
+.hm-pager button:disabled{opacity:.4;cursor:default}
+.hm-pager b{font-weight:600;color:var(--text)}
 .hub-market-link{border:1px dashed var(--primary);margin-top:6px}
 @media (max-width:1100px){.hm-hot{grid-template-columns:repeat(3,minmax(0,1fr))}.hm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:720px){.hm-hot{grid-template-columns:repeat(2,minmax(0,1fr))}.hm-grid{grid-template-columns:1fr}

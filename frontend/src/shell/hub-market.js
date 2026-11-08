@@ -7,9 +7,10 @@
  * （独立 key，不碰 config.json、不新增 js_api），按全局生效、可随时停用。
  */
 const HUB_ENABLED_KEY = 'harbor_hub_enabled';
+const HUB_MARKET_PAGE_SIZE = 48;
 const HUB_MARKET_STATE = {
   tab: 'expert', sub: 'experts', cat: '全部', sort: '综合',
-  q: '', mineOnly: false, open: false,
+  q: '', mineOnly: false, open: false, page: 1,
 };
 const HUB_HOT_SECTIONS = [
   { name: '电商运营', q: '电商', emoji: '🛒' },
@@ -71,12 +72,21 @@ function hubToggleEnabled(kind, id) {
   hubRenderMarket();
   if (typeof hubRenderSub === 'function') hubRenderSub();
   if (typeof hubRenderChip === 'function') hubRenderChip();
+  // R35：连接器启用时真的把 MCP 配置注册进后端运行时（异步，不阻塞 UI）。
+  // 停用只清启用态与接入状态，不删用户在设置里手工填过的 MCP 配置。
+  if (kind === 'connectors') {
+    if (nowOn && typeof hubConnectorInstall === 'function') {
+      Promise.resolve(hubConnectorInstall(sid)).catch(() => {});
+    } else if (!nowOn && typeof hubConnectorForget === 'function') {
+      hubConnectorForget(sid);
+    }
+  }
   return nowOn;
 }
 function hubDisableAll() {
   hubEnabledSave({ experts: [], teams: [], skills: [], connectors: [] });
   if (typeof HUB_STATE !== 'undefined' && HUB_STATE.picks) HUB_STATE.picks = {};
-  hubRenderMarket();
+  if (typeof hubRenderMarket === 'function') hubRenderMarket();
   if (typeof hubRenderSub === 'function') hubRenderSub();
   if (typeof hubRenderChip === 'function') hubRenderChip();
 }
@@ -107,6 +117,7 @@ function hubOpenMarket(tab) {
     ? '搜索技能' : (HUB_MARKET_STATE.tab === 'connector' ? '搜索连接器' : '搜索专家'); }
   HUB_MARKET_STATE.q = '';
   HUB_MARKET_STATE.cat = '全部';
+  HUB_MARKET_STATE.page = 1;
   hubRenderMarket();
   if (typeof hubCloseMenu === 'function') hubCloseMenu();
 }
@@ -123,6 +134,7 @@ function hubSetMarketTab(tab) {
   // 否则旧分区会把新池筛成 0 项（用户实测技能/连接器页全空）。
   HUB_MARKET_STATE.cat = '全部';
   HUB_MARKET_STATE.q = '';
+  HUB_MARKET_STATE.page = 1;
   const search = document.getElementById('hmSearch');
   if (search) search.value = '';
   document.querySelectorAll('#hmTabs [data-hm-tab]').forEach(b => {
@@ -133,23 +145,35 @@ function hubSetMarketTab(tab) {
 function hubSetMarketSub(sub) {
   HUB_MARKET_STATE.sub = sub;
   HUB_MARKET_STATE.cat = '全部';
+  HUB_MARKET_STATE.page = 1;
   hubRenderMarket();
 }
 function hubSetMarketCat(cat) {
   HUB_MARKET_STATE.cat = cat;
+  HUB_MARKET_STATE.page = 1;
   hubRenderMarket();
 }
 function hubSetMarketSort(sort) {
   HUB_MARKET_STATE.sort = sort;
+  HUB_MARKET_STATE.page = 1;
   hubRenderMarket();
 }
 function hubSetMarketQuery(q) {
   HUB_MARKET_STATE.q = String(q || '');
+  HUB_MARKET_STATE.page = 1;
   hubRenderMarket();
 }
 function hubToggleMine() {
   HUB_MARKET_STATE.mineOnly = !HUB_MARKET_STATE.mineOnly;
+  HUB_MARKET_STATE.page = 1;
   hubRenderMarket();
+}
+/** R35：分页——628 个连接器 / 377 个技能要能真正翻到，不能只显示前 48 个。 */
+function hubSetMarketPage(page) {
+  HUB_MARKET_STATE.page = Math.max(1, Number(page) || 1);
+  hubRenderMarket();
+  const grid = document.getElementById('hmGrid');
+  if (grid && grid.scrollTo) { try { grid.scrollTo(0, 0); } catch (e) {} }
 }
 
 /** R34：当前池的分区列表（不是写死的 15 个专家分类）。
@@ -246,7 +270,10 @@ function hubRenderMarket() {
   else if (s.sort === '最新') items.reverse();
   else items.sort((a, b) => (b.hot || 0) - (a.hot || 0));   // 综合：官方热门优先
   const total = items.length;
-  const shown = items.slice(0, 48);
+  const pages = Math.max(1, Math.ceil(total / HUB_MARKET_PAGE_SIZE));
+  if (s.page > pages) s.page = pages;
+  const from = (s.page - 1) * HUB_MARKET_PAGE_SIZE;
+  const shown = items.slice(from, from + HUB_MARKET_PAGE_SIZE);
   const pool = hubMarketPools()[0];
   if (!shown.length) {
     grid.innerHTML = '<div class="hm-empty">' +
@@ -255,19 +282,28 @@ function hubRenderMarket() {
   } else {
     grid.innerHTML = shown.map(it => {
       const on = (enabled[pool] || []).indexOf(String(it.id)) >= 0;
+      const isConn = pool === 'connectors';
+      // R35：连接器卡片如实标注「可直连 / 需授权 / 仅目录 / 已接入 N 个工具」，
+      // 并给一个「测试连接」入口重试，绝不把仅目录项说成可用。
+      const meta = (isConn && typeof hubConnCardMeta === 'function')
+        ? hubConnCardMeta(it) : null;
       return '<article class="hm-card' + (on ? ' enabled' : '') + '">' +
         '<div class="hm-card-top">' +
           '<span class="hm-card-emoji" aria-hidden="true">' + hmEsc(it.emoji || '⚡') + '</span>' +
           '<div class="hm-card-title"><b>' + hmEsc(it.name) + '</b>' +
             (it.alias && it.alias !== it.name ? '<small>' + hmEsc(it.alias) + '</small>' : '') +
           '</div>' +
-          (it.hot ? '<span class="hm-card-hot">热门</span>' : '') +
+          (!meta && it.hot ? '<span class="hm-card-hot">热门</span>' : '') +
         '</div>' +
+        (meta ? '<div class="hm-link hm-link-' + hmEsc(meta.cls) + '" title="' +
+          hmEsc(it.linkNote || meta.text) + '">' + hmEsc(meta.text) + '</div>' : '') +
         '<p class="hm-card-desc">' + hmEsc(String(it.desc || '').slice(0, 62)) + '</p>' +
         '<div class="hm-card-tags">' + (it.tags || []).slice(0, 3).map(t =>
           '<span>' + hmEsc(t) + '</span>').join('') +
           (it.section ? '<span class="hm-card-sec">' + hmEsc(it.section) + '</span>' : '') + '</div>' +
-        '<div class="hm-card-foot">' +
+        '<div class="hm-card-foot' + (meta && meta.canTest ? ' hm-card-foot-split' : '') + '">' +
+          (meta && meta.canTest ? '<button type="button" class="hm-test" data-hm-test="' +
+            hmEsc(it.id) + '" title="注册并实测连接">测试连接</button>' : '') +
           '<button type="button" class="hm-enable' + (on ? ' on' : '') +
             '" data-hm-kind="' + hmEsc(pool) + '" data-hm-id="' + hmEsc(it.id) + '">' +
             (on ? '✓ 已启用' : '+ 启用') + '</button>' +
@@ -275,9 +311,31 @@ function hubRenderMarket() {
       '</article>';
     }).join('');
   }
-  if (foot) foot.innerHTML = '<span>共 ' + total + ' 项 · 已启用 ' + hubEnabledCount() +
-    ' 项' + (total > shown.length ? ' · 显示前 ' + shown.length + ' 项，可用搜索缩小范围' : '') +
-    '</span><button type="button" class="hm-disable-all" id="hmDisableAll">全部停用</button>';
+  const stat = document.getElementById('hmLinkStat');
+  if (stat) {
+    const all = (typeof HUB_CATALOG !== 'undefined' && HUB_CATALOG.connectors)
+      ? HUB_CATALOG.connectors : [];
+    const counts = {};
+    all.forEach(x => { counts[x.link || 'catalog'] = (counts[x.link || 'catalog'] || 0) + 1; });
+    const zh = (typeof HUB_CONN_LEVEL_ZH !== 'undefined') ? HUB_CONN_LEVEL_ZH : {};
+    stat.textContent = s.tab === 'connector'
+      ? ('已实测可直连 ' + (counts.ready || 0) + ' 项 · 其余服务需 WorkBuddy 账号授权，已按你的要求从市场移除')
+      : '';
+    stat.hidden = s.tab !== 'connector';
+  }
+  if (foot) {
+    const pager = pages > 1
+      ? '<span class="hm-pager">' +
+        '<button type="button" data-hm-page="' + (s.page - 1) + '"' +
+        (s.page <= 1 ? ' disabled' : '') + '>上一页</button>' +
+        '<b>' + s.page + ' / ' + pages + '</b>' +
+        '<button type="button" data-hm-page="' + (s.page + 1) + '"' +
+        (s.page >= pages ? ' disabled' : '') + '>下一页</button></span>'
+      : '';
+    foot.innerHTML = '<span>共 ' + total + ' 项 · 已启用 ' + hubEnabledCount() + ' 项' +
+      (total > shown.length ? ' · 本页 ' + shown.length + ' 项，可搜索或翻页' : '') + '</span>' +
+      pager + '<button type="button" class="hm-disable-all" id="hmDisableAll">全部停用</button>';
+  }
 }
 
 /** 事件绑定（由 hubInitComposer 调用）。 */
@@ -323,11 +381,18 @@ function hubInitMarket() {
   if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) hubCloseMarket(); });
   const grid = document.getElementById('hmGrid');
   if (grid) grid.addEventListener('click', e => {
+    const t = e.target && e.target.closest ? e.target.closest('[data-hm-test]') : null;
+    if (t && t.dataset && typeof hubConnectorInstall === 'function') {
+      Promise.resolve(hubConnectorInstall(t.dataset.hmTest)).catch(() => {});
+      return;
+    }
     const b = e.target && e.target.closest ? e.target.closest('[data-hm-id]') : null;
     if (b && b.dataset) hubToggleEnabled(b.dataset.hmKind, b.dataset.hmId);
   });
   const foot = document.getElementById('hmFoot');
   if (foot) foot.addEventListener('click', e => {
+    const p = e.target && e.target.closest ? e.target.closest('[data-hm-page]') : null;
+    if (p && p.dataset) { hubSetMarketPage(p.dataset.hmPage); return; }
     const b = e.target && e.target.closest ? e.target.closest('#hmDisableAll') : null;
     if (b) hubDisableAll();
   });

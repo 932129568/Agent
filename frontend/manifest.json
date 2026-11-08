@@ -32,11 +32,35 @@
       "provides": [
         "HUB_CATALOG",
         "hubCatalogById",
+        "hubCatalogLink",
+        "hubCatalogMcp",
         "hubCatalogPrompt",
         "hubCatalogSearch",
         "hubCatalogSections"
       ],
       "requires": []
+    },
+    {
+      "path": "frontend/src/shell/hub-connector.js",
+      "provides": [
+        "HUB_CONN_BUSY",
+        "HUB_CONN_KEY",
+        "HUB_CONN_LEVEL_ZH",
+        "hubConnCardMeta",
+        "hubConnClear",
+        "hubConnConfig",
+        "hubConnLevelLabel",
+        "hubConnLoad",
+        "hubConnParse",
+        "hubConnSave",
+        "hubConnSet",
+        "hubConnState",
+        "hubConnectorForget",
+        "hubConnectorInstall"
+      ],
+      "requires": [
+        "hubCatalogById"
+      ]
     },
     {
       "path": "frontend/src/shell/composer-hub.js",
@@ -68,6 +92,7 @@
       "provides": [
         "HUB_ENABLED_KEY",
         "HUB_HOT_SECTIONS",
+        "HUB_MARKET_PAGE_SIZE",
         "HUB_MARKET_STATE",
         "hmEsc",
         "hubCloseMarket",
@@ -84,6 +109,7 @@
         "hubOpenMarket",
         "hubRenderMarket",
         "hubSetMarketCat",
+        "hubSetMarketPage",
         "hubSetMarketQuery",
         "hubSetMarketSort",
         "hubSetMarketSub",

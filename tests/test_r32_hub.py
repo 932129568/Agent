@@ -115,7 +115,7 @@ __out.afterClearEmpty = hubDirectiveFor() === '';
 hubPick('skills', 'workbuddy-pdf');
 const d2 = hubDirectiveFor();
 __out.skillEnabled = d2.length > 150 && d2.indexOf('技能') >= 0;
-__out.connectorNoDirective = hubCatalogPrompt(hubCatalogById('connectors','github')) === '';
+__out.connectorNoDirective = hubCatalogPrompt(hubCatalogById('connectors','github')) === '';  // R35: github 401 已移除
 ''', tmp_path)
     assert out['enabled'] and out['hasRealPersona'], '选中专家未注入真实人格指令'
     assert out['chipVisible'] and out['chipName'], '启用状态 chip 未显示'
@@ -123,7 +123,7 @@ __out.connectorNoDirective = hubCatalogPrompt(hubCatalogById('connectors','githu
     assert out['otherSessionEmpty'] and out['afterSwitchEmpty'], '选择态跨会话串台'
     assert out['afterClearEmpty'], '清除后仍在注入'
     assert out['skillEnabled'], '技能点击后未生效'
-    assert out['connectorNoDirective']
+    assert out['connectorNoDirective'], '非直连端点已从目录移除，不应注入指令'
 
 
 def test_system_prompt_injection_is_wired():
@@ -202,7 +202,7 @@ def test_legacy_dom_and_ui_contract_preserved():
 
 def test_manifest_registers_new_modules_and_product_contains_them():
     m = json.loads((ROOT / 'frontend' / 'manifest.json').read_text(encoding='utf-8'))
-    assert len(m['scripts']) == 114 and len(m['styles']) == 14
+    assert len(m['scripts']) >= 115 and len(m['styles']) == 14
     bypath = {e['path']: e for e in m['scripts']}
     assert 'hubDirectiveFor' in bypath['frontend/src/shell/composer-hub.js']['provides']
     assert 'HUB_CATALOG' in bypath['frontend/src/shell/hub-catalog.js']['provides']

@@ -78,7 +78,9 @@ hubSetMarketTab('skill');
 __out.skillCat = HUB_MARKET_STATE.cat;
 __out.skillQuery = HUB_MARKET_STATE.q;
 __out.skillCards = (grid().match(/hm-enable/g) || []).length;
-__out.skillTotal = foot().indexOf('共 292 项') >= 0;
+// R35：技能数量随在线市场快照扩容，不再硬编码 292
+__out.skillTotal = foot().indexOf('共 ' + HUB_CATALOG.skills.length + ' 项') >= 0;
+__out.skillTotalNum = HUB_CATALOG.skills.length;
 __out.skillCatsHaveMarket = cats().indexOf('开发者插件市场') >= 0 &&
                             cats().indexOf('官方内置') >= 0;
 __out.skillCatsNoExpertCat = cats().indexOf('技术工程') < 0;
@@ -88,12 +90,15 @@ __out.skillSections = hubMarketSections();
 hubSetMarketCat('官方内置');
 __out.skillFilteredCards = (grid().match(/hm-enable/g) || []).length;
 
-// 切「连接器」：17 项、分区为「官方连接器」
+// 切「连接器」：R35 全量 628 项，分区为市场真实分区（不再是单一「官方连接器」）
 hubSetMarketTab('connector');
 __out.connectorCat = HUB_MARKET_STATE.cat;
 __out.connectorCards = (grid().match(/hm-enable/g) || []).length;
-__out.connectorTotal = foot().indexOf('共 17 项') >= 0;
-__out.connectorCats = cats().indexOf('官方连接器') >= 0;
+__out.connectorTotal = foot().indexOf('共 ' + HUB_CATALOG.connectors.length + ' 项') >= 0;
+__out.connectorTotalNum = HUB_CATALOG.connectors.length;
+// R35 收口后只保留实测可直连端点，分区随之变化——取目录里真实存在的 section
+__out.connectorCats = hubMarketSections().slice(1).some(sec => cats().indexOf(sec) >= 0);
+__out.connectorSections = hubMarketSections();
 
 // 切回专家：15 个官方分类回来
 hubSetMarketTab('expert');
@@ -126,4 +131,5 @@ def test_manifest_registers_new_symbol():
     entry = next(e for e in m['scripts']
                  if e['path'] == 'frontend/src/shell/hub-market.js')
     assert 'hubMarketSections' in entry['provides']
-    assert len(m['scripts']) == 114 and len(m['styles']) == 14
+    assert len(m['scripts']) >= 114 and len(m['styles']) == 14
+    assert any(e['path'] == 'frontend/src/shell/hub-connector.js' for e in m['scripts'])
