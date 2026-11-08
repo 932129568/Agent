@@ -62,7 +62,10 @@ GUARD_OPS = ('delete_path', 'kill_process', 'clipboard_write', 'clipboard_read',
              # 是页面交互原语（可触发页面任意动作/提交表单）默认 always 每次确认；
              # navigate/extract/screenshot/close 为读取/会话管理默认 session 档
              'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
-             'browser_screenshot', 'browser_close')
+             'browser_screenshot', 'browser_close',
+             # R41 修复（N11）：open_url 入矩阵——原无护栏挂点（open_app 有），
+             # 模型可静默唤起系统浏览器开任意 URL；默认 off 保持既有行为
+             'open_url')
 DEFAULT_TIERS = {
     'delete_path': 'always',
     'kill_process': 'always',
@@ -74,6 +77,7 @@ DEFAULT_TIERS = {
     'run_powershell': 'off',
     'run_admin_command': 'off',
     'open_app': 'off',   # 修复 W9（三轮）：默认 off 保持既有行为，提档后弹窗/ token 生效
+    'open_url': 'off',   # R41（N11）：同 open_app 口径——默认 off 零行为，提档后 token 生效
     'web_search': 'off',          # 用户裁决（2026-10-24）：搜索只读无本地副作用、
                                   # 全程留审计——默认放行免每次确认；可在护栏设置提档
     'software_call': 'session',   # v1.8.0 §4.4：软件调用默认 session 档
@@ -100,6 +104,7 @@ _OP_GRANT_SCOPES = {
     'run_powershell': 'exec',
     'run_admin_command': 'exec',
     'open_app': 'app_launch',
+    'open_url': 'app_launch',   # R41（N11）
 }
 # allow_rules 宽模式告警词（detail 含写动词 → warn，不阻断——架构 §3.4）
 _RULE_WRITE_VERBS = ('del', 'delete', 'remove', 'rm', 'erase', 'move', 'copy',
@@ -113,7 +118,7 @@ _DENY_SENSITIVE_OPS = ('delete_path', 'kill_process')
 # 无保护名单意义的操作：'list' 档对它们语义等同 off 是误导（W10），后端降级为每次确认
 _LISTLESS_OPS = {'clipboard_write', 'clipboard_read', 'take_screenshot',
                  'run_command', 'run_powershell', 'run_admin_command',
-                 'open_app'}   # 修复 W9（三轮）：open_app 无名单语义
+                 'open_app', 'open_url'}   # W9（三轮）open_app + R41（N11）open_url 无名单语义
 
 # kill_process 内置保护（叠加用户名单；与 process_service.PROTECTED_NAMES 保持一致但独立声明，
 # 避免 service 间反向依赖）。修复 S4③：内置关键进程名单默认非空。
@@ -134,6 +139,7 @@ OP_LABELS = {
     'run_powershell': '执行 PowerShell',
     'run_admin_command': '管理员命令',
     'open_app': '打开应用/链接',   # 修复 W9（三轮）
+    'open_url': '打开网页链接',   # R41（N11）
 }
 
 # token 可签发的操作集合（mcp_call 由 McpService 在 call_tool 校验）
@@ -536,6 +542,8 @@ class GuardService:
             return {'cmd': str(d.get('cmd') or '')[:200]}
         if op == 'open_app':
             return {'path': str(d.get('path') or '')[:200]}   # 修复 W9（三轮）
+        if op == 'open_url':
+            return {'url': str(d.get('url') or '')[:200]}   # R41（N11）
         if op == 'mcp_call':
             return {'server': str(d.get('server') or ''), 'tool': str(d.get('tool') or ''),
                     'args': GuardService._args_digest(d.get('arguments'))}

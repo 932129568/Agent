@@ -495,17 +495,32 @@ def _build_cmdline(args, shell):
     return None, subprocess.list2cmdline([str(a) for a in args])
 
 
+# R41 修复（N9）：单流保留上限——原 _read_pipe 全量进内存（超大输出直接吃满
+# 内存，调用方亦无截断点）。保留头部、继续排空管道（防子进程写端阻塞）丢弃尾部。
+SANDBOX_PIPE_RETAIN = 2 * 1024 * 1024
+_SANDBOX_PIPE_MARK = ('\n...[sandbox output truncated: exceed %d bytes]'
+                      % SANDBOX_PIPE_RETAIN).encode('utf-8')
+
+
 def _read_pipe(handle, out_list):
     """线程体：同步 ReadFile 管道直至 EOF。纯 ctypes，不碰 fd 混用。"""
     k32 = ctypes.windll.kernel32
     buf = ctypes.create_string_buffer(65536)
     read = ctypes.c_ulong(0)
+    kept = 0
+    marked = False
     while True:
         if not k32.ReadFile(handle, buf, 65536, ctypes.byref(read), None):
             break
         if read.value == 0:
             break
-        out_list.append(buf.raw[:read.value])
+        if kept < SANDBOX_PIPE_RETAIN:
+            chunk = buf.raw[:read.value]
+            out_list.append(chunk)
+            kept += len(chunk)
+        elif not marked:
+            out_list.append(_SANDBOX_PIPE_MARK)
+            marked = True
 
 
 def run_in_sandbox(args, shell=False, cwd=None, timeout=60, limits=None,

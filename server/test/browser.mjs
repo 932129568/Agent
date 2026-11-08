@@ -24,6 +24,22 @@ const { mergeConfig } = await import('../src/services/jsonstore.js')
 const guard = await import('../src/services/guard.js')
 mergeConfig('guard.json', JSON.stringify({ tiers: { browser_navigate: 'off', browser_extract: 'off', browser_click: 'always', browser_fill: 'off', browser_screenshot: 'off', browser_close: 'off', web_search: 'off' } }))
 const results = []; const check = (name, fn) => { fn(); results.push(name) }
+
+// R41（S2-16）：SSRF 判定与 Python _is_public_host 同口径
+check('fake-ip 基准段 198.18.0.0/15 按公网放行', () => {
+  assert.equal(browser.privateIp('198.18.0.1'), false)
+  assert.equal(browser.privateIp('198.19.255.255'), false)
+  assert.equal(browser.isFakeipBenchmark('198.18.5.5'), true)
+  assert.equal(browser.isFakeipBenchmark('198.20.0.1'), false)
+})
+check('site-local fec0::/10 与 TEST-NET 段仍按私网拦截', () => {
+  assert.equal(browser.privateIp('fec0::1'), true)
+  assert.equal(browser.privateIp('febf::1'), true)
+  assert.equal(browser.privateIp('192.0.2.1'), true)
+  assert.equal(browser.privateIp('203.0.113.9'), true)
+  assert.equal(browser.privateIp('10.1.2.3'), true)
+  assert.equal(browser.privateIp('8.8.8.8'), false)
+})
 const fileBlocked = JSON.parse(await browser.browserNavigate('file:///C:/Windows/win.ini', '', 5, 'hidden'))
 check('file 协议返回 NAV_BLOCKED', () => assert.equal(fileBlocked.error.code, 'NAV_BLOCKED'))
 process.env.HARBOR_BROWSER_ALLOW_LOOPBACK = 'false'

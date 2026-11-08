@@ -846,20 +846,30 @@ class Api:
         return self._execute_guarded(
             'open_app', {'path': path[:200]}, token, execute, denial='err')
 
-    def open_url(self, url):
-        """用默认浏览器打开网页"""
-        try:
-            import webbrowser
-            import re as _re
-            u = str(url or '').strip()
-            if not u:
-                return err('缺少 url 参数')
-            if not _re.match(r'^https?://', u):
-                u = 'https://' + u
-            webbrowser.open(u)
-            return ok({'ok': True, 'url': u})
-        except Exception as e:
-            return err(e)
+    def open_url(self, url, token=None):
+        """用默认浏览器打开网页。
+
+        R41 修复（N11）：入护栏矩阵（op=open_url，默认 off 保持既有行为；
+        提档后需确认 token）——原无 guard 挂点，模型可静默唤起系统浏览器开
+        任意 URL（open_app 有挂点，本方法漏位）。token 为尾随可选参数
+        （open_app 增参先例），legacy 单参调用零影响。"""
+        def execute():
+            try:
+                import webbrowser
+                import re as _re
+                u = str(url or '').strip()
+                if not u:
+                    return err('缺少 url 参数')
+                if not _re.match(r'^https?://', u):
+                    u = 'https://' + u
+                webbrowser.open(u)
+                return ok({'ok': True, 'url': u})
+            except Exception as e:
+                return err(e)
+
+        return self._execute_guarded(
+            'open_url', {'url': str(url or '')[:200]}, token, execute,
+            denial='err')
 
     def take_screenshot(self, left=None, top=None, width=None, height=None, token=None):
         # 修复 S4②：take_screenshot 补 enforce 挂点（原完全无后端校验）

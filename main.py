@@ -129,6 +129,23 @@ def main():
                           ' --disable-background-timer-throttling')
                 _BaseControl = _ec.WebView2
 
+                # R41（F2d 改法①，pywebview 链对齐 Electron R40）：虚拟主机映射
+                # https://app.local/ ←→ 仓库根——file:// 页在 Chromium 永远无 V8
+                # code cache（crbug 40288216），映射给本地内容真 https 源后
+                # code cache/缓存栈全通（二次启动编译省约一半）。任一环失败
+                # 静默回落 file://（与 Electron 侧 HARBOR_LEGACY_FILE_PROTOCOL
+                # 等价的逃生口：HARBOR_PYW_NO_VHOST=1）。
+                _VHOST = 'app.local'
+                _VHOST_URL = 'https://app.local/harbor.html'
+                _ROOT = os.path.dirname(os.path.abspath(__file__))
+                _VHOST_OFF = os.environ.get('HARBOR_PYW_NO_VHOST') == '1'
+
+                def _map_vhost(core):
+                    from Microsoft.Web.WebView2.Core import \
+                        CoreWebView2HostResourceAccessKind as _Kind
+                    core.SetVirtualHostNameToFolderMapping(
+                        _VHOST, _ROOT, _Kind.Allow)
+
                 class _HarborWebView2(_BaseControl):
                     def EnsureCoreWebView2Async(self, env=None):
                         try:
@@ -147,6 +164,27 @@ def main():
                             self.CoreWebView2Controller.IsVisible = True
                         except Exception:
                             pass
+                        if _VHOST_OFF:
+                            return
+                        try:   # 就绪即建映射（load_url 改写依赖它已存在）
+                            _map_vhost(self.CoreWebView2)
+                        except Exception:
+                            pass
+
+                    def load_url(self, url):
+                        if _VHOST_OFF:
+                            return _BaseControl.load_url(self, url)
+                        try:
+                            s = str(url or '')
+                            is_page = s.endswith('harbor.html') and (
+                                s.startswith('file:') or '://' not in s)
+                            if is_page:
+                                core = self.CoreWebView2
+                                _map_vhost(core)
+                                return core.Navigate(_VHOST_URL)
+                        except Exception:
+                            pass
+                        return _BaseControl.load_url(self, url)
 
                 _ec.WebView2 = _HarborWebView2
             except Exception:

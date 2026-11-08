@@ -105,9 +105,12 @@ export async function openApp(target, token = null) {
   } catch (error) { return errJson(`打开失败: ${error.message}`) }
 }
 
-export async function openUrl(url) {
+export async function openUrl(url, token = null) {
   const value = String(url || '').trim()
   if (!/^https?:\/\//i.test(value)) return errJson('仅支持 http(s) 链接')
+  // R41（N11）：open_url 入护栏矩阵（openApp 同款挂点；默认 off 零行为）
+  const refusal = await enforceExec('open_url', { url: value.slice(0, 200) }, token)
+  if (refusal) return errJson(refusal)
   try {
     if (IS_WIN) await ps('Start-Process -FilePath $args[0]', [value])
     else {

@@ -37,16 +37,37 @@ function edgePath() {
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(fs.existsSync) || undefined
 }
-function privateIp(ip) {
+/** R41 修复（S2-16）：与 Python `_is_public_host`（session_base.py 2026-10-24
+ * 修订）同口径——①198.18.0.0/15（RFC 2544 基准段）按公网放行：Clash/Surge
+ * fake-ip 标准地址池，按私网拒绝=代理用户全部浏览被 SSRF 误杀（Python 真机
+ * 实证后修订，Node 未同步=分叉）；②补 IPv6 site-local fec0::/10 与 TEST-NET
+ * 段（Python ipaddress.is_private 覆盖而 Node 漏）。DNS rebinding TOCTOU 按
+ * Python 同款裁决留档：route 级逐请求重校验（installRequestGuard）已收窄
+ * 窗口，解析结果直连需 CDP 代理层，不在当前威胁模型。 */
+export function isFakeipBenchmark(ip) {
+  const parts = String(ip || '').split('.').map(Number)
+  return parts.length === 4 && parts[0] === 198 && parts[1] >= 18 && parts[1] <= 19
+}
+
+export function privateIp(ip) {
   let value = String(ip || '').toLowerCase().split('%')[0]
   if (value.startsWith('::ffff:')) value = value.slice(7)
-  if (net.isIPv6(value)) return value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('ff')
+  if (net.isIPv6(value)) return value === '::' || value === '::1' ||
+    value.startsWith('fc') || value.startsWith('fd') ||
+    value.startsWith('fe8') || value.startsWith('fe9') ||
+    value.startsWith('fea') || value.startsWith('feb') ||
+    value.startsWith('fec') || value.startsWith('fed') ||   // S2-16：site-local fec0::/10
+    value.startsWith('fee') || value.startsWith('fef') ||
+    value.startsWith('ff')
   if (!net.isIPv4(value)) return true
+  if (isFakeipBenchmark(value)) return false   // S2-16：fake-ip 基准段按公网放行
   const parts = value.split('.').map(Number)
-  const [a, b] = parts
+  const [a, b, c] = parts
   return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) ||
     (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19))
+    (a === 192 && b === 0 && c === 2) ||      // TEST-NET-1（is_private 对齐）
+    (a === 198 && b === 51 && c === 100) ||   // TEST-NET-2
+    (a === 203 && b === 0 && c === 113)       // TEST-NET-3
 }
 async function validateUrl(raw) {
   // 文案/判定逐字对齐 legacy session_win.navigate（P0-1b B7）：

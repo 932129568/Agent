@@ -47,6 +47,7 @@ export const GUARD_OPS = [
   'open_app', 'web_search', 'software_call',
   'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
   'browser_screenshot', 'browser_close',
+  'open_url',   // R41（N11）：与 Python 矩阵对齐（默认 off 零行为）
 ]
 
 /** Python DEFAULT_TIERS 全矩阵（逐字对齐）。 */
@@ -60,6 +61,7 @@ export const DEFAULT_TIERS = {
   run_powershell: 'off',
   run_admin_command: 'off',
   open_app: 'off',
+  open_url: 'off',   // R41（N11）：与 Python 矩阵逐字对齐
   web_search: 'off',
   software_call: 'session',
   browser_navigate: 'session',
@@ -96,7 +98,7 @@ const OP_GRANT_SCOPES = {
 
 /** Python _LISTLESS_OPS：无名单语义的操作，list 档降级为每次确认。 */
 const LISTLESS_OPS = new Set(['clipboard_write', 'clipboard_read', 'take_screenshot',
-  'run_command', 'run_powershell', 'run_admin_command', 'open_app'])
+  'run_command', 'run_powershell', 'run_admin_command', 'open_app', 'open_url'])
 
 /** armed（E7）：生产缺省武装；测试 seam 仅模块 init 读取。
  * R39 口径裁决（K8/S2-17，双端同轮定案）：与 Python `guard_service._armed=False`

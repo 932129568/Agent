@@ -240,7 +240,7 @@ check('审计条目五维 + 哈希链字段', () => {
 // ⑬ 配置归一化（guard_service.py _load：默认全量 + 覆盖；get_config 归一全量）
 const fullCfg = JSON.parse(await guard.guardGetConfig())
 check('guard_get_config 返回归一全量（17 档矩阵）', () => {
-  assert.equal(Object.keys(fullCfg.tiers).length, 17)
+  assert.equal(Object.keys(fullCfg.tiers).length, 18)   // R41（N11）：open_url 入矩阵
   assert.equal(fullCfg.tiers.run_command, 'off')           // 默认矩阵
   assert.equal(fullCfg.tiers.delete_path, 'always')        // c07 覆盖后仍归一
   assert.ok(Array.isArray(fullCfg.protect_paths))

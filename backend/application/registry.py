@@ -1,8 +1,15 @@
 # -*- coding: utf-8 -*-
 """Single owner for task state, cancellation and queue/wait/throughput metrics."""
+from collections import deque
 from dataclasses import dataclass, field
 import threading
 import time
+
+# R41 修复（N7）：终态记录容量淘汰——_records 原只增不删，长跑进程慢性泄漏。
+# 队列/在飞记录永不淘汰；终态按完成序 FIFO 逐出（result() 对已逐出 id 的
+# KeyError 语义与未知 id 一致，256 深归档足够回查窗口）。
+_TERMINAL_KEEP = 256
+_TERMINAL_STATUSES = frozenset({'succeeded', 'failed', 'cancelled', 'timed_out', 'partial'})
 
 from .task import (
     DeadlineExceeded, TaskCancelled, TaskEnvelope, TaskError, TaskFailure,
@@ -40,9 +47,18 @@ class TaskRegistry:
 
     def __init__(self):
         self._records = {}
+        self._terminal_order = deque()   # 终态 id 完成序（容量淘汰依据）
+        self._submitted = 0              # 真实提交总数（淘汰不影响计数口径）
         self._lock = threading.RLock()
         self._created = time.time()
         self._completed = 0
+
+    def _mark_terminal_locked(self, task_id):
+        """终态迁移登记 + 容量淘汰（调用方持锁）。"""
+        if task_id not in self._terminal_order:
+            self._terminal_order.append(task_id)
+        while len(self._terminal_order) > _TERMINAL_KEEP:
+            self._records.pop(self._terminal_order.popleft(), None)
 
     def register(self, envelope):
         with self._lock:
@@ -51,6 +67,7 @@ class TaskRegistry:
             result = TaskResult(envelope.taskId, TaskStatus.QUEUED,
                                 metrics=envelope.metrics.copy())
             self._records[envelope.taskId] = _Record(envelope, result=result)
+            self._submitted += 1
             return TaskFuture(self, envelope.taskId)
 
     def result(self, task_id):
@@ -96,6 +113,7 @@ class TaskRegistry:
             record.result = result
             record.envelope.metrics.update(result.metrics)
             self._completed += 1
+            self._mark_terminal_locked(task_id)
             record.event.set()
             return True
 
@@ -110,6 +128,7 @@ class TaskRegistry:
             record.result.error = TaskError(code, message, retryable, details or {})
             record.event.set()
             self._completed += 1
+            self._mark_terminal_locked(task_id)
             return True
 
     def cancel(self, task_id):
@@ -123,6 +142,7 @@ class TaskRegistry:
                 record.envelope.endAt = time.time()
                 record.event.set()
                 self._completed += 1
+                self._mark_terminal_locked(task_id)
                 return 'queued'
             if record.result.status == TaskStatus.RUNNING:
                 record.envelope.cancelToken.set()
@@ -143,6 +163,7 @@ class TaskRegistry:
             record.envelope.endAt = time.time()
             record.event.set()
             self._completed += 1
+            self._mark_terminal_locked(task_id)
             return record.result
 
     def is_running(self, task_id):
@@ -162,7 +183,7 @@ class TaskRegistry:
                             - record.envelope.queueAt)
                         for record in records if record.envelope.startAt is not None)
             return {
-                'submitted': len(records), 'completed': self._completed,
+                'submitted': self._submitted, 'completed': self._completed,
                 'queued': sum(record.result.status == TaskStatus.QUEUED for record in records),
                 'running': sum(record.running for record in records),
                 'wait_ms_total': waits * 1000.0,

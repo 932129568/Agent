@@ -50,6 +50,11 @@ const ROOT = path.join(__dirname, '..')
 /** §6.2/Q10：HARBOR_HEADLESS=1 → server-only（产物验收基建；env 缺省零行为） */
 const HEADLESS = process.env.HARBOR_HEADLESS === '1'
 
+/** R41（F 批）：HARBOR_SMOKE=1 → 隐藏窗烟雾——完整走 protocol.handle 加载链，
+ * 校验页面源后自动收尾（协议回归验证基建；env 缺省零行为）。userData 隔离到
+ * <CONFIG_DIR>/electron-smoke-profile（与真实桌面实例零交集）。 */
+const SMOKE = process.env.HARBOR_SMOKE === '1'
+
 /* R40（F2d 改法①）：harbor:// 自定义协议替代 file:// 加载——file:// 页在
  * Chromium 永远无 V8 code cache（crbug 40288216：仅 http(s)/WebUI 启用），
  * privileged standard+secure+codeCache scheme 解锁持久化 code cache，二次
@@ -119,6 +124,10 @@ async function boot() {
   // 带窗模式不在此列（真实用户语义）。
   if (HEADLESS) {
     app.setPath('userData', path.join(process.env.HARBOR_CONFIG_DIR, 'electron-profile'))
+  }
+  // R41（F 批）：烟雾模式同款隔离（隐藏窗也写 GPU cache 等，勿碰真实 profile）
+  if (SMOKE) {
+    app.setPath('userData', path.join(process.env.HARBOR_CONFIG_DIR, 'electron-smoke-profile'))
   }
 
   // 时序①：safeStorage 探测日志（先于 server 启动）+ DPAPI codec 路径披露
@@ -225,6 +234,7 @@ async function boot() {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
+    show: !SMOKE,   // R41（F 批）：HARBOR_SMOKE=1 隐藏窗烟雾——协议链验证不闪窗
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, // 显式声明口径（默认值亦为 true）
@@ -252,6 +262,17 @@ async function boot() {
     await win.loadFile(path.join(ROOT, 'harbor.html'))
   }
   console.log('[harbor] window loaded; bridge base =', process.env.HARBOR_API_BASE)
+  if (SMOKE) {
+    // 烟雾：校验页面真落在本协议源 + 主框架文档可读，然后自动收尾
+    const actual = win.webContents.getURL()
+    const okOrigin = USE_CUSTOM_PROTOCOL
+      ? String(actual).startsWith(HARBOR_SCHEME + '://app/harbor.html')
+      : String(actual).startsWith('file://')
+    console.log('[harbor] smoke: url =', actual)
+    console.log('[harbor] smoke: origin', okOrigin ? 'OK' : 'MISMATCH',
+      '| protocol =', USE_CUSTOM_PROTOCOL ? HARBOR_SCHEME : 'file')
+    gracefulShutdown()
+  }
 }
 
 /* ================= T03：admin 人审对话框 provider（§4.2 / Q7 原生 dialog） =================
