@@ -104,7 +104,10 @@ function openSessionSearch() {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); runSessionSearch(input.value); } });
   m.querySelector('.modal-cancel').onclick = _closeModal;
   m.querySelector('.modal-mask').onclick = _closeModal;
-  setTimeout(() => input.focus(), 30);
+  // R27：30ms 硬编码 → MOTION.focusXs() 令牌（值与原一致；fx-off 下 0ms）。
+  // typeof 守卫保 vm 沙箱可测；KNOWN_ISSUES §23 收口。
+  const _ssFocusMs = (typeof MOTION !== 'undefined' && MOTION.focusXs) ? MOTION.focusXs() : 30;
+  setTimeout(() => input.focus(), _ssFocusMs);
 }
 
 /** 点击搜索结果：切换会话 → 滚动到命中消息 → 高亮闪烁 2.4s。
@@ -140,6 +143,13 @@ function jumpToSearchHit(sessionId, midx) {
     if (++tries > 20) {   // 1s 仍未产出（目标消息未渲染/空内容）→ 兜底滚到底
       const box = document.getElementById('chatContainer');
       if (box) box.scrollTop = box.scrollHeight;
+      // R27：原兜底静默，用户只看到「跳到别处」却不知原因。补明确提示，
+      // 滚底行为与重试次数均不变。
+      try {
+        if (typeof toast === 'function') {
+          toast('未能定位到该消息（可能已不在当前会话），已跳转到最新位置', 'warn');
+        }
+      } catch (e) {}
       return;
     }
     setTimeout(poll, 50);

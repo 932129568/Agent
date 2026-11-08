@@ -41,6 +41,8 @@
   --dur-fast:120ms;--dur-base:180ms;--dur-slow:240ms;
   --dur-panel:180ms;--dur-panel-out:120ms;--dur-panel-lg:240ms;--dur-narr:180ms;
   --dur-comp:180ms;--dur-comp-out:120ms;--dur-theme:180ms;
+  /* R27 focus 延时令牌（JS 经 MOTION 读，禁止在 JS 硬编码毫秒） */
+  --dur-focus-xs:30ms;--dur-focus-sm:60ms;--dur-focus-md:80ms;
   --ease:cubic-bezier(.4,0,.2,1);--ease-out:cubic-bezier(.16,1,.3,1);
   --ease-out-soft:cubic-bezier(.25,.8,.35,1);--ease-in-soft:cubic-bezier(.42,0,1,1);
   --sidebar-w:248px;--content-w:880px;--rail-w:64px;--rail-btn:44px;--rail-gap:8px;
@@ -1039,6 +1041,7 @@ body.fx-off{
   --dur-panel:1ms; --dur-panel-out:1ms; --dur-panel-lg:1ms; --dur-narr:1ms; --dur-theme:1ms;
   --dur-count:1ms; --dur-chart:1ms;
   --stagger-xs:0ms; --stagger-sm:0ms; --stagger-max:0ms;
+  --dur-focus-xs:0ms; --dur-focus-sm:0ms; --dur-focus-md:0ms;
 }
 /* 无限循环动画必须显式停（变量覆盖对 infinite 无效） */
 body.fx-off #auroraBg .au,
@@ -5120,6 +5123,11 @@ const MOTION = (() => {
     chart:    () => readMs('--dur-chart', 800),
     staggerXs:() => readMs('--stagger-xs', 40),
     staggerSm:() => readMs('--stagger-sm', 60),
+    /* R27：focus 延时专用令牌——三处面板的入场节奏不同，独立可读，
+       数值与原硬编码 30/60/80ms 精确一致；fx-off 下由变量级降级为 0ms。 */
+    focusXs:  () => readMs('--dur-focus-xs', 30),
+    focusSm:  () => readMs('--dur-focus-sm', 60),
+    focusMd:  () => readMs('--dur-focus-md', 80),
     easeOutSoft,
     prefersReduced: () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches),
     fxOff:    () => document.body.classList.contains('fx-off'),
@@ -9036,7 +9044,10 @@ function openSessionSearch() {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); runSessionSearch(input.value); } });
   m.querySelector('.modal-cancel').onclick = _closeModal;
   m.querySelector('.modal-mask').onclick = _closeModal;
-  setTimeout(() => input.focus(), 30);
+  // R27：30ms 硬编码 → MOTION.focusXs() 令牌（值与原一致；fx-off 下 0ms）。
+  // typeof 守卫保 vm 沙箱可测；KNOWN_ISSUES §23 收口。
+  const _ssFocusMs = (typeof MOTION !== 'undefined' && MOTION.focusXs) ? MOTION.focusXs() : 30;
+  setTimeout(() => input.focus(), _ssFocusMs);
 }
 
 /** 点击搜索结果：切换会话 → 滚动到命中消息 → 高亮闪烁 2.4s。
@@ -9072,6 +9083,13 @@ function jumpToSearchHit(sessionId, midx) {
     if (++tries > 20) {   // 1s 仍未产出（目标消息未渲染/空内容）→ 兜底滚到底
       const box = document.getElementById('chatContainer');
       if (box) box.scrollTop = box.scrollHeight;
+      // R27：原兜底静默，用户只看到「跳到别处」却不知原因。补明确提示，
+      // 滚底行为与重试次数均不变。
+      try {
+        if (typeof toast === 'function') {
+          toast('未能定位到该消息（可能已不在当前会话），已跳转到最新位置', 'warn');
+        }
+      } catch (e) {}
       return;
     }
     setTimeout(poll, 50);
@@ -16497,7 +16515,11 @@ function spManualOpen() {
   if (panel && panel.classList.contains('show')) { searchPanelClose(); return; }  // 再点=收起
   searchPanelOpen();
   const input = spEl('spInput');
-  if (input) setTimeout(() => input.focus(), 60);
+  if (input) {
+    // R27：60ms 硬编码 → MOTION.focusSm() 令牌（值与原一致；fx-off 下 0ms）。
+    const _spFocusMs = (typeof MOTION !== 'undefined' && MOTION.focusSm) ? MOTION.focusSm() : 60;
+    setTimeout(() => input.focus(), _spFocusMs);
+  }
 }
 function searchPanelOpen() {
   const panel = searchPanelEl();
@@ -18453,7 +18475,18 @@ function guardGrantRenderIndicator() {
 /* ---------- 授权创建 / 收回 ---------- */
 async function guardGrantCreate() {
   const ttlEl = ggEl('ggTtl');
-  const ttl = ttlEl ? parseInt(ttlEl.value, 10) : 7200;
+  // R27：原实现 parseInt 无兜底——select 被外部改写 / 无选中时 NaN 直传后端
+  // guard_task_grant（后端口径 60-86400，越界 BAD_PARAMS），用户只看到泛化错误。
+  // 元素缺失仍回落默认 7200（与原行为一致）；值非法给明确人话提示并中止。
+  let ttl = 7200;
+  if (ttlEl) {
+    const v = parseInt(ttlEl.value, 10);
+    if (!Number.isFinite(v) || v < 60 || v > 86400) {
+      ggToast('授权时长无效（需 60-86400 秒），请重新选择', 'warn');
+      return;
+    }
+    ttl = v;
+  }
   const scopes = [];
   if (typeof document !== 'undefined') {
     document.querySelectorAll('.gg-scope').forEach(cb => {
@@ -19435,7 +19468,9 @@ function obWireStep(id) {
         if (apiKeyEl) apiKeyEl.value = String(input.value || '').trim();
         if (typeof queueSaveConfig === 'function') queueSaveConfig();
       });
-      setTimeout(() => input.focus(), 80);
+      // R27：80ms 硬编码 → MOTION.focusMd() 令牌（值与原一致；fx-off 下 0ms）。
+      const _obFocusMs = (typeof MOTION !== 'undefined' && MOTION.focusMd) ? MOTION.focusMd() : 80;
+      setTimeout(() => input.focus(), _obFocusMs);
     }
   }
 }

@@ -40,6 +40,11 @@ const MOTION = (() => {
     chart:    () => readMs('--dur-chart', 800),
     staggerXs:() => readMs('--stagger-xs', 40),
     staggerSm:() => readMs('--stagger-sm', 60),
+    /* R27：focus 延时专用令牌——三处面板的入场节奏不同，独立可读，
+       数值与原硬编码 30/60/80ms 精确一致；fx-off 下由变量级降级为 0ms。 */
+    focusXs:  () => readMs('--dur-focus-xs', 30),
+    focusSm:  () => readMs('--dur-focus-sm', 60),
+    focusMd:  () => readMs('--dur-focus-md', 80),
     easeOutSoft,
     prefersReduced: () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches),
     fxOff:    () => document.body.classList.contains('fx-off'),

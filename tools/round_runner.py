@@ -57,14 +57,43 @@ def run(cmd, timeout):
     return p, round(time.time() - t0, 1)
 
 
+_SYNTAX_BATCH_JS = r"""
+const fs = require('fs'), vm = require('vm');
+const files = JSON.parse(fs.readFileSync(0, 'utf8') || '[]');
+const bad = [];
+for (const f of files) {
+  try { new vm.Script(fs.readFileSync(f, 'utf8'), { filename: f }); }
+  catch (e) { bad.push(f); }
+}
+console.log(JSON.stringify(bad));
+"""
+
+
 def syntax_sweep(node):
-    """node --check 全部前端模块（语法哨兵）。"""
-    bad = []
+    """前端模块语法哨兵（R27：104 次 node 进程启动 → 1 次批量 V8 编译）。
+
+    vm.Script 与 `node --check` 同为「编译不执行」语义，判据等价；批量通道
+    异常时自动回落逐文件 --check，门禁强度不降低。文件列表走 stdin，规避
+    Windows 命令行长度限制。
+    """
     src = ROOT / 'frontend' / 'src'
-    for path in src.glob('**/*.js'):
-        p = subprocess.run([node, '--check', str(path)], capture_output=True, text=True)
-        if p.returncode != 0:
-            bad.append(str(path.relative_to(ROOT)))
+    files = [p.relative_to(ROOT).as_posix() for p in sorted(src.glob('**/*.js'))]
+    try:
+        p = subprocess.run([node, '-e', _SYNTAX_BATCH_JS], input=json.dumps(files),
+                           cwd=ROOT, capture_output=True, text=True, timeout=120,
+                           errors='replace')
+        if p.returncode == 0:
+            parsed = json.loads((p.stdout or '').strip() or '[]')
+            if isinstance(parsed, list):
+                return parsed
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
+    # 回落：逐文件 --check（保持原有判据，不因批量通道故障漏判）
+    bad = []
+    for f in files:
+        q = subprocess.run([node, '--check', str(ROOT / f)], capture_output=True, text=True)
+        if q.returncode != 0:
+            bad.append(f)
     return bad
 
 

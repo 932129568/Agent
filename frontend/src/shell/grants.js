@@ -297,7 +297,18 @@ function guardGrantRenderIndicator() {
 /* ---------- 授权创建 / 收回 ---------- */
 async function guardGrantCreate() {
   const ttlEl = ggEl('ggTtl');
-  const ttl = ttlEl ? parseInt(ttlEl.value, 10) : 7200;
+  // R27：原实现 parseInt 无兜底——select 被外部改写 / 无选中时 NaN 直传后端
+  // guard_task_grant（后端口径 60-86400，越界 BAD_PARAMS），用户只看到泛化错误。
+  // 元素缺失仍回落默认 7200（与原行为一致）；值非法给明确人话提示并中止。
+  let ttl = 7200;
+  if (ttlEl) {
+    const v = parseInt(ttlEl.value, 10);
+    if (!Number.isFinite(v) || v < 60 || v > 86400) {
+      ggToast('授权时长无效（需 60-86400 秒），请重新选择', 'warn');
+      return;
+    }
+    ttl = v;
+  }
   const scopes = [];
   if (typeof document !== 'undefined') {
     document.querySelectorAll('.gg-scope').forEach(cb => {

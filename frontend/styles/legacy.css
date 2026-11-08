@@ -931,6 +931,7 @@ body.fx-off{
   --dur-panel:1ms; --dur-panel-out:1ms; --dur-panel-lg:1ms; --dur-narr:1ms; --dur-theme:1ms;
   --dur-count:1ms; --dur-chart:1ms;
   --stagger-xs:0ms; --stagger-sm:0ms; --stagger-max:0ms;
+  --dur-focus-xs:0ms; --dur-focus-sm:0ms; --dur-focus-md:0ms;
 }
 /* 无限循环动画必须显式停（变量覆盖对 infinite 无效） */
 body.fx-off #auroraBg .au,

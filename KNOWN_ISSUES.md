@@ -147,9 +147,10 @@
 - **描述**：WebDAV/本地恢复的 sessions 数据可含恶意 `plan.task_id`（超长/含路径字符）。`normalizeSessions` 白名单只放行不校验（`String(x.plan.task_id)`），唯一消费路径是 `deleteSession → session_purge`；后端 `_safe_tid`（`^[A-Za-z0-9_-]{1,64}$`）对非法 tid **skip + warning 不抛**，purge 整体仍 ok、其余痕迹照清
 - **处理状态**：🟢 设计决策（前端不重复校验）：后端 skip 语义已闭环（`tests/test_round6_adversarial.py::TestPurgeMaliciousTaskIdClosedLoop` 固化），前端额外 strip 会造成「前端放了后端拒」与「前端拒了后端本可清」的双口径分叉。保存往返（saveSessions 30000 字符截断）后 task_id 存活性已由白名单测试固化
 
-### 23. 少数 focus 延时未令牌化（范围外遗留）
-- **描述**：`32-session-search.js`（30ms）、`63-search-panel.js`（60ms）、`68-onboarding.js`（80ms）的 focus 延时仍为字面量；`110-boot.js bridgeDependentInit` 的 get_api_info 重试间隔 800ms 为重试语义（非动效）
-- **处理状态**：🟡 范围外遗留（第六轮令牌化清单只含 85-session-mgmt 800/600、18-toast 30、72-shortcuts 60、60-agent-loop 350）；上述点位均为同型小改，后续轮次一并收口
+### 23. 少数 focus 延时未令牌化（R27 已收口）
+- **描述**：`32-session-search.js`（30ms）、`63-search-panel.js`（60ms）、`68-onboarding.js`（80ms）的 focus 延时仍为字面量；`110-boot.js bridgeDependentInit` 的 get_api_info 重试间隔 800ms 为重试语义（非动效，不属本项）
+- **R27 处理（2026-11-05）**：新增 `--dur-focus-xs/-sm/-md`（30/60/80ms，tokens.css）+ `MOTION.focusXs/focusSm/focusMd`，三处调用改为经 MOTION 读取；**数值精确不变**（行为兼容），`body.fx-off` 变量级降级块把三令牌覆盖为 0ms（reduced-motion 下立即 focus）。`72-shortcuts` 既有 `MOTION.staggerSm()` 范式保持不变。测试：`tests/test_r27_upgrades.py`（默认值/源码去硬编码/CSS 覆盖矩阵）。
+- **处理状态**：🟢 已处理（R27）
 
 ---
 
@@ -176,7 +177,7 @@
 ### 26. 63-search-panel：接管竞态两处 + TTL 到期提示遗留项（已修复）
 - **竞态 1**：pending 期轮询镜像可能把旧会话 takeover_id 挂进 `searchTakeoverId`，搜索成功时成功分支无清洗 → 成功态滞留 captcha 框。修复：成功分支清洗接管区
 - **竞态 2**：终态（success/error）或面板空开（idle）后，滞留的旧会话 captcha 快照会经 setPhase 复活接管 UI（僵尸接管 + 误拦关闭）。修复：setPhase 挂接门控 `searchPanelState === 'pending'`
-- **遗留项（任务书 A4）**：接管 TTL（后端 600s）到期前 60s 一次性 toast 提示——面板轮询已带 `takeover.elapsed_s`，零额外成本实现（每会话一次，新会话重置）；href 白名单矩阵（大写 scheme 放行 / 协议相对与 javascript:/file: 拦截 / fragment 无害）经 vm 验证成立
+- **TTL 到期提示（原遗留项 A4，已实现）**：接管 TTL（后端 600s）到期前 60s 一次性 toast——`search/panel.js` 已落地 `SP_TAKEOVER_TTL_S=600` / `SP_TAKEOVER_WARN_LEAD_S` / `spTakeoverWarned`（每会话一次，新会话在 `spTakeoverReset` 重置），面板轮询复用 `takeover.elapsed_s` 零额外成本。R27 复核确认代码在位，本条由「遗留项」改为「已实现」；href 白名单矩阵（大写 scheme 放行 / 协议相对与 javascript:/file: 拦截 / fragment 无害）经 vm 验证成立
 
 ### 27. 64-software-panel：测试调用被其他在途流吞输出 + swDetail 覆写（已修复）
 - **反例 1**：测试调用与列表/探测/保存共用 `softwareReqSeq`——探测约秒级返回而测试调用可跑数百秒，探测完成即使在途测试的返回被判陈旧静默丢弃：调用已真实执行（有副作用）却无任何输出渲染，用户重复点击即重复执行。修复：测试流独立 `swTestSeq`（同 63 面板 spStatsSeq 先例）

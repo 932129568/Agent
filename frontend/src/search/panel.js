@@ -177,7 +177,11 @@ function spManualOpen() {
   if (panel && panel.classList.contains('show')) { searchPanelClose(); return; }  // 再点=收起
   searchPanelOpen();
   const input = spEl('spInput');
-  if (input) setTimeout(() => input.focus(), 60);
+  if (input) {
+    // R27：60ms 硬编码 → MOTION.focusSm() 令牌（值与原一致；fx-off 下 0ms）。
+    const _spFocusMs = (typeof MOTION !== 'undefined' && MOTION.focusSm) ? MOTION.focusSm() : 60;
+    setTimeout(() => input.focus(), _spFocusMs);
+  }
 }
 function searchPanelOpen() {
   const panel = searchPanelEl();

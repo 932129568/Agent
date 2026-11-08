@@ -145,7 +145,9 @@ function obWireStep(id) {
         if (apiKeyEl) apiKeyEl.value = String(input.value || '').trim();
         if (typeof queueSaveConfig === 'function') queueSaveConfig();
       });
-      setTimeout(() => input.focus(), 80);
+      // R27：80ms 硬编码 → MOTION.focusMd() 令牌（值与原一致；fx-off 下 0ms）。
+      const _obFocusMs = (typeof MOTION !== 'undefined' && MOTION.focusMd) ? MOTION.focusMd() : 80;
+      setTimeout(() => input.focus(), _obFocusMs);
     }
   }
 }
