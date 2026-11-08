@@ -327,6 +327,7 @@ const PY_OPTIONAL_PARAMS = {
   pick_save_path: ['default_name'],
   browser_navigate: ['wait_selector', 'timeout', 'mode', 'token'],
   browser_extract: ['selector', 'mode', 'token'],
+  browser_snapshot: ['selector', 'max_chars', 'token'],
   browser_click: ['token'],
   browser_fill: ['token'],
   browser_screenshot: ['full_page', 'token'],
@@ -485,6 +486,8 @@ register('mcp_shutdown', async () => mcp.mcpShutdown())
 /* 浏览器驱动（Playwright + 本机 Edge/Chrome；默认后台；实时搜索与 CAPTCHA 接管） */
 register('browser_navigate', async (url, wait_selector, timeout, mode, token) => browser.browserNavigate(url, wait_selector, timeout, mode, token))
 register('browser_extract', async (selector, mode, token) => browser.browserExtract(selector, mode, token))
+register('browser_snapshot', async (selector, maxChars, token) => browser.browserSnapshot(selector, maxChars, token),
+  ['selector', 'max_chars', 'token'])
 register('browser_click', async (target, token) => browser.browserClick(target, token))
 register('browser_fill', async (selector, text, token) => browser.browserFill(selector, text, token))
 register('browser_screenshot', async (full_page, token) => browser.browserScreenshot(full_page, token))

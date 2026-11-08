@@ -96,6 +96,17 @@ class _DummySession(BrowserSession):
         except BrowserError:
             raise
 
+    def snapshot(self, selector='', max_chars=4000):
+        # R43：第七原语——状态机验证桩同只做状态进出
+        self._enter(SessionState.BUSY)
+        try:
+            return {'ok': True}
+        finally:
+            try:
+                self._enter(SessionState.READY)
+            except BrowserError:
+                pass
+
     def extract(self, selector='', mode='markdown'):
         self._enter(SessionState.BUSY)
         try:

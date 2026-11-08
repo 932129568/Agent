@@ -130,15 +130,21 @@ async function guardCheckTool(name, args, runSid) {
   }
   if (verdict.action !== 'confirm') return { blocked: null, token: null };    // allow → 放行
   const desc = await _guardDescribe(op, args);
+  // R43（权限记忆化收口）：高危操作禁用信任记忆——删除/杀进程/管理员提权
+  // 三类每次必须人审（once-only），不可勾「本会话/永久不再提示」。与后端
+  // _DENY_SENSITIVE_OPS（delete_path/kill_process 架空保护名单的 deny 口径）
+  // 同源语义；调研轮 27（once/always/never 记忆化的边界=高危不记忆）。
+  const _HIGH_RISK_ONCE = (op === 'delete_path' || op === 'kill_process' ||
+                           op === 'run_admin_command');
   const r = await uiConfirm({
     title: desc.title, body: desc.body, danger: desc.danger,
     // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
     // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
     sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: desc.danger ? '允许执行' : '允许',
-    checkboxLabel: '本会话内不再提示「' + GUARD_OP_LABEL[op] + '」',
+    checkboxLabel: _HIGH_RISK_ONCE ? '' : '本会话内不再提示「' + GUARD_OP_LABEL[op] + '」',
     // 修复 UX-2（v1.4）：第二勾选=永久信任（op 级，写 guard.json trustedOps，重启仍生效）
-    checkboxLabel2: '永久信任此操作（重启后仍不再确认，可在设置→安全护栏重置）'
+    checkboxLabel2: _HIGH_RISK_ONCE ? '' : '永久信任此操作（重启后仍不再确认，可在设置→安全护栏重置）'
   });
   try {
     callApi('guard_audit', [op, JSON.stringify(detail),

@@ -130,6 +130,15 @@ class HeadlessSession(BrowserSession):
         finally:
             self._settle_ready()
 
+    def snapshot(self, selector='', max_chars=4000):
+        """R43 语义快照：对 navigate 所取 HTML 跑 build_snapshot_result。"""
+        self._enter(SessionState.BUSY)
+        try:
+            from .snapshot import build_snapshot_result
+            return build_snapshot_result(self._html, selector, max_chars)
+        finally:
+            self._settle_ready()
+
     def click(self, target):
         """无头后端无渲染能力——点击原语不支持。"""
         self._enter(SessionState.BUSY)

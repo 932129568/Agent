@@ -7583,6 +7583,13 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
       return maybeBudgetInvite(await callApi('browser_extract',
         [(args && args.selector) || '', (args && args.mode) || 'markdown', g.token], 90000));
     }
+    if (name === 'browser_snapshot') {   // R43：语义快照（role/name/state 修剪树）
+      const g = await agentGuardCheck('browser_snapshot',
+        { selector: String((args && args.selector) || '').slice(0, 80) }, undefined, runSid);
+      if (g.blocked) return g.blocked;
+      return maybeBudgetInvite(await callApi('browser_snapshot',
+        [(args && args.selector) || '', Math.min(20000, Math.max(500, parseInt((args && args.max_chars), 10) || 4000)), g.token], 90000));
+    }
     if (name === 'browser_click') {
       const g = await agentGuardCheck('browser_click',
         { target: String((args && args.target) || '').slice(0, 120) }, undefined, runSid);
@@ -8005,15 +8012,21 @@ async function guardCheckTool(name, args, runSid) {
   }
   if (verdict.action !== 'confirm') return { blocked: null, token: null };    // allow → 放行
   const desc = await _guardDescribe(op, args);
+  // R43（权限记忆化收口）：高危操作禁用信任记忆——删除/杀进程/管理员提权
+  // 三类每次必须人审（once-only），不可勾「本会话/永久不再提示」。与后端
+  // _DENY_SENSITIVE_OPS（delete_path/kill_process 架空保护名单的 deny 口径）
+  // 同源语义；调研轮 27（once/always/never 记忆化的边界=高危不记忆）。
+  const _HIGH_RISK_ONCE = (op === 'delete_path' || op === 'kill_process' ||
+                           op === 'run_admin_command');
   const r = await uiConfirm({
     title: desc.title, body: desc.body, danger: desc.danger,
     // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
     // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）
     sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
     okText: desc.danger ? '允许执行' : '允许',
-    checkboxLabel: '本会话内不再提示「' + GUARD_OP_LABEL[op] + '」',
+    checkboxLabel: _HIGH_RISK_ONCE ? '' : '本会话内不再提示「' + GUARD_OP_LABEL[op] + '」',
     // 修复 UX-2（v1.4）：第二勾选=永久信任（op 级，写 guard.json trustedOps，重启仍生效）
-    checkboxLabel2: '永久信任此操作（重启后仍不再确认，可在设置→安全护栏重置）'
+    checkboxLabel2: _HIGH_RISK_ONCE ? '' : '永久信任此操作（重启后仍不再确认，可在设置→安全护栏重置）'
   });
   try {
     callApi('guard_audit', [op, JSON.stringify(detail),
@@ -13900,7 +13913,7 @@ const ROUTE_HINTS = {
     fileR:  ['文件','文档','附件','目录','文件夹','路径','源码','代码','项目','工程','读取','看看','检查','分析','报告','日志','code','file','read','log'],
     fileW:  ['修改','编辑','写入','保存','替换','删除','重命名','移动','复制','新建','修复','重构','格式化','补丁','改','fix','edit','write','replace','patch'],
     shell:  ['命令','运行','执行','脚本','powershell','cmd','安装','卸载','编译','构建','git','npm','pip','python','node','测试','启动','停止','服务','端口','环境变量','打包','build','run','test'],
-    sys:    ['截图','屏幕','剪贴板','粘贴','打开网页','网址','http','浏览器','打开软件','打开应用','打开文件','程序','app','screenshot','clipboard'],
+    sys:    ['截图','截屏','画面','屏幕','剪贴板','粘贴','打开网页','网页','网址','http','浏览器','打开软件','打开应用','打开文件','程序','app','screenshot','clipboard'],
     proc:   ['进程','卡死','卡住','无响应','内存','cpu','占用','任务管理器','结束','杀掉','蓝屏','崩溃','process','kill'],
     memory: ['记住','记忆','长期保存','收藏','remember']
 };

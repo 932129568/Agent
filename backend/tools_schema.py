@@ -70,6 +70,12 @@ _AGENT_BROWSER_DRIVER = (
             'selector': {'type': 'string'},
             'mode': {'type': 'string', 'enum': ['markdown', 'text', 'links']}},
             'required': [], 'additionalProperties': False}}},
+    {'type': 'function', 'function': {'name': 'browser_snapshot',
+        'description': '获取当前页面语义快照(角色/名称/状态修剪树)|点击/填表前定位元素比截图省token且标识稳定|纯读正文用browser_extract,视觉取证用browser_screenshot',
+        'parameters': {'type': 'object', 'properties': {
+            'selector': {'type': 'string'},
+            'max_chars': {'type': 'integer'}},
+            'required': [], 'additionalProperties': False}}},
     {'type': 'function', 'function': {'name': 'browser_click',
         'description': '点击页面元素(需确认)|selector或可见文本定位,拒绝视口外/不可见元素|敏感确认弹窗类页面交给用户接管',
         'parameters': {'type': 'object', 'properties': {

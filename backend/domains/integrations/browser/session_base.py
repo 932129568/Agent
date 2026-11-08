@@ -138,6 +138,10 @@ class BrowserSession(ABC):
         """
 
     @abstractmethod
+    def snapshot(self, selector='', max_chars=4000):
+        """R43 语义快照原语（子类实现；通道无 DOM 时抛 PRIMITIVE_UNSUPPORTED）。"""
+
+    @abstractmethod
     def extract(self, selector='', mode='markdown'):
         """提取当前页面内容。mode ∈ markdown|text|links →
         ``{ok, markdown?/text?/links?, truncated, char_count}``。"""

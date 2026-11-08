@@ -181,6 +181,13 @@ async function executeToolRaw(name, args, runSid, realCallApi = callApi) {
       return maybeBudgetInvite(await callApi('browser_extract',
         [(args && args.selector) || '', (args && args.mode) || 'markdown', g.token], 90000));
     }
+    if (name === 'browser_snapshot') {   // R43：语义快照（role/name/state 修剪树）
+      const g = await agentGuardCheck('browser_snapshot',
+        { selector: String((args && args.selector) || '').slice(0, 80) }, undefined, runSid);
+      if (g.blocked) return g.blocked;
+      return maybeBudgetInvite(await callApi('browser_snapshot',
+        [(args && args.selector) || '', Math.min(20000, Math.max(500, parseInt((args && args.max_chars), 10) || 4000)), g.token], 90000));
+    }
     if (name === 'browser_click') {
       const g = await agentGuardCheck('browser_click',
         { target: String((args && args.target) || '').slice(0, 120) }, undefined, runSid);

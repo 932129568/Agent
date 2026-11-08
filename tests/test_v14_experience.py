@@ -358,13 +358,21 @@ class TestUx2PersistentTrust:
         assert gs.check('clipboard_read', {})['action'] == 'confirm'   # 恢复确认
 
     def test_protect_list_beats_trust(self):
-        """名单永远优先于信任：delete_path 命中保护名单时即使持久信任也 block。"""
+        """名单永远优先于信任：delete_path 命中保护名单时即使持久信任也 block。
+
+        R43 断言更新：trustedOps 场景改用非高危 op——R43 起高危操作
+        （delete_path/kill_process/run_admin_command）不可设为持久信任
+        （save_config 拒绝），原用 delete_path 搭场景被正确拒绝。"""
         gs = self._mk()
-        gs.save_config(json.dumps({'trustedOps': ['delete_path'],
+        gs.save_config(json.dumps({'trustedOps': ['clipboard_read'],
                                    'protect_paths': [ws_dir := os.path.join(tempfile.mkdtemp(), 'x')]}))
         gs.arm()
         reason = gs.enforce_exec('delete_path', {'path': ws_dir}, None)
         assert reason and '保护名单' in reason, reason
+        # R43 新语义：高危 op 进 trustedOps 被 save_config 拒绝（不入库）
+        r3 = json.loads(gs.save_config(json.dumps({'trustedOps': ['delete_path']})))
+        assert r3.get('error') and '高危' in r3['error'], r3
+        assert 'delete_path' not in gs._cfg.get('trustedOps', [])
 
 
 # ============================================================ F2 callTimeout

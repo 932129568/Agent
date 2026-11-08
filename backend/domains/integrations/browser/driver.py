@@ -610,6 +610,33 @@ class BrowserService:
         return self._prim(session_id,
                           lambda s: s.extract(selector, mode))
 
+    def snapshot(self, selector='', session_id='', max_chars=4000):
+        """R43 语义快照原语（role/name/state 修剪树；_prim 走既有游标/忙态门）。"""
+        return self._prim(session_id,
+                          lambda s: s.snapshot(selector, max_chars))
+
+    def snapshot_guarded(self, selector='', session_id='', max_chars=4000):
+        """R43：与 extract_guarded 同口径——先检验证码特征再出树；成功载荷
+        provenance 包裹（UNTRUSTED DATA 红线 4：快照含页面文本）。"""
+        try:
+            from .service import _captcha_signal
+            if _captcha_signal(self._last_html(session_id)):
+                return {'ok': False,
+                        'error': {'code': 'CAPTCHA_REQUIRED',
+                                  'message': '页面检出验证码特征——引擎要求人机验证',
+                                  'hint': '可用 browser_navigate(mode="visible") 可见模式人工完成验证后重试'}}
+        except Exception:
+            pass
+        r = self.snapshot(selector, session_id, max_chars)
+        if isinstance(r, dict) and r.get('ok'):
+            try:
+                from ...providers.provenance import tag_payload
+                r = tag_payload(r, source_url=self._last_url(session_id),
+                                channel='driver-window')
+            except Exception:
+                pass
+        return r
+
     def extract_guarded(self, selector='', mode='markdown', session_id=''):
         """M5.7 反爬检测：**先**检页面验证码特征（提取前——验证码页正文稀疏
         会先抛 EXTRACT_EMPTY 掩盖真因）→ 命中 → 结构化 CAPTCHA_REQUIRED

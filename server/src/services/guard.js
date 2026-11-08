@@ -45,8 +45,8 @@ export const GUARD_OPS = [
   'delete_path', 'kill_process', 'clipboard_write', 'clipboard_read',
   'take_screenshot', 'run_command', 'run_powershell', 'run_admin_command',
   'open_app', 'web_search', 'software_call',
-  'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
-  'browser_screenshot', 'browser_close',
+  'browser_navigate', 'browser_extract', 'browser_snapshot', 'browser_click',
+  'browser_fill', 'browser_screenshot', 'browser_close',
   'open_url',   // R41（N11）：与 Python 矩阵对齐（默认 off 零行为）
 ]
 
@@ -66,6 +66,7 @@ export const DEFAULT_TIERS = {
   software_call: 'session',
   browser_navigate: 'session',
   browser_extract: 'session',
+  browser_snapshot: 'session',   // R43：语义快照（只读观察层，session 档）
   browser_click: 'always',
   browser_fill: 'always',
   browser_screenshot: 'session',
@@ -199,7 +200,11 @@ function loadCfg() {
       .filter(Boolean)
   }
   if (Array.isArray(data.trustedOps)) {
-    cfg.trustedOps = data.trustedOps.map(String).filter(op => GUARD_OPS.includes(op))
+    // R43（权限记忆化收口）：高危操作不可持久信任（与 Python save_config 拒绝
+    // 口径一致；历史 guard.json 中残留项在加载期静默剥离——更安全方向）
+    cfg.trustedOps = data.trustedOps.map(String)
+      .filter(op => GUARD_OPS.includes(op))
+      .filter(op => op !== 'delete_path' && op !== 'kill_process' && op !== 'run_admin_command')
   }
   if (Array.isArray(data.allow_rules)) {
     cfg.allow_rules = data.allow_rules.map(normalizeRule).filter(Boolean)

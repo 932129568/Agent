@@ -326,6 +326,15 @@ class MacSession(BrowserSession):
         except Exception as e:
             raise BrowserError(BrowserErrorCode.INTERNAL, '导航失败: %s' % e)
 
+    def snapshot(self, selector='', max_chars=4000):
+        """R43 语义快照：对 navigate 所取 HTML 跑 build_snapshot_result（同源 _html）。"""
+        self._enter(SessionState.BUSY)
+        try:
+            from .snapshot import build_snapshot_result
+            return build_snapshot_result(self._html, selector, max_chars)
+        finally:
+            self._settle_ready()
+
     def extract(self, selector='', mode='markdown'):
         self._enter(SessionState.BUSY)
         try:

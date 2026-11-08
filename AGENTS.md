@@ -15,12 +15,13 @@ Harbor 面向模型的工具经 `backend/tools_schema.py` 的 `build()` 输出
 | MCP 工具 | `McpService.tool_schemas()`（`mcp__<server>__<tool>`） | 服务器 enabled 且 ok |
 | Agent 工具族 | `AGENT_TOOLS`（browser_search/browser_open/software_call + **v1.9 浏览器驱动六原语**） | `include_agent=True`；GLM 端点过滤 `browser_*`（R11：与云端原生 web_search 不并存） |
 
-## 2. v1.9 浏览器驱动六原语（M3/M5）
+## 2. v1.9 浏览器驱动原语（M3/M5 六原语 + R43 语义快照 = 七原语）
 
 | 工具 | 确认档 | 要点 |
 |---|---|---|
 | `browser_navigate` | session | 新建驱动会话；仅 http(s) 公网（SSRF 拦截）；返回 `session_id` |
 | `browser_extract` | session | markdown/text/links 三态（enum 锁定）；作用于最近导航的会话 |
+| `browser_snapshot` | session | **R43 语义快照**：role/name/state 修剪树（a11y 共识观察层，省 token、标识稳定）；ARIA 快照（Node）/HTML 解析树（pywebview）；provenance 包裹 |
 | `browser_click` | **always** | selector 或可见文本；视口外/不可见元素拒点；前后态截图审计 |
 | `browser_fill` | **always** | 密码/文件字段拒绝；回传 `masked:true`（禁回显原文） |
 | `browser_screenshot` | session | win32 窗口捕获（b64，point 坐标系） |

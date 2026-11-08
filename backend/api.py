@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Api 门面（对外契约层）：57 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
+"""Api 门面（对外契约层）：58 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
 R39 追加记忆面板逐条管理 memory_entries_list/memory_entry_erase/memory_entry_pin，
 均 _V12_EXTRA 隐身），
 签名/位置参数/返回协议逐字保持 v1.0.0。
@@ -84,8 +84,8 @@ _V12_EXTRA = frozenset({
     'group_files_list', 'group_files_search', 'group_files_open_dir',
     'group_files_delete',
     # v1.9.0 M1.9 占位（master-plan §6.2；转正时只改实现不改登记）
-    'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
-    'browser_screenshot', 'browser_close', 'get_platform_info',
+    'browser_navigate', 'browser_extract', 'browser_snapshot', 'browser_click',
+    'browser_fill', 'browser_screenshot', 'browser_close', 'get_platform_info',
     'guard_approval_budget', 'search_reader_stats',
     'reader_config_get', 'reader_config_save',
     'pick_save_path', 'save_export_file',
@@ -309,6 +309,17 @@ class Api:
         return self._execute_guarded(
             'browser_extract', detail, token,
             lambda: ok(self._driver.extract_guarded(selector, mode)),
+            denial='structured', rejection_reason=None)
+
+    def browser_snapshot(self, selector='', max_chars=4000, token=None):
+        """R43 语义快照（role/name/state 修剪树；a11y 共识观察层，较截图省
+        token 且元素标识稳定）。guard session 档；provenance 包裹；
+        审计 op=browser_snapshot。"""
+        detail = {'selector': str(selector or '')[:80]}
+        return self._execute_guarded(
+            'browser_snapshot', detail, token,
+            lambda: ok(self._driver.snapshot_guarded(
+                selector, max_chars=max_chars)),
             denial='structured', rejection_reason=None)
 
     def browser_click(self, target, token=None):

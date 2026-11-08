@@ -22,7 +22,7 @@ const base = `http://127.0.0.1:${server.address().port}`
 const browser = await import('../src/services/browser.js')
 const { mergeConfig } = await import('../src/services/jsonstore.js')
 const guard = await import('../src/services/guard.js')
-mergeConfig('guard.json', JSON.stringify({ tiers: { browser_navigate: 'off', browser_extract: 'off', browser_click: 'always', browser_fill: 'off', browser_screenshot: 'off', browser_close: 'off', web_search: 'off' } }))
+mergeConfig('guard.json', JSON.stringify({ tiers: { browser_navigate: 'off', browser_extract: 'off', browser_snapshot: 'off', browser_click: 'always', browser_fill: 'off', browser_screenshot: 'off', browser_close: 'off', web_search: 'off' } }))
 const results = []; const check = (name, fn) => { fn(); results.push(name) }
 
 // R41（S2-16）：SSRF 判定与 Python _is_public_host 同口径
@@ -48,6 +48,13 @@ process.env.HARBOR_BROWSER_ALLOW_LOOPBACK = 'true'
 check('未开测试例外时回环地址返回 SSRF_BLOCKED', () => assert.equal(ssrfBlocked.error.code, 'SSRF_BLOCKED'))
 const nav = JSON.parse(await browser.browserNavigate(`${base}/page`, '#go', 30, 'hidden'))
 check('后台导航创建会话', () => { assert.equal(nav.ok, true, nav.error); assert.match(nav.session_id, /^brw_/) })
+const snap = JSON.parse(await browser.browserSnapshot('body', 4000))
+check('R43 语义快照：role/name 修剪树 + provenance', () => {
+  assert.equal(snap.ok, true, snap.error)
+  assert.match(snap.snapshot, /button|link|heading/, '语义角色应出现')
+  assert.equal(snap.untrusted, true)
+  assert.ok(snap.source && snap.source.url, 'provenance 包裹')
+})
 const extracted = JSON.parse(await browser.browserExtract('body', 'text'))
 check('正文提取返回真实页面文本且带 UNTRUSTED 来源', () => {
   assert.ok(extracted.content.includes('浏览器测试页'))

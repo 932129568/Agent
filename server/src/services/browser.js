@@ -214,6 +214,32 @@ export async function browserExtract(selector = '', mode = 'markdown', token = n
   catch (error) { return asError(error) }
   finally { if (entry) entry.busy = false }
 }
+
+// R43 语义快照原语（a11y 共识观察层）：ARIA 快照（role/name/state 修剪树，
+// 较截图省 token 且元素标识稳定）；provenance 包裹与 extract 同口径。
+export async function browserSnapshot(selector = '', maxChars = 4000, token = null) {
+  const refusal = await guard('browser_snapshot', { selector: String(selector || '').slice(0, 80) }, token)
+  if (refusal) return refusal
+  let entry
+  try {
+    entry = current()
+    const locator = selector ? entry.page.locator(String(selector)).first() : entry.page.locator('body')
+    await locator.waitFor({ state: 'attached', timeout: 15000 })
+    const url = entry.page.url(); const title = await entry.page.title()
+    let snap = ''
+    try { snap = await locator.ariaSnapshot() } catch { snap = '' }
+    if (!String(snap).trim()) throw { code: 'EXTRACT_EMPTY', message: '页面无可提取语义元素' }
+    const cap = Math.min(65536, Math.max(500, Number(maxChars) || 4000))
+    let truncated = false
+    if (snap.length > cap) { snap = snap.slice(0, cap); truncated = true }
+    const wrapped = wrapUntrusted(snap, url)
+    return json({ ok: true, snapshot: wrapped, elements: snap.split('\n').length,
+      truncated, selector: String(selector || '').slice(0, 80), url, title,
+      session_id: entry.id, char_count: snap.length, untrusted: true,
+      source: provenance(url) })
+  } catch (error) { return asError(error) }
+  finally { if (entry) entry.busy = false }
+}
 export async function browserClick(target, token = null) {
   const value = String(target || '').trim()
   if (!value) return fail('BAD_PARAMS', '缺少点击目标')

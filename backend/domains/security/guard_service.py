@@ -60,9 +60,9 @@ GUARD_OPS = ('delete_path', 'kill_process', 'clipboard_write', 'clipboard_read',
              'web_search', 'software_call',
              # v1.9.0 M5.2：浏览器驱动六原语档位（master-plan §181）——click/fill
              # 是页面交互原语（可触发页面任意动作/提交表单）默认 always 每次确认；
-             # navigate/extract/screenshot/close 为读取/会话管理默认 session 档
-             'browser_navigate', 'browser_extract', 'browser_click', 'browser_fill',
-             'browser_screenshot', 'browser_close',
+             # navigate/extract/snapshot/screenshot/close 为读取/会话管理默认 session 档
+             'browser_navigate', 'browser_extract', 'browser_snapshot',
+             'browser_click', 'browser_fill', 'browser_screenshot', 'browser_close',
              # R41 修复（N11）：open_url 入矩阵——原无护栏挂点（open_app 有），
              # 模型可静默唤起系统浏览器开任意 URL；默认 off 保持既有行为
              'open_url')
@@ -80,6 +80,7 @@ DEFAULT_TIERS = {
     'open_url': 'off',   # R41（N11）：同 open_app 口径——默认 off 零行为，提档后 token 生效
     'web_search': 'off',          # 用户裁决（2026-10-24）：搜索只读无本地副作用、
                                   # 全程留审计——默认放行免每次确认；可在护栏设置提档
+    'browser_snapshot': 'session',   # R43：语义快照（只读观察层，session 档同 extract）
     'software_call': 'session',   # v1.8.0 §4.4：软件调用默认 session 档
     # v1.9.0 M5.2（master-plan §181）：click/fill=always（前后态截图审计在
     # 会话层 best-effort）；其余 session
@@ -139,6 +140,7 @@ OP_LABELS = {
     'run_powershell': '执行 PowerShell',
     'run_admin_command': '管理员命令',
     'open_app': '打开应用/链接',   # 修复 W9（三轮）
+    'browser_snapshot': '页面语义快照',   # R43
     'open_url': '打开网页链接',   # R41（N11）
 }
 
@@ -273,6 +275,14 @@ class GuardService:
                 for op in trusted:
                     if str(op) not in GUARD_OPS:
                         return json.dumps({'error': '未知的信任操作: %s' % op}, ensure_ascii=False)
+                # R43（权限记忆化收口）：高危操作不可设为持久信任——删除/杀进程/
+                # 管理员提权每次必须人审（与前端确认弹窗禁用勾选同口径）。
+                _hr = {'delete_path', 'kill_process', 'run_admin_command'}
+                hit = sorted(_hr & {str(op) for op in trusted})
+                if hit:
+                    return json.dumps(
+                        {'error': '高危操作不可设为永久信任: %s（每次执行必须人工确认）'
+                         % '、'.join(hit)}, ensure_ascii=False)
             with self._lock:
                 tiers = incoming.get('tiers')
                 if isinstance(tiers, dict):
@@ -559,6 +569,8 @@ class GuardService:
             return {'url': str(d.get('url') or '')[:200]}
         if op == 'browser_extract':
             return {'selector': str(d.get('selector') or '')[:80]}
+        if op == 'browser_snapshot':
+            return {'selector': str(d.get('selector') or '')[:80]}   # R43
         if op == 'browser_click':
             return {'target': str(d.get('target') or '')[:120]}
         if op == 'browser_fill':

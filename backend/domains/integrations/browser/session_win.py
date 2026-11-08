@@ -635,6 +635,16 @@ class WinSession(BrowserSession):
         finally:
             self._settle_ready()
 
+    def snapshot(self, selector='', max_chars=4000):
+        """R43 语义快照：对 navigate 所取 HTML 跑 build_snapshot_result
+        （role/name/state 修剪树；与 extract 同源 _html，无新增取数）。"""
+        self._enter(SessionState.BUSY)
+        try:
+            from .snapshot import build_snapshot_result
+            return build_snapshot_result(self._html, selector, max_chars)
+        finally:
+            self._settle_ready()
+
     def click(self, target):
         """M3.2：点击原语——evaluate_js 派发（selector|text）+ 前后态截图审计。
 
