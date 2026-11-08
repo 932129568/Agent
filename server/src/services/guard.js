@@ -98,7 +98,13 @@ const OP_GRANT_SCOPES = {
 const LISTLESS_OPS = new Set(['clipboard_write', 'clipboard_read', 'take_screenshot',
   'run_command', 'run_powershell', 'run_admin_command', 'open_app'])
 
-/** armed（E7）：生产缺省武装；测试 seam 仅模块 init 读取。 */
+/** armed（E7）：生产缺省武装；测试 seam 仅模块 init 读取。
+ * R39 口径裁决（K8/S2-17，双端同轮定案）：与 Python `guard_service._armed=False`
+ * 的差异是**运行时形态差异**而非行为分叉——Node 桥只随 Electron 宿主运行
+ * （恒有真窗，无「无窗环境」），缺省武装即桌面语义；Python 后端可无窗运行
+ * （测试/沙箱/次窗降级），武装由 Api._set_window 挂真窗时置位。两侧语义同为
+ * 「有真窗=武装」，缺省值不同是各自运行时的正确缺省。测试可用
+ * HARBOR_GUARD_ARMED=false 复现 Python 无窗口径。 */
 export const ARMED = process.env.HARBOR_GUARD_ARMED !== 'false'
 
 /* ---------------- 会话级内存态（Python 进程内语义） ---------------- */
@@ -203,7 +209,7 @@ function loadCfg() {
   return cfg
 }
 
-/** guard 写档：归一 cfg + 会话态落盘（used/escalated/hits）。
+/** guard 写档：归一 cfg + 规则命中落盘（used/escalated 会话级不落盘）。
  * R37 修复（K6 Node 侧对齐）：未知顶层键透传保留——原白名单重建整写，
  * 未来版本/手工扩展键在下次写档被无声抹掉（与 Python guard_service 同铁律）。 */
 const GUARD_KNOWN_KEYS = new Set(['tiers', 'protect_paths', 'protect_processes',
@@ -222,7 +228,9 @@ function persistCfg(cfg) {
   out.protect_paths = cfg.protect_paths
   out.protect_processes = cfg.protect_processes
   out.trustedOps = cfg.trustedOps
-  out.approval_budget = { limit: cfg.approval_budget.limit, used: sidBudget().used, escalated: sidBudget().escalated }
+  // R39 修复（S2-20 对齐 Python）：used/escalated 是会话级内存态（loadCfg 亦
+  // 不加载）——原把当前 sid 的计数落盘，文件里残留无上下文的用量，误导审计。
+  out.approval_budget = { limit: cfg.approval_budget.limit, used: 0, escalated: false }
   if (cfg.allow_rules && cfg.allow_rules.length) {
     out.allow_rules = cfg.allow_rules.map(r => ({ ...r, hits: ruleHits.get(r.rule_id) ?? r.hits }))
   }
@@ -381,7 +389,9 @@ export async function guardConfirmToken(op, detail = {}) {
   }
   const token = crypto.randomBytes(16).toString('hex')
   tokensEvict()
-  tokens.set(token, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false })
+  // R39（S2-22 后半）：token 绑签发会话——A 会话签发的 token 不能被 B 会话消费
+  // （原仅 op+detail 校验，跨会话重放可行）
+  tokens.set(token, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false, sid: ctxSid() || null })
   await countApproval(op)
   return JSON.stringify({ token, ttl: TOKEN_TTL_SECONDS })
 }
@@ -390,6 +400,9 @@ export async function consumeToken(op, detail, token) {
   const entry = tokens.get(String(token || ''))
   if (!entry || entry.used || entry.exp < now()) return false
   if (entry.op !== op || entry.digest !== digestOf(detail)) return false
+  // R39（S2-22 后半）：会话绑定校验（签发侧 null=无 ALS 上下文的 legacy 流，
+  // 消费侧同样 null 才放行——差分/dev 环境行为不变）
+  if ((entry.sid || null) !== (ctxSid() || null)) return false
   entry.used = true
   return true
 }
@@ -399,7 +412,7 @@ export async function refundToken(op, detail, token) {
   const key = String(token || '')
   if (!key || tokens.has(key)) return false
   tokensEvict()
-  tokens.set(key, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false })
+  tokens.set(key, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false, sid: ctxSid() || null })
   sidBudget().used = Math.max(0, sidBudget().used - 1)
   return true
 }

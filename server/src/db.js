@@ -24,10 +24,14 @@ import path from 'node:path'
 import { PrismaLibSql } from '@prisma/adapter-libsql'
 import { PrismaClient } from './generated/prisma/client.ts'
 import { config } from './config.js'
+import { CONFIG_DIR } from './paths.js'
 
 function resolveSqlitePath(databaseUrl) {
   const raw = String(databaseUrl || '').replace(/^file:/, '')
-  return path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw)
+  // R39 修复（S2-12）：相对路径锚 CONFIG_DIR（与 electron/main.js 注入口径一致）
+  // ——原锚 process.cwd()，cwd 随启动方式漂移（CLI/服务/不同目录）→ 同一份
+  // 缺省 DATABASE_URL 打开不同库文件（「会话丢了」假象）。
+  return path.isAbsolute(raw) ? raw : path.resolve(CONFIG_DIR, raw)
 }
 
 export let sqlitePath = resolveSqlitePath(config.DATABASE_URL)

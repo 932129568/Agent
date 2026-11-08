@@ -111,6 +111,23 @@ await check('换绑后写入落到新库；物化反映新库内容', async () =
   const m = await materializeSessions(path.join(tmp, 'second-sessions.json'))
   assert.equal(m.count, 1)
 })
+
+// ---- R39（S2-7）：空数组无墓碑 → 拒绝清库（过期状态保护性拦截）----
+const blankSave = JSON.parse(await saveSessions(JSON.stringify([])))
+await check('空数组且存在无墓碑会话 → 拒绝写入（S2-7）', async () => {
+  assert.ok(blankSave.error && blankSave.error.includes('拒绝写入'))
+  assert.deepEqual(JSON.parse(await getSessions()).map(x => x.id), ['switched-in'])
+})
+// 合法「删光所有会话」：每条删除都经 session_purge 落墓碑 → 墓碑全覆盖照常清库
+const { rememberDeletedId } = await import('../src/services/session-migrate.js')
+rememberDeletedId('switched-in')
+const wipeSave = await saveSessions(JSON.stringify([]))
+await check('墓碑全覆盖的空数组 → 照常清库（合法删光路径不受影响）', async () => {
+  assert.equal(wipeSave, '{"ok":true}')
+  // 注意：本测试顶部解构的 prisma 是快照拷贝，switchDatabase 换绑后仍指旧库
+  // （既有断言恰好巧合通过）；活绑定证据一律走 getSessions（模块内部 prisma）
+  assert.deepEqual(JSON.parse(await getSessions()), [])
+})
 const back = await switchDatabase(path.join(tmp, 'main.db'))
 await check('切回旧库：旧数据原地保留（无覆盖无丢失）', async () => {
   assert.equal(back.ok, true)

@@ -388,6 +388,9 @@ async function memoryTail(query) {
 export async function buildSystemPrompt(query = '') {
   // PR1：编码形态对齐——legacy ok(text)=json.dumps(text)（HTTP body 是 JSON
   // 编码字符串）。沙箱尾注不注入（Node 无 Job 沙箱，不伪造安全声明 → ID-201）。
+  // R39 口径裁决（S2-19，双端同轮定案）：此为**有意分叉**非缺陷——沙箱尾注
+  // 描述的是 Python 侧 pywebview 桥的 Job 沙箱事实；Node 桥若照搬即伪造安全
+  // 声明。差分基线将该行登记为预期差异（differential allowlist）。
   const { getWsEnabled } = await import('./workspace.js')
   const enabled = JSON.parse(await getWsEnabled(ctxSid())).enabled !== false
   const root = ctxRoot()
@@ -417,8 +420,18 @@ export async function traceNew() {
 }
 
 export async function uiNudge(visibility = 'visible') {
-  // PR7：{nudged, reason}（无 visibility 键——api.py:405-416 口径；Node 服务
-  // 无原生窗口，如实报告未逼帧；visibility 诊断日志 P0-4 桌面壳接入）
+  // PR7：{nudged, reason}（无 visibility 键——api.py:405-416 口径）。
+  // R39 修复（S2-18）：Electron 宿主注册 redraw provider 后接真窗逼帧
+  // （webContents.invalidate()，对齐 Python 侧 RedrawWindow 语义）——原恒
+  // {nudged:false}，流式期间宿主逼帧空转。无宿主（纯 Node/差分环境）行为不变。
+  try {
+    const { getHostRedrawProvider } = await import('../host.js')
+    const host = getHostRedrawProvider()
+    if (host && typeof host.redraw === 'function') {
+      const done = host.redraw()
+      return okJson({ nudged: done === true, reason: done === true ? 'host-redraw' : 'window-not-ready' })
+    }
+  } catch { /* host 不可达 → 回落如实报告 */ }
   return okJson({ nudged: false, reason: 'window-not-ready' })
 }
 

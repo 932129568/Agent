@@ -126,7 +126,18 @@ async function boot() {
   if (!HEADLESS) {
     const host = await import(pathToFileURL(path.join(ROOT, 'server', 'src', 'host.js')).href)
     host.setHostDialogProvider({ adminMessageBox: adminMessageBoxProvider })
-    console.log('[harbor] host dialog provider registered (adminMessageBox)')
+    // R39 修复（S2-18）：ui_nudge 逼帧接真窗——流式期间前端每 800ms 请求逼帧，
+    // 宿主对 BrowserWindow webContents.invalidate()（对齐 Python RedrawWindow）
+    host.setHostRedrawProvider({
+      redraw: () => {
+        try {
+          if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return false
+          win.webContents.invalidate()
+          return true
+        } catch (e) { return false }
+      },
+    })
+    console.log('[harbor] host dialog provider registered (adminMessageBox, redraw)')
   }
 
   // 时序③（T02）：fresh-DB 建表先行——ensureSchema 幂等 DDL（db.js SCHEMA_DDL

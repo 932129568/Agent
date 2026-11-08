@@ -30,6 +30,25 @@ export function getHostDialogProvider() {
   return host
 }
 
+/**
+ * 逼帧提供者（R39 S2-18）：宿主真窗强制重绘（Electron 对齐 Python 侧
+ * RedrawWindow 语义——WebView2/Chromium 后台化节流时流式渲染冻结的逼帧兜底）。
+ *   - redraw(): boolean —— 执行成功返回 true；宿主窗口未就绪返回 false。
+ * 无宿主注册时 uiNudge 维持 {nudged:false}（纯 Node 运行零副作用）。
+ * @type {{redraw?: () => boolean}|null}
+ */
+let redraw = null
+
+/** 逼帧提供者注册口（同上幂等语义）。 */
+export function setHostRedrawProvider(provider) {
+  redraw = provider ? Object.freeze({ ...provider }) : null
+}
+
+/** 读取逼帧提供者（无宿主返回 null）。 */
+export function getHostRedrawProvider() {
+  return redraw
+}
+
 /** 宿主在场判定（测试与日志用）。 */
 export function hasHost() {
   return host !== null

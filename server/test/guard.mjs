@@ -159,6 +159,27 @@ const issued2 = JSON.parse(await guard.guardConfirmToken('take_screenshot', { no
 const mismatched = await guard.consumeToken('take_screenshot', { note: 'ls' }, issued2.token)
 check('参数变化后 token 无效', () => assert.equal(mismatched, false))
 
+// ⑧b R39（S2-22 后半）：token 绑签发会话——A 会话签发 B 会话不可消费
+const { runWithContext } = await import('../src/session-context.js')
+const issued3 = JSON.parse(await guard.guardConfirmToken('take_screenshot', { note: 'dir' }))
+const crossSid = await runWithContext({ sid: 's_other', explicitSid: true }, () =>
+  guard.consumeToken('take_screenshot', { note: 'dir' }, issued3.token))
+check('他会话消费 token 被拒（S2-22 会话绑定）', () => assert.equal(crossSid, false))
+const sameSid = await runWithContext({ sid: 's_guard', explicitSid: true }, () =>
+  guard.consumeToken('take_screenshot', { note: 'dir' }, issued3.token))
+check('同会话消费 token 正常（签发与消费同 sid）', () => assert.equal(sameSid, true))
+
+// ⑧c R39（S2-20）：used/escalated 会话态不落盘（对齐 Python）——内存计数>0，
+// 但 guard.json 里恒为 0/false（loadCfg 亦不加载，重启即归零）
+await writeCfg({ tiers: { clipboard_read: 'session' } })
+const guardOnDisk = JSON.parse(fs.readFileSync(
+  path.join(process.env.HARBOR_CONFIG_DIR, 'guard.json'), 'utf8'))
+check('persistCfg 不落会话计数（S2-20 对齐 Python）', () => {
+  assert.equal(guardOnDisk.approval_budget.used, 0)
+  assert.equal(guardOnDisk.approval_budget.escalated, false)
+  assert.ok(guardOnDisk.approval_budget.limit >= 1)
+})
+
 // ⑨ 规则列表与删除（guard_service.py rule_list/rule_remove：幂等 removed 键）
 const rules = JSON.parse(await guard.guardRuleList())
 check('规则列表可读（归一字段）', () => {

@@ -58,6 +58,20 @@ export async function saveSessions(data) {
   const { readDeletedIds } = await import('./session-migrate.js')
   const deleted = new Set(readDeletedIds())
   entries = entries.filter(entry => !deleted.has(String(entry.id)))
+  // R39 修复（S2-7）：空数组 + 存在无墓碑会话 → 拒绝写入（保护性拦截）。
+  // deleteMany(notIn=[]) 即清库——过期/损坏的客户端状态（空 localStorage 的
+  // 第二窗口早于会话加载）发 [] 会把整库清空。合法「删光所有会话」每条都经
+  // session_purge 落墓碑 → 墓碑全覆盖时照常清库；60 条裁剪不发墓碑（裁剪
+  // 恒非空数组），不受影响。
+  if (!entries.length) {
+    const rows = await prisma.session.findMany({ select: { id: true } })
+    const unbacked = rows.filter(r => !deleted.has(String(r.id)))
+    if (unbacked.length) {
+      return JSON.stringify({ error: 'save_sessions 收到空数组，但库中存在 ' +
+        unbacked.length + ' 个会话没有删除墓碑——疑似过期状态的全量覆盖，已拒绝写入。' +
+        '如确要清空，请逐条删除会话（产生墓碑）后再试。' })
+    }
+  }
   const keep = entries.map(entry => String(entry.id))
 
   await prisma.$transaction(async tx => {
