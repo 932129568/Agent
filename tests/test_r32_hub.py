@@ -139,11 +139,12 @@ def test_system_prompt_injection_is_wired():
 
 def test_unified_file_entry_and_more_formats(tmp_path):
     tpl = (ROOT / 'frontend' / 'index.template.html').read_text(encoding='utf-8')
-    m = re.search(r'id="unifiedFileInput"[^>]*accept="([^"]+)"', tpl, re.S)
+    m = re.search(r'<input[^>]*id="unifiedFileInput"[^>]*>', tpl, re.S)
     assert m, '缺少统一文件入口'
-    accept = m.group(1)
-    for ext in ('.heic', '.ipynb', '.tgz', '.docx', '.pdf', '.mp3', '.yaml', '.svg', '.zip'):
-        assert ext in accept, 'accept 未覆盖 ' + ext
+    # R33：不设 accept 限制 —— 所有格式都能上传（含 .md / .ppt / PDF / 音频…）
+    tag = m.group(0)
+    assert 'accept=' not in tag, '统一入口不应再限制格式'
+    assert 'multiple' in tag
     # 附件模块单独装载，避免依赖 handleFiles 等其它符号（hubFileKind 是纯函数）
     att = (ROOT / 'frontend' / 'src' / 'chat' / 'attachments.js').read_text(encoding='utf-8')
     # 上面用 vm 测的是 composer 模块（无 hubFileKind），改在这里单独验证
@@ -178,8 +179,8 @@ def test_unified_file_entry_and_more_formats(tmp_path):
     assert kinds['a.mkv'] == 'video'
     assert kinds['a.tar.gz'] == 'gztar' and kinds['a.zip'] == 'zip'
     assert kinds['a.ipynb'] == 'text' and kinds['a.graphql'] == 'text'
-    assert kinds['a.pdf'] == 'unsupported' and kinds['a.docx'] == 'unsupported'
-    assert kinds['a.mp3'] == 'unsupported' and kinds['a.rar'] == 'archive-unsupported'
+    assert kinds['a.pdf'] == 'file' and kinds['a.docx'] == 'file'
+    assert kinds['a.mp3'] == 'file' and kinds['a.rar'] == 'file'
 
 
 def test_legacy_dom_and_ui_contract_preserved():
@@ -201,7 +202,7 @@ def test_legacy_dom_and_ui_contract_preserved():
 
 def test_manifest_registers_new_modules_and_product_contains_them():
     m = json.loads((ROOT / 'frontend' / 'manifest.json').read_text(encoding='utf-8'))
-    assert len(m['scripts']) == 113 and len(m['styles']) == 14
+    assert len(m['scripts']) == 114 and len(m['styles']) == 14
     bypath = {e['path']: e for e in m['scripts']}
     assert 'hubDirectiveFor' in bypath['frontend/src/shell/composer-hub.js']['provides']
     assert 'HUB_CATALOG' in bypath['frontend/src/shell/hub-catalog.js']['provides']

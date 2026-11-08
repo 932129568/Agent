@@ -21,6 +21,8 @@
   <!-- 图标系统（R18 重设计）：24 网格 · 1.75 圆头描边 · 单一来源。
        每个 symbol 自声明呈现属性——脱离 .ui-icon 类也不会退化成实心黑块。 -->
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <!-- R33：功能市场（替换原来的字母 E 图标） -->
+  <symbol id="i-market" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 20v-6h6v6"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-4-4 4 4 4-4M5 19h14"/></symbol>
@@ -74,7 +76,7 @@
   <button class="rail-btn on" data-panel="chat" data-tip="对话" aria-label="对话" onclick="switchPanel('chat')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-chat"/></svg></button>
   <button class="rail-btn" data-panel="sessions" data-tip="会话历史" aria-label="会话历史" onclick="switchPanel('sessions')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-list"/></svg></button>
   <button class="rail-btn" data-panel="workspace" data-tip="工作区与工具权限" aria-label="工作区与工具权限" onclick="switchPanel('workspace')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-folder"/></svg></button>
-  <button class="rail-btn" id="expertCenterBtn" data-tip="专家中心" aria-label="专家中心"><span aria-hidden="true">E</span></button>
+  <button class="rail-btn" id="expertCenterBtn" data-tip="功能市场" aria-label="功能市场"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-market"/></svg></button>
   <div class="rail-sep"></div>
   <button class="rail-btn" id="toolsBoxBtn" data-tip="工具箱（分析 · 审计 · 搜索 · 沙箱）" aria-label="工具箱" aria-controls="toolsPop" aria-expanded="false" onclick="toolsToggle(event)"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-wrench"/></svg></button>
   <div class="notify-pop" id="toolsPop" role="menu" aria-label="工具箱" style="display:none;">
@@ -652,9 +654,10 @@
               <input type="file" id="zipInput" accept=".zip" multiple hidden>
               <button class="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">专家</button>
             </span>
-            <button class="tool-btn composer-plus" id="composerPlusBtn" type="button" title="添加文件 / 专家 / 技能 / 连接器" aria-label="更多" aria-expanded="false"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-plus"/></svg></button>
-            <input type="file" id="unifiedFileInput" multiple hidden
-              accept="image/*,video/*,audio/*,.txt,.md,.markdown,.json,.jsonl,.csv,.tsv,.log,.srt,.ass,.py,.js,.mjs,.cjs,.ts,.tsx,.jsx,.html,.htm,.css,.scss,.less,.java,.c,.cpp,.h,.hpp,.cs,.go,.rs,.rb,.php,.lua,.swift,.kt,.dart,.scala,.sh,.bash,.bat,.ps1,.sql,.tex,.rst,.adoc,.vue,.svelte,.yaml,.yml,.toml,.ini,.conf,.cfg,.xml,.svg,.graphql,.proto,.ipynb,.patch,.diff,.env,.gitignore,.makefile,.gradle,.properties,.lock,.zip,.tar,.gz,.tgz,.rar,.7z,.bz2,.xz,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.epub,.rtf,.mp3,.wav,.m4a,.flac,.ogg,.aac,.wma,.mp4,.mov,.mkv,.avi,.webm,.flv,.wmv,.m4v,.3gp,.png,.jpg,.jpeg,.gif,.webp,.bmp,.ico,.heic,.heif,.avif,.tif,.tiff">
+            <button class="tool-btn composer-plus" id="composerPlusBtn" type="button" hidden title="添加文件 / 专家 / 技能 / 连接器" aria-label="更多" aria-expanded="false"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <!-- R33：不设 accept —— 支持所有文件上传（图片/视频/文本/压缩包照常解析，
+                 其余格式作为文件附件携带元信息，不再拦截） -->
+            <input type="file" id="unifiedFileInput" multiple hidden>
             <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…（输入 /plan 可先出计划）" aria-label="消息输入"></textarea>
             <div class="expert-selection-chip" id="expertSelectionChip" aria-live="polite" hidden></div>
             <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="发送消息"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-send"/></svg></button>
@@ -665,7 +668,7 @@
           <div class="hub-menu" id="hubMenu" hidden role="menu" aria-label="更多操作">
             <button class="hub-mi" id="hubAddFile" type="button" role="menuitem">
               <svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-plus"/></svg>
-              <span class="hub-mi-body"><b>添加文件</b><small>图片 · 文档 · 代码 · 压缩包等</small></span>
+              <span class="hub-mi-body"><b>上传文件</b><small>支持全部格式，一次可选多个</small></span>
               <span class="hub-mi-arrow">›</span>
             </button>
             <button class="hub-mi" id="hubQuoteFile" type="button" role="menuitem">
@@ -945,7 +948,7 @@
 <div class="expert-overlay" id="expertCenter" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="expertCenterTitle" hidden>
   <div class="expert-dialog">
     <header class="expert-dialog-head">
-      <div><h2 id="expertCenterTitle">专家中心</h2><p>仅目录导入 · 快照固定 · 包内容不可信</p></div>
+      <div><h2 id="expertCenterTitle">功能市场</h2><p>浏览 · 启用 · 停用（旧目录导入面板保留为兼容面）</p></div>
       <button type="button" class="expert-btn" id="expertCloseBtn">关闭</button>
     </header>
     <p class="expert-center-status" id="expertCenterStatus" aria-live="polite"></p>
@@ -962,6 +965,42 @@
       <button type="button" class="expert-btn" id="expertEnableBtn" disabled>启停</button>
       <button type="button" class="expert-btn expert-btn-primary" id="expertSelectBtn" disabled>选择此专家（发送时自动加载）</button>
     </footer>
+  </div>
+</div>
+
+
+<!-- R33 · 功能市场：浏览全量目录，点击「启用」后才出现在会话页加号菜单 -->
+<div class="hm-overlay" id="hubMarket" hidden role="dialog" aria-modal="true" aria-labelledby="hmTitle">
+  <div class="hm-shell">
+    <header class="hm-head">
+      <div class="hm-brand"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-market"/></svg><h2 id="hmTitle">功能市场</h2></div>
+      <nav class="hm-tabs" id="hmTabs" aria-label="功能分类">
+        <button type="button" class="on" data-hm-tab="expert">专家</button>
+        <button type="button" data-hm-tab="skill">技能</button>
+        <button type="button" data-hm-tab="connector">连接器</button>
+      </nav>
+      <div class="hm-head-right">
+        <label class="hm-search"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="hmSearch" type="search" placeholder="搜索专家 / 技能 / 连接器" aria-label="搜索功能市场"></label>
+        <button type="button" class="hm-mine" id="hmMine">我的功能 <span id="hmMineCount">0</span></button>
+        <button type="button" class="hm-close" id="hmClose" aria-label="关闭">✕</button>
+      </div>
+    </header>
+    <section class="hm-hot" id="hmHot" aria-label="分区热门"></section>
+    <div class="hm-filter-row">
+      <div class="hm-cats" id="hmCats" aria-label="分区筛选"></div>
+      <div class="hm-sorts" id="hmSorts" aria-label="排序">
+        <button type="button" class="on" data-hm-sort="综合">综合</button>
+        <button type="button" data-hm-sort="最热">最热</button>
+        <button type="button" data-hm-sort="最新">最新</button>
+      </div>
+    </div>
+    <div class="hm-subrow">
+      <div class="hm-subtabs" id="hmSubtabs"></div>
+      <span class="hm-tip">启用后会出现在会话页「+」菜单里</span>
+    </div>
+    <div class="hm-grid" id="hmGrid"></div>
+    <footer class="hm-foot" id="hmFoot"></footer>
   </div>
 </div>
 

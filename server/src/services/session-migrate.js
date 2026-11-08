@@ -24,6 +24,26 @@ export { switchDatabase, currentDbPath } from '../db.js'
 export const LEGACY_SESSIONS_FILE = 'sessions.json'
 export const MIGRATION_META_KEY = 'migration_legacy_sessions'
 export const MIGRATION_BACKUP_SUFFIX = '.pre-node-migration.bak'
+/** R33：已删除会话 id 墓碑（独立文件，不污染 config.json）。
+ *  session_purge 写入；bootstrapLegacyImport / saveSessions 过滤，
+ *  防止 Python 遗留 sessions.json 在下次启动时把已删会话 merge 复活。 */
+export const DELETED_IDS_FILE = 'deleted_session_ids.json'
+export function readDeletedIds() {
+  try {
+    const p = path.join(CONFIG_DIR, DELETED_IDS_FILE)
+    if (!fs.existsSync(p)) return []
+    const arr = JSON.parse(fs.readFileSync(p, 'utf8'))
+    return Array.isArray(arr) ? arr.filter(x => x != null).map(String) : []
+  } catch (e) { return [] }
+}
+export function rememberDeletedId(sid) {
+  const list = readDeletedIds()
+  const id = String(sid)
+  if (!id || list.includes(id)) return
+  list.push(id)
+  try { atomicWriteText(path.join(CONFIG_DIR, DELETED_IDS_FILE), JSON.stringify(list)) }
+  catch (e) { /* 墓碑写失败不阻断删除主流程；前端 localStorage 墓碑仍兜底 */ }
+}
 
 /** 与 sessions.js 相同的索引列抽取规则（payload 原文优先；id 类型保真）。 */
 function toRecord(entry) {
@@ -51,7 +71,7 @@ function toRecord(entry) {
  * - replace：事务内 deleteMany+逐条写入（Python 文件级替换语义）。
  * 整批在单事务内（R4：失败整批回滚，标记由调用方最后写）。
  */
-export async function importLegacySessions(sourceJsonPath, { mode = 'merge' } = {}) {
+export async function importLegacySessions(sourceJsonPath, { mode = 'merge', skipIds = [] } = {}) {
   let parsed
   try {
     parsed = JSON.parse(fs.readFileSync(sourceJsonPath, 'utf8'))
@@ -61,11 +81,13 @@ export async function importLegacySessions(sourceJsonPath, { mode = 'merge' } = 
   if (!Array.isArray(parsed)) return { error: 'legacy sessions 不是 JSON 数组' }
   const warnings = []
   const entries = []
+  const skip = new Set((skipIds || []).map(String))
   parsed.forEach((item, index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item) || item.id === undefined || item.id === null) {
       warnings.push(`跳过非会话条目 index=${index}`)
       return
     }
+    if (skip.has(String(item.id))) return;   // R33：删除墓碑 —— 不再从 legacy 复活
     entries.push(item)
   })
   try {
@@ -163,7 +185,8 @@ export async function bootstrapLegacyImport({ source = null } = {}) {
     return { ok: true, imported: 0, skipped: 0 }
   }
   backupOnce(legacyPath)
-  const result = await importLegacySessions(legacyPath, { mode: 'merge' })
+  // R33：启动时把删除墓碑传入，legacy 源里的已删 id 一律跳过
+  const result = await importLegacySessions(legacyPath, { mode: 'merge', skipIds: readDeletedIds() })
   if (result.error) return result
   if (!marker) {
     await writeMeta(MIGRATION_META_KEY, {

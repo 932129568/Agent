@@ -5,11 +5,10 @@
  * 列表底部「配置自定义模型」→ 跳设置「连接与模型」块并闪光定位。
  */
 
+/* R33：4 个分类分支合并为单一「上传文件」（支持所有格式）。
+ * 旧分类 input 仍保留作契约兼容面，但入口统一到 unifiedFileInput。 */
 const PLUS_ITEMS = [
-  { key: 'img', label: '图片', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>' },
-  { key: 'vid', label: '视频', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg>' },
-  { key: 'file', label: '文本文件', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>' },
-  { key: 'zip', label: '压缩包 (zip)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l2 3h5a2 2 0 0 1 2 2z"/><path d="M10 12h4M12 12v3"/></svg>' }
+  { key: 'file', label: '上传文件', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>' }
 ];
 
 function ipEl(id) {
@@ -70,9 +69,14 @@ function ipCustomRemove(name) {
 
 /* ---------- 「+」附件菜单 ---------- */
 function ipPlusToggle() {
-  const pop = ipEl('atPop');
   const mc = ipEl('mcPop');
   if (mc) mc.classList.remove('on');
+  // R33：一个「+」按钮、一套菜单 —— 统一走 R32 菜单（上传文件/专家/技能/连接器）
+  if (ipEl('hubMenu') && typeof hubToggleMenu === 'function') {
+    hubToggleMenu();
+    return;
+  }
+  const pop = ipEl('atPop');
   if (!pop) return;
   if (pop.classList.contains('on')) { pop.classList.remove('on'); return; }
   ipPlusRender();
@@ -87,8 +91,9 @@ function ipPlusRender() {
   pop.querySelectorAll('.at-item').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-key');
-      const input = ipEl(key + 'Input');
-      if (input) input.click();
+      // R33：统一入口支持所有格式；回落旧 input 仅为兼容面
+      const input = ipEl('unifiedFileInput') || ipEl(key + 'Input');
+      if (input && input.click) input.click();
       pop.classList.remove('on');
     });
   });
@@ -254,7 +259,7 @@ function inputPlusInit() {
   plus.type = 'button';
   plus.id = 'plusBtn';
   plus.className = 'tool-btn';
-  plus.title = '添加附件';
+  plus.title = '上传文件 / 专家 / 技能 / 连接器';
   plus.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
   plus.addEventListener('click', (e) => { e.stopPropagation(); ipPlusToggle(); });
   const modeEl = ipEl('toolMode');

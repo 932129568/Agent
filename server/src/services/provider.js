@@ -14,6 +14,7 @@ import { prisma } from '../db.js'
 import { cacheToolOutput as cacheOutput, clearFileCaches } from './files.js'
 import { consumeExportPath } from './system.js'
 import { guardAudit } from './misc.js'
+import { rememberDeletedId } from './session-migrate.js'
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 const PROMPTS_DIR = path.join(PROJECT_ROOT, 'backend', 'prompts')
@@ -449,6 +450,8 @@ export async function sessionPurge(sid, taskIdsJson = '[]') {
   let taskIds = []
   try { taskIds = JSON.parse(String(taskIdsJson)) } catch (error) { taskIds = [] }
   const removed = { sessions: 0, plans: 0, checkpoints: 0, ws: 0 }
+  // R33：先落墓碑，确保 legacy sessions.json 下次启动 merge 时不会把它复活
+  rememberDeletedId(sid)
 
   const existing = await prisma.session.findUnique({ where: { id: String(sid) } })
   if (existing) {

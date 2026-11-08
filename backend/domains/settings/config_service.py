@@ -174,6 +174,22 @@ class ConfigService:
         """
         sid = str(sid or '')
         removed = {'sessions': 0, 'ws': 0, 'plans': 0, 'checkpoints': 0}
+        # R33：与 Electron/server 端共用的删除墓碑。两端共用 ~/.glm-chat，
+        # Python 版删 sessions.json、Electron 版删 DB；任一端删除后，另一端
+        # 启动时的 legacy 增量导入都必须跳过该 id，避免「删了又出现」。
+        try:
+            tomb_path = os.path.join(paths.CONFIG_DIR, 'deleted_session_ids.json')
+            tomb = []
+            if os.path.exists(tomb_path):
+                with open(tomb_path, encoding='utf-8') as f:
+                    tomb = json.load(f)
+                if not isinstance(tomb, list):
+                    tomb = []
+            if sid and sid not in tomb:
+                tomb.append(sid)
+                atomic_write_text(tomb_path, json.dumps(tomb, ensure_ascii=False))
+        except Exception as e:
+            self._log.debug('purge 墓碑写入失败（可忽略）: %r', e)
         try:
             tasks = json.loads(task_ids_json or '[]')
             if not isinstance(tasks, list):

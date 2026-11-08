@@ -91,17 +91,29 @@ function hubRenderSub() {
     ];
     if (q) items = items.filter(it => (it.name + it.desc).toLowerCase().indexOf(q.toLowerCase()) >= 0);
   } else {
-    const pools = hubSubPools(kind);
-    if (typeof hubCatalogSearch === 'function') {
-      items = hubCatalogSearch(pools, q, q ? 30 : 9)
-        .map(it => Object.assign({}, it, { __kind: it.kind === 'team' ? 'teams' : (it.kind === 'expert' ? 'experts' : (it.kind === 'skill' ? 'skills' : 'connectors')) }));
+    // R33：只显示功能市场里已启用的条目 —— 未启用的不进加号菜单
+    if (typeof hubEnabledItems === 'function') {
+      hubSubPools(kind).forEach(k => { items = items.concat(hubEnabledItems(k)); });
     }
+    if (q) {
+      const ql = q.toLowerCase();
+      items = items.filter(it => ((it.name || '') + ' ' + (it.desc || '') + ' ' +
+        (it.tags || []).join(' ')).toLowerCase().indexOf(ql) >= 0);
+    }
+    items = items.slice(0, 30);
   }
   const more = document.getElementById('hubMore');
   if (more) more.textContent = (kind === 'mode' ? '在设置中调整更多权限…'
-    : kind === 'connector' ? '查看全部连接器…' : '召唤更多' + (kind === 'skill' ? '技能' : '专家') + '…');
+    : '去功能市场启用更多…');
   if (!items.length) {
-    box.innerHTML = '<div class="hub-empty">没有匹配的条目，换个关键词试试</div>';
+    const why = q ? '没有匹配的已启用条目' : ('还没有启用任何' +
+      (kind === 'skill' ? '技能' : kind === 'connector' ? '连接器' : '专家/专家团'));
+    box.innerHTML = '<div class="hub-empty">' + why + '</div>' +
+      (kind === 'mode' ? '' :
+        '<button type="button" class="hub-item hub-market-link" data-hub-act="market">' +
+        '<span class="hub-item-emoji" aria-hidden="true">🛍️</span>' +
+        '<span class="hub-item-body"><span class="hub-item-name">去功能市场启用 →</span>' +
+        '<span class="hub-item-desc">启用后才会出现在这里</span></span></button>');
     return;
   }
   box.innerHTML = items.map(it =>
@@ -146,6 +158,11 @@ function hubPick(kind, id) {
   }
   const item = (typeof hubCatalogById === 'function') ? hubCatalogById(kind, id) : null;
   if (!item) return false;
+  // R33：功能市场未启用的条目不允许在会话里直接使用
+  if (typeof hubIsEnabled === 'function' && !hubIsEnabled(kind, id)) {
+    if (typeof toast === 'function') toast('请先在「功能市场」里启用「' + item.name + '」', 'warn');
+    return false;
+  }
   HUB_STATE.picks[sid] = { kind: kind, id: id, item: item };
   hubRenderChip();
   // 输入框为空时带入该角色的开场提问，用户直接回车即可真正用起来
@@ -298,13 +315,23 @@ function hubInitComposer() {
 
   const list = document.getElementById('hubList');
   if (list) list.addEventListener('click', (e) => {
+    const act = e.target && e.target.closest ? e.target.closest('[data-hub-act]') : null;
+    if (act && act.dataset && act.dataset.hubAct === 'market') {
+      hubCloseMenu();
+      if (typeof hubOpenMarket === 'function') hubOpenMarket(
+        HUB_STATE.sub === 'skill' ? 'skill' : HUB_STATE.sub === 'connector' ? 'connector' : 'expert');
+      return;
+    }
     const el = e.target && e.target.closest ? e.target.closest('[data-hub-id]') : null;
     if (el && el.dataset) hubPick(el.dataset.hubKind, el.dataset.hubId);
   });
 
   const more = document.getElementById('hubMore');
-  if (more) more.addEventListener('click', () => hubOpenAll(HUB_STATE.sub === 'skill' ? 'skill'
-    : HUB_STATE.sub === 'connector' ? 'connector' : 'expert'));
+  if (more) more.addEventListener('click', () => {
+    hubCloseMenu();
+    if (typeof hubOpenMarket === 'function') hubOpenMarket(HUB_STATE.sub === 'skill' ? 'skill'
+      : HUB_STATE.sub === 'connector' ? 'connector' : 'expert');
+  });
 
   const chip = document.getElementById('hubChip');
   if (chip) chip.addEventListener('click', (e) => {
@@ -348,5 +375,6 @@ function hubInitComposer() {
     if (HUB_STATE.allOpen) hubCloseAll();
     else if (HUB_STATE.open) hubCloseMenu();
   });
+  if (typeof hubInitMarket === 'function') hubInitMarket();
   hubRenderChip();
 }

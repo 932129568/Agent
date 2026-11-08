@@ -3640,6 +3640,95 @@ body.fx-off .sh-live i{animation:none!important}
 }
 body.fx-off .hub-menu,body.fx-off .hub-subpanel,body.fx-off .hub-all-card{box-shadow:var(--shadow-sm)}
 
+/* ===== R33 · 功能市场（仿 WorkBuddy 专家中心：热门分区 / 分类 / 排序 / 卡片网格） ===== */
+.hm-overlay{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:20px;
+  background:rgba(8,10,14,.62)}
+.hm-overlay[hidden]{display:none!important}
+.hm-shell{width:min(1180px,96vw);max-height:min(90vh,900px);display:flex;flex-direction:column;gap:12px;
+  padding:16px 18px;border:1px solid var(--border);border-radius:18px;
+  background:var(--card-bg);box-shadow:var(--shadow-lg);color:var(--text)}
+.hm-head{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.hm-brand{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.hm-brand .ui-icon{color:var(--primary)}
+.hm-brand h2{margin:0;font-size:16px;white-space:nowrap}
+.hm-tabs{display:flex;gap:4px;padding:3px;border:1px solid var(--border);
+  border-radius:var(--radius-full);background:var(--bg)}
+.hm-tabs button{border:0;border-radius:var(--radius-full);padding:5px 14px;background:transparent;
+  color:var(--text-2);font:inherit;font-size:13px;cursor:pointer}
+.hm-tabs button.on{background:var(--primary-soft);color:var(--primary);font-weight:600}
+.hm-head-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.hm-search{display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;
+  border:1px solid var(--border);border-radius:var(--radius-full);background:var(--bg)}
+.hm-search input{width:190px;border:0;outline:0;background:transparent;color:var(--text);
+  font:inherit;font-size:12px}
+.hm-mine,.hm-close{height:34px;padding:0 12px;border:1px solid var(--border);
+  border-radius:var(--radius-full);background:transparent;color:var(--text-2);
+  font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.hm-mine.on{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.hm-mine span{display:inline-block;min-width:18px;padding:0 4px;border-radius:9px;
+  background:var(--chip-bg);color:var(--text-2);font-family:var(--font-mono)}
+.hm-hot{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.hm-hot-card{position:relative;min-height:104px;display:flex;flex-direction:column;gap:5px;
+  padding:12px;border:1px solid var(--border);border-radius:14px;text-align:left;
+  background:linear-gradient(135deg,var(--primary-soft),var(--card-bg) 78%);
+  color:var(--text);font:inherit;cursor:pointer;overflow:hidden}
+.hm-hot-card:hover{border-color:var(--primary)}
+.hm-hot-emoji{position:absolute;right:10px;top:8px;font-size:26px;opacity:.55}
+.hm-hot-title{font-size:14px;font-weight:700}
+.hm-hot-list{font-size:11px;line-height:1.65;color:var(--text-2);
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.hm-filter-row{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.hm-cats{display:flex;gap:5px;overflow-x:auto;flex:1;min-width:0;padding-bottom:3px}
+.hm-cat{white-space:nowrap;border:1px solid transparent;border-radius:var(--radius-full);
+  padding:4px 10px;background:transparent;color:var(--text-3);font:inherit;font-size:12px;cursor:pointer}
+.hm-cat:hover{color:var(--text)}
+.hm-cat.on{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.hm-sorts{display:flex;gap:2px;flex:0 0 auto}
+.hm-sorts button{border:0;background:transparent;color:var(--text-3);font:inherit;
+  font-size:12px;padding:4px 7px;cursor:pointer}
+.hm-sorts button.on{color:var(--primary);font-weight:600}
+.hm-subrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hm-subtabs{display:flex;gap:14px}
+.hm-sub{border:0;border-bottom:2px solid transparent;padding:3px 2px;background:transparent;
+  color:var(--text-3);font:inherit;font-size:13px;cursor:pointer}
+.hm-sub.on{color:var(--text);border-bottom-color:var(--primary);font-weight:600}
+.hm-sub-label,.hm-tip{font-size:11px;color:var(--text-3)}
+.hm-grid{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:2px}
+.hm-card{display:flex;flex-direction:column;gap:8px;padding:12px;
+  border:1px solid var(--border);border-radius:13px;background:var(--bg)}
+.hm-card:hover{border-color:var(--border-strong)}
+.hm-card.enabled{border-color:var(--primary);background:var(--primary-soft)}
+.hm-card-top{display:flex;align-items:center;gap:9px;min-width:0}
+.hm-card-emoji{flex:0 0 36px;width:36px;height:36px;display:grid;place-items:center;
+  border-radius:50%;background:var(--chip-bg);font-size:20px}
+.hm-card-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.hm-card-title b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-card-title small{font-size:10px;color:var(--text-3);font-weight:400}
+.hm-card-hot{flex:0 0 auto;font-size:10px;color:var(--primary);background:var(--primary-soft);
+  border-radius:var(--radius-full);padding:2px 6px}
+.hm-card-desc{margin:0;font-size:11px;line-height:1.5;color:var(--text-2);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}
+.hm-card-tags{display:flex;gap:4px;flex-wrap:wrap}
+.hm-card-tags span{font-size:10px;color:var(--text-3);background:var(--chip-bg);
+  border-radius:var(--radius-sm);padding:2px 6px}
+.hm-card-tags .hm-card-sec{color:var(--primary)}
+.hm-card-foot{margin-top:auto;display:flex;justify-content:flex-end}
+.hm-enable{border:1px solid var(--primary);border-radius:var(--radius-full);
+  padding:4px 12px;background:transparent;color:var(--primary);font:inherit;font-size:11px;cursor:pointer}
+.hm-enable:hover{background:var(--primary-soft)}
+.hm-enable.on{border-color:var(--border);color:var(--text-2);background:var(--card-bg)}
+.hm-empty{grid-column:1/-1;padding:48px 20px;text-align:center;font-size:13px;color:var(--text-3)}
+.hm-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:11px;color:var(--text-3)}
+.hm-disable-all{border:0;background:transparent;color:var(--text-3);font:inherit;font-size:11px;cursor:pointer}
+.hm-disable-all:hover{color:var(--err)}
+.hub-market-link{border:1px dashed var(--primary);margin-top:6px}
+@media (max-width:1100px){.hm-hot{grid-template-columns:repeat(3,minmax(0,1fr))}.hm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:720px){.hm-hot{grid-template-columns:repeat(2,minmax(0,1fr))}.hm-grid{grid-template-columns:1fr}
+  .hm-head-right{width:100%;margin-left:0}.hm-search input{width:120px}}
+body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
+
 /* ===== frontend/styles/features/plan.css ===== */
 /* W4B plan, checkpoint and approval layout; shared card/button states live in components. */
 .plan-card,.ckpt-card,.clr-form,.pause-panel{min-width:0;overflow:hidden}
@@ -4159,6 +4248,8 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
   <!-- 图标系统（R18 重设计）：24 网格 · 1.75 圆头描边 · 单一来源。
        每个 symbol 自声明呈现属性——脱离 .ui-icon 类也不会退化成实心黑块。 -->
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <!-- R33：功能市场（替换原来的字母 E 图标） -->
+  <symbol id="i-market" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 20v-6h6v6"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-4-4 4 4 4-4M5 19h14"/></symbol>
@@ -4212,7 +4303,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
   <button class="rail-btn on" data-panel="chat" data-tip="对话" aria-label="对话" onclick="switchPanel('chat')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-chat"/></svg></button>
   <button class="rail-btn" data-panel="sessions" data-tip="会话历史" aria-label="会话历史" onclick="switchPanel('sessions')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-list"/></svg></button>
   <button class="rail-btn" data-panel="workspace" data-tip="工作区与工具权限" aria-label="工作区与工具权限" onclick="switchPanel('workspace')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-folder"/></svg></button>
-  <button class="rail-btn" id="expertCenterBtn" data-tip="专家中心" aria-label="专家中心"><span aria-hidden="true">E</span></button>
+  <button class="rail-btn" id="expertCenterBtn" data-tip="功能市场" aria-label="功能市场"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-market"/></svg></button>
   <div class="rail-sep"></div>
   <button class="rail-btn" id="toolsBoxBtn" data-tip="工具箱（分析 · 审计 · 搜索 · 沙箱）" aria-label="工具箱" aria-controls="toolsPop" aria-expanded="false" onclick="toolsToggle(event)"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-wrench"/></svg></button>
   <div class="notify-pop" id="toolsPop" role="menu" aria-label="工具箱" style="display:none;">
@@ -4790,9 +4881,10 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
               <input type="file" id="zipInput" accept=".zip" multiple hidden>
               <button class="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">专家</button>
             </span>
-            <button class="tool-btn composer-plus" id="composerPlusBtn" type="button" title="添加文件 / 专家 / 技能 / 连接器" aria-label="更多" aria-expanded="false"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-plus"/></svg></button>
-            <input type="file" id="unifiedFileInput" multiple hidden
-              accept="image/*,video/*,audio/*,.txt,.md,.markdown,.json,.jsonl,.csv,.tsv,.log,.srt,.ass,.py,.js,.mjs,.cjs,.ts,.tsx,.jsx,.html,.htm,.css,.scss,.less,.java,.c,.cpp,.h,.hpp,.cs,.go,.rs,.rb,.php,.lua,.swift,.kt,.dart,.scala,.sh,.bash,.bat,.ps1,.sql,.tex,.rst,.adoc,.vue,.svelte,.yaml,.yml,.toml,.ini,.conf,.cfg,.xml,.svg,.graphql,.proto,.ipynb,.patch,.diff,.env,.gitignore,.makefile,.gradle,.properties,.lock,.zip,.tar,.gz,.tgz,.rar,.7z,.bz2,.xz,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.epub,.rtf,.mp3,.wav,.m4a,.flac,.ogg,.aac,.wma,.mp4,.mov,.mkv,.avi,.webm,.flv,.wmv,.m4v,.3gp,.png,.jpg,.jpeg,.gif,.webp,.bmp,.ico,.heic,.heif,.avif,.tif,.tiff">
+            <button class="tool-btn composer-plus" id="composerPlusBtn" type="button" hidden title="添加文件 / 专家 / 技能 / 连接器" aria-label="更多" aria-expanded="false"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <!-- R33：不设 accept —— 支持所有文件上传（图片/视频/文本/压缩包照常解析，
+                 其余格式作为文件附件携带元信息，不再拦截） -->
+            <input type="file" id="unifiedFileInput" multiple hidden>
             <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…（输入 /plan 可先出计划）" aria-label="消息输入"></textarea>
             <div class="expert-selection-chip" id="expertSelectionChip" aria-live="polite" hidden></div>
             <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="发送消息"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-send"/></svg></button>
@@ -4803,7 +4895,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
           <div class="hub-menu" id="hubMenu" hidden role="menu" aria-label="更多操作">
             <button class="hub-mi" id="hubAddFile" type="button" role="menuitem">
               <svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-plus"/></svg>
-              <span class="hub-mi-body"><b>添加文件</b><small>图片 · 文档 · 代码 · 压缩包等</small></span>
+              <span class="hub-mi-body"><b>上传文件</b><small>支持全部格式，一次可选多个</small></span>
               <span class="hub-mi-arrow">›</span>
             </button>
             <button class="hub-mi" id="hubQuoteFile" type="button" role="menuitem">
@@ -5083,7 +5175,7 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
 <div class="expert-overlay" id="expertCenter" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="expertCenterTitle" hidden>
   <div class="expert-dialog">
     <header class="expert-dialog-head">
-      <div><h2 id="expertCenterTitle">专家中心</h2><p>仅目录导入 · 快照固定 · 包内容不可信</p></div>
+      <div><h2 id="expertCenterTitle">功能市场</h2><p>浏览 · 启用 · 停用（旧目录导入面板保留为兼容面）</p></div>
       <button type="button" class="expert-btn" id="expertCloseBtn">关闭</button>
     </header>
     <p class="expert-center-status" id="expertCenterStatus" aria-live="polite"></p>
@@ -5100,6 +5192,42 @@ body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animati
       <button type="button" class="expert-btn" id="expertEnableBtn" disabled>启停</button>
       <button type="button" class="expert-btn expert-btn-primary" id="expertSelectBtn" disabled>选择此专家（发送时自动加载）</button>
     </footer>
+  </div>
+</div>
+
+
+<!-- R33 · 功能市场：浏览全量目录，点击「启用」后才出现在会话页加号菜单 -->
+<div class="hm-overlay" id="hubMarket" hidden role="dialog" aria-modal="true" aria-labelledby="hmTitle">
+  <div class="hm-shell">
+    <header class="hm-head">
+      <div class="hm-brand"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-market"/></svg><h2 id="hmTitle">功能市场</h2></div>
+      <nav class="hm-tabs" id="hmTabs" aria-label="功能分类">
+        <button type="button" class="on" data-hm-tab="expert">专家</button>
+        <button type="button" data-hm-tab="skill">技能</button>
+        <button type="button" data-hm-tab="connector">连接器</button>
+      </nav>
+      <div class="hm-head-right">
+        <label class="hm-search"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="hmSearch" type="search" placeholder="搜索专家 / 技能 / 连接器" aria-label="搜索功能市场"></label>
+        <button type="button" class="hm-mine" id="hmMine">我的功能 <span id="hmMineCount">0</span></button>
+        <button type="button" class="hm-close" id="hmClose" aria-label="关闭">✕</button>
+      </div>
+    </header>
+    <section class="hm-hot" id="hmHot" aria-label="分区热门"></section>
+    <div class="hm-filter-row">
+      <div class="hm-cats" id="hmCats" aria-label="分区筛选"></div>
+      <div class="hm-sorts" id="hmSorts" aria-label="排序">
+        <button type="button" class="on" data-hm-sort="综合">综合</button>
+        <button type="button" data-hm-sort="最热">最热</button>
+        <button type="button" data-hm-sort="最新">最新</button>
+      </div>
+    </div>
+    <div class="hm-subrow">
+      <div class="hm-subtabs" id="hmSubtabs"></div>
+      <span class="hm-tip">启用后会出现在会话页「+」菜单里</span>
+    </div>
+    <div class="hm-grid" id="hmGrid"></div>
+    <footer class="hm-foot" id="hmFoot"></footer>
   </div>
 </div>
 
@@ -5484,17 +5612,29 @@ function hubRenderSub() {
     ];
     if (q) items = items.filter(it => (it.name + it.desc).toLowerCase().indexOf(q.toLowerCase()) >= 0);
   } else {
-    const pools = hubSubPools(kind);
-    if (typeof hubCatalogSearch === 'function') {
-      items = hubCatalogSearch(pools, q, q ? 30 : 9)
-        .map(it => Object.assign({}, it, { __kind: it.kind === 'team' ? 'teams' : (it.kind === 'expert' ? 'experts' : (it.kind === 'skill' ? 'skills' : 'connectors')) }));
+    // R33：只显示功能市场里已启用的条目 —— 未启用的不进加号菜单
+    if (typeof hubEnabledItems === 'function') {
+      hubSubPools(kind).forEach(k => { items = items.concat(hubEnabledItems(k)); });
     }
+    if (q) {
+      const ql = q.toLowerCase();
+      items = items.filter(it => ((it.name || '') + ' ' + (it.desc || '') + ' ' +
+        (it.tags || []).join(' ')).toLowerCase().indexOf(ql) >= 0);
+    }
+    items = items.slice(0, 30);
   }
   const more = document.getElementById('hubMore');
   if (more) more.textContent = (kind === 'mode' ? '在设置中调整更多权限…'
-    : kind === 'connector' ? '查看全部连接器…' : '召唤更多' + (kind === 'skill' ? '技能' : '专家') + '…');
+    : '去功能市场启用更多…');
   if (!items.length) {
-    box.innerHTML = '<div class="hub-empty">没有匹配的条目，换个关键词试试</div>';
+    const why = q ? '没有匹配的已启用条目' : ('还没有启用任何' +
+      (kind === 'skill' ? '技能' : kind === 'connector' ? '连接器' : '专家/专家团'));
+    box.innerHTML = '<div class="hub-empty">' + why + '</div>' +
+      (kind === 'mode' ? '' :
+        '<button type="button" class="hub-item hub-market-link" data-hub-act="market">' +
+        '<span class="hub-item-emoji" aria-hidden="true">🛍️</span>' +
+        '<span class="hub-item-body"><span class="hub-item-name">去功能市场启用 →</span>' +
+        '<span class="hub-item-desc">启用后才会出现在这里</span></span></button>');
     return;
   }
   box.innerHTML = items.map(it =>
@@ -5539,6 +5679,11 @@ function hubPick(kind, id) {
   }
   const item = (typeof hubCatalogById === 'function') ? hubCatalogById(kind, id) : null;
   if (!item) return false;
+  // R33：功能市场未启用的条目不允许在会话里直接使用
+  if (typeof hubIsEnabled === 'function' && !hubIsEnabled(kind, id)) {
+    if (typeof toast === 'function') toast('请先在「功能市场」里启用「' + item.name + '」', 'warn');
+    return false;
+  }
   HUB_STATE.picks[sid] = { kind: kind, id: id, item: item };
   hubRenderChip();
   // 输入框为空时带入该角色的开场提问，用户直接回车即可真正用起来
@@ -5691,13 +5836,23 @@ function hubInitComposer() {
 
   const list = document.getElementById('hubList');
   if (list) list.addEventListener('click', (e) => {
+    const act = e.target && e.target.closest ? e.target.closest('[data-hub-act]') : null;
+    if (act && act.dataset && act.dataset.hubAct === 'market') {
+      hubCloseMenu();
+      if (typeof hubOpenMarket === 'function') hubOpenMarket(
+        HUB_STATE.sub === 'skill' ? 'skill' : HUB_STATE.sub === 'connector' ? 'connector' : 'expert');
+      return;
+    }
     const el = e.target && e.target.closest ? e.target.closest('[data-hub-id]') : null;
     if (el && el.dataset) hubPick(el.dataset.hubKind, el.dataset.hubId);
   });
 
   const more = document.getElementById('hubMore');
-  if (more) more.addEventListener('click', () => hubOpenAll(HUB_STATE.sub === 'skill' ? 'skill'
-    : HUB_STATE.sub === 'connector' ? 'connector' : 'expert'));
+  if (more) more.addEventListener('click', () => {
+    hubCloseMenu();
+    if (typeof hubOpenMarket === 'function') hubOpenMarket(HUB_STATE.sub === 'skill' ? 'skill'
+      : HUB_STATE.sub === 'connector' ? 'connector' : 'expert');
+  });
 
   const chip = document.getElementById('hubChip');
   if (chip) chip.addEventListener('click', (e) => {
@@ -5741,7 +5896,318 @@ function hubInitComposer() {
     if (HUB_STATE.allOpen) hubCloseAll();
     else if (HUB_STATE.open) hubCloseMenu();
   });
+  if (typeof hubInitMarket === 'function') hubInitMarket();
   hubRenderChip();
+}
+
+/* ===== frontend/src/shell/hub-market.js ===== */
+/* ================= R33 · 功能市场（浏览 / 启用 / 停用） =================
+ * 与 WorkBuddy 专家中心同形态：顶栏 tab + 搜索 + 我的功能；分区热门卡片；
+ * 官方分类标签；综合/最热/最新排序；专家/专家团切换；卡片网格带「启用」。
+ *
+ * 核心规则（用户要求）：只有在这里点击「启用」的条目，才会出现在会话页
+ * 「+」菜单的 专家 / 技能 / 连接器 子面板里。启用态存 localStorage
+ * （独立 key，不碰 config.json、不新增 js_api），按全局生效、可随时停用。
+ */
+const HUB_ENABLED_KEY = 'harbor_hub_enabled';
+const HUB_MARKET_STATE = {
+  tab: 'expert', sub: 'experts', cat: '全部', sort: '综合',
+  q: '', mineOnly: false, open: false,
+};
+const HUB_HOT_SECTIONS = [
+  { name: '电商运营', q: '电商', emoji: '🛒' },
+  { name: '内容创作', q: '内容创作', emoji: '✍️' },
+  { name: '投资分析', q: '投资', emoji: '💰' },
+  { name: '法律咨询', q: '法律', emoji: '⚖️' },
+  { name: '小微企业', q: '创业', emoji: '🏢' },
+];
+const hmEsc = (v) => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/** 读取启用集（结构：{experts:[],teams:[],skills:[],connectors:[]}）。 */
+function hubEnabledLoad() {
+  const empty = { experts: [], teams: [], skills: [], connectors: [] };
+  try {
+    const raw = localStorage.getItem(HUB_ENABLED_KEY);
+    if (!raw) return empty;
+    const d = JSON.parse(raw) || {};
+    Object.keys(empty).forEach(k => {
+      empty[k] = Array.isArray(d[k]) ? d[k].filter(x => typeof x === 'string') : [];
+    });
+  } catch (e) {}
+  return empty;
+}
+function hubEnabledSave(set) {
+  try { localStorage.setItem(HUB_ENABLED_KEY, JSON.stringify(set || hubEnabledLoad())); }
+  catch (e) {}
+}
+function hubIsEnabled(kind, id) {
+  return (hubEnabledLoad()[kind] || []).indexOf(String(id)) >= 0;
+}
+function hubEnabledCount() {
+  const s = hubEnabledLoad();
+  return Object.keys(s).reduce((n, k) => n + s[k].length, 0);
+}
+/** 已启用项（供加号菜单子面板使用；kind 为目录池名）。 */
+function hubEnabledItems(kind) {
+  const ids = hubEnabledLoad()[kind] || [];
+  return ids.map(id => (typeof hubCatalogById === 'function') ? hubCatalogById(kind, id) : null)
+            .filter(Boolean).map(it => Object.assign({}, it, { __kind: kind }));
+}
+/** 启用 / 停用；同步刷新市场页、加号菜单与 chip。 */
+function hubToggleEnabled(kind, id) {
+  const set = hubEnabledLoad();
+  if (!Array.isArray(set[kind])) set[kind] = [];
+  const sid = String(id);
+  const at = set[kind].indexOf(sid);
+  const nowOn = at < 0;
+  if (nowOn) set[kind].push(sid); else set[kind].splice(at, 1);
+  hubEnabledSave(set);
+  // 停用后清掉仍引用该条目的会话选择，避免指令继续注入
+  if (!nowOn && typeof HUB_STATE !== 'undefined' && HUB_STATE.picks) {
+    Object.keys(HUB_STATE.picks).forEach(s => {
+      const p = HUB_STATE.picks[s];
+      if (p && p.kind === kind && p.id === sid) delete HUB_STATE.picks[s];
+    });
+  }
+  hubRenderMarket();
+  if (typeof hubRenderSub === 'function') hubRenderSub();
+  if (typeof hubRenderChip === 'function') hubRenderChip();
+  return nowOn;
+}
+function hubDisableAll() {
+  hubEnabledSave({ experts: [], teams: [], skills: [], connectors: [] });
+  if (typeof HUB_STATE !== 'undefined' && HUB_STATE.picks) HUB_STATE.picks = {};
+  hubRenderMarket();
+  if (typeof hubRenderSub === 'function') hubRenderSub();
+  if (typeof hubRenderChip === 'function') hubRenderChip();
+}
+
+/** 当前 tab 对应的目录池。 */
+function hubMarketPools() {
+  const s = HUB_MARKET_STATE;
+  if (s.tab === 'skill') return ['skills'];
+  if (s.tab === 'connector') return ['connectors'];
+  return s.sub === 'teams' ? ['teams'] : ['experts'];
+}
+/** 当前池的全部条目（未经筛选）。 */
+function hubMarketPoolItems() {
+  const cat = (typeof HUB_CATALOG !== 'undefined') ? HUB_CATALOG : {};
+  let out = [];
+  hubMarketPools().forEach(k => { out = out.concat(cat[k] || []); });
+  return out;
+}
+
+function hubOpenMarket(tab) {
+  const box = document.getElementById('hubMarket');
+  if (!box) return;
+  if (tab === 'skill' || tab === 'connector' || tab === 'expert') HUB_MARKET_STATE.tab = tab;
+  HUB_MARKET_STATE.open = true;
+  box.hidden = false;
+  const search = document.getElementById('hmSearch');
+  if (search) { search.value = ''; search.placeholder = HUB_MARKET_STATE.tab === 'skill'
+    ? '搜索技能' : (HUB_MARKET_STATE.tab === 'connector' ? '搜索连接器' : '搜索专家'); }
+  HUB_MARKET_STATE.q = '';
+  HUB_MARKET_STATE.cat = '全部';
+  hubRenderMarket();
+  if (typeof hubCloseMenu === 'function') hubCloseMenu();
+}
+function hubCloseMarket() {
+  const box = document.getElementById('hubMarket');
+  if (box) box.hidden = true;
+  HUB_MARKET_STATE.open = false;
+}
+function hubSetMarketTab(tab) {
+  HUB_MARKET_STATE.tab = tab;
+  HUB_MARKET_STATE.sub = (tab === 'expert') ? 'experts' : tab;
+  document.querySelectorAll('#hmTabs [data-hm-tab]').forEach(b => {
+    if (b.classList) b.classList.toggle('on', b.dataset && b.dataset.hmTab === tab);
+  });
+  hubRenderMarket();
+}
+function hubSetMarketSub(sub) {
+  HUB_MARKET_STATE.sub = sub;
+  hubRenderMarket();
+}
+function hubSetMarketCat(cat) {
+  HUB_MARKET_STATE.cat = cat;
+  hubRenderMarket();
+}
+function hubSetMarketSort(sort) {
+  HUB_MARKET_STATE.sort = sort;
+  hubRenderMarket();
+}
+function hubSetMarketQuery(q) {
+  HUB_MARKET_STATE.q = String(q || '');
+  hubRenderMarket();
+}
+function hubToggleMine() {
+  HUB_MARKET_STATE.mineOnly = !HUB_MARKET_STATE.mineOnly;
+  hubRenderMarket();
+}
+
+/** 市场页主渲染。 */
+function hubRenderMarket() {
+  const s = HUB_MARKET_STATE;
+  const cat = (typeof HUB_CATALOG !== 'undefined') ? HUB_CATALOG : {};
+  const enabled = hubEnabledLoad();
+  const kinds = ['experts', 'teams', 'skills', 'connectors'];
+
+  // 我的功能计数
+  const mineEl = document.getElementById('hmMineCount');
+  if (mineEl) mineEl.textContent = String(hubEnabledCount());
+  const mineBtn = document.getElementById('hmMine');
+  if (mineBtn && mineBtn.classList) mineBtn.classList.toggle('on', s.mineOnly);
+
+  // 分区热门卡（点击把关键词带入搜索）
+  const hot = document.getElementById('hmHot');
+  if (hot) {
+    hot.innerHTML = HUB_HOT_SECTIONS.map(sec => {
+      const picks = (typeof hubCatalogSearch === 'function')
+        ? hubCatalogSearch(['experts', 'teams'], sec.q, 3) : [];
+      const names = picks.map(p => p.name).filter(Boolean);
+      return '<button type="button" class="hm-hot-card" data-hm-hot="' + hmEsc(sec.q) + '">' +
+        '<span class="hm-hot-emoji" aria-hidden="true">' + sec.emoji + '</span>' +
+        '<span class="hm-hot-title">' + hmEsc(sec.name) + '</span>' +
+        '<span class="hm-hot-list">' + (names.length
+          ? names.map(n => hmEsc(n) + ' ›').join('<br>')
+          : '查看相关专家 ›') + '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  // 分类标签
+  const cats = document.getElementById('hmCats');
+  if (cats) {
+    const list = ['全部'].concat((cat.categories || []).map(c => c.name));
+    cats.innerHTML = list.map(n =>
+      '<button type="button" class="hm-cat' + (s.cat === n ? ' on' : '') +
+      '" data-hm-cat="' + hmEsc(n) + '">' + hmEsc(n) + '</button>').join('');
+  }
+  document.querySelectorAll('#hmSorts [data-hm-sort]').forEach(b => {
+    if (b.classList) b.classList.toggle('on', b.dataset && b.dataset.hmSort === s.sort);
+  });
+
+  // 专家 / 专家团 子切换
+  const subs = document.getElementById('hmSubtabs');
+  if (subs) {
+    subs.innerHTML = (s.tab === 'expert')
+      ? '<button type="button" class="hm-sub' + (s.sub === 'experts' ? ' on' : '') +
+        '" data-hm-sub="experts">专家</button>' +
+        '<button type="button" class="hm-sub' + (s.sub === 'teams' ? ' on' : '') +
+        '" data-hm-sub="teams">专家团</button>'
+      : '<span class="hm-sub-label">' + (s.tab === 'skill' ? '技能' : '连接器') + '</span>';
+  }
+
+  // 卡片网格
+  const grid = document.getElementById('hmGrid');
+  const foot = document.getElementById('hmFoot');
+  if (!grid) return;
+  let items = hubMarketPoolItems();
+  if (s.cat !== '全部') items = items.filter(it => it.section === s.cat);
+  if (s.mineOnly) {
+    const ids = enabled[hubMarketPools()[0]] || [];
+    items = items.filter(it => ids.indexOf(String(it.id)) >= 0);
+  }
+  const q = s.q.trim().toLowerCase();
+  if (q) {
+    items = items.filter(it => ((it.name || '') + ' ' + (it.desc || '') + ' ' +
+      (it.tags || []).join(' ') + ' ' + (it.section || '') + ' ' + (it.alias || ''))
+      .toLowerCase().indexOf(q) >= 0);
+  }
+  if (s.sort === '最热') items.sort((a, b) => (b.hot || 0) - (a.hot || 0));
+  else if (s.sort === '最新') items.reverse();
+  else items.sort((a, b) => (b.hot || 0) - (a.hot || 0));   // 综合：官方热门优先
+  const total = items.length;
+  const shown = items.slice(0, 48);
+  const pool = hubMarketPools()[0];
+  if (!shown.length) {
+    grid.innerHTML = '<div class="hm-empty">' +
+      (s.mineOnly ? '还没有启用任何条目，点「启用」后会出现在这里和会话页 + 菜单里。'
+                  : '没有匹配的条目，换个关键词或分区试试。') + '</div>';
+  } else {
+    grid.innerHTML = shown.map(it => {
+      const on = (enabled[pool] || []).indexOf(String(it.id)) >= 0;
+      return '<article class="hm-card' + (on ? ' enabled' : '') + '">' +
+        '<div class="hm-card-top">' +
+          '<span class="hm-card-emoji" aria-hidden="true">' + hmEsc(it.emoji || '⚡') + '</span>' +
+          '<div class="hm-card-title"><b>' + hmEsc(it.name) + '</b>' +
+            (it.alias && it.alias !== it.name ? '<small>' + hmEsc(it.alias) + '</small>' : '') +
+          '</div>' +
+          (it.hot ? '<span class="hm-card-hot">热门</span>' : '') +
+        '</div>' +
+        '<p class="hm-card-desc">' + hmEsc(String(it.desc || '').slice(0, 62)) + '</p>' +
+        '<div class="hm-card-tags">' + (it.tags || []).slice(0, 3).map(t =>
+          '<span>' + hmEsc(t) + '</span>').join('') +
+          (it.section ? '<span class="hm-card-sec">' + hmEsc(it.section) + '</span>' : '') + '</div>' +
+        '<div class="hm-card-foot">' +
+          '<button type="button" class="hm-enable' + (on ? ' on' : '') +
+            '" data-hm-kind="' + hmEsc(pool) + '" data-hm-id="' + hmEsc(it.id) + '">' +
+            (on ? '✓ 已启用' : '+ 启用') + '</button>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+  }
+  if (foot) foot.innerHTML = '<span>共 ' + total + ' 项 · 已启用 ' + hubEnabledCount() +
+    ' 项' + (total > shown.length ? ' · 显示前 ' + shown.length + ' 项，可用搜索缩小范围' : '') +
+    '</span><button type="button" class="hm-disable-all" id="hmDisableAll">全部停用</button>';
+}
+
+/** 事件绑定（由 hubInitComposer 调用）。 */
+function hubInitMarket() {
+  const tabs = document.getElementById('hmTabs');
+  if (tabs) tabs.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('[data-hm-tab]') : null;
+    if (b && b.dataset) hubSetMarketTab(b.dataset.hmTab);
+  });
+  const cats = document.getElementById('hmCats');
+  if (cats) cats.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('[data-hm-cat]') : null;
+    if (b && b.dataset) hubSetMarketCat(b.dataset.hmCat);
+  });
+  const sorts = document.getElementById('hmSorts');
+  if (sorts) sorts.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('[data-hm-sort]') : null;
+    if (b && b.dataset) hubSetMarketSort(b.dataset.hmSort);
+  });
+  const subs = document.getElementById('hmSubtabs');
+  if (subs) subs.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('[data-hm-sub]') : null;
+    if (b && b.dataset) hubSetMarketSub(b.dataset.hmSub);
+  });
+  const hot = document.getElementById('hmHot');
+  if (hot) hot.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('[data-hm-hot]') : null;
+    if (!b || !b.dataset) return;
+    const input = document.getElementById('hmSearch');
+    if (input) input.value = b.dataset.hmHot;
+    HUB_MARKET_STATE.tab = 'expert';
+    HUB_MARKET_STATE.sub = 'experts';
+    HUB_MARKET_STATE.cat = '全部';
+    hubSetMarketQuery(b.dataset.hmHot);
+  });
+  const search = document.getElementById('hmSearch');
+  if (search) search.addEventListener('input', e => hubSetMarketQuery(e.target.value));
+  const mine = document.getElementById('hmMine');
+  if (mine) mine.addEventListener('click', hubToggleMine);
+  const close = document.getElementById('hmClose');
+  if (close) close.addEventListener('click', hubCloseMarket);
+  const overlay = document.getElementById('hubMarket');
+  if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) hubCloseMarket(); });
+  const grid = document.getElementById('hmGrid');
+  if (grid) grid.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('[data-hm-id]') : null;
+    if (b && b.dataset) hubToggleEnabled(b.dataset.hmKind, b.dataset.hmId);
+  });
+  const foot = document.getElementById('hmFoot');
+  if (foot) foot.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('#hmDisableAll') : null;
+    if (b) hubDisableAll();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && HUB_MARKET_STATE.open) hubCloseMarket();
+  });
 }
 
 /* ===== frontend/src/core/motion.js ===== */
@@ -21654,11 +22120,10 @@ function chatNavInit() {
  * 列表底部「配置自定义模型」→ 跳设置「连接与模型」块并闪光定位。
  */
 
+/* R33：4 个分类分支合并为单一「上传文件」（支持所有格式）。
+ * 旧分类 input 仍保留作契约兼容面，但入口统一到 unifiedFileInput。 */
 const PLUS_ITEMS = [
-  { key: 'img', label: '图片', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>' },
-  { key: 'vid', label: '视频', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg>' },
-  { key: 'file', label: '文本文件', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>' },
-  { key: 'zip', label: '压缩包 (zip)', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l2 3h5a2 2 0 0 1 2 2z"/><path d="M10 12h4M12 12v3"/></svg>' }
+  { key: 'file', label: '上传文件', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>' }
 ];
 
 function ipEl(id) {
@@ -21719,9 +22184,14 @@ function ipCustomRemove(name) {
 
 /* ---------- 「+」附件菜单 ---------- */
 function ipPlusToggle() {
-  const pop = ipEl('atPop');
   const mc = ipEl('mcPop');
   if (mc) mc.classList.remove('on');
+  // R33：一个「+」按钮、一套菜单 —— 统一走 R32 菜单（上传文件/专家/技能/连接器）
+  if (ipEl('hubMenu') && typeof hubToggleMenu === 'function') {
+    hubToggleMenu();
+    return;
+  }
+  const pop = ipEl('atPop');
   if (!pop) return;
   if (pop.classList.contains('on')) { pop.classList.remove('on'); return; }
   ipPlusRender();
@@ -21736,8 +22206,9 @@ function ipPlusRender() {
   pop.querySelectorAll('.at-item').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-key');
-      const input = ipEl(key + 'Input');
-      if (input) input.click();
+      // R33：统一入口支持所有格式；回落旧 input 仅为兼容面
+      const input = ipEl('unifiedFileInput') || ipEl(key + 'Input');
+      if (input && input.click) input.click();
       pop.classList.remove('on');
     });
   });
@@ -21903,7 +22374,7 @@ function inputPlusInit() {
   plus.type = 'button';
   plus.id = 'plusBtn';
   plus.className = 'tool-btn';
-  plus.title = '添加附件';
+  plus.title = '上传文件 / 专家 / 技能 / 连接器';
   plus.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
   plus.addEventListener('click', (e) => { e.stopPropagation(); ipPlusToggle(); });
   const modeEl = ipEl('toolMode');
@@ -24207,10 +24678,10 @@ function hubFileKind(f) {
   if (mime.startsWith('video/') || HUB_VIDEO_EXT.test(name)) return 'video';
   if (/\.zip$/i.test(name)) return 'zip';
   if (/\.(tgz|tar\.gz|gz|tar)$/i.test(name)) return 'gztar';
-  if (/\.(rar|7z|bz2|xz)$/i.test(name)) return 'archive-unsupported';
+  if (/\.(rar|7z|bz2|xz)$/i.test(name)) return 'file';
   if (HUB_TEXT_EXT.test(name) || mime.startsWith('text/') ||
       /json|xml|javascript|typescript/.test(mime)) return 'text';
-  return 'unsupported';
+  return 'file';   // R33：其余格式一律接纳为文件附件（不再拦截）
 }
 
 /** 浏览器端提取 .gz / .tar / .tgz 里的文本（复用页面已有的 fflate 全局）。 */
@@ -24268,8 +24739,7 @@ async function _hubReadGzTar(f) {
 /** 统一入口：一次选择多种格式，自动分派；保持原有大小限制与安全护栏。 */
 async function hubDispatchFiles(fileList) {
   if (!attachmentsAllowed()) { toast(attachmentsDeniedText(), 'warn'); return false; }
-  const groups = { image: [], video: [], text: [], zip: [], gztar: [],
-                   'archive-unsupported': [], unsupported: [] };
+  const groups = { image: [], video: [], text: [], zip: [], gztar: [], file: [] };
   (Array.from(fileList || [])).forEach(f => {
     const k = hubFileKind(f);
     (groups[k] || groups.unsupported).push(f);
@@ -24285,13 +24755,15 @@ async function hubDispatchFiles(fileList) {
         name: `${f.name}（含${got.count}个文件）` });
     } catch (e) { toast(`读取 ${f.name} 失败: ${e.message || e}`, 'err'); }
   }
-  if (groups['archive-unsupported'].length) {
-    toast('rar / 7z / bz2 / xz 暂不能在浏览器端解压；请先转成 zip，或解压后选取文本文件。', 'warn');
-  }
-  if (groups.unsupported.length) {
-    const names = groups.unsupported.slice(0, 3).map(f => f.name).join('、');
-    toast(`已识别 ${groups.unsupported.length} 个二进制文件（${names}${groups.unsupported.length > 3 ? '…' : ''}）：` +
-      'PDF / Office / 音频等暂不能解析内容，请另存为 .txt/.md 或截图后添加。', 'warn');
+  // R33：所有格式都能上传。二进制不解析内容，作为文件附件携带名称/大小/类型，
+  // 发送时由 send.js 把元信息注入上下文；绝不静默丢弃。
+  groups.file.forEach(f => {
+    attachments.push({ type: 'file', name: f.name, size: f.size || 0,
+      mime: String(f.type || '') });
+  });
+  if (groups.file.length && typeof toast === 'function') {
+    toast(`已加入 ${groups.file.length} 个文件（含 .md / .ppt / PDF 等任意格式）；` +
+      '二进制内容不解析，仅附文件名与大小。', 'ok');
   }
   renderPreview();
   return true;
@@ -24812,16 +25284,22 @@ async function sendMessage() {
   const images = currentAttachments.filter(a => a.type === 'image');
   const videos = currentAttachments.filter(a => a.type === 'video');
   const textFiles = currentAttachments.filter(a => a.type === 'text');
+  const otherFiles = currentAttachments.filter(a => a.type === 'file');   // R33：任意格式文件附件
   const toolModeEl = document.getElementById('toolMode');
   const attachmentWriteAllowed = !toolModeEl || !toolModeEl.value || toolModeEl.value === 'full';
   const mem = recallMemory(text);
   const memBlock = mem ? '\n\n[相关历史记忆]\n' + mem + '\n（背景参考，无关可忽略）' : '';
   let userContent;
-  if (images.length === 0 && videos.length === 0 && textFiles.length === 0) {
+  if (images.length === 0 && videos.length === 0 && textFiles.length === 0 && otherFiles.length === 0) {
     userContent = (text + memBlock) || '请回复';
   } else {
     const parts = [];
     let fullText = (text ? text + memBlock : '');
+    if (otherFiles.length > 0) {
+      const meta = otherFiles.map(f => '- ' + f.name + '（' + (f.mime || '未知类型') +
+        '，' + ((Number(f.size) || 0) / 1024).toFixed(1) + ' KB；二进制内容未解析）').join('\n');
+      fullText = (fullText ? fullText + '\n' : '') + '[附件文件]\n' + meta;
+    }
     if (textFiles.length > 0) {
       const ATT_FULL = 200000;   // ≤20万字符直接全文注入
       const results = await Promise.all(textFiles.map(async f => {
@@ -24845,7 +25323,9 @@ async function sendMessage() {
     videos.forEach(v => parts.push({ type: 'video_url', video_url: { url: v.dataUrl } }));
     userContent = parts;
   }
-  const displayText = text + (textFiles.length > 0 ? `\n（附带 ${textFiles.length} 个文本文件）` : '');
+  const displayText = text +
+    (textFiles.length > 0 ? `\n（附带 ${textFiles.length} 个文本文件）` : '') +
+    (otherFiles.length > 0 ? `\n（附带 ${otherFiles.length} 个文件）` : '');
   const displayExtra = {};
   if (images.length > 0) displayExtra.images = images.map(i => i.dataUrl);
   if (textFiles.length > 0) displayExtra.files = textFiles.map(f => f.name);
@@ -29633,7 +30113,11 @@ function expertCenterInit() {
   expertCenterState.initialized = true;
   const on = (id, event, handler) => { const element = document.getElementById(id); if (element) element.addEventListener(event, handler); };
   on('expertPickerBtn', 'click', openExpertPicker);
-  on('expertCenterBtn', 'click', openExpertCenter);
+  // R33：rail 入口改为「功能市场」；旧目录导入面板仍可由 expertPickerBtn 打开（兼容面）
+  on('expertCenterBtn', 'click', () => {
+    if (typeof hubOpenMarket === 'function') hubOpenMarket('expert');
+    else openExpertCenter();
+  });
   on('expertCloseBtn', 'click', closeExpertCenter);
   on('expertCenter', 'keydown', expertCenterKeydown);
   on('expertSelectBtn', 'click', expertSelectForNextRun);

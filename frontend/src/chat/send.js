@@ -139,16 +139,22 @@ async function sendMessage() {
   const images = currentAttachments.filter(a => a.type === 'image');
   const videos = currentAttachments.filter(a => a.type === 'video');
   const textFiles = currentAttachments.filter(a => a.type === 'text');
+  const otherFiles = currentAttachments.filter(a => a.type === 'file');   // R33：任意格式文件附件
   const toolModeEl = document.getElementById('toolMode');
   const attachmentWriteAllowed = !toolModeEl || !toolModeEl.value || toolModeEl.value === 'full';
   const mem = recallMemory(text);
   const memBlock = mem ? '\n\n[相关历史记忆]\n' + mem + '\n（背景参考，无关可忽略）' : '';
   let userContent;
-  if (images.length === 0 && videos.length === 0 && textFiles.length === 0) {
+  if (images.length === 0 && videos.length === 0 && textFiles.length === 0 && otherFiles.length === 0) {
     userContent = (text + memBlock) || '请回复';
   } else {
     const parts = [];
     let fullText = (text ? text + memBlock : '');
+    if (otherFiles.length > 0) {
+      const meta = otherFiles.map(f => '- ' + f.name + '（' + (f.mime || '未知类型') +
+        '，' + ((Number(f.size) || 0) / 1024).toFixed(1) + ' KB；二进制内容未解析）').join('\n');
+      fullText = (fullText ? fullText + '\n' : '') + '[附件文件]\n' + meta;
+    }
     if (textFiles.length > 0) {
       const ATT_FULL = 200000;   // ≤20万字符直接全文注入
       const results = await Promise.all(textFiles.map(async f => {
@@ -172,7 +178,9 @@ async function sendMessage() {
     videos.forEach(v => parts.push({ type: 'video_url', video_url: { url: v.dataUrl } }));
     userContent = parts;
   }
-  const displayText = text + (textFiles.length > 0 ? `\n（附带 ${textFiles.length} 个文本文件）` : '');
+  const displayText = text +
+    (textFiles.length > 0 ? `\n（附带 ${textFiles.length} 个文本文件）` : '') +
+    (otherFiles.length > 0 ? `\n（附带 ${otherFiles.length} 个文件）` : '');
   const displayExtra = {};
   if (images.length > 0) displayExtra.images = images.map(i => i.dataUrl);
   if (textFiles.length > 0) displayExtra.files = textFiles.map(f => f.name);

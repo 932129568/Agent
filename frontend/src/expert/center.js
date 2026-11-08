@@ -284,7 +284,11 @@ function expertCenterInit() {
   expertCenterState.initialized = true;
   const on = (id, event, handler) => { const element = document.getElementById(id); if (element) element.addEventListener(event, handler); };
   on('expertPickerBtn', 'click', openExpertPicker);
-  on('expertCenterBtn', 'click', openExpertCenter);
+  // R33：rail 入口改为「功能市场」；旧目录导入面板仍可由 expertPickerBtn 打开（兼容面）
+  on('expertCenterBtn', 'click', () => {
+    if (typeof hubOpenMarket === 'function') hubOpenMarket('expert');
+    else openExpertCenter();
+  });
   on('expertCloseBtn', 'click', closeExpertCenter);
   on('expertCenter', 'keydown', expertCenterKeydown);
   on('expertSelectBtn', 'click', expertSelectForNextRun);

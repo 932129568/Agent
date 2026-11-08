@@ -64,6 +64,35 @@
       "requires": []
     },
     {
+      "path": "frontend/src/shell/hub-market.js",
+      "provides": [
+        "HUB_ENABLED_KEY",
+        "HUB_HOT_SECTIONS",
+        "HUB_MARKET_STATE",
+        "hmEsc",
+        "hubCloseMarket",
+        "hubDisableAll",
+        "hubEnabledCount",
+        "hubEnabledItems",
+        "hubEnabledLoad",
+        "hubEnabledSave",
+        "hubInitMarket",
+        "hubIsEnabled",
+        "hubMarketPoolItems",
+        "hubMarketPools",
+        "hubOpenMarket",
+        "hubRenderMarket",
+        "hubSetMarketCat",
+        "hubSetMarketQuery",
+        "hubSetMarketSort",
+        "hubSetMarketSub",
+        "hubSetMarketTab",
+        "hubToggleEnabled",
+        "hubToggleMine"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/core/motion.js",
       "provides": [
         "MOTION"

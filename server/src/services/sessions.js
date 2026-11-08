@@ -54,6 +54,10 @@ export async function saveSessions(data) {
   } catch (error) {
     return JSON.stringify({ error: String(error && error.message ? error.message : error).slice(0, 400) })
   }
+  // R33：删除墓碑 —— 滞后的旧全量数组不得把已删会话写回 DB
+  const { readDeletedIds } = await import('./session-migrate.js')
+  const deleted = new Set(readDeletedIds())
+  entries = entries.filter(entry => !deleted.has(String(entry.id)))
   const keep = entries.map(entry => String(entry.id))
 
   await prisma.$transaction(async tx => {

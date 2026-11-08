@@ -190,10 +190,10 @@ function hubFileKind(f) {
   if (mime.startsWith('video/') || HUB_VIDEO_EXT.test(name)) return 'video';
   if (/\.zip$/i.test(name)) return 'zip';
   if (/\.(tgz|tar\.gz|gz|tar)$/i.test(name)) return 'gztar';
-  if (/\.(rar|7z|bz2|xz)$/i.test(name)) return 'archive-unsupported';
+  if (/\.(rar|7z|bz2|xz)$/i.test(name)) return 'file';
   if (HUB_TEXT_EXT.test(name) || mime.startsWith('text/') ||
       /json|xml|javascript|typescript/.test(mime)) return 'text';
-  return 'unsupported';
+  return 'file';   // R33：其余格式一律接纳为文件附件（不再拦截）
 }
 
 /** 浏览器端提取 .gz / .tar / .tgz 里的文本（复用页面已有的 fflate 全局）。 */
@@ -251,8 +251,7 @@ async function _hubReadGzTar(f) {
 /** 统一入口：一次选择多种格式，自动分派；保持原有大小限制与安全护栏。 */
 async function hubDispatchFiles(fileList) {
   if (!attachmentsAllowed()) { toast(attachmentsDeniedText(), 'warn'); return false; }
-  const groups = { image: [], video: [], text: [], zip: [], gztar: [],
-                   'archive-unsupported': [], unsupported: [] };
+  const groups = { image: [], video: [], text: [], zip: [], gztar: [], file: [] };
   (Array.from(fileList || [])).forEach(f => {
     const k = hubFileKind(f);
     (groups[k] || groups.unsupported).push(f);
@@ -268,13 +267,15 @@ async function hubDispatchFiles(fileList) {
         name: `${f.name}（含${got.count}个文件）` });
     } catch (e) { toast(`读取 ${f.name} 失败: ${e.message || e}`, 'err'); }
   }
-  if (groups['archive-unsupported'].length) {
-    toast('rar / 7z / bz2 / xz 暂不能在浏览器端解压；请先转成 zip，或解压后选取文本文件。', 'warn');
-  }
-  if (groups.unsupported.length) {
-    const names = groups.unsupported.slice(0, 3).map(f => f.name).join('、');
-    toast(`已识别 ${groups.unsupported.length} 个二进制文件（${names}${groups.unsupported.length > 3 ? '…' : ''}）：` +
-      'PDF / Office / 音频等暂不能解析内容，请另存为 .txt/.md 或截图后添加。', 'warn');
+  // R33：所有格式都能上传。二进制不解析内容，作为文件附件携带名称/大小/类型，
+  // 发送时由 send.js 把元信息注入上下文；绝不静默丢弃。
+  groups.file.forEach(f => {
+    attachments.push({ type: 'file', name: f.name, size: f.size || 0,
+      mime: String(f.type || '') });
+  });
+  if (groups.file.length && typeof toast === 'function') {
+    toast(`已加入 ${groups.file.length} 个文件（含 .md / .ppt / PDF 等任意格式）；` +
+      '二进制内容不解析，仅附文件名与大小。', 'ok');
   }
   renderPreview();
   return true;

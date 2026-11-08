@@ -26,11 +26,15 @@ STYLES = ROOT / 'frontend' / 'styles'
 
 
 def _old_tokens_src():
-    """升级前源码（R29 提交 65989be 的工作树版本）。"""
-    p = subprocess.run(['git', 'show', 'HEAD:' + TOKENS], cwd=ROOT,
-                       capture_output=True, text=True, encoding='utf-8')
-    assert p.returncode == 0, p.stderr
-    return p.stdout
+    """升级前源码（R29 提交 65989be 的工作树版本）。
+
+    R33：原先直接 `git show HEAD:...` 取旧版，但 R30 提交进 HEAD 后基线被
+    自身覆盖（旧/新变成同一份，污染与性能两条断言失去意义）。改为读取
+    固化的 fixture，基线不再随提交漂移。
+    """
+    fixture = ROOT / 'tests' / 'fixtures' / 'tokens_pre_r30.js'
+    assert fixture.is_file(), '缺少 R30 升级前基线 fixture'
+    return fixture.read_text(encoding='utf-8')
 
 
 def _css_all():
