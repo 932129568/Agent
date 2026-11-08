@@ -54,7 +54,7 @@
 ```
 build×2 / 五契约 / 锚点 r43 差分零漂移 / upgrade_audit PASS / 桥侧 20 PASS
   （contract-signatures 146 对称含 browser_snapshot；guard.mjs 19 档）
-pytest tests/ -q → 全绿（终态数字见 git log 提交说明）
+pytest tests/ -q → **1963 passed / 0 failed / 3 skipped**
 ```
 
 ### 4.1 全量中抓到并修复的三处（本轮测试对齐，均非掩盖问题）
