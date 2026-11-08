@@ -7,6 +7,11 @@
 
 用法：
   python tools/entry_sweep.py --port 9344 [--json out.json]
+  python tools/entry_sweep.py --self-check          # CI：不连 CDP，只校验工具链
+
+退出码：0=全绿 / 1=有 BAD 入口 / 2=CDP 连接失败（CI 据此降级为 self-check）。
+CDP 桥：优先用历史注入版（%TEMP% > tests/），干净环境回落到仓库内
+tools/cdp_lib.py（R26 新增，复用 perf_cdp 的纯标准库实现，零第三方依赖）。
 
 安全护栏（跳过清单）：删除/解绑/重置/恢复类入口不自动点击——
   session-del、groupMemberDel、gf-item-del、wsQuickUnbind、unbindSession、
@@ -21,6 +26,10 @@ import os
 import sys
 import time
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+# 优先级：历史注入版（%TEMP% > tests/）保持最高；仓库内自包含 tools/cdp_lib.py
+# 作为干净 CI 环境的回落。insert(0) 后写的最优先，故顺序与优先级相反。
+sys.path.insert(0, _HERE)
 sys.path.insert(0, 'tests')
 sys.path.insert(0, os.environ.get('TEMP', ''))
 from cdp_lib import connect, ev  # noqa: E402
@@ -69,13 +78,37 @@ ENUM = r"""
 """
 
 
+def self_check():
+    """不连 CDP：校验工具链自身完整（CI 降级 / 发版前快速门禁）。"""
+    checks = {
+        'cdp_lib_loaded': callable(connect) and callable(ev),
+        'skip_patterns': len(SKIP_PATTERNS) >= 15,
+        'collect_script': 'addEventListener' in COLLECT and '__sweepErrors' in COLLECT,
+        'enum_script': 'querySelectorAll' in ENUM,
+        'skip_rollback': 'checkpoint_rollback' in SKIP_PATTERNS,
+    }
+    ok = all(checks.values())
+    print('self-check:', json.dumps(checks, ensure_ascii=False))
+    print('self-check:', 'OK' if ok else 'FAILED')
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=9344)
     ap.add_argument('--json', default='')
+    ap.add_argument('--self-check', action='store_true',
+                    help='不连 CDP，只校验工具自身可加载与脚本/护栏完整（CI 降级用）')
     args = ap.parse_args()
+    if args.self_check:
+        return self_check()
 
-    st = connect(args.port, timeout=120)
+    # 连不上 CDP 与「入口有 BAD」是两回事——退出码 2 供 CI 判定降级
+    try:
+        st = connect(args.port, timeout=120)
+    except Exception as e:
+        print('CDP connect failed: %s' % e)
+        return 2
     print('error-collector:', ev(st, COLLECT, wait=5))
     entries = ev(st, ENUM, wait=10) or []
     print('entries:', len(entries))

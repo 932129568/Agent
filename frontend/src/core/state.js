@@ -2,7 +2,6 @@
 const API_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 let lastReqAt = 0;
 let pendingShots = [];
-let shotState = 'idle';
 let lastShotHash = null;
 let currentSessionId = null;
 let sessions = [];

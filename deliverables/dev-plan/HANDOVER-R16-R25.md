@@ -169,10 +169,70 @@
 
 ---
 
-## 7. 遗留风险与建议下一步
+## 7. 遗留风险与建议下一步（R26 已逐项销项，2026-11-05）
 
-1. `shotState` 全局变量仍存在（已不参与逻辑，仅兼容面）——可在下个版本彻底删除 `core/state.js` 中的声明与 app-state 的 getter/setter。
-2. 计划任务的步进级恢复依赖 `checkpoint_rollback` 既有链路；横幅只提供上下文与续跑入口，**逐计划 resume 卡片未做**。
-3. 群聊「测试端点」按钮依赖 callApi 桥在线，桥未就绪时静默（有 toast）。
-4. 懒渲染后**搜索跳转**依赖 `data-midx`（轻量节点保留），已验证；但若未来改成虚拟列表，需重新设计该跳转。
-5. 建议把 `tools/entry_sweep.py` + `tools/round_runner.py` 接进 CI，每次发版前各跑一遍。
+> 接手人注意：原第 7 节列出的 5 项在 R26 全部落地。每项标注「改了什么 / 验证证据 / 剩余边界」，
+> 完整变更清单与复跑命令见第 8 节。本节不再作为「待办」使用。
+
+| # | 原遗留 | R26 处理 | 验证证据 |
+|---|---|---|---|
+| 1 | `shotState` 全局兼容面仍存在 | 删 `core/state.js` 声明、`core/app-state.js` getter/setter、`sessions/controller.js` 两处复位赋值、`manifest.json` 三处登记（含 `text-compress.js` 一条**假 requires**）。`run.shotState`（R24 per-run 态）保留——全仓 `frontend/src` 仅剩该形式 | `node frontend/build.js` 104 模块幂等；`grep shotState frontend/src` 无裸全局；49 项契约门禁；UI 五大契约 PASS |
+| 2 | 逐计划 resume 卡片未做 | 新增 `planResumeCardsMount`（`agent/resume.js`）：按 `plan_list` 为每个进行中计划挂独立卡片（断点 `done/total`、检查点保留文案、「从断点续跑」「放弃本计划」），桥不可用/清单空回落 `s.plan`；`renderChatHistory` 接线。**步进级回滚仍走 `checkpoint_rollback` 既有链路**，卡片只给入口，不与 `planning/card.js` 两段式二次确认竞态 | `tests/test_resume.py` 新增 3 项（多计划过滤 / 续跑回调 / 无桥回落 / 接线） |
+| 3 | 群聊「测试端点」桥未就绪静默 | `.gw-eptest` 按钮在 `groupBindEndpointRows` 的 `sync()` 内按 `typeof callApi` 设 `disabled` + 明确 `title`（下拉变化自动恢复，不留永久禁用）；点击开头显式守卫 → 明确 warn toast「后端桥未就绪，无法测试端点；请等待应用加载完成后重试」，不再被 catch 吞成泛化「端点测试失败」 | `tests/test_group_endpoint_bridge.py` 3 项（守卫早于真实调用 / 状态随 sync 刷新 / 真实失败提示保留） |
+| 4 | 改虚拟列表需重设搜索跳转 | `sessions/controller.js` 新增 `virtualChatMount / virtualChatActive / virtualChatJumpToIndex / virtualChatWindowRange`：长会话（≥120 行、非群聊）按视口窗口挂载行 + 前后 spacer 撑高，窗口内实测高度回填修正；**群聊不启用**（气泡按 `.message` 逐条对位）。`sessions/search.js` 的 `jumpToSearchHit` 改为节点未产出时由 `virtualChatJumpToIndex` 按 `midx` 驱动窗口把目标行换入 DOM（最多 3 次，覆盖 140ms 切换过渡），保留原 1s 轮询高亮与滚底兜底 | `tests/test_virtual_chat.py` 4 项（窗口算法边界与单调性 / 群聊与短会话排除 / 跳转接线 / manifest 符号登记） |
+| 5 | 两个扫描工具接进 CI | 新增 `tools/cdp_lib.py`（复用 `perf_cdp.py` 纯标准库 loopback CDP，历史 `%TEMP% > tests/` 注入优先级保留作回落）；`entry_sweep.py` 加 `--self-check` 与连接失败退出码 2；`round_runner.py` 加 `--node` / `--no-record` / 失败退出码 1，Node 解析改为 `--node > HARBOR_NODE > PATH > 旧硬编码`；新建 `.github/workflows/harbor-ci.yml`（`gate` job 跑 `round_runner --full --no-record` + `check_contract` + 发版 `check_release`；`entry-sweep` job 跑 `--self-check` 硬门禁，发版 / 手动 dispatch 尝试真实 CDP 点击扫描） | `tests/test_ci_tooling.py` 6 项；本机 `round_runner.py --rounds 1 --no-record` → `green / exit 0`、jsonl **219→219** 未污染；`entry_sweep.py --self-check` → `OK / exit 0` |
+
+### 7.1 仍存在的边界（如实登记，不美化）
+
+1. **CI 里的真实 CDP 点击扫描是 best-effort**：Electron 完整宿主（`electron/main.js` = fastify + DB + BrowserWindow + 后端桥）在 GitHub-hosted runner 上不保证可启动；不可用时降级为 `--self-check` 并在日志/输出标注 `degraded=true`，**不伪造通过**。真机全入口扫描仍按 R17 方式本地执行：
+   `python tools/entry_sweep.py --port <调试端口> --json out.json`（BAD=0 为绿）。
+2. **虚拟列表阈值 120 行、群聊不启用**；高度按初始实测 + 窗口内回填修正，图片/长代码块等极端动态高度仍可能有轻微滚动漂移。`data-midx` 语义保持不变，短会话路径完全未改。
+3. **`check_release.py` 只在 `release` 事件触发**；`--full` 全量 pytest 在 CI 上依赖 `requirements-win.txt` 全部可安装，本机隔离 venv 已验证。
+4. 逐计划 resume 卡片的「放弃」只移除卡片 + toast，**不改后端计划状态**（避免引入 `plan_update` 的非法枚举风险）；需要真正废弃计划仍走计划卡既有链路。
+
+---
+
+## 8. R26 收口记录（2026-11-05，追加；不改变 R16–R25 覆盖范围）
+
+### 8.1 变更文件
+
+| 类别 | 文件 |
+|---|---|
+| 前端源码 | `frontend/src/core/state.js`、`core/app-state.js`、`agent/resume.js`、`group/group.js`、`sessions/controller.js`、`sessions/search.js` |
+| 样式 / 清单 | `frontend/styles/features/plan.css`、`frontend/manifest.json` |
+| 构建产物 | `harbor.html`（`node frontend/build.js` 重建，**勿手改**） |
+| 工具 | `tools/cdp_lib.py`（新）、`tools/entry_sweep.py`、`tools/round_runner.py` |
+| CI | `.github/workflows/harbor-ci.yml`（新） |
+| 测试 | `tests/test_resume.py`、`tests/test_virtual_chat.py`（新）、`tests/test_group_endpoint_bridge.py`（新）、`tests/test_ci_tooling.py`（新） |
+
+### 8.2 复跑命令
+
+```bash
+PY="C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe"
+node frontend/build.js                              # 构建幂等（104 JS / 14 CSS）
+"$PY" deliverables/design/check_contract.py          # UI 五大契约
+"$PY" -m pytest tests/ -q                            # 全量门禁
+"$PY" tools/entry_sweep.py --self-check              # 入口扫描工具自检
+"$PY" tools/round_runner.py --rounds 1 --no-record   # 轮次门禁（不写 jsonl）
+```
+
+### 8.3 契约纪律复核
+
+- `get_api_info` / `API_VERSION='v1.0.0'` 零漂移；`config.json` 零污染；`VERSION` 未动。
+- 前端 manifest 保持 **104 个模块 / 14 个样式**（虚拟列表实现放在既有 `sessions/controller.js` 内，未新增模块，`test_frontend_tree` / `test_modern_build` 的硬编码计数无需改动）。
+- 新顶层符号 `planResumeCardsMount`、`virtualChat*` 四件均已登记 `manifest.json` 的 `provides`；`search.js` 对虚拟符号属**后置可选调用**，用 `typeof` 守卫、未列入前置 `requires`（`search.js` 在 `controller.js` 之前加载，列入会被 lint 拦下）。
+- 新增 DOM id / CSS 类为「只增不改」，UI 契约 40 id / 13 onclick / 43 callApi / 39 类 / 21 变量全部保持。
+
+### 8.4 实测结果（2026-11-05，本机隔离 venv）
+
+| 门禁 | 结果 |
+|---|---|
+| 全量 pytest | **1843 passed / 0 failed / 3 skipped**（1102.78s）。1 个既有 `SyntaxWarning`（`tests/test_harbor_fix.py:542` 文档字符串 `\g`），与本轮改动无关 |
+| 契约子集（API/release/frontend-tree/modern-build 等 12 文件） | 87 passed |
+| 新增 4 组测试 | resume 3 + endpoint-bridge 3 + virtual-chat 4 + ci-tooling 6 = **16 项全绿** |
+| UI 五大契约 | PASS（40 DOM id / 13 onclick / 43 callApi / 39 类 / 21 变量；manifest 104 JS / 14 CSS） |
+| 构建幂等 | `node frontend/build.js` 连跑两次产物逐字节一致；`harbor.html` 已同步；全局 `shotState` 残留清零 |
+| `entry_sweep.py --self-check` | `OK` / exit 0；`cdp_lib` 自包含可加载 |
+| `round_runner.py --rounds 1 --no-record` | `green` / exit 0 / `scan-rounds.jsonl` **219→219** 未污染；Node 解析到 PATH 的 v22.22.2（非硬编码路径） |
+| workflow YAML | `js-yaml` 解析通过，`gate` / `entry-sweep` 两 job 各 7 步 |
+

@@ -147,6 +147,15 @@ function groupBindEndpointRows(scope) {
     if (!sel || sel.getAttribute('data-bound')) return;
     sel.setAttribute('data-bound', '1');
     const sync = () => {
+      // R26：callApi 桥未就绪时「测试端点」不再静默——显式禁用 + 明确 title。
+      // 下拉每次变化都会重跑 sync，桥就绪后自动恢复，不留永久禁用态。
+      const tb0 = row.querySelector('.gw-eptest');
+      if (tb0) {
+        const bridgeReady = typeof callApi === 'function';
+        tb0.disabled = !bridgeReady;
+        tb0.title = bridgeReady ? '用该端点+Key+模型发一次测试请求'
+          : '后端桥未就绪，暂时无法测试端点（请等待应用加载完成）';
+      }
       const row2 = row.querySelector('.gw-eprow');
       if (!row2) return;
       const cross = String(sel.value || '').indexOf('::') >= 0;
@@ -172,6 +181,12 @@ function groupBindEndpointRows(scope) {
     if (testBtn && row2 && !testBtn.getAttribute('data-bound')) {
       testBtn.setAttribute('data-bound', '1');
       testBtn.addEventListener('click', async () => {
+        // R26：桥未就绪 → 明确提示。原实现直接 await callApi 抛 ReferenceError，
+        // 被 catch 吞成泛化「端点测试失败」，用户看不出真因（交接报告遗留 #3）。
+        if (typeof callApi !== 'function') {
+          if (typeof toast === 'function') toast('后端桥未就绪，无法测试端点；请等待应用加载完成后重试', 'warn');
+          return;
+        }
         const model = String(sel.value || '');
         const i = model.indexOf('::');
         if (i < 0) { if (typeof toast === 'function') toast('当前是当前端点模型，无需单独测试', 'info'); return; }

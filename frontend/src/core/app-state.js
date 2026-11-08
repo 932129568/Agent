@@ -19,8 +19,6 @@ const AppState = Object.freeze({
   set lastReqAt(value) { lastReqAt = value; },
   get pendingShots() { return pendingShots; },
   set pendingShots(value) { pendingShots = value; },
-  get shotState() { return shotState; },
-  set shotState(value) { shotState = value; },
   get lastShotHash() { return lastShotHash; },
   set lastShotHash(value) { lastShotHash = value; },
   get backendWarning() { return backendWarning; },

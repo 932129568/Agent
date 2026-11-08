@@ -109,7 +109,9 @@ function openSessionSearch() {
 
 /** 点击搜索结果：切换会话 → 滚动到命中消息 → 高亮闪烁 2.4s。
  *  修复 S10（三轮）：原 rAF(≈16ms) 早于 switchSession 的 140ms 切换过渡 + 历史重建，
- *  [data-midx] 元素尚未产出 → 恒落兜底滚到底、高亮错消息。改为轮询等待（≤1s）。 */
+ *  [data-midx] 元素尚未产出 → 恒落兜底滚到底、高亮错消息。改为轮询等待（≤1s）。
+ *  R26：虚拟列表下节点不常驻 DOM，轮询查不到时改由 virtualChatJumpToIndex
+ *  按索引驱动窗口把目标行换入 DOM，再继续命中——跳转不再依赖节点常驻。 */
 function jumpToSearchHit(sessionId, midx) {
   _closeModal();
   if (isStreaming) { toast('正在生成回复，请先停止', 'warn'); return; }
@@ -121,9 +123,20 @@ function jumpToSearchHit(sessionId, midx) {
     setTimeout(() => el.classList.remove('search-hit-flash'), 2400);
   };
   let tries = 0;
+  let virtualTries = 0;
   const poll = () => {
     const el = document.querySelector(selector);
     if (el) { flash(el); return; }
+    // 虚拟列表态：节点未产出不是「消息不存在」，而是「该行尚未换入窗口」。
+    // 最多驱动 3 次，覆盖 switchSession 的历史重建过渡（140ms）。
+    if (virtualTries < 3 && typeof virtualChatActive === 'function' &&
+        typeof virtualChatJumpToIndex === 'function') {
+      const vb = document.getElementById('chatContainer');
+      if (vb && virtualChatActive(vb)) {
+        virtualTries++;
+        try { virtualChatJumpToIndex(vb, midx); } catch (e) {}
+      }
+    }
     if (++tries > 20) {   // 1s 仍未产出（目标消息未渲染/空内容）→ 兜底滚到底
       const box = document.getElementById('chatContainer');
       if (box) box.scrollTop = box.scrollHeight;

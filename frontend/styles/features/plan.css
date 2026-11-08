@@ -38,3 +38,16 @@
 /* Round 2 视觉修正:ckpt-row 收敛为纯分隔行(去除「圆角卡+分隔线」杂种样式) */
 .ckpt-row { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 2px; }
 .ckpt-row:last-child { border-bottom: 0; }
+
+/* R26 · 逐计划 resume 卡片（横幅只给会话级入口，此处按计划给独立续跑卡片） */
+.plan-resume-cards{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.plan-resume-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);
+  border-left:3px solid var(--warn);border-radius:8px;background:var(--card-bg);flex-wrap:wrap}
+.plan-resume-card .prc-ico{display:inline-flex;align-items:center;color:var(--warn)}
+.plan-resume-card .prc-body{flex:1;min-width:180px}
+.plan-resume-card .prc-title{font-weight:600;overflow-wrap:anywhere}
+.plan-resume-card .prc-meta{font-size:var(--fs-caption);color:var(--text-3);margin-top:2px;overflow-wrap:anywhere}
+.plan-resume-card .prc-continue,.plan-resume-card .prc-dismiss{min-height:32px;padding:4px 12px;
+  border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer}
+.plan-resume-card .prc-continue{border-color:var(--primary);color:var(--primary)}
+.plan-resume-card button:disabled{opacity:.5;cursor:not-allowed}

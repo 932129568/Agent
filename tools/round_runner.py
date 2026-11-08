@@ -1,21 +1,27 @@
 # -*- coding: utf-8 -*-
 """自动化检测轮次 runner（主理人立项：代码级反复检测，逐轮如实记录）。
 
-用法：python tools/round_runner.py --rounds N [--full]
+用法：python tools/round_runner.py --rounds N [--full] [--no-record] [--node PATH]
   每轮执行：
     1) 前端构建（幂等，哈希一致则零输出变化）
     2) 全量 pytest 门禁（--full 时；否则核心子集）
     3) 静态哨兵：语法检查全部 src 模块（node --check 逐个）
-  每轮写一行 JSON 记录到 deliverables/dev-plan/scan-rounds.jsonl：
+  默认每轮写一行 JSON 记录到 deliverables/dev-plan/scan-rounds.jsonl：
     {round, ts, build_ok, tests_passed, tests_failed, failures[], syntax_errors,
      duration_s}
-  诚实纪律：轮次必须真实执行，失败如实记录；不生成未运行的轮次。
+  --no-record（CI 用）不写该 append-only 记账文件，其余行为完全一致。
 
-退出码：存在测试失败或构建失败 → 1（供 CI 语义），否则 0。
+诚实纪律：轮次必须真实执行，失败如实记录；不生成未运行的轮次。
+
+退出码：任一轮非 green / 构建失败 / 语法错误 → 1；全绿 → 0（供 CI 语义）。
+Node 解析：--node > 环境变量 HARBOR_NODE > PATH 里的 node > 旧硬编码路径
+（R26 起不再绑定本机绝对路径，干净 CI 可直接跑）。
 """
 import argparse
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -23,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RECORD = ROOT / 'deliverables' / 'dev-plan' / 'scan-rounds.jsonl'
-NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
+LEGACY_NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 
 CORE = [
     'tests/test_resume.py', 'tests/test_icon_system.py',
@@ -35,6 +41,15 @@ CORE = [
 ]
 
 
+def resolve_node(explicit=None):
+    """CI 友好：显式参数 > 环境变量 > PATH > 旧硬编码路径 > 裸命令名。"""
+    for cand in (explicit, os.environ.get('HARBOR_NODE'),
+                 shutil.which('node'), LEGACY_NODE):
+        if cand and os.path.exists(cand):
+            return cand
+    return 'node'
+
+
 def run(cmd, timeout):
     t0 = time.time()
     p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout,
@@ -42,27 +57,27 @@ def run(cmd, timeout):
     return p, round(time.time() - t0, 1)
 
 
-def syntax_sweep():
+def syntax_sweep(node):
     """node --check 全部前端模块（语法哨兵）。"""
     bad = []
     src = ROOT / 'frontend' / 'src'
     for path in src.glob('**/*.js'):
-        p = subprocess.run([NODE, '--check', str(path)], capture_output=True, text=True)
+        p = subprocess.run([node, '--check', str(path)], capture_output=True, text=True)
         if p.returncode != 0:
             bad.append(str(path.relative_to(ROOT)))
     return bad
 
 
-def one_round(idx, full):
+def one_round(idx, full, node):
     rec = {'round': idx, 'ts': time.strftime('%Y-%m-%d %H:%M:%S')}
     t0 = time.time()
 
-    build, _ = run(['node', 'frontend/build.js'], 120)
+    build, _ = run([node, 'frontend/build.js'], 120)
     rec['build_ok'] = build.returncode == 0
     if build.returncode != 0:
         rec['build_err'] = (build.stderr or build.stdout)[-300:]
 
-    rec['syntax_errors'] = syntax_sweep()
+    rec['syntax_errors'] = syntax_sweep(node)
 
     targets = ['tests/'] if full else CORE
     p, dur = run([sys.executable, '-m', 'pytest', *targets, '-q', '-p', 'no:cacheprovider'], 900)
@@ -97,16 +112,25 @@ def main():
     ap.add_argument('--rounds', type=int, default=5)
     ap.add_argument('--full', action='store_true')
     ap.add_argument('--label', default='')
+    ap.add_argument('--node', default='',
+                    help='显式指定 node 可执行文件（默认按 HARBOR_NODE / PATH 解析）')
+    ap.add_argument('--no-record', action='store_true',
+                    help='不写 scan-rounds.jsonl（CI 用；默认仍逐轮记账）')
     args = ap.parse_args()
 
-    RECORD.parent.mkdir(parents=True, exist_ok=True)
+    node = resolve_node(args.node)
+    print('node:', node)
+    if not args.no_record:
+        RECORD.parent.mkdir(parents=True, exist_ok=True)
     greens = 0
+    failed_rounds = 0
     for i in range(1, args.rounds + 1):
-        rec = one_round(i, args.full)
+        rec = one_round(i, args.full, node)
         if args.label:
             rec['label'] = args.label
-        with open(RECORD, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+        if not args.no_record:
+            with open(RECORD, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
         print('round %d: %s build=%s passed=%s failed=%s (%.0fs)' % (
             i, rec['verdict'], rec['build_ok'], rec['tests_passed'],
             rec['tests_failed'], rec['duration_s']))
@@ -114,8 +138,10 @@ def main():
             print('   FAILED', name)
         if rec['verdict'] == 'green':
             greens += 1
+        if rec['verdict'] != 'green' or not rec['build_ok'] or rec['syntax_errors']:
+            failed_rounds += 1
     print('greens: %d/%d' % (greens, args.rounds))
-    return 0
+    return 1 if failed_rounds else 0
 
 
 if __name__ == '__main__':

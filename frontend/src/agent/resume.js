@@ -108,3 +108,90 @@ function persistResumeState(s, resuming) {
     try { if (typeof saveSessions === 'function') saveSessions(); } catch (e) {}
   }
 }
+
+/* ---------- R26：逐计划 resume 卡片（交接报告遗留 #2） ----------
+ * 横幅只给会话级「继续」入口与计划上下文，没有逐计划的独立续跑卡片。
+ * 这里按 plan_list 列出所有进行中的计划，每张卡片显示断点步数与检查点
+ * 保留状态，并提供「从断点续跑」「放弃本计划」。
+ *
+ * 边界（重要）：步进级恢复仍由既有 checkpoint_rollback 链路承接——本卡片
+ * 只提供入口，不自行回滚，避免与 planning/card.js 的两段式二次确认竞态。
+ * 桥不可用 / 计划清单为空 → 回落 s.plan 单计划；仍无 → 不挂任何 DOM。
+ * 计划标题属不可信文本，一律 textContent 装配（R20 高危 XSS 纪律）。
+ */
+function planResumeCardsMount(box, s, actions) {
+  const fallback = (s && s.plan && s.plan.task_id)
+    ? [{ task_id: String(s.plan.task_id), title: s.plan.title || '任务计划',
+         status: s.plan.status || 'executing', steps: s.plan.steps || [] }]
+    : [];
+  const mount = (plans) => {
+    const list = (plans || []).filter(p => p && p.task_id &&
+      ['planning', 'approved', 'executing', 'running'].indexOf(String(p.status || '')) >= 0)
+      .slice(0, 5);
+    if (!box || !box.appendChild || !list.length) return 0;
+    const wrap = document.createElement('div');
+    wrap.id = 'planResumeCards';
+    wrap.className = 'plan-resume-cards';
+    if (wrap.setAttribute) wrap.setAttribute('role', 'group');
+    list.forEach(p => {
+      const steps = p.steps || [];
+      const done = steps.filter(x => x && x.status === 'done').length;
+      const at = Math.min(done + 1, steps.length || 1);
+      const card = document.createElement('div');
+      card.className = 'plan-resume-card';
+      card.dataset.taskId = String(p.task_id);   // dataset 兼容 DOM 桩与真实 DOM
+      card.innerHTML =
+        '<span class="prc-ico"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-bolt"/></svg></span>' +
+        '<div class="prc-body"><div class="prc-title"></div><div class="prc-meta"></div></div>' +
+        '<button type="button" class="prc-continue">▸ 从断点续跑</button>' +
+        '<button type="button" class="prc-dismiss">放弃</button>';
+      const titleEl = card.querySelector('.prc-title');
+      if (titleEl) titleEl.textContent = '计划「' + (p.title || '任务') + '」';
+      const metaEl = card.querySelector('.prc-meta');
+      if (metaEl) metaEl.textContent = '执行至第 ' + at + '/' + (steps.length || 1) +
+        ' 步被中断 · 已完成步骤与检查点均保留';
+      // 桩的 querySelector 每次返回新元素——测试读侧通道（同 el.__textEl）
+      card.__titleEl = titleEl;
+      card.__metaEl = metaEl;
+      const cleanup = () => {
+        if (card.parentNode) card.parentNode.removeChild(card);
+        if (wrap.children && !wrap.children.length && wrap.parentNode) {
+          wrap.parentNode.removeChild(wrap);
+        }
+      };
+      const go = () => {
+        cleanup();
+        if (actions && typeof actions.onContinue === 'function') {
+          try { actions.onContinue(p); } catch (e) {}
+        }
+      };
+      const drop = () => {
+        cleanup();
+        try { if (typeof toast === 'function') toast('已放弃计划「' + (p.title || '任务') + '」的续跑', 'info'); } catch (e) {}
+      };
+      // DOM 桩的 querySelector 每次返回新元素——程序化触发/测试走侧通道
+      const contBtn = card.querySelector('.prc-continue');
+      const dropBtn = card.querySelector('.prc-dismiss');
+      if (contBtn) contBtn.onclick = go;
+      if (dropBtn) dropBtn.onclick = drop;
+      card.__continue = go;
+      card.__dismiss = drop;
+      wrap.appendChild(card);
+    });
+    if (box.insertBefore) box.insertBefore(wrap, box.firstChild);
+    else box.appendChild(wrap);
+    return list.length;
+  };
+  if (typeof callApi !== 'function') return mount(fallback);
+  try {
+    const pending = callApi('plan_list', [20], 15000);
+    if (!pending || typeof pending.then !== 'function') return mount(fallback);
+    return pending.then(raw => {
+      let d = {};
+      try { d = JSON.parse(raw || '{}'); } catch (e) {}
+      let plans = d.plans || d.data || (Array.isArray(d) ? d : []);
+      if (!Array.isArray(plans)) plans = [];
+      return mount(plans.length ? plans : fallback);
+    }).catch(() => mount(fallback));
+  } catch (e) { return mount(fallback); }
+}

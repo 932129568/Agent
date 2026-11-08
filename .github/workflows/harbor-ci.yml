@@ -1,0 +1,126 @@
+name: Harbor CI
+
+# R26：把 tools/round_runner.py（轮次门禁）与 tools/entry_sweep.py（全入口健康扫描）
+# 接进 CI。push/PR 走稳定硬门禁；发版事件与手动 dispatch 额外尝试真实 CDP 点击扫描。
+# 真实扫描需要完整启动 Electron 宿主（fastify + DB + GUI + 后端桥），CI 环境不具备
+# 时按设计降级为 --self-check，并在日志/输出里如实标注，不伪造通过。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      run_live_sweep:
+        description: '尝试启动 Electron 做真实 CDP 点击扫描（失败自动降级）'
+        type: boolean
+        default: false
+      strict_sweep:
+        description: '真实扫描出现 BAD 入口时判 CI 失败（默认仅记录）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: 轮次门禁 + 契约
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pip install -r requirements-win.txt
+      - name: UI / DOM / API 契约
+        run: python deliverables/design/check_contract.py
+      - name: 轮次门禁（round_runner，--no-record 不污染 219 轮记账）
+        run: python tools/round_runner.py --rounds 1 --full --no-record --label "CI"
+      - name: 发版版本纪律（check_release）
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          EXPECT="${GITHUB_REF_NAME#v}"
+          python tools/check_release.py --expect "$EXPECT"
+
+  entry-sweep:
+    name: 全入口运行时健康扫描
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # 硬门禁：无需 GUI/后端，验证 cdp_lib 可加载、护栏清单与注入脚本完整。
+      # R26 起 cdp_lib 已随仓库自带（tools/cdp_lib.py，复用 perf_cdp 纯标准库实现）。
+      - name: 工具自检（硬门禁）
+        run: python tools/entry_sweep.py --self-check
+      - name: 安装 Electron（真实扫描用）
+        if: github.event_name == 'release' || inputs.run_live_sweep == true
+        run: npm ci --no-audit --no-fund
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      - name: 启动应用并真实点击扫描（best-effort）
+        if: github.event_name == 'release' || inputs.run_live_sweep == true
+        id: live
+        shell: bash
+        run: |
+          set +e
+          npx electron electron/main.js --remote-debugging-port=9344 > app.log 2>&1 &
+          APP_PID=$!
+          python - <<'PY'
+          import socket, sys, time
+          for _ in range(60):
+              try:
+                  s = socket.create_connection(("127.0.0.1", 9344), timeout=1)
+                  s.close()
+                  print("CDP ready")
+                  sys.exit(0)
+              except OSError:
+                  time.sleep(1)
+          print("CDP not ready within 60s")
+          sys.exit(1)
+          PY
+          READY=$?
+          if [ "$READY" -ne 0 ]; then
+            echo "CDP 未就绪（CI 无完整 GUI/后端）→ 保留 self-check 门禁，跳过真实扫描"
+            kill "$APP_PID" 2>/dev/null
+            echo "degraded=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python tools/entry_sweep.py --port 9344 --json entry-sweep.json
+          CODE=$?
+          kill "$APP_PID" 2>/dev/null
+          echo "sweep_code=$CODE" >> "$GITHUB_OUTPUT"
+          if [ "$CODE" -eq 2 ]; then
+            echo "CDP 连接失败 → 降级（self-check 已通过）"
+            exit 0
+          fi
+          if [ "$CODE" -ne 0 ] && [ "${{ inputs.strict_sweep }}" = "true" ]; then
+            echo "严格模式：存在 BAD 入口，判失败"
+            exit 1
+          fi
+          echo "扫描完成（非严格模式：BAD 仅记录，不阻断）"
+          exit 0
+      - name: 上传扫描结果
+        if: always() && (github.event_name == 'release' || inputs.run_live_sweep == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: entry-sweep
+          path: entry-sweep.json
+          if-no-files-found: ignore

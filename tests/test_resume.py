@@ -160,3 +160,79 @@ def test_banner_plan_context_enrichment():
 """, 'resume_plan')
     assert '重构登录页' in result['text'] and '2/3' in result['text'], result
     assert result['calls'] >= 1
+
+
+def test_plan_resume_cards_from_plan_list():
+    """R26 遗留 #2：逐计划卡片按 plan_list 为每个进行中计划挂独立续跑入口。"""
+    result = _run(r"""
+  const ctx2 = ctx;
+  __run(ctx2, "globalThis.__calls = []; globalThis.callApi = async function(name, args){"
+    + " globalThis.__calls.push({name:name, args:args});"
+    + " return JSON.stringify({ plans: ["
+    + "  {task_id:'t1', title:'重构登录页', status:'executing',"
+    + "   steps:[{status:'done'},{status:'doing'},{status:'todo'}]},"
+    + "  {task_id:'t2', title:'补齐单测', status:'approved', steps:[{status:'todo'}]},"
+    + "  {task_id:'t3', title:'已完成计划', status:'done', steps:[]}"
+    + " ] }); };");
+  const script = `(function(){
+    const box = document.createElement('div');
+    const s = { runStatus:'paused', messages:[
+      {role:'user',content:'go'},{role:'assistant',content:'...'}] };
+    let continued = 0, lastPlan = null;
+    const actions = { onContinue: function(p){ continued++; lastPlan = p; } };
+    planResumeCardsMount(box, s, actions);
+    return new Promise(function(res){
+      setTimeout(function(){
+        const wrap = box.children.filter(function(c){ return c.id === 'planResumeCards'; })[0];
+        const cards = wrap ? wrap.children : [];
+        const titles = cards.map(function(c){ return c.__titleEl ? c.__titleEl.textContent : ''; });
+        const metas = cards.map(function(c){ return c.__metaEl ? c.__metaEl.textContent : ''; });
+        const ids = cards.map(function(c){ return c.dataset.taskId; });
+        if (cards[0]) cards[0].__continue();
+        if (cards[1]) cards[1].__dismiss();
+        res({ wrap: !!wrap, count: cards.length, ids: ids, titles: titles, metas: metas,
+              continued: continued, lastId: lastPlan && lastPlan.task_id,
+              callNames: globalThis.__calls.map(function(c){return c.name;}) });
+      }, 60);
+    });
+  })()`;
+  return __vm.runInContext(script, ctx2);
+""", 'resume_plan_cards')
+    assert result['wrap'] is True
+    assert result['count'] == 2, result          # status=done 的 t3 被过滤
+    assert result['ids'] == ['t1', 't2'], result
+    assert '重构登录页' in result['titles'][0] and '2/3' in result['metas'][0], result
+    assert result['continued'] == 1 and result['lastId'] == 't1', result
+    assert 'plan_list' in result['callNames'], result
+
+
+def test_plan_resume_cards_fallback_without_bridge():
+    """桥不可用 → 回落 s.plan 单计划；无计划 → 零 DOM（不噪音挂载）。"""
+    result = _run(r"""
+  const script = `(function(){
+    globalThis.callApi = undefined;
+    const box = document.createElement('div');
+    const s = { runStatus:'paused', plan:{task_id:'tf', title:'单计划回退',
+      status:'executing', steps:[{status:'done'},{status:'todo'}]},
+      messages:[{role:'user',content:'go'}] };
+    const n = planResumeCardsMount(box, s, {});
+    const wrap = box.children.filter(function(c){return c.id==='planResumeCards';})[0];
+    const emptyBox = document.createElement('div');
+    const n2 = planResumeCardsMount(emptyBox,
+      {runStatus:'paused', messages:[{role:'user',content:'x'}]}, {});
+    return { n:n, count: wrap ? wrap.children.length : 0,
+             title: wrap && wrap.children[0] && wrap.children[0].__titleEl
+               ? wrap.children[0].__titleEl.textContent : '',
+             empty: n2, emptyKids: emptyBox.children.length };
+  })()`;
+  return __vm.runInContext(script, ctx);
+""", 'resume_plan_fallback')
+    assert result['n'] == 1 and result['count'] == 1, result
+    assert '单计划回退' in result['title'], result
+    assert result['empty'] == 0 and result['emptyKids'] == 0, result
+
+
+def test_render_hooks_plan_resume_cards():
+    src = (ROOT / 'frontend' / 'src' / 'sessions' / 'controller.js').read_text(encoding='utf-8')
+    assert "typeof planResumeCardsMount === 'function'" in src
+    assert 'planResumeCardsMount(box, s' in src

@@ -387,7 +387,6 @@ function newSession() {
   // R20/R24：后台 run 的截图保留（消费端按 sid 过滤兜底串图）；lastShotHash
   // 是「同图不重截」指纹——新会话语义下应允许重截，故复位指纹但不动截图队列
   lastShotHash = null;
-  shotState = 'idle';   // 全局态仅剩兼容面；run 内已用 run.shotState（R24）
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲：补 rejection 处理（原只挡同步 throw）
     try { callApi('set_current_sid', [null]).catch(() => {}); } catch (e) {}   // 修复 ㊲：同上；后端借此清空会话信任态（含 MCP）
@@ -457,7 +456,6 @@ function switchSession(id, silent) {
   // R20：只清被离开会话的截图（后台 run 的截图由 sid 过滤兜底串图）
   lastShotHash = null;
   if (typeof pendingShots !== 'undefined') pendingShots = pendingShots.filter(x => x && x.sid === String(__prevSid));
-  shotState = 'idle';   // 全局态仅剩兼容面；run 内已用 run.shotState（R24）
   if (!activeRun || activeRun.cancelled) {
     try { callApi('clear_caches', []).catch(() => {}); } catch (e) {}   // 修复 ㊲
     try { callApi('set_current_sid', [currentSessionId]).catch(() => {}); } catch (e) {}   // 修复 ㊲：后端据此清空会话信任态（含 MCP）
@@ -598,21 +596,163 @@ function renderChatHistory(s) {
   try { box.scrollTop = box.scrollHeight; } catch (e) {}
   // R21：重建完成立即做一次视口内升级（覆盖视口很大的场景）
   try { upgradeInView(); } catch (e) {}
+  // R26：把轻量节点升级器暴露给虚拟列表——窗口换入后需立即升级视口内行
+  box.__upgradeInView = upgradeInView;
   // Round 16 resume：任务中断恢复横幅（runStatus=paused 且停在 assistant/tool）。
   // 继续 = runAgentLoop 重入（历史已配平，模型从挂起点续写）；放弃 = 收敛 completed。
   if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {
+    const doResume = () => {
+      const apiKey = (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '';
+      if (typeof continueLastGeneration === 'function') continueLastGeneration(s, apiKey);
+    };
     try {
-      resumeBannerMount(box, s, {
-        onContinue: () => {
-          const apiKey = (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '';
-          if (typeof continueLastGeneration === 'function') continueLastGeneration(s, apiKey);
-        },
-      });
+      resumeBannerMount(box, s, { onContinue: doResume });
+    } catch (e) {}
+    // R26 遗留 #2：逐计划 resume 卡片。横幅只给会话级入口，卡片给每个计划
+    // 独立的断点进度与续跑入口；步进级回滚仍走 checkpoint_rollback 既有链路。
+    try {
+      if (typeof planResumeCardsMount === 'function') {
+        planResumeCardsMount(box, s, { onContinue: doResume });
+      }
     } catch (e) {}
   }
+  // R26 遗留 #4：长会话启用虚拟列表（群聊不启用——气泡按 .message 逐条对位）。
+  // 由此搜索跳转改为按索引驱动窗口定位，见 sessions/search.js。
+  try { virtualChatMount(box, s); } catch (e) {}
   // v4：两帧后摘 .batch——重建完成，此后新消息恢复正常入场动画
   requestAnimationFrame(() => requestAnimationFrame(() => box.classList.remove('batch')));
 }
+
+/* ================= R26 · 长会话虚拟列表（交接报告遗留 #4） =================
+ * R21 懒渲染仍把全部 .message 节点常驻 DOM（只是内容轻量）。本轮改为按视口
+ * 窗口挂载：视口外的行从 DOM 卸载，前后用 spacer 撑起总高度。群聊不启用
+ * （气泡映射按 .message 逐条对位，报告 §6 纪律）。
+ *
+ * 由此必须重设搜索跳转：虚拟列表下 [data-midx] 节点不常驻，jumpToSearchHit
+ * 先调 virtualChatJumpToIndex 按索引把目标行滚进窗口，再轮询高亮。
+ */
+/** 纯函数：按高度前缀和求窗口 [start,end)（可单测，不碰 DOM）。 */
+function virtualChatWindowRange(prefix, scrollTop, vh, buffer) {
+  const n = prefix.length - 1;
+  if (!n) return { start: 0, end: 0 };
+  const lo = Math.max(0, scrollTop - vh);
+  const hi = scrollTop + vh * 2;
+  let start = 0, end = n;
+  for (let i = 0; i < n; i++) { if (prefix[i + 1] > lo) { start = i; break; } }
+  for (let i = start; i < n; i++) { if (prefix[i] >= hi) { end = i + 1; break; } }
+  return { start: Math.max(0, start - buffer), end: Math.min(n, end + buffer) };
+}
+
+/** search.js 判据：当前容器是否处于虚拟列表态。 */
+function virtualChatActive(box) {
+  return !!(box && box.__virtualChat);
+}
+
+/** 启用虚拟列表；不满足条件返回 null（短会话 / 群聊 / 无容器）。 */
+function virtualChatMount(box, s) {
+  const MIN_ROWS = 120, BUFFER = 6, MIN_H = 24;
+  if (!box || !box.appendChild || !box.children || !box.children.length) return null;
+  if (s && s.group) return null;                       // 群聊逐条对位，不虚拟化
+  const rows = Array.prototype.slice.call(box.children);
+  if (rows.length < MIN_ROWS) return null;
+  const heights = rows.map(r => Math.max(MIN_H, Number(r.offsetHeight) || MIN_H));
+  const prefix = [0];
+  for (let i = 0; i < heights.length; i++) prefix.push(prefix[i] + heights[i]);
+  const top = document.createElement('div');
+  const bottom = document.createElement('div');
+  top.className = 'virtual-spacer';
+  bottom.className = 'virtual-spacer';
+  top.dataset.virtualSpacer = 'top';
+  bottom.dataset.virtualSpacer = 'bottom';
+  top.style.width = '100%'; bottom.style.width = '100%';
+  top.style.pointerEvents = 'none'; bottom.style.pointerEvents = 'none';
+  const state = {
+    box: box, rows: rows, heights: heights, prefix: prefix,
+    top: top, bottom: bottom, start: -1, end: -1,
+    apply: null, onScroll: null,
+  };
+  const recalcPrefix = () => {
+    state.prefix = [0];
+    for (let i = 0; i < state.heights.length; i++) {
+      state.prefix.push(state.prefix[i] + state.heights[i]);
+    }
+  };
+  const detach = (el) => {
+    if (!el) return;
+    try {
+      if (box.removeChild) box.removeChild(el);
+      else if (el.remove) el.remove();
+    } catch (e) {}
+  };
+  const apply = (scrollTop) => {
+    const vh = Number(box.clientHeight) || 800;
+    const r = virtualChatWindowRange(state.prefix, scrollTop, vh, BUFFER);
+    if (r.start === state.start && r.end === state.end) return;
+    // 保留非 rows 的动态节点（恢复横幅 / 计划卡 / 逐计划 resume 卡片）
+    const dynamic = Array.prototype.slice.call(box.children).filter(n =>
+      n !== state.top && n !== state.bottom && state.rows.indexOf(n) < 0);
+    state.rows.forEach(detach);
+    detach(state.top); detach(state.bottom);
+    dynamic.forEach(detach);
+    state.top.style.height = state.prefix[r.start] + 'px';
+    state.bottom.style.height = Math.max(0, state.prefix[state.rows.length] - state.prefix[r.end]) + 'px';
+    box.appendChild(state.top);
+    for (let i = r.start; i < r.end; i++) box.appendChild(state.rows[i]);
+    box.appendChild(state.bottom);
+    dynamic.forEach(n => box.appendChild(n));
+    state.start = r.start; state.end = r.end;
+    // 窗口内行实测高度回填（R21 懒渲染升级后会变高），修正 spacer 防漂移
+    let changed = false;
+    for (let i = r.start; i < r.end; i++) {
+      const h = Number(state.rows[i].offsetHeight);
+      if (h && Math.abs(h - state.heights[i]) > 2) {
+        state.heights[i] = Math.max(MIN_H, h); changed = true;
+      }
+    }
+    if (changed) recalcPrefix();
+    try { if (typeof box.__upgradeInView === 'function') box.__upgradeInView(); } catch (e) {}
+  };
+  state.apply = apply;
+  const onScroll = () => {
+    if (onScroll._t) return;
+    onScroll._t = setTimeout(() => { onScroll._t = null; apply(Number(box.scrollTop) || 0); }, 60);
+  };
+  state.onScroll = onScroll;
+  // 切会话会重建 box.innerHTML——先卸掉旧监听，避免叠加
+  const prev = box.__virtualChat;
+  if (prev && prev.onScroll && box.removeEventListener) {
+    try { box.removeEventListener('scroll', prev.onScroll); } catch (e) {}
+  }
+  if (box.addEventListener) box.addEventListener('scroll', onScroll, { passive: true });
+  box.__virtualChat = state;
+  // renderChatHistory 的收尾归底发生在 spacer 撑高之前，此处按总高度重新归底
+  box.scrollTop = prefix[rows.length];
+  apply(Number(box.scrollTop) || prefix[rows.length]);
+  return state;
+}
+
+/** 搜索跳转：按消息索引 midx 找到对应行，驱动虚拟窗口把它滚进 DOM。
+ *  返回 true 表示已接管定位（调用方随后轮询 [data-midx] 做高亮）。 */
+function virtualChatJumpToIndex(box, midx) {
+  const state = box && box.__virtualChat;
+  if (!state) return false;
+  const target = Number(midx);
+  let rowIdx = -1;
+  for (let i = 0; i < state.rows.length; i++) {
+    const r = state.rows[i];
+    let hit = null;
+    try { hit = r.querySelector ? r.querySelector('[data-midx="' + target + '"]') : null; } catch (e) {}
+    if (hit || (r.dataset && String(r.dataset.midx) === String(target))) { rowIdx = i; break; }
+  }
+  if (rowIdx < 0) rowIdx = Math.max(0, Math.min(state.rows.length - 1, target));
+  const vh = Number(box.clientHeight) || 800;
+  const scrollTop = Math.max(0, state.prefix[rowIdx] - Math.round(vh / 3));
+  box.scrollTop = scrollTop;
+  state.start = -1;              // 强制重算窗口（即使区间相同也要换入目标行）
+  state.apply(scrollTop);
+  return true;
+}
+
 /** 修复 F1（v1.4）：会话导出为 Markdown——前端序列化（零后端/零新 js_api/零依赖）。
  *  消息角色标题 + 工具调用块 + 时间戳 + 可选 token 统计页脚；Blob 下载。
  *  边界：空会话正常生成（仅标题+说明）；超长消息截断防爆；文件名净化非法字符。 */

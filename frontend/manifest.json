@@ -53,7 +53,6 @@
         "pendingShots",
         "providerState",
         "sessions",
-        "shotState",
         "uiGenerative"
       ],
       "requires": []
@@ -73,7 +72,6 @@
         "abortController",
         "lastReqAt",
         "pendingShots",
-        "shotState",
         "lastShotHash",
         "backendWarning",
         "mcpLoadFailed"
@@ -945,6 +943,7 @@
       "provides": [
         "isResumableError",
         "persistResumeState",
+        "planResumeCardsMount",
         "resumeBannerMount",
         "shouldOfferResume"
       ],
@@ -1572,7 +1571,11 @@
         "switchSession",
         "toggleProjectGroup",
         "toggleTaskGroup",
-        "updateSessionTitle"
+        "updateSessionTitle",
+        "virtualChatActive",
+        "virtualChatJumpToIndex",
+        "virtualChatMount",
+        "virtualChatWindowRange"
       ],
       "requires": [
         "sessions",
@@ -1614,9 +1617,7 @@
         "shotPreset",
         "sumSessionTokens"
       ],
-      "requires": [
-        "shotState"
-      ]
+      "requires": []
     },
     {
       "path": "frontend/src/agent/compact-command.js",
