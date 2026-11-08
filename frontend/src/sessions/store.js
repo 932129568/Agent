@@ -249,6 +249,36 @@ function _sessionsPersistReplacer(key, v) {
   if (typeof v === 'string' && v.length > 30000) return v.slice(0, 30000) + '…(存储截断)';
   return v;
 }
+/** R38-R3（F2b 调研）：逐会话序列化缓存——全量 stringify（60 会话×160 消息
+ * 实测 17.3MB/89.6ms 主线程）的根治。payload 契约不变（save_sessions 恒
+ * 全量数组）：未变更会话直接复用上次序列化串，仅重串变更会话。缓存键=
+ * 既有变更签名（与「未变更短路」同一判定，语义严格等价——签名已覆盖全部
+ * 持久化字段）；JSON.stringify(数组) 的元素拼接与逐元素 stringify 逐字节一致。
+ * 容量治理：会话集合收缩时清理失联 id。 */
+let _sessionJsonCache = new Map();   // id -> {sig, json}
+function _serializeSessions(sessions) {
+  const parts = new Array(sessions.length);
+  const seen = new Set();
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    const sig = _sessionSaveSignature(s);
+    const hit = _sessionJsonCache.get(s.id);
+    if (hit && hit.sig === sig) {
+      parts[i] = hit.json;
+    } else {
+      const json = JSON.stringify(s, _sessionsPersistReplacer);
+      _sessionJsonCache.set(s.id, { sig, json });
+      parts[i] = json;
+    }
+    seen.add(s.id);
+  }
+  if (_sessionJsonCache.size > seen.size + 16) {
+    for (const id of Array.from(_sessionJsonCache.keys())) {
+      if (!seen.has(id)) _sessionJsonCache.delete(id);
+    }
+  }
+  return '[' + parts.join(',') + ']';
+}
 /** 本地镜像投影：仅保留最近 N 条会话 + 正文按 2k 截断，确保落在配额内。 */
 function _sessionsMirrorProjection(list) {
   const recent = (list || []).slice()
@@ -279,8 +309,9 @@ async function saveSessions() {
   // ② 未变更短路：与上次成功落盘的签名完全一致 → 无需序列化与双端写
   const sigs = _sessionSignatures(currentSessions);
   if (_allSignaturesEqual(sigs, _savedSignatures)) return;
-  // ① 单次序列化（原深克隆 + 二次 stringify 两趟遍历）
-  const data = JSON.stringify(currentSessions, _sessionsPersistReplacer);
+  // ① 序列化：R38-R3 起走逐会话缓存（未变更会话复用上串，仅重串变更者；
+  // 产物与全量 stringify 逐字节一致，save_sessions 全量数组契约不变）
+  const data = _serializeSessions(currentSessions);
   let _backendPersisted = false;
   try { localStorage.setItem('glm_sessions', _sessionsMirrorProjection(currentSessions)); }
   catch (e) { toast('本地会话缓存写入失败（浏览器存储可能已满）: ' + e.message, 'warn'); }   // 修复 建议㊶（二轮）：原完全静默

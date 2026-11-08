@@ -1313,6 +1313,8 @@
     {
       "path": "frontend/src/sessions/store.js",
       "provides": [
+        "_serializeSessions",
+        "_sessionJsonCache",
         "SAVE_THROTTLE_MS",
         "SAVE_THROTTLE_BUSY_MS",
         "LOCAL_MIRROR_MAX_SESSIONS",
