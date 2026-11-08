@@ -872,6 +872,7 @@
     "mcpTextToMapping": "frontend/src/integrations/mcp-panel.js",
     "mcpToggleServer": "frontend/src/integrations/mcp-panel.js",
     "mcpTrusted": "frontend/src/core/state.js",
+    "memoryDbStatRefresh": "frontend/src/settings/memory.js",
     "memoryGenerativeEnsure": "frontend/src/settings/memory.js",
     "memoryGenerativeHide": "frontend/src/settings/memory.js",
     "memoryGenerativeRender": "frontend/src/settings/memory.js",
@@ -1419,7 +1420,7 @@
     ]
   },
   "api_version": "v1.0.0",
-  "api_py_sha256": "d8b532942a50991ce3e9a43348ea4f560062ecfe7e54edc94700b89c08568312",
+  "api_py_sha256": "31a495ea3a1c0b91ea28bb96cce1c88eafc86a112079334838000344c0067a5e",
   "html": {
     "dom_ids": [
       "accessToggle",
@@ -1686,6 +1687,7 @@
       "mcpTabTools",
       "mmAddBtn",
       "mmCount",
+      "mmDbStat",
       "mmError",
       "mmInput",
       "mmList",
@@ -2061,7 +2063,7 @@
       "write_file"
     ]
   },
-  "source_line_multiset_sha256": "ce9c4cf454061a16cac86b7927c094c9205e502d36f6794076f37a83162bc857",
+  "source_line_multiset_sha256": "c06743d09553c199e020968fc156fc2cf2cf2edec64b0bc8130c6f0bdf07d0db",
   "function_defs": {
     "API_URL": "ae87671072a6b9cc7d8a4d98f4f51580226742096620c3317ac4eabd7e63787d",
     "AUDIT_STATUS": "823684b4db8710cc53207f6b980948032144d46d27ffb0776c0b716b72f1b121",
@@ -2932,13 +2934,14 @@
     "mcpTextToMapping": "5f8ec753e057674e8b48af5dbf9fe9bcd25cdfc4393bc2416df799c4da6cf788",
     "mcpToggleServer": "eabec55b1dd1ac97be1a4c4829363532b29cdd3e4e2d47341f900204a5cff008",
     "mcpTrusted": "62639a3406059373a36b932435f876ef241f9b005781665da87843255ff10f75",
+    "memoryDbStatRefresh": "96d591a02ab9b63c14da366909fb1cc609d771c9dde324dffa65e18ec32e81f2",
     "memoryGenerativeEnsure": "b7f6d13f5637715f565a97b6795a69597820cd591c4c230d28f9f1cd702096b7",
     "memoryGenerativeHide": "c76a58377a73e3ed4b59f3c6007fb88852ad52bd3060cbedf176590df0e1376c",
     "memoryGenerativeRender": "169cf7b7b6fc74143a6c012c0b31a76d308ea84a4f9b50991a40425e5bcf339d",
     "memoryGenerativeShow": "443fb67af312f92515e89e7ca13b6620c6ed2efaa161599ab742e11a551448d0",
     "memoryPanelAdd": "a2003b3816da4e40bba19843f7ea21e8c4c22ae98de6f07eede350fbb84fd42c",
     "memoryPanelDelete": "720c32cc5f9836363288faecbd2afd045bd60dfcc3122f9bbb7e004f8c032d98",
-    "memoryPanelInit": "d9c8a03ef7fc369abd293aa5373eaa01a0c2e739cf28019c49457d72424aa295",
+    "memoryPanelInit": "22094382ffb24a09458d4f3fca646494c842d06a5e692c3a43ce0f401373549f",
     "memoryPanelRefresh": "49ab91ab186d559d78ba95201886cca60c9224aba3758918627fedba39b10413",
     "memoryPanelRenderError": "6ef519fbc5ddb08c5a39086f71a6c10f5cac035ef22fb57e9ee32f1779662c0d",
     "memoryPanelRenderList": "50011e6a035d17be76a33f0149d01fa1472e681fd30a1831e24950e90c42ac23",

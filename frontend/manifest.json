@@ -1510,7 +1510,8 @@
         "memoryGenerativeRender",
         "memoryGenerativeShow",
         "memoryGenerativeHide",
-        "memoryGenerativeEnsure"
+        "memoryGenerativeEnsure",
+        "memoryDbStatRefresh"
       ],
       "requires": [
         "callApi",

@@ -21,7 +21,9 @@ a = Analysis(
     # pywebview自带__pyinstaller hook继续负责lib/WebView2 DLL与runtimes数据。
     hiddenimports=['send2trash', 'PIL.ImageGrab',
                    'webview', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
-                   'pythonnet', 'clr', 'clr_loader', 'cffi', '_cffi_backend'],
+                   'pythonnet', 'clr', 'clr_loader', 'cffi', '_cffi_backend',
+                   # R38 记忆模块 v2（SQLite 四层库；agent_memory 纯标准库包）
+                   'agent_memory', 'agent_memory.memory_store'],
     # 复核修正：pywin32 在 Py3.15 构建环境不可加载（pywin32-312 只带 313 DLL，
     # send2trash 的 COM 路径把 pythoncom 拉入图触发 hook-pythoncom 崩溃）——
     # 排除 pywin32 族，运行时 send2trash 自动回落 ctypes legacy 路径

@@ -96,6 +96,10 @@ _V12_EXTRA = frozenset({
     # W5A 专家包目录导入/快照资源服务（仅包治理，不含 Team/Agent 执行）
     'expert_list', 'expert_get', 'expert_import_directory', 'expert_read_resource',
     'expert_save_preferences', 'expert_set_enabled', 'expert_delete_package',
+    # R38 记忆模块 v2（SQLite 四层库渐进增强层；R36 开发文档 §8；legacy 四方法
+    # 继续走 memory.json 契约不接管；引擎不可用时以下方法全部安全降级）
+    'memory_context_build', 'memory_remember', 'memory_erase',
+    'memory_stats', 'memory_audit_query',
 })
 
 
@@ -690,7 +694,34 @@ class Api:
         return self._config.get_memory()
 
     def append_memory(self, entry_json):
-        return self._config.append_memory(entry_json)
+        """legacy 契约（memory.json）不变；R38 起同步镜像进 memory.db 的
+        `legacy:` 命名空间（面板写入对 v2 引擎可见；镜像失败不阻断 legacy）。"""
+        r = self._config.append_memory(entry_json)
+        try:
+            import json as _json
+            entry = _json.loads(entry_json) if isinstance(entry_json, str) else entry_json
+            text = str((entry or {}).get('text') or '').strip() if isinstance(entry, dict) else ''
+            if text and r.get('ok'):
+                kind = (entry or {}).get('kind')
+                if kind in ('rule', 'preference'):
+                    import hashlib
+                    key = 'legacy:' + hashlib.sha1(
+                        ''.join(text.split()).lower().encode('utf-8')).hexdigest()[:16]
+                    self._memory_db.ensure_synced()
+                    if self._memory_db.enabled:
+                        self._memory_db._mm.profiles.set(
+                            'legacy', 'local', key, text,
+                            weight=1.2 if kind == 'rule' else 1.0, source='user')
+                else:
+                    self._memory_db.ensure_synced()
+                    if self._memory_db.enabled:
+                        self._memory_db._mm.facts.put('legacy', 'local',
+                                                      'legacy_note', text)
+                # 面板写入后指纹已过期——强制下次同步跳过重建（避免重复导入）
+                self._memory_db._legacy_fp_seen = self._memory_db._legacy_fp()
+        except Exception:
+            pass
+        return r
 
     def memory_delete(self, index):
         """实现 v1.8.0 W11：删除 memory.json 数组第 index 条（记忆面板「删除」按钮）。
@@ -887,7 +918,11 @@ class Api:
             '3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。' + tail)
 
     def _memory_inject(self, query):
-        """W11：系统提示词记忆注入段（'' = 无记忆/异常——不影响主流程）。"""
+        """W11：系统提示词记忆注入段（'' = 无记忆/异常——不影响主流程）。
+
+        R38 增强：legacy 段（memory.json，逐字节契约）之后追加 v2 扩展段
+        （【长期记忆·扩展】，仅当 memory.db 存在非 legacy 结构化记忆时非空；
+        引擎不可用/无扩展记忆 → 输出与本增强前逐字节一致）。"""
         try:
             from .domains.settings.memory_service import (KINDS, inject_block,
                                                          retrieve)
@@ -900,9 +935,68 @@ class Api:
             if query:
                 rel = retrieve(query, items, 2)
                 picked += [x for x in rel if x not in picked]
-            return ('\n\n' + inject_block(picked)) if picked else ''
+            tail = ('\n\n' + inject_block(picked)) if picked else ''
+            try:
+                extras = self._memory_db.extras_block('local', 'legacy',
+                                                      query=str(query or ''))
+                if extras:
+                    tail = (tail + '\n\n' + extras) if tail else extras
+            except Exception:
+                pass
+            return tail
         except Exception:
             return ''          # 记忆注入失败不阻塞主提示词
+
+    # ---- R38 记忆 v2（SQLite 四层库；_V12_EXTRA 隐身；引擎不可用安全降级）----
+    _MEMORY_USER = 'local'          # 单用户规范身份（legacy 导入同款）
+
+    def memory_remember(self, text, source='user', explicit=True,
+                        attribute=None, session_id='legacy'):
+        """写入门控入口（gate→classify→分层落库；untrusted/敏感字段拒写）。"""
+        r = self._memory_db.remember(session_id, self._MEMORY_USER,
+                                     str(text or ''), source=str(source or 'user'),
+                                     explicit=bool(explicit), attribute=attribute)
+        return ok(r)
+
+    def memory_context_build(self, query='', mode='full', token_budget=None):
+        """派生视图（门控+scrub+预算；provenance 标注内置；引擎不可用 → {enabled:False}）。"""
+        ctx = self._memory_db.context(self._MEMORY_USER, 'legacy',
+                                      mode=str(mode or 'full'),
+                                      query=str(query or ''),
+                                      token_budget=token_budget)
+        if ctx is None:
+            return ok({'enabled': False})
+        return ok({'enabled': True, 'context': ctx})
+
+    def memory_erase(self, attribute=None, value='', hard=False,
+                     reason='用户请求删除'):
+        """软 scrub（视图层）/ 硬删除（两阶段+墓碑）；attribute='*' = 整体清除。"""
+        r = self._memory_db.erase(self._MEMORY_USER, attribute=attribute,
+                                  value=str(value or ''), hard=bool(hard),
+                                  reason=str(reason or '用户请求删除'))
+        return ok(r)
+
+    def memory_stats(self):
+        return ok(self._memory_db.stats())
+
+    def memory_audit_query(self, attribute=None, at=None, by='valid'):
+        """双时间戳 as-of 查询（valid=现实生效口径 / tx=审计重建口径）。"""
+        mm = self._memory_db.ensure_synced()
+        if mm is None:
+            return ok({'enabled': False})
+        try:
+            hist = mm.facts.history(self._MEMORY_USER,
+                                    str(attribute or 'legacy_note'))
+            if at:
+                cur = mm.facts.as_of(self._MEMORY_USER,
+                                     str(attribute or 'legacy_note'),
+                                     str(at), by=str(by or 'valid'))
+            else:
+                cur = mm.facts.get_current(self._MEMORY_USER,
+                                           str(attribute or 'legacy_note'))
+            return ok({'enabled': True, 'current': cur, 'history': hist})
+        except Exception as e:
+            return err('as-of 查询失败: %s' % e)
 
     def memory_retrieve(self, query, limit=5):
         """W11：关键词检索 js_api（前端探活/测试用；items 带 kind）。

@@ -21511,8 +21511,10 @@ function memoryPanelInit() {
     '<div class="set-hint" style="margin:2px 0 8px;">' +
       'Harbor 记住你手动保存的偏好与事实（每条都由你确认，不会自动记忆）。' +
       '数据存于 <code>~/.glm-chat/memory.json</code>（独立文件，不碰 config.json），' +
-      '最多保留最近 200 条。' +
+      '最多保留最近 200 条。删除会话不会删除这些记忆；' +
+      '扩展记忆库（memory.db）为独立增强层，可随时整体清除。' +
     '</div>' +
+    '<div class="set-hint" id="mmDbStat" style="margin:0 0 6px;color:var(--text-2);">扩展记忆库：读取中…</div>' +
     '<div class="provider-row" style="align-items:center;gap:8px;">' +
       '<input class="mm-input" id="mmSearch" placeholder="搜索记忆（本地过滤）" maxlength="100" ' +
         'style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);' +
@@ -21533,7 +21535,31 @@ function memoryPanelInit() {
     '<div class="mm-error" id="mmError" style="display:none;margin-top:8px;"></div>';
   grid.appendChild(block);
   memoryPanelWire();
+  memoryDbStatRefresh();
   return true;
+}
+/* R38：扩展记忆库（memory.db v2）状态行——引擎不可用/未启用时如实降级说明，
+ * 面板主功能（memory.json legacy 契约）不受影响。 */
+function memoryDbStatRefresh() {
+  const el = mmEl('mmDbStat');
+  if (!el) return;
+  const done = () => {
+    if (typeof mmCallApi !== 'function') { el.textContent = '扩展记忆库：未启用'; return; }
+    mmCallApi('memory_stats', [], 8000).then(raw => {
+      let d = null;
+      try { d = JSON.parse(raw || '{}'); } catch (e) {}
+      if (!d || !d.enabled) {
+        el.textContent = '扩展记忆库：未启用（记忆仍存 memory.json，功能不受影响）';
+        return;
+      }
+      el.innerHTML = '扩展记忆库：<b>已启用</b>（memory.db · ' +
+        escapeHtml(String(d.journal || 'wal').toUpperCase()) + '）· 事实 ' +
+        escapeHtml(String(d.facts || 0)) + ' · 画像 ' +
+        escapeHtml(String(d.profiles || 0)) + ' · 审计事件 ' +
+        escapeHtml(String(d.events || 0)) + ' · 完整性 ' + (d.integrity ? '✓' : '✗');
+    }).catch(() => { el.textContent = '扩展记忆库：状态未知'; });
+  };
+  if (typeof setTimeout === 'function') setTimeout(done, 0); else done();
 }
 function memoryPanelWire() {
   const add = mmEl('mmAddBtn');

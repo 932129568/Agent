@@ -55,7 +55,7 @@ class ServiceContainer:
         'mcp_config', 'mcp', 'local', 'webdav', 'sandbox', 'software',
         'hybrid', 'reader', 'model_prefs', 'checkpoints', 'search', 'driver',
         'plans', 'session', 'operation', 'task_registry', 'scheduler', 'native_ui', 'expert',
-        'group_files',
+        'group_files', 'memory_db',
     )
     API_ALIASES = {
         '_runtime': 'runtime', '_config': 'config', '_workspace': 'workspace',
@@ -69,6 +69,7 @@ class ServiceContainer:
         '_plan': 'plans', '_session': 'session', '_operation': 'operation',
         '_registry': 'task_registry', '_scheduler': 'scheduler', '_native_ui': 'native_ui',
         '_expert': 'expert', '_group_files': 'group_files',
+        '_memory_db': 'memory_db',
     }
 
     def __init__(self):
@@ -86,6 +87,10 @@ class ServiceContainer:
         paths.ensure_dirs()
         self.runtime = RuntimeState()
         self.config = ConfigService()
+        # R38（记忆 v2 接入）：SQLite 四层记忆库渐进增强层——引擎不可用整体降级，
+        # legacy memory.json 四 js_api 契约不接管。
+        from ..domains.memory.db_service import MemoryDbService
+        self.memory_db = MemoryDbService(logger=self._log)
         self.workspace = WorkspaceService(self.runtime, self.config)
         self.toolcache = ToolcacheService()
         self.guard = GuardService()
@@ -175,6 +180,11 @@ class ServiceContainer:
             ('local_proxy', shutdown_proxy),
             ('driver', self.driver.shutdown),
             ('mcp', self.mcp.shutdown),
+            # R38：memory_db 关闭用惰性取属——v13 生命周期测试以未装配容器
+            # 驱动 shutdown（无 memory_db 属性），直接引用会在元组构造期炸。
+            ('memory_db', lambda: (
+                getattr(self, 'memory_db', None) is not None
+                and self.memory_db.close()) or None),
         ):
             try:
                 result = closer()

@@ -18,6 +18,9 @@ SESSIONS_PATH = os.path.join(CONFIG_DIR, 'sessions.json')
 # SESSIONS_PATH（~/.glm-chat/sessions.json）。
 HISTORY_FILE = os.path.join(CONFIG_DIR, 'history.json')
 MEMORY_PATH = os.path.join(CONFIG_DIR, 'memory.json')
+# R38（记忆模块 v2 接入）：SQLite 四层记忆库（R36 开发文档 §8.1；memory.json
+# 为 legacy 契约存储保持不动，本库为渐进增强层；迁移器一次性导入 legacy 条目）。
+MEMORY_DB_PATH = os.path.join(CONFIG_DIR, 'memory.db')
 SESSION_WS_FILE = os.path.join(CONFIG_DIR, 'session_ws.json')
 RECENT_WS_FILE = os.path.join(CONFIG_DIR, 'recent_ws.json')
 WS_ENABLED_FILE = os.path.join(CONFIG_DIR, 'ws_enabled.json')
