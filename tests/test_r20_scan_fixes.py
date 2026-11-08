@@ -5,6 +5,7 @@ from pathlib import Path
 
 from test_connect_merge import _run_node
 
+from helpers.frontend import read_frontend_source
 ROOT = Path(__file__).resolve().parent.parent
 GROUP = ROOT / 'frontend' / 'src' / 'group' / 'group.js'
 
@@ -68,8 +69,8 @@ def test_trust_sets_keyed_by_run_sid():
 
 def test_pending_shots_tagged_by_session():
     ex = (ROOT / 'frontend' / 'src' / 'agent' / 'tool-executor.js').read_text(encoding='utf-8')
-    rc = (ROOT / 'frontend' / 'src' / 'agent' / 'run-controller.js').read_text(encoding='utf-8')
-    ctl = (ROOT / 'frontend' / 'src' / 'sessions' / 'controller.js').read_text(encoding='utf-8')
+    rc = read_frontend_source(str(ROOT), 'frontend/src/agent/run-controller.js')
+    ctl = read_frontend_source(str(ROOT), 'frontend/src/sessions/controller.js')
     assert 'pendingShots.push({ sid:' in ex
     assert 'x.sid === String(s.id)' in rc                     # 消费按会话过滤
     assert '!(run.__sentShots || []).includes(x.comp)' in rc  # 发送后精确出队

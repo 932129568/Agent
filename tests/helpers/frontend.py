@@ -2,6 +2,7 @@
 """Shared manifest-backed frontend source lookup for tests."""
 import json
 import os
+from functools import lru_cache
 
 
 # Mechanical migration aliases for legacy test basenames; never used by the builder.
@@ -66,20 +67,30 @@ LEGACY_SCRIPT_PATHS = {
 }
 
 
-# R28 模块级重构：大模块拆出「前置子模块」后，vm 沙箱仍按单文件/旧名加载，
-# 需要按加载顺序把「前置依赖 + 原模块」一起提供，才能还原拆分前的完整符号面。
-# 键为原模块路径，值为必须先行加载的前置子模块路径列表。
-MODULE_FAMILIES = {
-    'frontend/src/settings/connection.js': ['frontend/src/settings/connection-presets.js'],
-    'frontend/src/search/panel.js': ['frontend/src/search/panel-state.js'],
-    'frontend/src/agent/run-controller.js': ['frontend/src/agent/run-controller-utils.js'],
-    'frontend/src/sessions/controller.js': ['frontend/src/sessions/controller-meta.js'],
-}
+# R28/R29 模块级重构：大模块拆出「前置子模块」后，vm 沙箱仍按单文件/旧名加载，
+# 需要按 manifest 顺序把「前置依赖 + 原模块」一起提供，还原拆分前的完整符号面。
+# R29 结构升级：从 manifest **自动推导**，消除 R28 手工清单的维护成本与顺序隐患。
+# 规则：同目录、文件名为 `<原模块 stem>-*`、且在原模块之前加载的模块即前置族成员。
+# 实测与 R28 手工清单完全一致（4 族），且顺序严格等于构建顺序。
 
 
-def family_paths(relative):
-    """模块族按加载顺序的路径列表（前置依赖在前，原模块在后）。"""
-    return MODULE_FAMILIES.get(relative, []) + [relative]
+@lru_cache(maxsize=8)
+def _cached_script_paths(root):
+    return tuple(script_paths(root))
+
+
+def family_paths(root, relative):
+    """模块族按 manifest 加载顺序的路径列表（前置依赖在前，原模块在后）。"""
+    stem = os.path.basename(relative).rsplit('.', 1)[0]
+    parent = os.path.dirname(relative)
+    prefix = []
+    for path in _cached_script_paths(root):
+        if path == relative:
+            break
+        if (os.path.dirname(path) == parent
+                and os.path.basename(path).startswith(stem + '-')):
+            prefix.append(path)
+    return prefix + [relative]
 
 
 def load_manifest(root):
@@ -117,7 +128,7 @@ def read_frontend_source(root, name):
     """
     relative = resolve_script(root, name)
     parts = []
-    for rel in family_paths(relative):
+    for rel in family_paths(root, relative):
         with open(os.path.join(root, *rel.split('/')), 'r', encoding='utf-8') as source:
             parts.append(source.read())
     return '\n'.join(parts)
@@ -150,7 +161,7 @@ def frontend_node_map(root):
     """
     result = {}
     for relative in script_paths(root):
-        bundle = ','.join(family_paths(relative))
+        bundle = ','.join(family_paths(root, relative))
         result[relative] = bundle
         basename = relative.rsplit('/', 1)[-1]
         if basename in result and result[basename] != bundle:
@@ -158,7 +169,7 @@ def frontend_node_map(root):
         else:
             result[basename] = bundle
     for legacy, relative in LEGACY_SCRIPT_PATHS.items():
-        bundle = ','.join(family_paths(relative))
+        bundle = ','.join(family_paths(root, relative))
         if legacy in result and result[legacy] != bundle:
             result[legacy] = None
         else:

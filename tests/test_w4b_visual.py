@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from helpers.frontend import read_frontend_source
 ROOT = Path(__file__).resolve().parent.parent
 EXPECTED_SCENARIOS = {
     'plan-light-1280x720', 'mcp-dark-1280x720', 'memory-light-1280x720',
@@ -46,7 +47,7 @@ def test_w4b_focus_keyboard_and_aria_wiring():
     assert '_bindOverlayKeyboard(panel' in send
     assert 'aria-label="关闭通知"' in overlays
     attachments = (ROOT / 'frontend' / 'src' / 'chat' / 'attachments.js').read_text(encoding='utf-8')
-    sessions = (ROOT / 'frontend' / 'src' / 'sessions' / 'controller.js').read_text(encoding='utf-8')
+    sessions = read_frontend_source(str(ROOT), 'frontend/src/sessions/controller.js')
     assert 'aria-label="移除附件"' in attachments
     assert 'aria-label="删除会话"' in sessions
 

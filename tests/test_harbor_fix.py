@@ -32,6 +32,7 @@ import pytest
 from helpers.frontend import (LEGACY_SCRIPT_PATHS, frontend_node_map,
                               read_frontend_source, script_paths)
 
+from helpers.frontend import read_frontend_source
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NODE = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-alpha.0.0.0-win-x64\node.exe'
 SRC_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'src')
@@ -395,10 +396,18 @@ class TestNormalizeWiring:
         # 其余模块（会话存储/会话创建等，字段名恰好叫 messages；97-compact 是纯 user 压缩请求）
         not_send_body = {'65-session-store.js', '85-session-mgmt.js', '97-compact.js'}
         new_to_legacy = {new: old for old, new in LEGACY_SCRIPT_PATHS.items()}
+        # R29：controller.js 已拆出前置子模块，同族文件里的「会话创建」构造点
+        # 语义不变（非发送体），用 family_paths 自动覆盖，避免手工补白名单。
+        from helpers.frontend import family_paths
+        controller_family = {
+            p.rsplit('/', 1)[-1]
+            for p in family_paths(PROJECT_ROOT, 'frontend/src/sessions/controller.js')
+        }
         for name in script_paths(PROJECT_ROOT):
             short_name = name.rsplit('/', 1)[-1]
             legacy_name = new_to_legacy.get(name, short_name)
-            if legacy_name in covered or legacy_name in not_send_body:
+            if (legacy_name in covered or legacy_name in not_send_body
+                    or short_name in controller_family):
                 continue
             for lineno, line in enumerate(_fe(name).splitlines(), 1):
                 assert 'messages:' not in line, (
@@ -584,19 +593,19 @@ class TestStopButtonImmediate:
     """
 
     def test_source_has_user_stopped_flag(self):
-        src = open('frontend/src/agent/run-controller.js', encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, 'frontend/src/agent/run-controller.js')
         assert 'let userStopped = false;' in src
         assert 'userStopped = true;' in src
 
     def test_loop_checkpoints(self):
-        src = open('frontend/src/agent/run-controller.js', encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, 'frontend/src/agent/run-controller.js')
         checkpoint = 'if (userStopped || !agentRunCurrent(run))'
         assert checkpoint + " return { stop: true, finished: true, status: 'cancelled' };" in src, \
             'beforeRound 轮次检查点缺失'
         assert checkpoint + ' break;' in src, '工具批检查点缺失'
 
     def test_button_immediate_feedback(self):
-        src = open('frontend/src/agent/run-controller.js', encoding='utf-8').read()
+        src = read_frontend_source(PROJECT_ROOT, 'frontend/src/agent/run-controller.js')
         # 点击即置位 + 立即按钮态 + toast（run.stopHandler 支持切回会话时复用）
         i = src.find('run.stopHandler = () => {')
         assert i > 0

@@ -13,6 +13,9 @@
   5. **源码行多重集哈希**：所有 frontend/src/**/*.js 的非空行 strip 后排序拼接的
      sha256。拆分只把行从一个文件移到另一个文件，只要不增删/改写任何一行，该值
      恒定 —— 这是「代码零改写、仅重新编排归属」的强证据。
+  6. **逐函数定义体哈希**（R29 新增）：由 tools/function_graph.py 按顶层声明切段，
+     对每个符号的定义体（剥除纯注释行/空行后）取 sha256。相比第 5 类的「全体行
+     多重集」，本类能定位到**具体哪个函数**被改写，实现逐函数契约差分。
 
 允许变化的项（记录但不判失败）：module_count、symbols 的 file 归属、styles 列表。
 
@@ -72,6 +75,18 @@ def _html_contract():
     }
 
 
+def _function_def_hashes():
+    """逐函数定义体哈希（第 6 类契约面），复用 function_graph 的切段口径。"""
+    tools = str(ROOT / 'tools')
+    sys.path.insert(0, tools)
+    try:
+        import function_graph as fg
+        return {name: meta['def_hash']
+                for name, meta in fg.collect()['defs'].items()}
+    finally:
+        sys.path.remove(tools)
+
+
 def collect():
     manifest = json.loads(MANIFEST.read_text(encoding='utf-8'))
     symbols = {}
@@ -89,10 +104,12 @@ def collect():
         'api_py_sha256': hashlib.sha256(API_PY.read_bytes()).hexdigest(),
         'html': _html_contract(),
         'source_line_multiset_sha256': _source_line_multiset(),
+        'function_defs': dict(sorted(_function_def_hashes().items())),
     }
 
 
-FROZEN = ('ui', 'api_version', 'api_py_sha256', 'html', 'source_line_multiset_sha256')
+FROZEN = ('ui', 'api_version', 'api_py_sha256', 'html',
+          'source_line_multiset_sha256', 'function_defs')
 
 
 def compare(base, cur):
@@ -146,7 +163,7 @@ def main():
     if args.compare:
         base = json.loads(Path(args.compare).read_text(encoding='utf-8'))
         issues, notes, moved = compare(base, cur)
-        lines = ['# R28 模块级重构 · 独立契约差分', '',
+        lines = ['# Harbor 模块级重构 · 独立契约差分', '',
                  '结论: **%s**' % ('零漂移 PASS' if not issues else '漂移 FAIL'), '']
         lines += ['## 说明项'] + ['- ' + n for n in notes] + ['']
         if moved:

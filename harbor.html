@@ -9905,7 +9905,7 @@ let connectIdentifyTimer = null;  // 防抖定时器
  * 只记与预设默认值不同的值，避免把默认值也塞进记忆。会话级（不落盘）。 */
 const PRESET_BASE_MEMO = {};
 
-/* ===== frontend/src/settings/connection.js ===== */
+/* ===== frontend/src/settings/connection-base.js ===== */
 
 /* ================= 预设元信息 ================= */
 
@@ -9993,18 +9993,6 @@ function connectHotModels(url) {
 }
 
 /** ctx 徽标文本（'32k' / '200k'）；无窗口信息 → ''。 */
-function connectCtxBadge(meta) {
-  const ctx = parseInt((meta || {}).ctx_window, 10) || 0;
-  if (ctx <= 0) return '';
-  // 修复 ㊾（三轮）：改走统一 formatCtx()（80-utils 定义；typeof 守卫保 vm 单模块
-  // 沙箱只加载本文件时可测，兜底与 formatCtx 同口径）
-  return (typeof formatCtx === 'function') ? formatCtx(ctx)
-    : (ctx >= 1024 ? Math.round(ctx / 1024) + 'k' : String(ctx));
-}
-
-/* ================= DOM 取值 ================= */
-
-/** Base URL 输入值（去空白）。 */
 function connectBaseUrl() {
   const el = document.getElementById('providerBase');
   return el ? String(el.value || '').trim() : '';
@@ -10107,6 +10095,128 @@ function connectSetButtonLoading(btn, on, text) {
 /** 刷新模型下拉：可选「智能档」首项 + 分组标题 + 模型项（可带 ctx 徽标）+
  *  末项固定「✎ 手动输入模型名…」。
  *  opts: {auto:boolean, group:string, keep:string} */
+function connectSetPickManual(on) {
+  const pick = document.getElementById('cmPick');
+  if (!pick || !pick.classList) return;
+  pick.classList.toggle('manual', !!on);
+}
+
+/** 进入手动输入态（识别失败兜底 / 用户选「✎ 手动输入模型名…」）。 */
+function connectIdentifyLabel(id) {
+  const meta = connectPresetMeta(id || connectCurrentPreset());
+  if (meta.local) return '↻ 探测本机';
+  if (meta.glm_capable) return '↻ 获取模型';
+  if (meta.catalog) return '↻ 探测目录';   // 实现 v1.6 T2：GitHub Models 目录探测
+  return '↻ 识别模型';
+}
+
+/** 同步应用预设（唯一的「端点开关」入口；无动画路径，配置回填可直接调用）。
+ *  opts: {base, key, models, keepModel, prices, quiet} */
+function connectCancelIdentify() {
+  clearTimeout(connectIdentifyTimer);
+  connectIdentifySeq++;
+}
+
+/* ================= 测试连接（云端 Key / 本地免 Key 统一入口）================= */
+
+async function connectTestNow() {
+  const btn = document.getElementById('providerTestBtn');
+  const st = document.getElementById('providerTestStatus');
+  if (btn && btn.disabled) return;
+  const meta = connectPresetMeta(connectCurrentPreset());
+  const base = connectBaseUrl();
+  const key = connectApiKeyInput();
+  const model = connectModelValue();
+  const done = (ok, msg) => {
+    if (st) {
+      st.textContent = (ok ? '✓ ' : '✗ ') + msg;
+      st.className = 'cm-status ' + (ok ? 'ok' : 'err');
+      st.style.color = ok ? 'var(--ok)' : 'var(--err)';
+    }
+    toast((ok ? '连接成功：' : '连接失败：') + msg, ok ? 'ok' : 'err', { stay: !ok });
+  };
+  connectSetButtonLoading(btn, true, '测试中');
+  if (st) { st.textContent = '正在测试连接…'; st.className = 'cm-status'; st.style.color = ''; }
+  try {
+    if (!base) { done(false, '请先填写 Base URL'); return; }
+    if (!/^https?:\/\//i.test(base)) { done(false, 'Base URL 需以 http:// 或 https:// 开头'); return; }
+    if (meta.key_required && !key) { done(false, '请先填写 API Key'); return; }   // 修复（四轮）：统一 key_required 判据
+    if (!model) { done(false, '请先选择或手动输入模型名'); return; }
+    const local = !!meta.local;
+    const raw = await callApi('test_provider_endpoint',
+      [base, local ? '' : key, model, local ? 30 : 15, local], local ? 90000 : 20000);
+    const r = JSON.parse(raw || '{}');
+    if (r && r.ok && r.state === 'loading') done(true, r.message || '模型加载中');
+    else if (r && r.ok) done(true, (r.reply ? '回复：' + r.reply : '端点可达' + (local ? ' · 本地 · 0 费用' : '')));
+    else {
+      // 修复（2026-10-21 P0）：1211 等模型不可用时后端顺带拉了可用清单
+      // （available_models）——展示出来，用户点一次就知道能换什么
+      let msg = (r && r.error) || '端点不可达';
+      if (r && Array.isArray(r.available_models) && r.available_models.length) {
+        msg += '\n可用模型（' + r.available_models.length + '）：'
+          + r.available_models.slice(0, 8).join('、')
+          + (r.available_models.length > 8 ? ' 等' : '');
+      }
+      done(false, msg);
+      if (r && Array.isArray(r.available_models) && r.available_models.length) {
+        // 一键填入第一个可用模型（用户可改）——降低「知道能换什么但懒得找」的摩擦
+        const inp = document.getElementById('cmManualInput');
+        if (inp && !inp.value) inp.value = r.available_models[0];
+      }
+    }
+  } catch (e) {
+    done(false, (e && e.message) || '请求失败');
+  } finally {
+    connectSetButtonLoading(btn, false);
+  }
+}
+
+/** 旧签名兼容（v1.2 服务商测试通道）：统一走合并块的测试连接。 */
+async function testProviderNow() {
+  return connectTestNow();
+}
+
+/* ================= 配置读写（单一事实源 provider_*）================= */
+
+/** 采集 provider_* 键组（provider_name = 预设 id）。 */
+function connectCollectConfig() {
+  return {
+    provider_name: connectCurrentPreset(),
+    provider_base_url: connectBaseUrl(),
+    provider_key: connectApiKeyInput(),
+    provider_model: connectModelValue(),
+    provider_prices: connectPrices()
+  };
+}
+
+/** 从 config.json 回填合并块（含 v1.5 本地 config 与 v1.2 仅有 api_key 的旧配置迁移）。
+ *  seed 一次性且严格幂等：迁移落盘后 config 自带「本地系预设 + provider_base_url」，
+ *  再次 boot 时 alreadyLocal=true → 不再进入迁移分支、不再落盘（QA 修正 1）。 */
+function syncProviderUiState() {
+  const wrap = document.getElementById('providerFields');
+  if (wrap && wrap.style) wrap.style.display = '';
+}
+
+/** 旧签名兼容：保存后刷新运行态。 */
+function collectProviderConfig() {
+  return connectCollectConfig();
+}
+
+/* ================= 初始化（boot 调用）================= */
+
+/* ===== frontend/src/settings/connection.js ===== */
+function connectCtxBadge(meta) {
+  const ctx = parseInt((meta || {}).ctx_window, 10) || 0;
+  if (ctx <= 0) return '';
+  // 修复 ㊾（三轮）：改走统一 formatCtx()（80-utils 定义；typeof 守卫保 vm 单模块
+  // 沙箱只加载本文件时可测，兜底与 formatCtx 同口径）
+  return (typeof formatCtx === 'function') ? formatCtx(ctx)
+    : (ctx >= 1024 ? Math.round(ctx / 1024) + 'k' : String(ctx));
+}
+
+/* ================= DOM 取值 ================= */
+
+/** Base URL 输入值（去空白）。 */
 function connectFillModels(list, opts) {
   opts = opts || {};
   const sel = document.getElementById('modelSelect');
@@ -10172,13 +10282,6 @@ function connectSyncAfterModelFill(sel) {
 }
 
 /** 手动态切换（.cm-pick.manual 显隐由 CSS 决定）。 */
-function connectSetPickManual(on) {
-  const pick = document.getElementById('cmPick');
-  if (!pick || !pick.classList) return;
-  pick.classList.toggle('manual', !!on);
-}
-
-/** 进入手动输入态（识别失败兜底 / 用户选「✎ 手动输入模型名…」）。 */
 function connectEnterManual(prefill) {
   const sel = document.getElementById('modelSelect');
   if (sel) sel.value = CONNECT_MANUAL_VALUE;
@@ -10246,16 +10349,6 @@ function connectUpdateAdvanced() {
 }
 
 /** 识别 / 探测按钮文案（本地系 = 探测本机；GLM = 获取模型；目录型 = 探测目录）。 */
-function connectIdentifyLabel(id) {
-  const meta = connectPresetMeta(id || connectCurrentPreset());
-  if (meta.local) return '↻ 探测本机';
-  if (meta.glm_capable) return '↻ 获取模型';
-  if (meta.catalog) return '↻ 探测目录';   // 实现 v1.6 T2：GitHub Models 目录探测
-  return '↻ 识别模型';
-}
-
-/** 同步应用预设（唯一的「端点开关」入口；无动画路径，配置回填可直接调用）。
- *  opts: {base, key, models, keepModel, prices, quiet} */
 function connectApplyPresetNow(key, opts) {
   opts = opts || {};
   const presetId = PRESETS[key] ? key : 'custom';
@@ -10452,86 +10545,6 @@ async function connectIdentifyNow(fromClick) {
 }
 
 /** 取消进行中的识别（切预设 / 弃用时调用）：序号递增使旧请求全部失效。 */
-function connectCancelIdentify() {
-  clearTimeout(connectIdentifyTimer);
-  connectIdentifySeq++;
-}
-
-/* ================= 测试连接（云端 Key / 本地免 Key 统一入口）================= */
-
-async function connectTestNow() {
-  const btn = document.getElementById('providerTestBtn');
-  const st = document.getElementById('providerTestStatus');
-  if (btn && btn.disabled) return;
-  const meta = connectPresetMeta(connectCurrentPreset());
-  const base = connectBaseUrl();
-  const key = connectApiKeyInput();
-  const model = connectModelValue();
-  const done = (ok, msg) => {
-    if (st) {
-      st.textContent = (ok ? '✓ ' : '✗ ') + msg;
-      st.className = 'cm-status ' + (ok ? 'ok' : 'err');
-      st.style.color = ok ? 'var(--ok)' : 'var(--err)';
-    }
-    toast((ok ? '连接成功：' : '连接失败：') + msg, ok ? 'ok' : 'err', { stay: !ok });
-  };
-  connectSetButtonLoading(btn, true, '测试中');
-  if (st) { st.textContent = '正在测试连接…'; st.className = 'cm-status'; st.style.color = ''; }
-  try {
-    if (!base) { done(false, '请先填写 Base URL'); return; }
-    if (!/^https?:\/\//i.test(base)) { done(false, 'Base URL 需以 http:// 或 https:// 开头'); return; }
-    if (meta.key_required && !key) { done(false, '请先填写 API Key'); return; }   // 修复（四轮）：统一 key_required 判据
-    if (!model) { done(false, '请先选择或手动输入模型名'); return; }
-    const local = !!meta.local;
-    const raw = await callApi('test_provider_endpoint',
-      [base, local ? '' : key, model, local ? 30 : 15, local], local ? 90000 : 20000);
-    const r = JSON.parse(raw || '{}');
-    if (r && r.ok && r.state === 'loading') done(true, r.message || '模型加载中');
-    else if (r && r.ok) done(true, (r.reply ? '回复：' + r.reply : '端点可达' + (local ? ' · 本地 · 0 费用' : '')));
-    else {
-      // 修复（2026-10-21 P0）：1211 等模型不可用时后端顺带拉了可用清单
-      // （available_models）——展示出来，用户点一次就知道能换什么
-      let msg = (r && r.error) || '端点不可达';
-      if (r && Array.isArray(r.available_models) && r.available_models.length) {
-        msg += '\n可用模型（' + r.available_models.length + '）：'
-          + r.available_models.slice(0, 8).join('、')
-          + (r.available_models.length > 8 ? ' 等' : '');
-      }
-      done(false, msg);
-      if (r && Array.isArray(r.available_models) && r.available_models.length) {
-        // 一键填入第一个可用模型（用户可改）——降低「知道能换什么但懒得找」的摩擦
-        const inp = document.getElementById('cmManualInput');
-        if (inp && !inp.value) inp.value = r.available_models[0];
-      }
-    }
-  } catch (e) {
-    done(false, (e && e.message) || '请求失败');
-  } finally {
-    connectSetButtonLoading(btn, false);
-  }
-}
-
-/** 旧签名兼容（v1.2 服务商测试通道）：统一走合并块的测试连接。 */
-async function testProviderNow() {
-  return connectTestNow();
-}
-
-/* ================= 配置读写（单一事实源 provider_*）================= */
-
-/** 采集 provider_* 键组（provider_name = 预设 id）。 */
-function connectCollectConfig() {
-  return {
-    provider_name: connectCurrentPreset(),
-    provider_base_url: connectBaseUrl(),
-    provider_key: connectApiKeyInput(),
-    provider_model: connectModelValue(),
-    provider_prices: connectPrices()
-  };
-}
-
-/** 从 config.json 回填合并块（含 v1.5 本地 config 与 v1.2 仅有 api_key 的旧配置迁移）。
- *  seed 一次性且严格幂等：迁移落盘后 config 自带「本地系预设 + provider_base_url」，
- *  再次 boot 时 alreadyLocal=true → 不再进入迁移分支、不再落盘（QA 修正 1）。 */
 function connectLoadFromConfig(cfg) {
   cfg = cfg || {};
   const legacyKey = String(cfg.api_key || '').trim();
@@ -10598,24 +10611,12 @@ function loadProviderUI(cfg) {
 }
 
 /** 旧签名兼容：合并后无「启用端点」勾选，字段常显（保留函数供旧调用点调用）。 */
-function syncProviderUiState() {
-  const wrap = document.getElementById('providerFields');
-  if (wrap && wrap.style) wrap.style.display = '';
-}
-
-/** 旧签名兼容：保存后刷新运行态。 */
 function applyProviderConfig() {
   connectSyncState();
   if (typeof updateBrandModel === 'function') updateBrandModel();
 }
 
 /** 旧签名兼容：采集 provider_* 键组。 */
-function collectProviderConfig() {
-  return connectCollectConfig();
-}
-
-/* ================= 初始化（boot 调用）================= */
-
 function connectInit() {
   const on = (id, ev, fn) => {
     const el = document.getElementById(id);
@@ -14671,7 +14672,7 @@ function fillMissingToolResults(s, assistantMsg) {
   }
 }
 
-/* ===== frontend/src/agent/run-controller.js ===== */
+/* ===== frontend/src/agent/run-controller-base.js ===== */
 
 /* ================= v1.8.0 C 域：人工接管等待态（联调规范 §2.4） =================
  * executeToolRaw 检出 CAPTCHA_REQUIRED → fail-fast 返回带 suspended:true 的
@@ -14710,6 +14711,36 @@ function harborTakeoverAwaitTerminal(shouldAbort) {
     }, 500);
   });
 }
+let __agentRunSeq = 0;
+/* P0-3：并行 run 注册表与状态访问器（Map<sessionId, run>——run.id 为唯一写者，
+ * 每 run 只写自己 session 的 runStatus 字段（R8 竞态防线）。 */
+const __agentRuns = new Map();
+
+/** 显式「并行运行」入口（Q5）：对指定会话启动 run 而不取消其他会话在途 run。 */
+function getActiveRunSid() {
+  return __agentActiveRun && !__agentActiveRun.cancelled ? __agentActiveRun.sessionId : null;
+}
+
+/** 全部在途 run 的快照（多任务面板数据源——前端本地运行时态，无新增 js_api）。 */
+function getActiveRuns() {
+  return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
+    sessionId: r.sessionId, title: r.session.title || '', status: r.status,
+    parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
+  }));
+}
+
+/** P0-3（Q5）：显式「并行运行」入口（React 岛按钮调用）——对指定会话启动 run
+ * 而不取消其他会话在途 run；找不到会话/密钥时静默不动作（不破坏现有 UI）。 */
+function harborStopRun(sessionId) {
+  const run = __agentRuns.get(sessionId);
+  if (!run || run.cancelled) return;
+  run.cancelled = true;
+  try { if (run.abortController) run.abortController.abort(); } catch (e) {}
+}
+
+let __agentActiveRun = null;
+
+/* ===== frontend/src/agent/run-controller.js ===== */
 async function harborMaybeAwaitTakeover(result, toolDiv, label) {
   let d = null;
   try { d = JSON.parse(result); } catch (e) { return result; }
@@ -14771,31 +14802,11 @@ function planFinishIfNatural(userStopped, naturalDone) {
 
 /* 请求所有权：每次生成都有独立 run；切换/新建会话只撤销所有权，
  * 不强行杀死底层 RPC。旧 run 之后不得再写会话、全局状态或新 run 的 UI。 */
-let __agentRunSeq = 0;
-/* P0-3：并行 run 注册表与状态访问器（Map<sessionId, run>——run.id 为唯一写者，
- * 每 run 只写自己 session 的 runStatus 字段（R8 竞态防线）。 */
-const __agentRuns = new Map();
-
-/** 显式「并行运行」入口（Q5）：对指定会话启动 run 而不取消其他会话在途 run。 */
 async function runAgentLoopParallel(s, apiKey) {
   return runAgentLoop(s, apiKey, { parallel: true });
 }
 
 /** 当前视窗 run 的 sessionId（单活跃兼容；无 run 返回 null——UI 调用不带 header）。 */
-function getActiveRunSid() {
-  return __agentActiveRun && !__agentActiveRun.cancelled ? __agentActiveRun.sessionId : null;
-}
-
-/** 全部在途 run 的快照（多任务面板数据源——前端本地运行时态，无新增 js_api）。 */
-function getActiveRuns() {
-  return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
-    sessionId: r.sessionId, title: r.session.title || '', status: r.status,
-    parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
-  }));
-}
-
-/** P0-3（Q5）：显式「并行运行」入口（React 岛按钮调用）——对指定会话启动 run
- * 而不取消其他会话在途 run；找不到会话/密钥时静默不动作（不破坏现有 UI）。 */
 async function harborStartParallelRun(sessionId) {
   try {
     const s = (typeof getSession === 'function' ? getSession(sessionId) : null)
@@ -14808,14 +14819,6 @@ async function harborStartParallelRun(sessionId) {
 }
 
 /** 多任务面板的停止按钮：仅取消指定会话的 run（不影响其他并行实例）。 */
-function harborStopRun(sessionId) {
-  const run = __agentRuns.get(sessionId);
-  if (!run || run.cancelled) return;
-  run.cancelled = true;
-  try { if (run.abortController) run.abortController.abort(); } catch (e) {}
-}
-
-let __agentActiveRun = null;
 function agentRunCurrent(run) {
   if (typeof RunRegistry !== 'undefined') return RunRegistry.isCurrent(run);
   // P0-3：按会话注册表判定活跃（并行 run 各自独立——不再全局唯一活跃指针）；
@@ -21986,33 +21989,7 @@ const RUN_STATUS_META = {
   failed: { label: '运行失败', title: '会话运行失败' },
 };
 
-/* ===== frontend/src/sessions/controller.js ===== */
-
-async function continueInNewSession() {
-  const s = getCurrentSession();
-  const btn = document.getElementById('continueNewBtn');
-  if (!s || !s.messages.length) { newSession(); return; }
-  const apiKey = effectiveApiKey();
-  if (!apiKey) { toast('请先设置 API Key', 'warn'); document.getElementById('settingsPanel').classList.add('show'); return; }
-  if (btn) btn.textContent = '⏳ 总结中…';
-  // 实现 v1.6 W28：生成中 compactNow 会静默跳过压缩（isStreaming 早退），原流程
-  // 仍继续 newSession() → 用户在新会话丢失全部上下文且无感知。生成中直接中止并明示。
-  if (isStreaming) {
-    toast('AI 正在生成中，稍后再「新对话继续」（避免未压缩就开新会话丢失上下文）', 'warn');
-    if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
-    return;
-  }
-  try { await compactNow(s, apiKey, { quiet: false }); }
-  catch (e) {
-    // 修复 W25（二轮）：压缩失败不再静默吞——否则用户在新会话丢失全部上下文且无察觉
-    toast('历史压缩失败，已中止开新会话（当前对话未受影响）：' + (e && e.message || e), 'err');
-    if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
-    return;
-  }
-  newSession();
-  if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
-  document.getElementById('userInput').focus();
-}
+/* ===== frontend/src/sessions/controller-base.js ===== */
 function normalizeProjects(raw) {
   let arr = [];
   try {
@@ -22053,27 +22030,6 @@ function projectById(id) {
 function _projectSessionCount(projectId) {
   return sessions.filter(s => s.projectId === projectId).length;
 }
-function _setNewChatScreenVisible(visible) {
-  const screen = document.getElementById('newChatScreen');
-  const chat = document.getElementById('chatContainer');
-  const inputArea = document.getElementById('chatInputArea');
-  const runArea = document.getElementById('expertRunArea');
-  if (screen) screen.hidden = !visible;
-  if (chat) chat.hidden = !!visible;
-  if (inputArea) inputArea.hidden = !!visible;
-  if (runArea) runArea.hidden = !!visible;
-  if (visible) renderNewChatHistory();
-}
-function openNewChatScreen() {
-  // New-chat screen is a selection surface, not a blank session. Reuse the
-  // existing reset path so streaming/attachments/trust are cleared safely.
-  if (typeof closeSidebarDrawer === 'function') closeSidebarDrawer();
-  newSession();
-  _setNewChatScreenVisible(true);
-  renderNewChatHistory();
-  const focus = document.getElementById('newChatNewTaskBtn');
-  if (focus && focus.focus) { try { focus.focus(); } catch (e) {} }
-}
 function _newChatGroupsData() {
   const sorted = [...sessions].filter(s => s && s.id)
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -22099,28 +22055,6 @@ function _runStatusHtml(s) {
   const label = status === 'working' ? `<span class="session-status-label">${meta.label}</span>` : '';
   return `<span class="session-status ${status}" role="img" title="${meta.title}" aria-label="${meta.title}">` +
     `<span class="session-status-dot" aria-hidden="true"></span>${label}</span>`;
-}
-function setSessionRunStatus(sessionOrId, status) {
-  if (!RUN_STATUS_META[status]) return false;
-  const session = (sessionOrId && typeof sessionOrId === 'object')
-    ? sessionOrId : sessions.find(s => s.id === sessionOrId);
-  if (!session) return false;
-  if (session.runStatus === status) return true;
-  session.runStatus = status;
-  try { saveSessions(); } catch (e) {}
-  try { renderSessionList(); } catch (e) {}
-  return true;
-}
-function migrateWorkingRunStatuses() {
-  let migrated = 0;
-  sessions.forEach(s => {
-    if (s && s.runStatus === 'working') { s.runStatus = 'paused'; migrated += 1; }
-  });
-  if (migrated) {
-    try { saveSessions(); } catch (e) {}
-    try { renderSessionList(); } catch (e) {}
-  }
-  return migrated;
 }
 function _sessionItemHtml(s, showActions) {
   const acts = showActions ? `<span class="session-acts">
@@ -22171,6 +22105,467 @@ function _sessionGroupsHtml(options) {
     html += '</section>';
   }
   return html;
+}
+function _projectError(text) {
+  const el = document.getElementById('projectError');
+  if (el) el.textContent = text || '';
+}
+function openProjectModal() {
+  const modal = document.getElementById('projectModal');
+  if (!modal) return;
+  const name = document.getElementById('projectNameInput');
+  const workspace = document.getElementById('projectWorkspaceInput');
+  if (name) name.value = '';
+  if (workspace) workspace.value = '';
+  _projectError('');
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  setTimeout(() => { if (name && name.focus) { try { name.focus(); } catch (e) {} } }, 0);
+}
+function closeProjectModal() {
+  const modal = document.getElementById('projectModal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+}
+async function pickProjectFolder() {
+  try {
+    const raw = JSON.parse(await callApi('pick_folder', [currentSessionId], 60000) || '{}');
+    if (raw && raw.ok && raw.path) {
+      const input = document.getElementById('projectWorkspaceInput');
+      if (input) input.value = raw.path;
+      _projectError('');
+    } else if (raw && raw.err) {
+      _projectError('目录选择不可用：' + raw.err + '（可手动输入路径）');
+    }
+  } catch (e) { _projectError('目录选择失败，可手动输入路径'); }
+}
+function virtualChatWindowRange(prefix, scrollTop, vh, buffer) {
+  const n = prefix.length - 1;
+  if (!n) return { start: 0, end: 0 };
+  const lo = Math.max(0, scrollTop - vh);
+  const hi = scrollTop + vh * 2;
+  let start = 0, end = n;
+  for (let i = 0; i < n; i++) { if (prefix[i + 1] > lo) { start = i; break; } }
+  for (let i = start; i < n; i++) { if (prefix[i] >= hi) { end = i + 1; break; } }
+  return { start: Math.max(0, start - buffer), end: Math.min(n, end + buffer) };
+}
+
+/** search.js 判据：当前容器是否处于虚拟列表态。 */
+function virtualChatActive(box) {
+  return !!(box && box.__virtualChat);
+}
+
+/** 启用虚拟列表；不满足条件返回 null（短会话 / 群聊 / 无容器）。 */
+function virtualChatMount(box, s) {
+  const MIN_ROWS = 120, BUFFER = 6, MIN_H = 24;
+  if (!box || !box.appendChild || !box.children || !box.children.length) return null;
+  if (s && s.group) return null;                       // 群聊逐条对位，不虚拟化
+  const rows = Array.prototype.slice.call(box.children);
+  if (rows.length < MIN_ROWS) return null;
+  const heights = rows.map(r => Math.max(MIN_H, Number(r.offsetHeight) || MIN_H));
+  const prefix = [0];
+  for (let i = 0; i < heights.length; i++) prefix.push(prefix[i] + heights[i]);
+  const top = document.createElement('div');
+  const bottom = document.createElement('div');
+  top.className = 'virtual-spacer';
+  bottom.className = 'virtual-spacer';
+  top.dataset.virtualSpacer = 'top';
+  bottom.dataset.virtualSpacer = 'bottom';
+  top.style.width = '100%'; bottom.style.width = '100%';
+  top.style.pointerEvents = 'none'; bottom.style.pointerEvents = 'none';
+  const state = {
+    box: box, rows: rows, heights: heights, prefix: prefix,
+    top: top, bottom: bottom, start: -1, end: -1,
+    apply: null, onScroll: null,
+  };
+  const recalcPrefix = () => {
+    state.prefix = [0];
+    for (let i = 0; i < state.heights.length; i++) {
+      state.prefix.push(state.prefix[i] + state.heights[i]);
+    }
+  };
+  const detach = (el) => {
+    if (!el) return;
+    try {
+      if (box.removeChild) box.removeChild(el);
+      else if (el.remove) el.remove();
+    } catch (e) {}
+  };
+  const apply = (scrollTop) => {
+    const vh = Number(box.clientHeight) || 800;
+    const r = virtualChatWindowRange(state.prefix, scrollTop, vh, BUFFER);
+    if (r.start === state.start && r.end === state.end) return;
+    // 保留非 rows 的动态节点（恢复横幅 / 计划卡 / 逐计划 resume 卡片）
+    const dynamic = Array.prototype.slice.call(box.children).filter(n =>
+      n !== state.top && n !== state.bottom && state.rows.indexOf(n) < 0);
+    state.rows.forEach(detach);
+    detach(state.top); detach(state.bottom);
+    dynamic.forEach(detach);
+    state.top.style.height = state.prefix[r.start] + 'px';
+    state.bottom.style.height = Math.max(0, state.prefix[state.rows.length] - state.prefix[r.end]) + 'px';
+    box.appendChild(state.top);
+    for (let i = r.start; i < r.end; i++) box.appendChild(state.rows[i]);
+    box.appendChild(state.bottom);
+    dynamic.forEach(n => box.appendChild(n));
+    state.start = r.start; state.end = r.end;
+    // 窗口内行实测高度回填（R21 懒渲染升级后会变高），修正 spacer 防漂移
+    let changed = false;
+    for (let i = r.start; i < r.end; i++) {
+      const h = Number(state.rows[i].offsetHeight);
+      if (h && Math.abs(h - state.heights[i]) > 2) {
+        state.heights[i] = Math.max(MIN_H, h); changed = true;
+      }
+    }
+    if (changed) recalcPrefix();
+    try { if (typeof box.__upgradeInView === 'function') box.__upgradeInView(); } catch (e) {}
+  };
+  state.apply = apply;
+  const onScroll = () => {
+    if (onScroll._t) return;
+    onScroll._t = setTimeout(() => { onScroll._t = null; apply(Number(box.scrollTop) || 0); }, 60);
+  };
+  state.onScroll = onScroll;
+  // 切会话会重建 box.innerHTML——先卸掉旧监听，避免叠加
+  const prev = box.__virtualChat;
+  if (prev && prev.onScroll && box.removeEventListener) {
+    try { box.removeEventListener('scroll', prev.onScroll); } catch (e) {}
+  }
+  if (box.addEventListener) box.addEventListener('scroll', onScroll, { passive: true });
+  box.__virtualChat = state;
+  // renderChatHistory 的收尾归底发生在 spacer 撑高之前，此处按总高度重新归底
+  box.scrollTop = prefix[rows.length];
+  apply(Number(box.scrollTop) || prefix[rows.length]);
+  return state;
+}
+
+/** 搜索跳转：按消息索引 midx 找到对应行，驱动虚拟窗口把它滚进 DOM。
+ *  返回 true 表示已接管定位（调用方随后轮询 [data-midx] 做高亮）。 */
+function virtualChatJumpToIndex(box, midx) {
+  const state = box && box.__virtualChat;
+  if (!state) return false;
+  const target = Number(midx);
+  let rowIdx = -1;
+  for (let i = 0; i < state.rows.length; i++) {
+    const r = state.rows[i];
+    let hit = null;
+    try { hit = r.querySelector ? r.querySelector('[data-midx="' + target + '"]') : null; } catch (e) {}
+    if (hit || (r.dataset && String(r.dataset.midx) === String(target))) { rowIdx = i; break; }
+  }
+  if (rowIdx < 0) rowIdx = Math.max(0, Math.min(state.rows.length - 1, target));
+  const vh = Number(box.clientHeight) || 800;
+  const scrollTop = Math.max(0, state.prefix[rowIdx] - Math.round(vh / 3));
+  box.scrollTop = scrollTop;
+  state.start = -1;              // 强制重算窗口（即使区间相同也要换入目标行）
+  state.apply(scrollTop);
+  return true;
+}
+
+/** 修复 F1（v1.4）：会话导出为 Markdown——前端序列化（零后端/零新 js_api/零依赖）。
+ *  消息角色标题 + 工具调用块 + 时间戳 + 可选 token 统计页脚；Blob 下载。
+ *  边界：空会话正常生成（仅标题+说明）；超长消息截断防爆；文件名净化非法字符。 */
+function exportSessionMd(id, e) {
+  if (e) e.stopPropagation();
+  const s = sessions.find(x => x.id === id);
+  if (!s) { toast('会话不存在', 'warn'); return; }
+  const lines = [];
+  lines.push('# ' + (s.title || 'Harbor 会话'));
+  lines.push('');
+  // 修复 建议㊷（三轮）：APP_VERSION 前端永无定义（原恒显旧版 '1.4'）——兜底取全局
+  // window.__appVersion（后端可注入），再无则省略版本号，不显示错误版本
+  const _ver = (typeof APP_VERSION !== 'undefined' && APP_VERSION)
+    ? APP_VERSION : (window.__appVersion || '');
+  lines.push('> 导出自 Harbor' + (_ver ? ' v' + _ver : '') +
+    ' · ' + new Date().toLocaleString('zh-CN'));
+  lines.push('');
+  let toolCount = 0, usage = null;
+  for (const m of (s.messages || [])) {
+    if (m.role === 'user') {
+      let text = typeof m.content === 'string' ? m.content : '';
+      if (Array.isArray(m.content)) {
+        text = m.content.map(p => p.text || (p.type === 'image_url' ? '[图片]' : p.type === 'video_url' ? '[视频]' : '')).join(' ');
+      }
+      lines.push('## 🧑 我', '', String(text).slice(0, 20000), '');
+    } else if (m.role === 'assistant') {
+      if (m.tool_calls && m.tool_calls.length) {
+        for (const tc of m.tool_calls) {
+          toolCount++;
+          let args = {};
+          try { args = JSON.parse(tc.function?.arguments || '{}'); } catch (e) {}
+          lines.push('#### 🔧 工具调用 · `' + (tc.function?.name || '') + '`');
+          lines.push('```json');
+          lines.push(JSON.stringify(args, null, 2).slice(0, 4000));
+          lines.push('```', '');
+        }
+      }
+      if (m.content && String(m.content).trim()) {
+        lines.push('## 🤖 AI', '', String(m.content).slice(0, 20000), '');
+      }
+      if (m.usage) usage = m.usage;   // 最后一次 usage = 会话累计口径（calcUsage 同源）
+    } else if (m.role === 'tool') {
+      lines.push('<details><summary>📄 工具结果</summary>', '', '```', String(m.content || '').slice(0, 8000), '```', '', '</details>', '');
+    }
+  }
+  if (usage) {
+    lines.push('---', '', '**Token 统计**：输入 ' + (usage.prompt_tokens || 0) +
+      ' · 输出 ' + (usage.completion_tokens || 0) +
+      ' · 合计 ' + (usage.total_tokens || 0) +
+      (usage.prompt_tokens_details?.cached_tokens ? ' · 缓存命中 ' + usage.prompt_tokens_details.cached_tokens : '') +
+      ' · 工具调用 ' + toolCount + ' 次', '');
+  }
+  const fname = (s.title || 'chat').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) +
+    '-' + new Date().toISOString().slice(0, 10) + '.md';
+  const content = lines.join('\n');
+  // 2026-10-21 补：原生「另存为」对话框优先（后端 pick_save_path + save_export_file 现成），
+  // 旧 exe/取消/失败回落浏览器 Blob 下载
+  const blobFallback = () => {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('已导出 Markdown', 'ok');
+  };
+  (async () => {
+    try {
+      const pr = JSON.parse(await callApi('pick_save_path', [fname], 120000) || '{}');
+      if (!pr || !pr.ok || !pr.path) { blobFallback(); return; }   // 取消或旧后端
+      const wr = JSON.parse(await callApi('save_export_file', [pr.path, content], 60000) || '{}');
+      if (wr && wr.ok) toast('已导出到 ' + pr.path, 'ok');
+      else blobFallback();
+    } catch (e) { blobFallback(); }
+  })();
+}
+
+/* 删除会话（真删：sessions + ws 绑定 + plan + checkpoint）。
+ * 修复（对抗复审）：
+ * ① stopPropagation typeof 守卫——程序调用 deleteSession(id)（无事件对象）时
+ *    原裸 e.stopPropagation() 直接 NPE；
+ * ② 原「新版真删覆盖」monkey-patch 模式（文件尾部 deleteSession = async
+ *    function…）把带守卫的新版叠在被覆盖的旧声明上，旧声明（裸 NPE + 无 purge）
+ *    成为死代码但保留在盘——任何直接引用旧绑定的路径（_origDeleteSession 别名/
+ *    未来重构）都会复活无守卫版本。现合并为单一函数声明，消灭双定义。 */
+const _escId = (id) => escapeHtml(String(id)).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+function _dayGroup(ts) {
+  const t = Number(ts);
+  if (!ts || !isFinite(t)) return '更早';
+  const d = new Date(t), now = new Date();
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, now)) return '今天';
+  const y = new Date(Date.now() - 86400000);
+  if (sameDay(d, y)) return '昨天';
+  return '更早';
+}
+function formatTime(ts) {
+  // 修复 建议㉲（三轮）：undefined/非时间戳不再显示 Invalid Date/NaN
+  const t = Number(ts);
+  if (!ts || !isFinite(t)) return '';
+  const d = new Date(t), now = new Date();
+  if (d.toDateString() === now.toDateString())
+    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+  return (d.getMonth() + 1) + '/' + d.getDate();
+}
+function ensureSession() {
+  if (!currentSessionId) {
+    currentSessionId = 's_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    sessions.push({ id: currentSessionId, title: '', createdAt: Date.now(), updatedAt: Date.now(), messages: [] });
+  }
+}
+function updateSessionTitle(text) {
+  const s = getCurrentSession();
+  if (!s || s.title) return;
+  s.title = text.replace(/\s+/g, ' ').slice(0, 20) || '新对话';
+}
+
+/* ============ 历史存放目录 + 真删（2026-10-21 用户需求）============
+ * 「历史记录存放可以自己选择放哪个文件夹，删掉就是真的删掉了」。
+ * 全部动态 DOM（零 template 改动——UI 并行协作纪律）；类名避开既有
+ * UI 契约集合（40 id/13 onclick/43 callApi/39 类/21 变量只增不改的
+ * 是既有面，新增动态类不在此列）。
+ * 数据流：history_dir_get/set（后端 history.json 独立配置）+ 目录对话
+ * 框复用 legacy pick_folder(sid)；删除经 session_purge 后端真删
+ * （sessions 条目 + ws 绑定 + plan json + checkpoint 目录）。
+ */
+
+/* 历史目录 UI 样式已由模板 index.template.html:1991-2029 官方样式承载
+ * （变量均已定义）——原 _hdStyle IIFE 动态注入与模板样式冲突，删除。 */
+
+function ensureHistoryFoot() {
+  if (document.getElementById('historyFoot')) return;
+  const list = document.getElementById('sessionList');
+  if (!list) return;
+  const foot = document.createElement('div');
+  foot.id = 'historyFoot';
+  foot.className = 'history-foot';
+  foot.innerHTML = '<button class="history-dir-btn" id="historyDirBtn" title="选择历史记录存放文件夹"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 历史目录</button>';
+  if (list.parentNode) list.parentNode.appendChild(foot);
+  const btn = document.getElementById('historyDirBtn');
+  if (btn) btn.addEventListener('click', showHistoryDirPanel);
+  refreshHistoryFoot();
+}
+async function refreshHistoryFoot() {
+  const btn = document.getElementById('historyDirBtn');
+  if (!btn) return;
+  try {
+    const r = JSON.parse(await callApi('history_dir_get', [], 20000) || '{}');
+    btn.innerHTML = r.dir ? '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> ' + _shortDir(r.dir)
+      : '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 历史目录（默认）';
+    btn.title = r.dir ? ('历史存放：' + r.dir + '\n点击更改') : '历史存放：默认 ~/.glm-chat\n点击更改';
+  } catch (e) { /* 后端旧版：保持默认文案 */ }
+}
+function _shortDir(d) {
+  const s = String(d || '');
+  return s.length > 22 ? '…' + s.slice(-21) : s;
+}
+/* hdSave 防连点闸门（保存期间忽略重复点击并禁用面板按钮） */
+let _hdBusy = false;
+/* 修复（建议14 残余）：面板「成功提示停留后自动关闭」延时不硬编码毫秒——
+ * 以 MOTION.comp()（组件入场令牌，默认 200ms）为基元取倍数：保存成功停留
+ * 4×（默认 800ms）、恢复默认 3×（默认 600ms），语义=「让用户读完一行结果」；
+ * fx-off 下 comp=1ms → 倍增值同样趋 0，立即关闭（关特效不拖节奏）。
+ * typeof 守卫：vm 单模块沙箱未加载 00-motion 时回落原字面量。 */
+const _hdLingerMs = (mult) => (typeof MOTION !== 'undefined' && MOTION.comp) ? MOTION.comp() * mult : 200 * mult;
+function showHistoryDirPanel() {
+  if (document.getElementById('historyDirMask')) return;
+  const mask = document.createElement('div');
+  mask.id = 'historyDirMask';
+  mask.className = 'history-dir-mask';
+  const panel = document.createElement('div');
+  panel.className = 'history-dir-panel';
+  panel.innerHTML =
+    '<div class="hd-title">历史记录存放</div>' +
+    '<div class="hd-desc">选择会话历史的存放文件夹（默认在用户目录 .glm-chat）。切换后新对话写入新位置。</div>' +
+    '<div class="hd-row"><input class="hd-input" id="hdInput" placeholder="目录路径（如 D:////harbor-history）" spellcheck="false"></div>' +
+    '<div class="hd-row hd-btns">' +
+    '<button class="hd-btn" id="hdBrowse">浏览…</button>' +
+    '<label class="hd-chk"><input type="checkbox" id="hdMigrate"> 迁移已有历史</label>' +
+    '</div>' +
+    '<div class="hd-row hd-btns">' +
+    '<button class="hd-btn hd-primary" id="hdSave">保存</button>' +
+    '<button class="hd-btn" id="hdDefault">恢复默认</button>' +
+    '<button class="hd-btn" id="hdClose">取消</button>' +
+    '</div>' +
+    '<div class="hd-msg" id="hdMsg"></div>';
+  mask.appendChild(panel);
+  document.body.appendChild(mask);
+  const input = document.getElementById('hdInput');
+  const msg = document.getElementById('hdMsg');
+  const say = (t, ok) => { msg.textContent = t; msg.className = 'hd-msg ' + (ok ? 'ok' : 'err'); };
+  callApi('history_dir_get', [], 20000).then(raw => {
+    const r = JSON.parse(raw || '{}');
+    if (r.dir) input.value = r.dir;
+  }).catch(() => {});
+  document.getElementById('hdBrowse').addEventListener('click', async () => {
+    try {
+      const raw = JSON.parse(await callApi('pick_folder', [currentSessionId], 60000) || '{}');
+      if (raw && raw.ok && raw.path) input.value = raw.path;
+      else if (raw && raw.err) say('目录选择不可用：' + raw.err + '（请手动输入）', false);
+    } catch (e) { say('目录选择失败', false); }
+  });
+  document.getElementById('hdSave').addEventListener('click', async () => {
+    if (_hdBusy) return;   // 防连点：保存进行中忽略重复点击
+    const d = input.value.trim();
+    if (!d) { say('请输入目录路径', false); return; }
+    _hdBusy = true;
+    // 保存期间禁用三个按钮（hdSave/hdClose/hdBrowse），防重复提交与误关面板
+    const _hdBtns = ['hdSave', 'hdClose', 'hdBrowse'].map(bid => document.getElementById(bid)).filter(Boolean);
+    _hdBtns.forEach(b => { b.disabled = true; });
+    try {
+      const raw = JSON.parse(await callApi('history_dir_set', [d, document.getElementById('hdMigrate').checked], 60000) || '{}');
+      if (raw.error) { say(raw.error, false); return; }
+      say(raw.migrated ? '已保存并迁移旧历史' : '已保存', true);
+      refreshHistoryFoot();
+      setTimeout(() => mask.remove(), _hdLingerMs(4));
+    } catch (e) { say('保存失败: ' + (e.message || e), false); }
+    finally { _hdBusy = false; _hdBtns.forEach(b => { b.disabled = false; }); }
+  });
+  document.getElementById('hdDefault').addEventListener('click', async () => {
+    try {
+      await callApi('history_dir_set', ['', false], 20000);
+      say('已恢复默认目录', true);
+      refreshHistoryFoot();
+      setTimeout(() => mask.remove(), _hdLingerMs(3));
+    } catch (e) { say('恢复失败', false); }
+  });
+  document.getElementById('hdClose').addEventListener('click', () => mask.remove());
+  mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove(); });
+}
+/* 真删：session_purge 后端调用已并入上方 deleteSession 主体（sessions+ws+plan+
+ * checkpoint）。原文件尾部的「const _origDeleteSession = deleteSession;
+ * deleteSession = async function…」monkey-patch 覆盖模式已删除（对抗复审）：
+ * 双定义让无守卫的旧声明成为潜伏死代码，单一函数声明 + typeof 守卫是终态。 */
+
+/* ===== frontend/src/sessions/controller.js ===== */
+
+async function continueInNewSession() {
+  const s = getCurrentSession();
+  const btn = document.getElementById('continueNewBtn');
+  if (!s || !s.messages.length) { newSession(); return; }
+  const apiKey = effectiveApiKey();
+  if (!apiKey) { toast('请先设置 API Key', 'warn'); document.getElementById('settingsPanel').classList.add('show'); return; }
+  if (btn) btn.textContent = '⏳ 总结中…';
+  // 实现 v1.6 W28：生成中 compactNow 会静默跳过压缩（isStreaming 早退），原流程
+  // 仍继续 newSession() → 用户在新会话丢失全部上下文且无感知。生成中直接中止并明示。
+  if (isStreaming) {
+    toast('AI 正在生成中，稍后再「新对话继续」（避免未压缩就开新会话丢失上下文）', 'warn');
+    if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
+    return;
+  }
+  try { await compactNow(s, apiKey, { quiet: false }); }
+  catch (e) {
+    // 修复 W25（二轮）：压缩失败不再静默吞——否则用户在新会话丢失全部上下文且无察觉
+    toast('历史压缩失败，已中止开新会话（当前对话未受影响）：' + (e && e.message || e), 'err');
+    if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
+    return;
+  }
+  newSession();
+  if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
+  document.getElementById('userInput').focus();
+}
+function _setNewChatScreenVisible(visible) {
+  const screen = document.getElementById('newChatScreen');
+  const chat = document.getElementById('chatContainer');
+  const inputArea = document.getElementById('chatInputArea');
+  const runArea = document.getElementById('expertRunArea');
+  if (screen) screen.hidden = !visible;
+  if (chat) chat.hidden = !!visible;
+  if (inputArea) inputArea.hidden = !!visible;
+  if (runArea) runArea.hidden = !!visible;
+  if (visible) renderNewChatHistory();
+}
+function openNewChatScreen() {
+  // New-chat screen is a selection surface, not a blank session. Reuse the
+  // existing reset path so streaming/attachments/trust are cleared safely.
+  if (typeof closeSidebarDrawer === 'function') closeSidebarDrawer();
+  newSession();
+  _setNewChatScreenVisible(true);
+  renderNewChatHistory();
+  const focus = document.getElementById('newChatNewTaskBtn');
+  if (focus && focus.focus) { try { focus.focus(); } catch (e) {} }
+}
+function setSessionRunStatus(sessionOrId, status) {
+  if (!RUN_STATUS_META[status]) return false;
+  const session = (sessionOrId && typeof sessionOrId === 'object')
+    ? sessionOrId : sessions.find(s => s.id === sessionOrId);
+  if (!session) return false;
+  if (session.runStatus === status) return true;
+  session.runStatus = status;
+  try { saveSessions(); } catch (e) {}
+  try { renderSessionList(); } catch (e) {}
+  return true;
+}
+function migrateWorkingRunStatuses() {
+  let migrated = 0;
+  sessions.forEach(s => {
+    if (s && s.runStatus === 'working') { s.runStatus = 'paused'; migrated += 1; }
+  });
+  if (migrated) {
+    try { saveSessions(); } catch (e) {}
+    try { renderSessionList(); } catch (e) {}
+  }
+  return migrated;
 }
 function toggleTaskGroup() {
   _taskGroupCollapsed = !_taskGroupCollapsed;
@@ -22256,40 +22651,6 @@ async function createProjectSession(project) {
   }
   try { await saveSessions(); } catch (e) {}
   return session;
-}
-function _projectError(text) {
-  const el = document.getElementById('projectError');
-  if (el) el.textContent = text || '';
-}
-function openProjectModal() {
-  const modal = document.getElementById('projectModal');
-  if (!modal) return;
-  const name = document.getElementById('projectNameInput');
-  const workspace = document.getElementById('projectWorkspaceInput');
-  if (name) name.value = '';
-  if (workspace) workspace.value = '';
-  _projectError('');
-  modal.hidden = false;
-  modal.setAttribute('aria-hidden', 'false');
-  setTimeout(() => { if (name && name.focus) { try { name.focus(); } catch (e) {} } }, 0);
-}
-function closeProjectModal() {
-  const modal = document.getElementById('projectModal');
-  if (!modal) return;
-  modal.hidden = true;
-  modal.setAttribute('aria-hidden', 'true');
-}
-async function pickProjectFolder() {
-  try {
-    const raw = JSON.parse(await callApi('pick_folder', [currentSessionId], 60000) || '{}');
-    if (raw && raw.ok && raw.path) {
-      const input = document.getElementById('projectWorkspaceInput');
-      if (input) input.value = raw.path;
-      _projectError('');
-    } else if (raw && raw.err) {
-      _projectError('目录选择不可用：' + raw.err + '（可手动输入路径）');
-    }
-  } catch (e) { _projectError('目录选择失败，可手动输入路径'); }
 }
 async function createProjectFromModal() {
   const nameEl = document.getElementById('projectNameInput');
@@ -22610,212 +22971,6 @@ function renderChatHistory(s) {
  * 先调 virtualChatJumpToIndex 按索引把目标行滚进窗口，再轮询高亮。
  */
 /** 纯函数：按高度前缀和求窗口 [start,end)（可单测，不碰 DOM）。 */
-function virtualChatWindowRange(prefix, scrollTop, vh, buffer) {
-  const n = prefix.length - 1;
-  if (!n) return { start: 0, end: 0 };
-  const lo = Math.max(0, scrollTop - vh);
-  const hi = scrollTop + vh * 2;
-  let start = 0, end = n;
-  for (let i = 0; i < n; i++) { if (prefix[i + 1] > lo) { start = i; break; } }
-  for (let i = start; i < n; i++) { if (prefix[i] >= hi) { end = i + 1; break; } }
-  return { start: Math.max(0, start - buffer), end: Math.min(n, end + buffer) };
-}
-
-/** search.js 判据：当前容器是否处于虚拟列表态。 */
-function virtualChatActive(box) {
-  return !!(box && box.__virtualChat);
-}
-
-/** 启用虚拟列表；不满足条件返回 null（短会话 / 群聊 / 无容器）。 */
-function virtualChatMount(box, s) {
-  const MIN_ROWS = 120, BUFFER = 6, MIN_H = 24;
-  if (!box || !box.appendChild || !box.children || !box.children.length) return null;
-  if (s && s.group) return null;                       // 群聊逐条对位，不虚拟化
-  const rows = Array.prototype.slice.call(box.children);
-  if (rows.length < MIN_ROWS) return null;
-  const heights = rows.map(r => Math.max(MIN_H, Number(r.offsetHeight) || MIN_H));
-  const prefix = [0];
-  for (let i = 0; i < heights.length; i++) prefix.push(prefix[i] + heights[i]);
-  const top = document.createElement('div');
-  const bottom = document.createElement('div');
-  top.className = 'virtual-spacer';
-  bottom.className = 'virtual-spacer';
-  top.dataset.virtualSpacer = 'top';
-  bottom.dataset.virtualSpacer = 'bottom';
-  top.style.width = '100%'; bottom.style.width = '100%';
-  top.style.pointerEvents = 'none'; bottom.style.pointerEvents = 'none';
-  const state = {
-    box: box, rows: rows, heights: heights, prefix: prefix,
-    top: top, bottom: bottom, start: -1, end: -1,
-    apply: null, onScroll: null,
-  };
-  const recalcPrefix = () => {
-    state.prefix = [0];
-    for (let i = 0; i < state.heights.length; i++) {
-      state.prefix.push(state.prefix[i] + state.heights[i]);
-    }
-  };
-  const detach = (el) => {
-    if (!el) return;
-    try {
-      if (box.removeChild) box.removeChild(el);
-      else if (el.remove) el.remove();
-    } catch (e) {}
-  };
-  const apply = (scrollTop) => {
-    const vh = Number(box.clientHeight) || 800;
-    const r = virtualChatWindowRange(state.prefix, scrollTop, vh, BUFFER);
-    if (r.start === state.start && r.end === state.end) return;
-    // 保留非 rows 的动态节点（恢复横幅 / 计划卡 / 逐计划 resume 卡片）
-    const dynamic = Array.prototype.slice.call(box.children).filter(n =>
-      n !== state.top && n !== state.bottom && state.rows.indexOf(n) < 0);
-    state.rows.forEach(detach);
-    detach(state.top); detach(state.bottom);
-    dynamic.forEach(detach);
-    state.top.style.height = state.prefix[r.start] + 'px';
-    state.bottom.style.height = Math.max(0, state.prefix[state.rows.length] - state.prefix[r.end]) + 'px';
-    box.appendChild(state.top);
-    for (let i = r.start; i < r.end; i++) box.appendChild(state.rows[i]);
-    box.appendChild(state.bottom);
-    dynamic.forEach(n => box.appendChild(n));
-    state.start = r.start; state.end = r.end;
-    // 窗口内行实测高度回填（R21 懒渲染升级后会变高），修正 spacer 防漂移
-    let changed = false;
-    for (let i = r.start; i < r.end; i++) {
-      const h = Number(state.rows[i].offsetHeight);
-      if (h && Math.abs(h - state.heights[i]) > 2) {
-        state.heights[i] = Math.max(MIN_H, h); changed = true;
-      }
-    }
-    if (changed) recalcPrefix();
-    try { if (typeof box.__upgradeInView === 'function') box.__upgradeInView(); } catch (e) {}
-  };
-  state.apply = apply;
-  const onScroll = () => {
-    if (onScroll._t) return;
-    onScroll._t = setTimeout(() => { onScroll._t = null; apply(Number(box.scrollTop) || 0); }, 60);
-  };
-  state.onScroll = onScroll;
-  // 切会话会重建 box.innerHTML——先卸掉旧监听，避免叠加
-  const prev = box.__virtualChat;
-  if (prev && prev.onScroll && box.removeEventListener) {
-    try { box.removeEventListener('scroll', prev.onScroll); } catch (e) {}
-  }
-  if (box.addEventListener) box.addEventListener('scroll', onScroll, { passive: true });
-  box.__virtualChat = state;
-  // renderChatHistory 的收尾归底发生在 spacer 撑高之前，此处按总高度重新归底
-  box.scrollTop = prefix[rows.length];
-  apply(Number(box.scrollTop) || prefix[rows.length]);
-  return state;
-}
-
-/** 搜索跳转：按消息索引 midx 找到对应行，驱动虚拟窗口把它滚进 DOM。
- *  返回 true 表示已接管定位（调用方随后轮询 [data-midx] 做高亮）。 */
-function virtualChatJumpToIndex(box, midx) {
-  const state = box && box.__virtualChat;
-  if (!state) return false;
-  const target = Number(midx);
-  let rowIdx = -1;
-  for (let i = 0; i < state.rows.length; i++) {
-    const r = state.rows[i];
-    let hit = null;
-    try { hit = r.querySelector ? r.querySelector('[data-midx="' + target + '"]') : null; } catch (e) {}
-    if (hit || (r.dataset && String(r.dataset.midx) === String(target))) { rowIdx = i; break; }
-  }
-  if (rowIdx < 0) rowIdx = Math.max(0, Math.min(state.rows.length - 1, target));
-  const vh = Number(box.clientHeight) || 800;
-  const scrollTop = Math.max(0, state.prefix[rowIdx] - Math.round(vh / 3));
-  box.scrollTop = scrollTop;
-  state.start = -1;              // 强制重算窗口（即使区间相同也要换入目标行）
-  state.apply(scrollTop);
-  return true;
-}
-
-/** 修复 F1（v1.4）：会话导出为 Markdown——前端序列化（零后端/零新 js_api/零依赖）。
- *  消息角色标题 + 工具调用块 + 时间戳 + 可选 token 统计页脚；Blob 下载。
- *  边界：空会话正常生成（仅标题+说明）；超长消息截断防爆；文件名净化非法字符。 */
-function exportSessionMd(id, e) {
-  if (e) e.stopPropagation();
-  const s = sessions.find(x => x.id === id);
-  if (!s) { toast('会话不存在', 'warn'); return; }
-  const lines = [];
-  lines.push('# ' + (s.title || 'Harbor 会话'));
-  lines.push('');
-  // 修复 建议㊷（三轮）：APP_VERSION 前端永无定义（原恒显旧版 '1.4'）——兜底取全局
-  // window.__appVersion（后端可注入），再无则省略版本号，不显示错误版本
-  const _ver = (typeof APP_VERSION !== 'undefined' && APP_VERSION)
-    ? APP_VERSION : (window.__appVersion || '');
-  lines.push('> 导出自 Harbor' + (_ver ? ' v' + _ver : '') +
-    ' · ' + new Date().toLocaleString('zh-CN'));
-  lines.push('');
-  let toolCount = 0, usage = null;
-  for (const m of (s.messages || [])) {
-    if (m.role === 'user') {
-      let text = typeof m.content === 'string' ? m.content : '';
-      if (Array.isArray(m.content)) {
-        text = m.content.map(p => p.text || (p.type === 'image_url' ? '[图片]' : p.type === 'video_url' ? '[视频]' : '')).join(' ');
-      }
-      lines.push('## 🧑 我', '', String(text).slice(0, 20000), '');
-    } else if (m.role === 'assistant') {
-      if (m.tool_calls && m.tool_calls.length) {
-        for (const tc of m.tool_calls) {
-          toolCount++;
-          let args = {};
-          try { args = JSON.parse(tc.function?.arguments || '{}'); } catch (e) {}
-          lines.push('#### 🔧 工具调用 · `' + (tc.function?.name || '') + '`');
-          lines.push('```json');
-          lines.push(JSON.stringify(args, null, 2).slice(0, 4000));
-          lines.push('```', '');
-        }
-      }
-      if (m.content && String(m.content).trim()) {
-        lines.push('## 🤖 AI', '', String(m.content).slice(0, 20000), '');
-      }
-      if (m.usage) usage = m.usage;   // 最后一次 usage = 会话累计口径（calcUsage 同源）
-    } else if (m.role === 'tool') {
-      lines.push('<details><summary>📄 工具结果</summary>', '', '```', String(m.content || '').slice(0, 8000), '```', '', '</details>', '');
-    }
-  }
-  if (usage) {
-    lines.push('---', '', '**Token 统计**：输入 ' + (usage.prompt_tokens || 0) +
-      ' · 输出 ' + (usage.completion_tokens || 0) +
-      ' · 合计 ' + (usage.total_tokens || 0) +
-      (usage.prompt_tokens_details?.cached_tokens ? ' · 缓存命中 ' + usage.prompt_tokens_details.cached_tokens : '') +
-      ' · 工具调用 ' + toolCount + ' 次', '');
-  }
-  const fname = (s.title || 'chat').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) +
-    '-' + new Date().toISOString().slice(0, 10) + '.md';
-  const content = lines.join('\n');
-  // 2026-10-21 补：原生「另存为」对话框优先（后端 pick_save_path + save_export_file 现成），
-  // 旧 exe/取消/失败回落浏览器 Blob 下载
-  const blobFallback = () => {
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = fname;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast('已导出 Markdown', 'ok');
-  };
-  (async () => {
-    try {
-      const pr = JSON.parse(await callApi('pick_save_path', [fname], 120000) || '{}');
-      if (!pr || !pr.ok || !pr.path) { blobFallback(); return; }   // 取消或旧后端
-      const wr = JSON.parse(await callApi('save_export_file', [pr.path, content], 60000) || '{}');
-      if (wr && wr.ok) toast('已导出到 ' + pr.path, 'ok');
-      else blobFallback();
-    } catch (e) { blobFallback(); }
-  })();
-}
-
-/* 删除会话（真删：sessions + ws 绑定 + plan + checkpoint）。
- * 修复（对抗复审）：
- * ① stopPropagation typeof 守卫——程序调用 deleteSession(id)（无事件对象）时
- *    原裸 e.stopPropagation() 直接 NPE；
- * ② 原「新版真删覆盖」monkey-patch 模式（文件尾部 deleteSession = async
- *    function…）把带守卫的新版叠在被覆盖的旧声明上，旧声明（裸 NPE + 无 purge）
- *    成为死代码但保留在盘——任何直接引用旧绑定的路径（_origDeleteSession 别名/
- *    未来重构）都会复活无守卫版本。现合并为单一函数声明，消灭双定义。 */
 async function deleteSession(id, e) {
   if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
   const activeRun = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : null;
@@ -22850,7 +23005,6 @@ async function deleteSession(id, e) {
 // 修复 建议㉝（二轮）：会话 id 拼 onclick 前统一转义（模块作用域，UX-3 搜索跳转同样复用）。
 // 修复 51（三轮）：补双引号转义——escapeHtml 走 textContent→innerHTML 不转引号，
 // 属性上下文（onclick="..."）里双引号同样有注入面（与单引号一并纵深防御）
-const _escId = (id) => escapeHtml(String(id)).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 function _renderHistoryRoot(box, options) {
   if (!box) return;
   if (!sessions.length && !projects.length) {
@@ -22874,155 +23028,6 @@ function renderSessionList() {
   updateTokenStat();
 }
 /** 日期分组键：今天/昨天/更早（跨天边界用自然日比对，非 24h 减法）。 */
-function _dayGroup(ts) {
-  const t = Number(ts);
-  if (!ts || !isFinite(t)) return '更早';
-  const d = new Date(t), now = new Date();
-  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (sameDay(d, now)) return '今天';
-  const y = new Date(Date.now() - 86400000);
-  if (sameDay(d, y)) return '昨天';
-  return '更早';
-}
-function formatTime(ts) {
-  // 修复 建议㉲（三轮）：undefined/非时间戳不再显示 Invalid Date/NaN
-  const t = Number(ts);
-  if (!ts || !isFinite(t)) return '';
-  const d = new Date(t), now = new Date();
-  if (d.toDateString() === now.toDateString())
-    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-  return (d.getMonth() + 1) + '/' + d.getDate();
-}
-function ensureSession() {
-  if (!currentSessionId) {
-    currentSessionId = 's_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    sessions.push({ id: currentSessionId, title: '', createdAt: Date.now(), updatedAt: Date.now(), messages: [] });
-  }
-}
-function updateSessionTitle(text) {
-  const s = getCurrentSession();
-  if (!s || s.title) return;
-  s.title = text.replace(/\s+/g, ' ').slice(0, 20) || '新对话';
-}
-
-/* ============ 历史存放目录 + 真删（2026-10-21 用户需求）============
- * 「历史记录存放可以自己选择放哪个文件夹，删掉就是真的删掉了」。
- * 全部动态 DOM（零 template 改动——UI 并行协作纪律）；类名避开既有
- * UI 契约集合（40 id/13 onclick/43 callApi/39 类/21 变量只增不改的
- * 是既有面，新增动态类不在此列）。
- * 数据流：history_dir_get/set（后端 history.json 独立配置）+ 目录对话
- * 框复用 legacy pick_folder(sid)；删除经 session_purge 后端真删
- * （sessions 条目 + ws 绑定 + plan json + checkpoint 目录）。
- */
-
-/* 历史目录 UI 样式已由模板 index.template.html:1991-2029 官方样式承载
- * （变量均已定义）——原 _hdStyle IIFE 动态注入与模板样式冲突，删除。 */
-
-function ensureHistoryFoot() {
-  if (document.getElementById('historyFoot')) return;
-  const list = document.getElementById('sessionList');
-  if (!list) return;
-  const foot = document.createElement('div');
-  foot.id = 'historyFoot';
-  foot.className = 'history-foot';
-  foot.innerHTML = '<button class="history-dir-btn" id="historyDirBtn" title="选择历史记录存放文件夹"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 历史目录</button>';
-  if (list.parentNode) list.parentNode.appendChild(foot);
-  const btn = document.getElementById('historyDirBtn');
-  if (btn) btn.addEventListener('click', showHistoryDirPanel);
-  refreshHistoryFoot();
-}
-async function refreshHistoryFoot() {
-  const btn = document.getElementById('historyDirBtn');
-  if (!btn) return;
-  try {
-    const r = JSON.parse(await callApi('history_dir_get', [], 20000) || '{}');
-    btn.innerHTML = r.dir ? '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> ' + _shortDir(r.dir)
-      : '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-folder"/></svg> 历史目录（默认）';
-    btn.title = r.dir ? ('历史存放：' + r.dir + '\n点击更改') : '历史存放：默认 ~/.glm-chat\n点击更改';
-  } catch (e) { /* 后端旧版：保持默认文案 */ }
-}
-function _shortDir(d) {
-  const s = String(d || '');
-  return s.length > 22 ? '…' + s.slice(-21) : s;
-}
-/* hdSave 防连点闸门（保存期间忽略重复点击并禁用面板按钮） */
-let _hdBusy = false;
-/* 修复（建议14 残余）：面板「成功提示停留后自动关闭」延时不硬编码毫秒——
- * 以 MOTION.comp()（组件入场令牌，默认 200ms）为基元取倍数：保存成功停留
- * 4×（默认 800ms）、恢复默认 3×（默认 600ms），语义=「让用户读完一行结果」；
- * fx-off 下 comp=1ms → 倍增值同样趋 0，立即关闭（关特效不拖节奏）。
- * typeof 守卫：vm 单模块沙箱未加载 00-motion 时回落原字面量。 */
-const _hdLingerMs = (mult) => (typeof MOTION !== 'undefined' && MOTION.comp) ? MOTION.comp() * mult : 200 * mult;
-function showHistoryDirPanel() {
-  if (document.getElementById('historyDirMask')) return;
-  const mask = document.createElement('div');
-  mask.id = 'historyDirMask';
-  mask.className = 'history-dir-mask';
-  const panel = document.createElement('div');
-  panel.className = 'history-dir-panel';
-  panel.innerHTML =
-    '<div class="hd-title">历史记录存放</div>' +
-    '<div class="hd-desc">选择会话历史的存放文件夹（默认在用户目录 .glm-chat）。切换后新对话写入新位置。</div>' +
-    '<div class="hd-row"><input class="hd-input" id="hdInput" placeholder="目录路径（如 D:////harbor-history）" spellcheck="false"></div>' +
-    '<div class="hd-row hd-btns">' +
-    '<button class="hd-btn" id="hdBrowse">浏览…</button>' +
-    '<label class="hd-chk"><input type="checkbox" id="hdMigrate"> 迁移已有历史</label>' +
-    '</div>' +
-    '<div class="hd-row hd-btns">' +
-    '<button class="hd-btn hd-primary" id="hdSave">保存</button>' +
-    '<button class="hd-btn" id="hdDefault">恢复默认</button>' +
-    '<button class="hd-btn" id="hdClose">取消</button>' +
-    '</div>' +
-    '<div class="hd-msg" id="hdMsg"></div>';
-  mask.appendChild(panel);
-  document.body.appendChild(mask);
-  const input = document.getElementById('hdInput');
-  const msg = document.getElementById('hdMsg');
-  const say = (t, ok) => { msg.textContent = t; msg.className = 'hd-msg ' + (ok ? 'ok' : 'err'); };
-  callApi('history_dir_get', [], 20000).then(raw => {
-    const r = JSON.parse(raw || '{}');
-    if (r.dir) input.value = r.dir;
-  }).catch(() => {});
-  document.getElementById('hdBrowse').addEventListener('click', async () => {
-    try {
-      const raw = JSON.parse(await callApi('pick_folder', [currentSessionId], 60000) || '{}');
-      if (raw && raw.ok && raw.path) input.value = raw.path;
-      else if (raw && raw.err) say('目录选择不可用：' + raw.err + '（请手动输入）', false);
-    } catch (e) { say('目录选择失败', false); }
-  });
-  document.getElementById('hdSave').addEventListener('click', async () => {
-    if (_hdBusy) return;   // 防连点：保存进行中忽略重复点击
-    const d = input.value.trim();
-    if (!d) { say('请输入目录路径', false); return; }
-    _hdBusy = true;
-    // 保存期间禁用三个按钮（hdSave/hdClose/hdBrowse），防重复提交与误关面板
-    const _hdBtns = ['hdSave', 'hdClose', 'hdBrowse'].map(bid => document.getElementById(bid)).filter(Boolean);
-    _hdBtns.forEach(b => { b.disabled = true; });
-    try {
-      const raw = JSON.parse(await callApi('history_dir_set', [d, document.getElementById('hdMigrate').checked], 60000) || '{}');
-      if (raw.error) { say(raw.error, false); return; }
-      say(raw.migrated ? '已保存并迁移旧历史' : '已保存', true);
-      refreshHistoryFoot();
-      setTimeout(() => mask.remove(), _hdLingerMs(4));
-    } catch (e) { say('保存失败: ' + (e.message || e), false); }
-    finally { _hdBusy = false; _hdBtns.forEach(b => { b.disabled = false; }); }
-  });
-  document.getElementById('hdDefault').addEventListener('click', async () => {
-    try {
-      await callApi('history_dir_set', ['', false], 20000);
-      say('已恢复默认目录', true);
-      refreshHistoryFoot();
-      setTimeout(() => mask.remove(), _hdLingerMs(3));
-    } catch (e) { say('恢复失败', false); }
-  });
-  document.getElementById('hdClose').addEventListener('click', () => mask.remove());
-  mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove(); });
-}
-/* 真删：session_purge 后端调用已并入上方 deleteSession 主体（sessions+ws+plan+
- * checkpoint）。原文件尾部的「const _origDeleteSession = deleteSession;
- * deleteSession = async function…」monkey-patch 覆盖模式已删除（对抗复审）：
- * 双定义让无守卫的旧声明成为潜伏死代码，单一函数声明 + typeof 守卫是终态。 */
 
 /* ===== frontend/src/chat/attachments.js ===== */
 /* ================= 附件 ================= */

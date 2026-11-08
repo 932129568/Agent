@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from helpers.frontend import family_paths, read_frontend_source
 ROOT = Path(__file__).resolve().parent.parent
 CTRL = ROOT / 'frontend' / 'src' / 'sessions' / 'controller.js'
 SEARCH = ROOT / 'frontend' / 'src' / 'sessions' / 'search.js'
@@ -24,7 +25,7 @@ NODE_FALLBACK = r'C:\Users\陈\.workbuddy\binaries\node\versions\node-v27.0.0-al
 _PRELUDE = r"""
 const vm = require('vm'), fs = require('fs');
 const SRC = %s;
-const src = fs.readFileSync(SRC, 'utf8');
+const src = SRC.split(',').map(function(r){ return fs.readFileSync(r, 'utf8'); }).join('\n');
 function mkEl() {
   return { style:{}, dataset:{}, className:'', children:[], offsetHeight:0,
     clientHeight:600, scrollTop:0,
@@ -49,7 +50,9 @@ def _vm(body):
     node = shutil.which('node') or NODE_FALLBACK
     if not Path(node).exists():
         pytest.skip('node 不可用')
-    js = (_PRELUDE % json.dumps(str(CTRL).replace('\\', '/'))) + \
+    fam = family_paths(str(ROOT), 'frontend/src/sessions/controller.js')
+    src_arg = ','.join(str(ROOT / q).replace('\\', '/') for q in fam)
+    js = (_PRELUDE % json.dumps(src_arg)) + \
          '\nvm.runInContext(' + json.dumps(body) + ', ctx, { timeout: 30000 });'
     proc = subprocess_run(node, js)
     if proc.returncode != 0:
@@ -129,7 +132,7 @@ console.log(JSON.stringify({
 
 
 def test_controller_and_search_wiring():
-    ctrl = CTRL.read_text(encoding='utf-8')
+    ctrl = read_frontend_source(str(ROOT), 'frontend/src/sessions/controller.js')
     search = SEARCH.read_text(encoding='utf-8')
     assert 'virtualChatMount(box, s)' in ctrl
     assert 'if (s && s.group) return null' in ctrl
@@ -141,11 +144,14 @@ def test_controller_and_search_wiring():
 
 def test_manifest_declares_virtual_symbols():
     data = json.loads(MANIFEST.read_text(encoding='utf-8'))
-    entry = next(e for e in data['scripts']
-                 if e['path'] == 'frontend/src/sessions/controller.js')
+    fam = set(family_paths(str(ROOT), 'frontend/src/sessions/controller.js'))
+    provided = set()
+    for e in data['scripts']:
+        if e['path'] in fam:
+            provided.update(e['provides'])
     for sym in ('virtualChatActive', 'virtualChatJumpToIndex',
                 'virtualChatMount', 'virtualChatWindowRange'):
-        assert sym in entry['provides'], sym
+        assert sym in provided, sym
     search_entry = next(e for e in data['scripts']
                         if e['path'] == 'frontend/src/sessions/search.js')
     # search.js 在 controller.js 之前加载，虚拟符号不能列为前置 requires；
