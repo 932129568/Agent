@@ -181,6 +181,10 @@ function memoryPanelInit() {
       '扩展记忆库（memory.db）为独立增强层，可随时整体清除。' +
     '</div>' +
     '<div class="set-hint" id="mmDbStat" style="margin:0 0 6px;color:var(--text-2);">扩展记忆库：读取中…</div>' +
+    '<div id="mmDbWrap" style="display:none;margin:0 0 10px;">' +
+      '<div class="set-hint" style="margin:0 0 4px;">扩展库条目（结构化事实/画像）——钉选后每次对话恒带上：</div>' +
+      '<div class="mm-list" id="mmDbList" style="display:flex;flex-direction:column;gap:6px;"></div>' +
+    '</div>' +
     '<div class="provider-row" style="align-items:center;gap:8px;">' +
       '<input class="mm-input" id="mmSearch" placeholder="搜索记忆（本地过滤）" maxlength="100" ' +
         'style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);' +
@@ -205,7 +209,10 @@ function memoryPanelInit() {
   return true;
 }
 /* R38：扩展记忆库（memory.db v2）状态行——引擎不可用/未启用时如实降级说明，
- * 面板主功能（memory.json legacy 契约）不受影响。 */
+ * 面板主功能（memory.json legacy 契约）不受影响。
+ * R39：状态行下挂逐条管理区（memory_entries_list 视图：删除/钉选/来源·置信度/
+ * 上次命中）。legacy 命名空间条目只读（删除/增删走上方基础列表——重建会复活，
+ * 双写真相源在 memory.json），操作按钮禁用并给出指引。 */
 function memoryDbStatRefresh() {
   const el = mmEl('mmDbStat');
   if (!el) return;
@@ -216,6 +223,7 @@ function memoryDbStatRefresh() {
       try { d = JSON.parse(raw || '{}'); } catch (e) {}
       if (!d || !d.enabled) {
         el.textContent = '扩展记忆库：未启用（记忆仍存 memory.json，功能不受影响）';
+        const wrap = mmEl('mmDbWrap'); if (wrap) wrap.style.display = 'none';
         return;
       }
       el.innerHTML = '扩展记忆库：<b>已启用</b>（memory.db · ' +
@@ -223,15 +231,114 @@ function memoryDbStatRefresh() {
         escapeHtml(String(d.facts || 0)) + ' · 画像 ' +
         escapeHtml(String(d.profiles || 0)) + ' · 审计事件 ' +
         escapeHtml(String(d.events || 0)) + ' · 完整性 ' + (d.integrity ? '✓' : '✗');
+      memoryDbEntriesRefresh();
     }).catch(() => { el.textContent = '扩展记忆库：状态未知'; });
   };
   if (typeof setTimeout === 'function') setTimeout(done, 0); else done();
+}
+
+/* ---------- R39：扩展库逐条管理（视图/钉选/单条擦除） ---------- */
+const mmDbSeq = { n: 0 };          // last-wins 序号（容器对象：vm 沙箱模块级 let 可测性同款）
+let mmDbEntries = [];              // 最近一次 entries 载荷（渲染/定位用）
+function mmDbBadge(it) {
+  // 来源·置信度·命中：session/legacy/user/assistant → 人话；命中仅画像层有
+  const srcMap = { session: '会话', legacy: '迁移', user: '用户', assistant: 'AI' };
+  const conf = (it.kind === 'profile')
+    ? ('置信 ' + (it.confidence >= 1.2 ? '★★' : '★'))
+    : '';
+  const hits = (it.kind === 'profile')
+    ? ('命中 ' + (it.hits || 0) + ' 次' + (it.last_hit ? ' · ' + String(it.last_hit).replace('T', ' ').slice(0, 16) : ''))
+    : (it.updated ? '记录 ' + String(it.updated).replace('T', ' ').slice(0, 16) : '');
+  return [(srcMap[it.source] || it.source), conf, hits].filter(Boolean).join(' · ');
+}
+function memoryDbEntriesRefresh() {
+  const wrap = mmEl('mmDbWrap');
+  if (!wrap) return;
+  const seq = ++mmDbSeq.n;
+  if (typeof mmCallApi !== 'function') { wrap.style.display = 'none'; return; }
+  mmCallApi('memory_entries_list', [], MM_LIST_TIMEOUT_MS).then(raw => {
+    if (seq !== mmDbSeq.n) return;   // last-wins
+    let d = {};
+    try { d = JSON.parse(raw || '{}'); } catch (e) {}
+    const entries = (d && Array.isArray(d.entries)) ? d.entries : [];
+    mmDbEntries = entries;
+    wrap.style.display = (d && d.enabled && entries.length) ? '' : 'none';
+    memoryDbEntriesRender(entries);
+  }).catch(() => { if (seq === mmDbSeq.n) wrap.style.display = 'none'; });
+}
+function memoryDbEntriesRender(entries) {
+  const box = mmEl('mmDbList');
+  if (!box) return;
+  box.innerHTML = '';
+  (Array.isArray(entries) ? entries : []).forEach(it => {
+    const row = document.createElement('div');
+    row.className = 'mm-row';
+    row.setAttribute('style',
+      'display:flex;align-items:flex-start;gap:8px;padding:7px 10px;' +
+      'border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);' +
+      'font-size:12px;');
+    const meta = mmDbBadge(it);
+    row.innerHTML =
+      '<span style="flex:0 0 auto;font-size:11px;" title="钉选条目每次对话恒带上">' +
+        (it.pinned ? '📌' : '') + '</span>' +
+      '<span style="flex:1;min-width:0;">' +
+        '<span class="mm-dbtext" style="display:block;color:var(--text);white-space:pre-wrap;word-break:break-all;"></span>' +
+        '<span style="display:block;font-size:11px;color:var(--text-3);margin-top:2px;">' +
+          mmEsc(meta) + (it.readonly ? ' · 迁移条目（在上方基础列表管理）' : '') +
+        '</span>' +
+      '</span>' +
+      '<button type="button" class="modal-btn mm-db-pin" style="flex:0 0 auto;padding:3px 8px;font-size:11.5px;">' +
+        (it.pinned ? '取消钉选' : '钉选') + '</button>' +
+      '<button type="button" class="modal-btn mm-db-del" style="flex:0 0 auto;padding:3px 8px;font-size:11.5px;color:var(--err);">删除</button>';
+    row.querySelector('.mm-dbtext').textContent = it.text || '';
+    const pinBtn = row.querySelector('.mm-db-pin');
+    const delBtn = row.querySelector('.mm-db-del');
+    if (it.readonly) { pinBtn.disabled = true; delBtn.disabled = true; pinBtn.title = '迁移条目请在上方基础列表管理'; delBtn.title = pinBtn.title; }
+    pinBtn.addEventListener('click', () => memoryDbEntryPin(it));
+    delBtn.addEventListener('click', () => memoryDbEntryErase(it));
+    box.appendChild(row);
+  });
+}
+async function memoryDbEntryPin(it) {
+  if (mmBusy || !it || it.readonly) return;
+  try {
+    const raw = await mmCallApi('memory_entry_pin',
+      [it.kind, it.id, !it.pinned], MM_WRITE_TIMEOUT_MS);
+    let d = {};
+    try { d = JSON.parse(raw || '{}'); } catch (e) {}
+    if (d && d.ok) { mmToast(it.pinned ? '已取消钉选' : '已钉选——每次对话恒带上', 'ok'); memoryDbStatRefresh(); }
+    else mmToast((d && d.error && d.error.message) || '操作失败', 'err');
+  } catch (e) { mmToast('桥接调用失败', 'err'); }
+}
+async function memoryDbEntryErase(it) {
+  if (mmBusy || !it || it.readonly) return;
+  const preview = String(it.text || '').slice(0, 40);
+  const bodyHtml = '确定删除这条扩展记忆吗？<br>「' + mmEsc(preview) +
+    (preview.length >= 40 ? '…' : '') + '」<br>事实条目为软删除（账本留审计痕迹）。';
+  let confirmed = false;
+  if (typeof uiConfirm === 'function') {
+    const r = await uiConfirm({ title: '删除扩展记忆', bodyHtml: bodyHtml, danger: true,
+      okText: '删除', cancelText: '取消' });
+    confirmed = !!(r && r.ok);
+  } else if (typeof confirm === 'function') {
+    confirmed = confirm('确定删除这条扩展记忆吗？\n「' + preview + '」');
+  }
+  if (!confirmed) return;
+  mmBusy = true;
+  try {
+    const raw = await mmCallApi('memory_entry_erase', [it.kind, it.id], MM_WRITE_TIMEOUT_MS);
+    let d = {};
+    try { d = JSON.parse(raw || '{}'); } catch (e) {}
+    if (d && d.ok) { mmToast('已删除', 'ok'); memoryDbStatRefresh(); }
+    else mmToast((d && d.error && d.error.message) || '删除失败', 'err');
+  } catch (e) { mmToast('桥接调用失败', 'err'); }
+  finally { mmBusy = false; }
 }
 function memoryPanelWire() {
   const add = mmEl('mmAddBtn');
   if (add) add.addEventListener('click', () => memoryPanelAdd());
   const refresh = mmEl('mmRefreshBtn');
-  if (refresh) refresh.addEventListener('click', () => memoryPanelRefresh());
+  if (refresh) refresh.addEventListener('click', () => { memoryPanelRefresh(); memoryDbStatRefresh(); });
   const search = mmEl('mmSearch');
   if (search) search.addEventListener('input', () => memoryPanelRenderList(mmLastItems));
   memoryGenerativeEnsure(mmEl('memoryBlock'));
@@ -373,6 +480,7 @@ async function memoryPanelAdd() {
       if (ta) ta.value = '';
       mmToast('已添加记忆', 'ok');
       await memoryPanelRefresh();
+      memoryDbStatRefresh();   // R39：镜像进 db → 扩展区条目同步刷新
     } else {
       // 复核修正：err() 家族返回 {'error': '字符串'}——renderError 只读
       // e.message，字符串塞进去恒显「[INTERNAL] 操作失败」丢真因（兼容两态）
@@ -450,6 +558,7 @@ async function memoryPanelDelete(index) {
     if (d && d.ok) {
       mmToast('已删除（剩余 ' + (d.remaining || 0) + ' 条）', 'ok');
       await memoryPanelRefresh();
+      memoryDbStatRefresh();   // R39：删除传播（指纹重建）→ 扩展区同步
     } else {
       const er = (d && d.error) || {};
       memoryPanelRenderError({ code: er.code || 'INTERNAL',

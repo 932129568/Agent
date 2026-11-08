@@ -13,6 +13,7 @@
   （remember()/memory_remember）不落 `legacy:` 命名空间，不受重建影响；
 - **config.json 零污染**：库文件=MEMORY_DB_PATH（paths.py 独立常量）。
 """
+import json
 import os
 import threading
 
@@ -23,6 +24,24 @@ LEGACY_ATTR = 'legacy_note'
 LEGACY_KEY_PREFIX = 'legacy:'
 
 # legacy 同步指纹：mtime_ns + 长度即可敏感捕获增删改（内容逐条 diff 不必要）
+
+
+def _text_attr(prefix, text):
+    """按文本派生稳定唯一 attribute（R39-D1 修复）。
+
+    facts.put 同 attribute latest-wins（R15 唯一性 partial index）：R38 把所有
+    legacy note / 默认 note 记忆都写进同一 attribute → 多条互相 supersede 只剩
+    最后一条（实证复现）。改为 attribute 携带规范化文本指纹 → 多条并存，
+    且同文本重放幂等（facts.put 值相同 → noop）。"""
+    import hashlib
+    return prefix + ':' + hashlib.sha1(
+        ''.join(str(text).split()).lower().encode('utf-8')).hexdigest()[:12]
+
+
+def _utc_now():
+    """ISO 时刻（agent_memory.utc_now_iso 同款口径，避免私有依赖漂移）。"""
+    from agent_memory.memory_store import utc_now_iso
+    return utc_now_iso()
 
 
 class MemoryDbService:
@@ -51,6 +70,13 @@ class MemoryDbService:
             try:
                 from agent_memory.memory_store import MemoryManager
                 mm = MemoryManager(paths.MEMORY_DB_PATH, window_turns=12)
+                # R39：Harbor 侧伴生表（钉选状态；agent_memory 参考实现零改动）
+                with mm.conn:
+                    mm.conn.execute(
+                        "CREATE TABLE IF NOT EXISTS ui_meta ("
+                        "kind TEXT NOT NULL, eid TEXT NOT NULL,"
+                        "pinned INTEGER NOT NULL DEFAULT 0,"
+                        "PRIMARY KEY (kind, eid))")
                 self._mm = mm
                 self.enabled = True
                 self._sync_legacy(force=True)
@@ -82,8 +108,11 @@ class MemoryDbService:
         with mm.conn:                           # 重建在单事务内（旧命名空间整删再导）
             mm.conn.execute(
                 "DELETE FROM profile_kv WHERE key LIKE ?", (LEGACY_KEY_PREFIX + '%',))
+            # R39-D1：attribute 带文本指纹（legacy_note:<sha12>），前缀匹配
+            # 兼容清理 R38 时代的裸 legacy_note 折叠残留（整库自愈重建）
             mm.conn.execute(
-                "DELETE FROM fact_records WHERE attribute=?", (LEGACY_ATTR,))
+                "DELETE FROM fact_records WHERE attribute LIKE ?",
+                (LEGACY_ATTR + '%',))
         try:
             import json
             with open(paths.MEMORY_PATH, encoding='utf-8') as f:
@@ -108,7 +137,9 @@ class MemoryDbService:
                                 weight=1.2 if kind == 'rule' else 1.0,
                                 source='user')
             else:
-                mm.facts.put('legacy', 'local', LEGACY_ATTR, text)
+                # R39-D1：逐条唯一 attribute（同文本幂等 noop），多条不再互相 supersede
+                mm.facts.put('legacy', 'local',
+                             _text_attr(LEGACY_ATTR, text), text)
 
     def ensure_synced(self):
         """对外入口：引擎可用即（必要时）同步 legacy。返回引擎或 None。"""
@@ -124,6 +155,10 @@ class MemoryDbService:
         mm = self._engine()
         if mm is None:
             return {'ok': False, 'reason': 'engine_unavailable'}
+        # R39-D1：未指定 attribute 时按文本派生唯一键——mm.remember 缺省 'note'
+        # 会把用户的多条事实记忆互相 supersede（同 R38 legacy 折叠同型缺陷）
+        if not attribute:
+            attribute = _text_attr('note', text)
         with self._lock:
             return mm.remember(session_id, user_id, text, source=source,
                                explicit=explicit, attribute=attribute)
@@ -154,8 +189,8 @@ class MemoryDbService:
             with mm.conn:
                 row = mm.conn.execute(
                     "SELECT COUNT(*) c FROM fact_records"
-                    " WHERE is_current=1 AND attribute<>?",
-                    (LEGACY_ATTR,)).fetchone()
+                    " WHERE is_current=1 AND attribute NOT LIKE ?",
+                    (LEGACY_ATTR + '%',)).fetchone()
                 row2 = mm.conn.execute(
                     "SELECT COUNT(*) c FROM profile_kv WHERE key NOT LIKE ?",
                     (LEGACY_KEY_PREFIX + '%',)).fetchone()
@@ -164,16 +199,24 @@ class MemoryDbService:
             ctx = mm.build_context(user_id, session_id, mode='profile_only',
                                    query=query)
             facts = ctx.get('current_facts') or {}
-            facts = {k: v for k, v in facts.items() if k != LEGACY_ATTR}
             profile = {k: v for k, v in (ctx.get('profile') or {}).items()
                        if not str(k).startswith(LEGACY_KEY_PREFIX)}
+            facts = {k: v for k, v in facts.items()
+                     if not str(k).startswith(LEGACY_ATTR)}
+            # R39：钉选条目恒置前（用户显式「这条必须每次带上」的语义）
+            pinned = self._pinned_ids(mm)
+            def _pin_first(items, keyfn):
+                return (sorted(items, key=lambda kv: 0 if keyfn(kv[0]) in pinned else 1)
+                        if pinned else list(items))
             lines = ['【长期记忆·扩展】（结构化事实，双时间戳校准；与当前指令冲突时以当前指令为准）']
-            for attr, val in list(facts.items())[:4]:
+            for attr, val in _pin_first(list(facts.items()),
+                                        lambda k: ('fact', str(k)))[:4]:
                 text = str(val)
                 if len(text) > 120:
                     text = text[:120] + '…'
                 lines.append('- [事实:%s] %s' % (attr, text))
-            for k, v in list(profile.items())[:2]:
+            for k, v in _pin_first(list(profile.items()),
+                                   lambda k: ('profile', str(k)))[:2]:
                 text = str(v)
                 if len(text) > 80:
                     text = text[:80] + '…'
@@ -184,6 +227,116 @@ class MemoryDbService:
             if self._log:
                 self._log.warning('extras_block 失败: %r', e)
             return ''
+
+    # ---- R39：面板逐条管理（列表 / 钉选 / 单条擦除） ----
+    def _pinned_ids(self, mm):
+        try:
+            rows = mm.conn.execute(
+                "SELECT kind, eid FROM ui_meta WHERE pinned=1").fetchall()
+            return {(r['kind'], r['eid']) for r in rows}
+        except Exception:
+            return set()
+
+    def list_entries(self, user_id):
+        """面板逐条视图：profile_kv + 当前事实合并（钉选/来源/置信度/命中）。"""
+        mm = self.ensure_synced()
+        if mm is None:
+            return None
+
+        def _text(v):
+            # profile_kv.value / fact_records.value 均为 JSON 串——解码为人话
+            try:
+                return str(json.loads(v))
+            except Exception:
+                return str(v)
+
+        with self._lock:
+            pinned = self._pinned_ids(mm)
+            out = []
+            for r in mm.conn.execute(
+                    "SELECT key, value, weight, source, access_count,"
+                    " last_accessed, updated_at FROM profile_kv"
+                    " WHERE user_id=? ORDER BY updated_at DESC", (user_id,)):
+                key = r['key']
+                out.append({
+                    'kind': 'profile', 'id': key,
+                    'text': _text(r['value']),
+                    'source': str(r['source'] or 'user'),
+                    'confidence': round(float(r['weight'] or 1.0), 2),
+                    'hits': int(r['access_count'] or 0),
+                    'last_hit': str(r['last_accessed'] or ''),
+                    'updated': str(r['updated_at'] or ''),
+                    'pinned': ('profile', key) in pinned,
+                    'readonly': str(key).startswith(LEGACY_KEY_PREFIX),
+                })
+            for r in mm.conn.execute(
+                    "SELECT fact_id, attribute, value, valid_from, tx_time"
+                    " FROM fact_records WHERE entity_id=? AND is_current=1"
+                    " ORDER BY tx_time DESC", (user_id,)):
+                fid = r['fact_id']
+                out.append({
+                    'kind': 'fact', 'id': fid,
+                    'text': _text(r['value']),
+                    'source': 'legacy' if str(r['attribute']).startswith(LEGACY_ATTR) else 'session',
+                    'confidence': 1.0,
+                    'hits': 0,
+                    'last_hit': '',
+                    'updated': str(r['tx_time'] or ''),
+                    'pinned': ('fact', fid) in pinned,
+                    'readonly': str(r['attribute']).startswith(LEGACY_ATTR),
+                })
+            return out
+
+    def pin(self, user_id, kind, eid, pinned=True):
+        """钉选/取消（ui_meta 伴生表 + 审计事件走 events.append 保哈希链）。"""
+        mm = self.ensure_synced()
+        if mm is None:
+            return {'ok': False, 'reason': 'engine_unavailable'}
+        with self._lock:
+            with mm.conn as c:
+                if pinned:
+                    c.execute("INSERT INTO ui_meta(kind, eid, pinned)"
+                              " VALUES (?,?,1) ON CONFLICT(kind, eid)"
+                              " DO UPDATE SET pinned=1", (kind, eid))
+                else:
+                    c.execute("DELETE FROM ui_meta WHERE kind=? AND eid=?",
+                              (kind, eid))
+                # 审计（eid 已是指纹/键名，非原文——R24 掩码口径不破）
+                mm.events.append('ui', 'memory_pin',
+                                 {'kind': str(kind), 'eid': str(eid)[:80],
+                                  'pinned': bool(pinned)}, tx=c)
+            return {'ok': True, 'kind': kind, 'pinned': bool(pinned)}
+
+    def erase_entry(self, user_id, kind, eid):
+        """面板单条擦除（legacy 命名空间条目只读——重建会复活，legacy 面板管）。"""
+        mm = self.ensure_synced()
+        if mm is None:
+            return {'ok': False, 'reason': 'engine_unavailable'}
+        with self._lock:
+            with mm.conn as c:
+                if kind == 'profile':
+                    cur = c.execute("SELECT key FROM profile_kv"
+                                    " WHERE user_id=? AND key=?",
+                                    (user_id, eid)).fetchone()
+                    if cur is None:
+                        return {'ok': False, 'reason': 'not_found'}
+                    c.execute("DELETE FROM profile_kv WHERE user_id=? AND key=?",
+                              (user_id, eid))
+                elif kind == 'fact':
+                    cur = c.execute("SELECT fact_id FROM fact_records"
+                                    " WHERE fact_id=? AND is_current=1",
+                                    (eid,)).fetchone()
+                    if cur is None:
+                        return {'ok': False, 'reason': 'not_found'}
+                    # 双时间轴软关闭（is_current=0 + valid_to=now；历史行保留可审计）
+                    c.execute("UPDATE fact_records SET is_current=0,"
+                              " valid_to=? WHERE fact_id=?",
+                              (_utc_now(), eid))
+                else:
+                    return {'ok': False, 'reason': 'bad_kind'}
+                mm.events.append('ui', 'memory_erase_entry',
+                                 {'kind': str(kind), 'eid': str(eid)[:80]}, tx=c)
+            return {'ok': True, 'kind': kind}
 
     def stats(self):
         mm = self.ensure_synced()

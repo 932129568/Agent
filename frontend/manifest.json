@@ -848,6 +848,7 @@
       "path": "frontend/src/components/markdown.js",
       "provides": [
         "MSG_ICONS",
+        "_mdStreamMap",
         "_rafPendingMap",
         "addMessage",
         "addMsgActions",
@@ -857,6 +858,8 @@
         "flushRender",
         "msgRecall",
         "renderMd",
+        "renderMdStream",
+        "resetMdStream",
         "scheduleRender",
         "viewImage"
       ],
@@ -1087,6 +1090,8 @@
         "routeTools",
         "fetchGLMStream",
         "scheduleRender",
+        "renderMdStream",
+        "resetMdStream",
         "AppState",
         "buildChatRequestBody",
         "degradeChatBodyFor400",
@@ -1513,7 +1518,14 @@
         "memoryGenerativeShow",
         "memoryGenerativeHide",
         "memoryGenerativeEnsure",
-        "memoryDbStatRefresh"
+        "memoryDbStatRefresh",
+        "mmDbSeq",
+        "mmDbEntries",
+        "mmDbBadge",
+        "memoryDbEntriesRefresh",
+        "memoryDbEntriesRender",
+        "memoryDbEntryPin",
+        "memoryDbEntryErase"
       ],
       "requires": [
         "callApi",

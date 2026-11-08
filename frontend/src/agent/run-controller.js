@@ -437,6 +437,8 @@ async function runAgentLoop(s, apiKey, opts) {
     let finishReason = null;
     const beforeRound = async ({ round }) => {
       if (userStopped || !agentRunCurrent(run)) return { stop: true, finished: true, status: 'cancelled' };
+      // R39（D24）：轮次边界复位块级冻结状态——mdBody 每轮重写，冻结前缀按轮重新累计
+      resetMdStream(mdBody);
       // 修复 建议㉔（二轮）：finishReason 每轮复位——原跨轮次残留，上轮 length
       // 会让下轮正常结束也误触发截断续跑
       finishReason = null;
@@ -464,7 +466,10 @@ async function runAgentLoop(s, apiKey, opts) {
       let sysContent = EFFICIENCY_PROMPT + (sysPrompt ? '\n\n' + sysPrompt : '');
       let effTools = effectiveTools;
       try {
-        const beSys = await callApi('build_system_prompt', []);
+        // R39（P0-2b）：传当前任务文本作 query → 记忆注入按相关度补充（W11 语义
+        // 自此激活：常驻 rule/preference 依旧恒注入，query 相关 top2 + 扩展库
+        // 排序生效）。纯 legacy/无记忆用户输出逐字节不变（_memory_inject 空段回退）。
+        const beSys = await callApi('build_system_prompt', [String(routeText || '').slice(0, 400)]);
         // W0 R19：执行铁律改读 prompts/efficiency.md（版本化）；失败回落前端
         // 内置常量（内容与 prompts 文件逐字节一致，回落零行为差异）
         let effText = EFFICIENCY_PROMPT;
@@ -607,7 +612,9 @@ async function runAgentLoop(s, apiKey, opts) {
           fullContent = current.content;
           fullReasoning = current.reasoning;
           if (delta.reasoning_content || delta.content) {
-            scheduleRender(mdBody, () => reasonHtml(fullReasoning) + renderMd(fullContent));
+            // R39（F3a/D24）：流式期走块级冻结——只重渲染尾部活动块，O(n²)→O(n)；
+            // 轮末 onAssistant 仍 renderMd 全文权威渲染（跨块语义终帧纠正）
+            scheduleRender(mdBody, () => reasonHtml(fullReasoning) + renderMdStream(mdBody, fullContent));
             if (agentRunVisible(run)) {
               const le = document.getElementById('liveTokenStat');
               const est = Math.ceil((fullContent.length + fullReasoning.length) / 1.8);

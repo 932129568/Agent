@@ -19,6 +19,35 @@ function renderMd(text) {
   //（模型输出是半不可信输入，XSS 在 pywebview 下等于拿到全部 js_api 本地能力），降级为纯文本转义。
   return '<p>' + escapeHtml(text || '') + '</p>';
 }
+/* R39（F3a/D24）块级冻结流式渲染：onDelta 全文重解析 O(n²) 根治。
+ * 按 marked 顶层 token 切分——已闭合块冻结（每块终身只过一次 marked+DOMPurify），
+ * 每次仅重渲染尾部活动块；未闭合围栏由 lexer 自动按代码块补全（F3a③，消除裸符号闪烁）。
+ * 正确性边界：跨块语义（引用链接后置定义等）流式期间允许瞬时分歧，
+ * 轮末/流末调用方 renderMd 全文权威渲染兜底纠正（F3a 共识：Streamdown/Cherry 同型方案）。 */
+const _mdStreamMap = new WeakMap();   // el -> { doneRaw, doneHtml }
+function renderMdStream(el, text) {
+  const src = String(text || '');
+  if (!el || !(window.marked && window.marked.lexer && window.DOMPurify)) return renderMd(src);
+  let st = _mdStreamMap.get(el);
+  // 增量前提：新文本须是已冻结前缀的延长（截断/重生成/换轮内容 → 全量重建，自愈）
+  if (!(st && src.length >= st.doneRaw.length && src.startsWith(st.doneRaw))) {
+    st = { doneRaw: '', doneHtml: '' };
+    _mdStreamMap.set(el, st);
+  }
+  let tokens = null;
+  try { tokens = marked.lexer(src.slice(st.doneRaw.length)); } catch (e) { tokens = null; }
+  if (!tokens || !tokens.length) return st.doneHtml;
+  if (tokens.length > 1) {
+    // ≥2 块：前 n-1 块已闭合 → 冻结（st.doneHtml 终身累计，不重渲染）
+    let frozen = '';
+    for (let i = 0; i < tokens.length - 1; i++) frozen += renderMd(tokens[i].raw);
+    st.doneHtml += frozen;
+    st.doneRaw += tokens.slice(0, tokens.length - 1).map(t => t.raw).join('');
+  }
+  return st.doneHtml + renderMd(tokens[tokens.length - 1].raw);
+}
+/** 轮次边界复位（run-controller beforeRound 调用）：新一轮正文重新累计。 */
+function resetMdStream(el) { if (el) _mdStreamMap.delete(el); }
 const _rafPendingMap = new WeakMap();   // 修复 W28：按 el 保存唯一待渲染记录，避免全局单 flag 丢帧；终帧可同步 flush
 function scheduleRender(el, fn) {
   // 复核批修正（真机实证）：WebView2 合成器空闲时 rAF 回调可能不派发——

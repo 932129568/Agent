@@ -37,7 +37,11 @@ def test_engine_available_and_wal(mem_env):
 
 
 def test_migration_import_and_extras_zero_drift(mem_env):
-    """legacy 条目进 `legacy:` 命名空间；**不触发扩展注入段**（契约零漂移）。"""
+    """legacy 条目进 `legacy:` 命名空间；**不触发扩展注入段**（契约零漂移）。
+
+    R39-D1 断言更新：原断言 `attribute='legacy_note'` 恰 1 条 current——
+    钉住的是折叠缺陷（多条 fact 类记忆同 attribute 互相 supersede 只剩最后
+    一条，Node/Python 双端实证）。现 attribute 带文本指纹，逐条并存。"""
     svc, jp = mem_env
     _write_legacy(jp, [
         {'text': '以后都先写测试再写实现', 'kind': 'rule', 'ts': '01-01 10:00'},
@@ -50,11 +54,29 @@ def test_migration_import_and_extras_zero_drift(mem_env):
         assert mm.conn.execute(
             "SELECT COUNT(*) c FROM profile_kv WHERE key LIKE 'legacy:%'"
         ).fetchone()['c'] == 2
+        # 1 条 fact 类 legacy 记忆 → 1 条 current（前缀命名空间）
         assert mm.conn.execute(
-            "SELECT COUNT(*) c FROM fact_records WHERE attribute='legacy_note'"
+            "SELECT COUNT(*) c FROM fact_records WHERE attribute LIKE 'legacy_note:%'"
             " AND is_current=1").fetchone()['c'] == 1
     # 全部是 legacy → 扩展段必须为空（对既有用户 build_system_prompt 零变化）
     assert svc.extras_block('local', 'legacy') == ''
+
+
+def test_legacy_multi_note_no_supersede(mem_env):
+    """R39-D1：多条 fact 类 legacy 记忆迁移后逐条并存（原实现折叠只剩最后一条）。"""
+    svc, jp = mem_env
+    _write_legacy(jp, [
+        {'text': '部署脚本在 D:\\deploy\\ship.ps1', 'kind': 'fact', 'ts': '01-01 10:00'},
+        {'text': '数据备份在 E:\\bak', 'kind': 'fact', 'ts': '01-01 10:01'},
+        {'text': '发布前先跑 tests/', 'kind': 'fact', 'ts': '01-01 10:02'},
+    ])
+    svc.ensure_synced()
+    entries = svc.list_entries('local')
+    facts = [e for e in entries if e['kind'] == 'fact']
+    assert len(facts) == 3
+    texts = {e['text'] for e in facts}
+    assert '部署脚本在 D:\\deploy\\ship.ps1' in texts
+    assert all(e['readonly'] for e in facts)      # legacy 条目只读（删除走 legacy 面板）
 
 
 def test_legacy_delete_propagates(mem_env):
@@ -69,7 +91,7 @@ def test_legacy_delete_propagates(mem_env):
     mm = svc._mm
     with mm.conn:
         assert mm.conn.execute(
-            "SELECT COUNT(*) c FROM fact_records WHERE attribute='legacy_note'"
+            "SELECT COUNT(*) c FROM fact_records WHERE attribute LIKE 'legacy_note:%'"
             " AND is_current=1").fetchone()['c'] == 1
 
 
@@ -115,6 +137,68 @@ def test_hard_erase_tombstone(mem_env):
     assert st['integrity'] is True        # 墓碑事件不断哈希链
 
 
+def test_entries_pin_erase_and_extras_priority(mem_env):
+    """R39 面板逐条能力：list_entries 视图 / 钉选注入置前 / 单条擦除。"""
+    svc, _ = mem_env
+    svc.remember('s1', 'local', '部署脚本在 D 盘 deploy 目录', attribute='deploy')
+    svc.remember('s1', 'local', '数据备份在 E 盘 bak 目录', attribute='backup')
+    entries = svc.list_entries('local')
+    facts = [e for e in entries if e['kind'] == 'fact']
+    assert len(facts) == 2 and not any(e['pinned'] for e in facts)
+    assert all(e['source'] == 'session' for e in facts)
+    # 钉选 → 视图标位 + 注入段置前 + 审计不断链
+    fid = [e for e in facts if '备份' in e['text']][0]['id']
+    assert svc.pin('local', 'fact', fid, True)['ok']
+    entries = svc.list_entries('local')
+    f = [e for e in entries if e['kind'] == 'fact' and e['id'] == fid][0]
+    assert f['pinned'] is True
+    out = svc.extras_block('local', 's1')
+    assert '【长期记忆·扩展】' in out and out.index('备份') < out.index('deploy')
+    assert svc.stats()['integrity'] is True
+    # 单条软关闭：视图消失 + 其余保留 + 审计不断链
+    assert svc.erase_entry('local', 'fact', fid)['ok']
+    entries = svc.list_entries('local')
+    assert [e for e in entries if e['kind'] == 'fact' and e['id'] == fid] == []
+    assert len([e for e in entries if e['kind'] == 'fact']) == 1
+    assert svc.stats()['integrity'] is True
+    # profile 擦除 + not_found/bad_kind 边界（preference 句式 → 画像层）
+    svc.remember('s1', 'local', '我喜欢简洁的回复')
+    prof = [e for e in svc.list_entries('local') if e['kind'] == 'profile']
+    assert prof and svc.erase_entry('local', 'profile', prof[0]['id'])['ok']
+    assert svc.erase_entry('local', 'profile', prof[0]['id'])['reason'] == 'not_found'
+    assert svc.erase_entry('local', 'widget', 'x')['reason'] == 'bad_kind'
+
+
+def test_api_entries_surface_and_mirror(fresh_home, tmp_path, monkeypatch):
+    """R39：Api 面 3 个新 js_api + append_memory 镜像修复（多条 note 不再 supersede）。"""
+    from backend import paths
+    from backend.api import Api
+    monkeypatch.setattr(paths, 'MEMORY_DB_PATH', str(tmp_path / 'memory.db'))
+    api = Api()
+    # 多条 fact 类 legacy 写入 → 逐条镜像（R39-D1 修复：原实现只留最后一条）
+    api.append_memory(json.dumps({'text': '部署脚本在 D 盘'}))
+    api.append_memory(json.dumps({'text': '备份在 E 盘'}))
+    r = json.loads(api.memory_entries_list())
+    assert r['enabled'] is True
+    texts = [e['text'] for e in r['entries'] if e['kind'] == 'fact']
+    assert any('部署脚本' in t for t in texts), texts
+    assert any('备份' in t for t in texts), texts
+    facts = [e for e in r['entries'] if e['kind'] == 'fact']
+    assert all(e['readonly'] for e in facts)     # legacy 条目只读
+    # 用户直写（非 legacy）→ 可钉选可删；legacy/未知 kind 拒绝
+    json.loads(api.memory_remember('测试输出目录在 F 盘'))
+    mine = [e for e in json.loads(api.memory_entries_list())['entries']
+            if e['kind'] == 'fact' and not e['readonly']]
+    assert mine, '用户直写条目应存在且可管理'
+    fid = mine[0]['id']
+    assert json.loads(api.memory_entry_pin('fact', fid, True))['ok']
+    assert json.loads(api.memory_entry_erase('fact', fid))['ok']
+    r3 = json.loads(api.memory_entries_list())
+    assert not [e for e in r3['entries'] if e['id'] == fid]
+    bad = json.loads(api.memory_entry_erase('legacy', 'x'))
+    assert bad['ok'] is False and bad['error']['code'] == 'BAD_PARAMS'
+
+
 def test_container_and_v12_registration():
     """容器装配 + API_ALIASES + _V12_EXTRA 登记（get_api_info 隐身铁律）。"""
     from backend.bootstrap.container import ServiceContainer
@@ -124,5 +208,6 @@ def test_container_and_v12_registration():
     c.shutdown()
     from backend.api import _V12_EXTRA
     for m in ('memory_context_build', 'memory_remember', 'memory_erase',
-              'memory_stats', 'memory_audit_query'):
+              'memory_stats', 'memory_audit_query',
+              'memory_entries_list', 'memory_entry_erase', 'memory_entry_pin'):
         assert m in _V12_EXTRA, m

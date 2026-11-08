@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Api 门面（对外契约层）：51 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc），
+"""Api 门面（对外契约层）：54 个 js_api 公开方法（含 v1.8.0 增补的通用分发通道 rpc；
+R39 追加记忆面板逐条管理 memory_entries_list/memory_entry_erase/memory_entry_pin，
+均 _V12_EXTRA 隐身），
 签名/位置参数/返回协议逐字保持 v1.0.0。
 
 红线（重构生命线）：
@@ -100,6 +102,7 @@ _V12_EXTRA = frozenset({
     # 继续走 memory.json 契约不接管；引擎不可用时以下方法全部安全降级）
     'memory_context_build', 'memory_remember', 'memory_erase',
     'memory_stats', 'memory_audit_query',
+    'memory_entries_list', 'memory_entry_erase', 'memory_entry_pin',
 })
 
 
@@ -715,8 +718,12 @@ class Api:
                 else:
                     self._memory_db.ensure_synced()
                     if self._memory_db.enabled:
-                        self._memory_db._mm.facts.put('legacy', 'local',
-                                                      'legacy_note', text)
+                        # R39-D1：逐条唯一 attribute（同文本 noop 幂等）——
+                        # 原 'legacy_note' 定值会让第二条 note 类记忆 supersede 第一条
+                        from .domains.memory.db_service import _text_attr, LEGACY_ATTR
+                        self._memory_db._mm.facts.put(
+                            'legacy', 'local',
+                            _text_attr(LEGACY_ATTR, text), text)
                 # 面板写入后指纹已过期——强制下次同步跳过重建（避免重复导入）
                 self._memory_db._legacy_fp_seen = self._memory_db._legacy_fp()
         except Exception:
@@ -956,6 +963,38 @@ class Api:
         r = self._memory_db.remember(session_id, self._MEMORY_USER,
                                      str(text or ''), source=str(source or 'user'),
                                      explicit=bool(explicit), attribute=attribute)
+        return ok(r)
+
+    # ---- R39：记忆面板逐条管理（_V12_EXTRA 隐身；引擎不可用安全降级） ----
+    def memory_entries_list(self):
+        """扩展库逐条视图（profile+fact 合并；含钉选/来源/置信度/命中）。"""
+        entries = self._memory_db.list_entries(self._MEMORY_USER)
+        if entries is None:
+            return ok({'enabled': False, 'entries': []})
+        return ok({'enabled': True, 'entries': entries})
+
+    def memory_entry_erase(self, kind, eid):
+        """面板单条擦除（profile 删行 / fact 双时间轴软关闭；legacy 条目只读拒删）。"""
+        r = self._memory_db.erase_entry(self._MEMORY_USER,
+                                        str(kind or ''), str(eid or ''))
+        if r.get('reason') == 'engine_unavailable':
+            return ok({'ok': False, 'error': {'code': 'DISABLED',
+                                              'message': '扩展记忆库未启用'}})
+        if r.get('reason') == 'not_found':
+            return ok({'ok': False, 'error': {'code': 'NOT_FOUND',
+                                              'message': '该条目已不存在，请刷新'}})
+        if r.get('reason') == 'bad_kind':
+            return ok({'ok': False, 'error': {'code': 'BAD_PARAMS',
+                                              'message': 'kind 必须是 profile 或 fact'}})
+        return ok(r)
+
+    def memory_entry_pin(self, kind, eid, pinned=True):
+        """钉选/取消（钉选条目在注入段恒置前）。"""
+        r = self._memory_db.pin(self._MEMORY_USER, str(kind or ''),
+                                str(eid or ''), pinned=bool(pinned))
+        if r.get('reason') == 'engine_unavailable':
+            return ok({'ok': False, 'error': {'code': 'DISABLED',
+                                              'message': '扩展记忆库未启用'}})
         return ok(r)
 
     def memory_context_build(self, query='', mode='full', token_budget=None):
