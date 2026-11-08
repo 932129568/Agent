@@ -1074,7 +1074,8 @@ async function groupCallModel(s, member, messages, onDelta, onTool) {
   return text;
 }
 
-const groupAbort = { controller: new AbortController(), bySid: new Map() };
+// R37（D20）：controller 死字段移除（bySid 才是真实存储；全库无 controller 引用）
+const groupAbort = { bySid: new Map() };
 
 /** R31：按会话取 abort controller —— 暂停 A 群不中断并行中的 B 群。 */
 function groupAbortController(sid) {

@@ -103,6 +103,15 @@ export const ARMED = process.env.HARBOR_GUARD_ARMED !== 'false'
 
 /* ---------------- 会话级内存态（Python 进程内语义） ---------------- */
 const tokens = new Map()          // token -> {op, digest, exp, used}（全局单用即毁）
+// R37 修复（S2-22·淘汰半边）：tokens 无上限=长期运行慢性泄漏——容量 256，
+// 超限先清过期/已用，再按插入序逐出最旧。（sid 绑定属确认语义变更，留档评审）
+const TOKEN_MAP_MAX = 256
+function tokensEvict() {
+  if (tokens.size < TOKEN_MAP_MAX) return
+  const nowMs = now()
+  for (const [k, v] of tokens) { if (v.used || v.exp < nowMs) tokens.delete(k) }
+  while (tokens.size >= TOKEN_MAP_MAX) tokens.delete(tokens.keys().next().value)
+}
 // P0-3：per-sid 容器（单 sid 时与原单值变量行为一致；purgeSid 统一清理）
 const trustBySid = registerSidContainer('sessionTrust', new Map())   // sid -> Set<op>
 const grants = registerSidContainer('grants', new Map())             // sid -> grant
@@ -371,6 +380,7 @@ export async function guardConfirmToken(op, detail = {}) {
     return JSON.stringify({ error: `未知护栏操作: ${op}` })
   }
   const token = crypto.randomBytes(16).toString('hex')
+  tokensEvict()
   tokens.set(token, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false })
   await countApproval(op)
   return JSON.stringify({ token, ttl: TOKEN_TTL_SECONDS })
@@ -388,6 +398,7 @@ export async function consumeToken(op, detail, token) {
 export async function refundToken(op, detail, token) {
   const key = String(token || '')
   if (!key || tokens.has(key)) return false
+  tokensEvict()
   tokens.set(key, { op, digest: digestOf(detail), exp: now() + TOKEN_TTL_SECONDS * 1000, used: false })
   sidBudget().used = Math.max(0, sidBudget().used - 1)
   return true

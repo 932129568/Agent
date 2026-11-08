@@ -281,6 +281,7 @@ async function saveSessions() {
   if (_allSignaturesEqual(sigs, _savedSignatures)) return;
   // ① 单次序列化（原深克隆 + 二次 stringify 两趟遍历）
   const data = JSON.stringify(currentSessions, _sessionsPersistReplacer);
+  let _backendPersisted = false;
   try { localStorage.setItem('glm_sessions', _sessionsMirrorProjection(currentSessions)); }
   catch (e) { toast('本地会话缓存写入失败（浏览器存储可能已满）: ' + e.message, 'warn'); }   // 修复 建议㊶（二轮）：原完全静默
   try {
@@ -288,8 +289,14 @@ async function saveSessions() {
     if ((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE) {
       await callApi('save_sessions', [data]);
       _savedSignatures = sigs;   // 仅在后端写成功后更新基线（失败时下次仍全量重试）
+      _backendPersisted = true;
     }
   } catch (e) { toast('会话历史保存失败：' + e.message, 'warn'); }   // v1.2 R3：静默吞错 → 可见
+  // R37 修复（D34）：纯浏览器环境（无 pywebview/HTTP 桥）镜像即权威——原基线
+  // 永不更新，签名短路永不命中，每次保存都全量双写。
+  if (!_backendPersisted && !((window.pywebview && window.pywebview.api) || window.HARBOR_API_BASE)) {
+    _savedSignatures = sigs;
+  }
   };
   const now = Date.now();
   // R31：任意会话有在途 run 都走快速节流（后台并行的输出同样不能丢）
