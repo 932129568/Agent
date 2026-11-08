@@ -638,18 +638,79 @@
             <span class="access-hint">允许创建文件夹、写入文件和执行命令；仍受命令沙箱与安全护栏限制。</span>
           </div>
           <div class="input-row">
-            <button class="tool-btn" title="添加图片" onclick="document.getElementById('imgInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-image"/></svg></button>
-            <button class="tool-btn" title="添加视频" onclick="document.getElementById('vidInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-video"/></svg></button>
-            <button class="tool-btn" title="添加文本文件" onclick="document.getElementById('fileInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-file"/></svg></button>
-            <button class="tool-btn" title="上传压缩包 (zip)" onclick="document.getElementById('zipInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-zip"/></svg></button>
-            <input type="file" id="imgInput" accept="image/*" multiple hidden>
-            <input type="file" id="vidInput" accept="video/*" hidden>
-            <input type="file" id="fileInput" multiple hidden>
-            <input type="file" id="zipInput" accept=".zip" multiple hidden>
-            <button class="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">专家</button>
+            <!-- R32 契约兼容面：旧 4 个分类上传按钮 / 4 个 input / 文字「专家」按钮原样保留
+                 （DOM id 与 onclick 属冻结契约），视觉上收敛为下方单个「+」按钮。
+                 统一入口 unifiedFileInput 覆盖更多格式，按类型自动分派到既有处理链。 -->
+            <span class="legacy-attach" hidden>
+              <button class="tool-btn" title="添加图片" onclick="document.getElementById('imgInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-image"/></svg></button>
+              <button class="tool-btn" title="添加视频" onclick="document.getElementById('vidInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-video"/></svg></button>
+              <button class="tool-btn" title="添加文本文件" onclick="document.getElementById('fileInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-file"/></svg></button>
+              <button class="tool-btn" title="上传压缩包 (zip)" onclick="document.getElementById('zipInput').click()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-zip"/></svg></button>
+              <input type="file" id="imgInput" accept="image/*" multiple hidden>
+              <input type="file" id="vidInput" accept="video/*" hidden>
+              <input type="file" id="fileInput" multiple hidden>
+              <input type="file" id="zipInput" accept=".zip" multiple hidden>
+              <button class="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">专家</button>
+            </span>
+            <button class="tool-btn composer-plus" id="composerPlusBtn" type="button" title="添加文件 / 专家 / 技能 / 连接器" aria-label="更多" aria-expanded="false"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <input type="file" id="unifiedFileInput" multiple hidden
+              accept="image/*,video/*,audio/*,.txt,.md,.markdown,.json,.jsonl,.csv,.tsv,.log,.srt,.ass,.py,.js,.mjs,.cjs,.ts,.tsx,.jsx,.html,.htm,.css,.scss,.less,.java,.c,.cpp,.h,.hpp,.cs,.go,.rs,.rb,.php,.lua,.swift,.kt,.dart,.scala,.sh,.bash,.bat,.ps1,.sql,.tex,.rst,.adoc,.vue,.svelte,.yaml,.yml,.toml,.ini,.conf,.cfg,.xml,.svg,.graphql,.proto,.ipynb,.patch,.diff,.env,.gitignore,.makefile,.gradle,.properties,.lock,.zip,.tar,.gz,.tgz,.rar,.7z,.bz2,.xz,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.epub,.rtf,.mp3,.wav,.m4a,.flac,.ogg,.aac,.wma,.mp4,.mov,.mkv,.avi,.webm,.flv,.wmv,.m4v,.3gp,.png,.jpg,.jpeg,.gif,.webp,.bmp,.ico,.heic,.heif,.avif,.tif,.tiff">
             <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…（输入 /plan 可先出计划）" aria-label="消息输入"></textarea>
             <div class="expert-selection-chip" id="expertSelectionChip" aria-live="polite" hidden></div>
             <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="发送消息"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-send"/></svg></button>
+          </div>
+          <div class="hub-chip" id="hubChip" aria-live="polite" hidden></div>
+
+          <!-- R32：WorkBuddy 同款「+」菜单：添加文件 / 引用对话中的文件 / 模式 / 专家 / 技能 / 连接器 -->
+          <div class="hub-menu" id="hubMenu" hidden role="menu" aria-label="更多操作">
+            <button class="hub-mi" id="hubAddFile" type="button" role="menuitem">
+              <svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-plus"/></svg>
+              <span class="hub-mi-body"><b>添加文件</b><small>图片 · 文档 · 代码 · 压缩包等</small></span>
+              <span class="hub-mi-arrow">›</span>
+            </button>
+            <button class="hub-mi" id="hubQuoteFile" type="button" role="menuitem">
+              <span class="hub-mi-glyph">@</span>
+              <span class="hub-mi-body"><b>引用对话中的文件</b><small>在历史消息里检索</small></span>
+              <span class="hub-mi-arrow">›</span>
+            </button>
+            <div class="hub-sep"></div>
+            <button class="hub-mi hub-mi-sub" data-hub-sub="mode" type="button" role="menuitem">
+              <span class="hub-mi-glyph">⚡</span><span class="hub-mi-body"><b>模式</b></span><span class="hub-mi-arrow">›</span>
+            </button>
+            <button class="hub-mi hub-mi-sub" data-hub-sub="expert" type="button" role="menuitem">
+              <span class="hub-mi-glyph">🎭</span><span class="hub-mi-body"><b>专家</b></span><span class="hub-mi-arrow">›</span>
+            </button>
+            <button class="hub-mi hub-mi-sub" data-hub-sub="skill" type="button" role="menuitem">
+              <span class="hub-mi-glyph">✨</span><span class="hub-mi-body"><b>技能</b></span><span class="hub-mi-arrow">›</span>
+            </button>
+            <button class="hub-mi hub-mi-sub" data-hub-sub="connector" type="button" role="menuitem">
+              <span class="hub-mi-glyph">🔗</span><span class="hub-mi-body"><b>连接器</b></span><span class="hub-mi-arrow">›</span>
+            </button>
+            <div class="hub-subpanel" id="hubSubpanel" hidden>
+              <div class="hub-sub-head">
+                <svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-search"/></svg>
+                <input id="hubSearch" type="search" placeholder="搜索专家" aria-label="搜索内置目录">
+              </div>
+              <div class="hub-sub-list" id="hubList"></div>
+              <button class="hub-sub-more" id="hubMore" type="button">召唤更多专家…</button>
+            </div>
+          </div>
+
+          <!-- R32：「召唤更多」全量目录（市场 448 专家 / 54 专家团 / 292 技能 / 17 连接器） -->
+          <div class="hub-all" id="hubAll" hidden>
+            <div class="hub-all-card" role="dialog" aria-label="内置目录">
+              <div class="hub-all-head">
+                <h3 id="hubAllTitle">WorkBuddy 市场 · 全部目录</h3>
+                <button class="hub-all-close" id="hubAllClose" type="button" aria-label="关闭">✕</button>
+              </div>
+              <div class="hub-all-tabs" id="hubAllTabs"></div>
+              <div class="hub-sub-head hub-all-search">
+                <svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-search"/></svg>
+                <input id="hubAllSearch" type="search" placeholder="搜索名称 / 描述 / 分区" aria-label="搜索全部目录">
+              </div>
+              <div class="hub-all-list" id="hubAllList"></div>
+              <div class="hub-all-foot" id="hubAllFoot"></div>
+            </div>
           </div>
           <div class="hint">
             <span>Enter 发送 · Shift+Enter 换行</span>
@@ -668,11 +729,29 @@
       <div class="panel-head">
         <div>
           <h1 class="panel-title">会话</h1>
-          <p class="panel-sub">历史对话都在这里，点击即可接着聊</p>
+          <p class="panel-sub">群聊与单聊可同时进行、互不干扰；点击卡片接着聊</p>
         </div>
         <button class="pill-btn" id="sessionsNewChatBtn" onclick="openNewChatScreen()"><svg class="ui-icon"><use href="#i-plus"/></svg>新建对话</button>
       </div>
-      <div class="session-list" id="sessionList"></div>
+      <!-- R31 历史会话页重构：概览统计 + 类型筛选 + 搜索 + 富信息卡片 -->
+      <div class="sessions-hub">
+        <div class="sh-stats" id="sessionStatsBar" aria-label="会话概览"></div>
+        <div class="sh-toolbar">
+          <div class="seg sh-filter" id="sessionFilterSeg" role="tablist" aria-label="会话类型筛选">
+            <button type="button" class="seg-btn on" role="tab" aria-selected="true" data-sfilter="all" onclick="setSessionFilter('all')">全部</button>
+            <button type="button" class="seg-btn" role="tab" aria-selected="false" data-sfilter="chat" onclick="setSessionFilter('chat')">单聊</button>
+            <button type="button" class="seg-btn" role="tab" aria-selected="false" data-sfilter="group" onclick="setSessionFilter('group')">群聊</button>
+            <button type="button" class="seg-btn" role="tab" aria-selected="false" data-sfilter="running" onclick="setSessionFilter('running')">进行中</button>
+          </div>
+          <div class="sh-search">
+            <input class="sh-search-input" id="sessionSearchInput" type="search" autocomplete="off"
+                   placeholder="搜索标题或消息内容…" aria-label="搜索会话"
+                   oninput="setSessionQuery(this.value)"
+                   onkeydown="if(event.key==='Escape'){this.value='';setSessionQuery('');}">
+          </div>
+        </div>
+        <div class="session-list sh-list" id="sessionList"></div>
+      </div>
     </section>
 
     <!-- 面板 3 · 分析：趋势图 + 工具统计（数据全部来自运行时 sessions，R3：#tokenStat 不受影响） -->

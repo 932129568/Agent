@@ -174,6 +174,15 @@ async function loadAll() {
       await handleFiles(e.target.files, tp); e.target.value = '';
     });
   });
+  // R32：统一附件入口——所有格式共用一个 input，按 MIME/扩展名自动分派
+  const _unifiedInput = document.getElementById('unifiedFileInput');
+  if (_unifiedInput) _unifiedInput.addEventListener('change', async e => {
+    if (typeof hubDispatchFiles === 'function') await hubDispatchFiles(e.target.files);
+    else await handleFiles(e.target.files, 'text');
+    e.target.value = '';
+  });
+  // R32：加号菜单 / 内置目录 / 启用状态 chip 的事件绑定
+  if (typeof hubInitComposer === 'function') hubInitComposer();
   await loadSessions();
   try { loadProjects(); } catch (e) { /* project storage is optional/local-only */ }
   try { migrateWorkingRunStatuses(); } catch (e) { /* status migration is best-effort */ }

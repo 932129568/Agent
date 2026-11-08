@@ -117,7 +117,12 @@ function openSessionSearch() {
  *  按索引驱动窗口把目标行换入 DOM，再继续命中——跳转不再依赖节点常驻。 */
 function jumpToSearchHit(sessionId, midx) {
   _closeModal();
-  if (isStreaming) { toast('正在生成回复，请先停止', 'warn'); return; }
+  // R31：只拦目标会话自己有在途 run；harness 无按会话信息时仅拦当前会话
+  const _jumpBusy = (typeof isSessionStreaming === 'function')
+    ? isSessionStreaming(sessionId)
+    : (sessionId === (typeof currentSessionId !== 'undefined' ? currentSessionId : null)
+       && !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming)));
+  if (_jumpBusy) { toast('目标会话正在生成回复，请先停止', 'warn'); return; }
   if (currentSessionId !== sessionId) switchSession(sessionId);
   const selector = '#chatContainer [data-midx="' + String(midx) + '"]';
   const flash = (el) => {

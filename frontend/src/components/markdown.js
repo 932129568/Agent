@@ -241,7 +241,8 @@ function addMsgActions(msgEl, text, onlyCopy) {
 /** 撤回 user 消息：midx 起删到下一个 user/system 前（仅当这些是会话末尾消息），内容回输入框。 */
 function msgRecall(msgEl, text) {
   // 修复：流式生成中撤回会 splice 掉正在追加的消息、与 Agent 循环竞态——入口拦截
-  if (isStreaming) { toast('正在生成回复，请先停止或等待完成', 'warn'); return; }
+  // R31：只拦本会话（其他会话并行生成不阻塞本条撤回）
+  if (typeof isSessionStreaming === 'function' ? isSessionStreaming() : !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming))) { toast('本会话正在生成回复，请先停止或等待完成', 'warn'); return; }
   const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
   const midx = msgEl && msgEl.dataset ? parseInt(msgEl.dataset.midx, 10) : NaN;
   if (!s || isNaN(midx) || s.messages[midx] == null || s.messages[midx].role !== 'user') {

@@ -19,8 +19,8 @@ function saveCompactBackup(s, kind, replacedMsgs) {
 function restoreCompactBackup(s, gen) {
   // 复核修正：生成中禁止恢复——renderChatHistory 重建 DOM 会摘除在途流式
   // 气泡（最终消息可能只在数据层不在界面）
-  if (typeof isStreaming !== 'undefined' && isStreaming) {
-    toast('AI 正在生成中，请先停止或等待完成再恢复原文', 'warn');
+  if (typeof isSessionStreaming === 'function' ? isSessionStreaming(s && s.id) : !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming))) {
+    toast('本会话正在生成中，请先停止或等待完成再恢复原文', 'warn');
     return false;
   }
   const bk = s && s._compactBackup;
@@ -128,7 +128,11 @@ function summarizeToolResult(raw) {
 }
 async function compactNow(s, apiKey, opts = {}) {
   const quietAdd = (msg) => { if (!opts.quiet) addMessage('assistant', msg); };
-  if (!opts.force && isStreaming) return quietAdd('AI 正在生成中，稍后再压缩。');
+  const _cmpBusy = (typeof isSessionStreaming === 'function')
+    ? isSessionStreaming(s && s.id)
+    : ((!s || s.id === (typeof currentSessionId !== 'undefined' ? currentSessionId : null))
+       && !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming)));
+  if (!opts.force && _cmpBusy) return quietAdd('本会话正在生成中，稍后再压缩。');
   if (s.messages.length < 6) return quietAdd('历史很短，无需压缩。');
   const lastMsg = s.messages[s.messages.length - 1];
   const keepLast = !!(lastMsg && lastMsg.role === 'assistant' && !lastMsg.tool_calls);

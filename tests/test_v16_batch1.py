@@ -659,7 +659,7 @@ class TestT8BoundaryItems:
 
     def test_w28_continue_blocked_while_streaming(self):
         src = _fe('85-session-mgmt.js')
-        assert 'if (isStreaming) {' in src, '生成中必须中止开新会话（防静默丢上下文）'
+        assert '(typeof isSessionStreaming === \'function\' ? isSessionStreaming(' in src, '生成中必须中止开新会话（防静默丢上下文）'
 
     def test_w30_compact_history_per_message_guard(self):
         src = _fe('97-compact.js')

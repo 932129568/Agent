@@ -67,7 +67,9 @@ class ExpertRunController {
     if (app.currentSessionId && requestDraft.sessionId !== String(app.currentSessionId)) {
       return { status: 'error', error: { code: 'EXPERT_SESSION_NOT_CURRENT', message: '专家选择不能跨会话继承' } };
     }
-    const previous = RunRegistry.current();
+    // R31：current() 只返回在途 run；上一 run 已取消/完成时用 last() 追溯世代
+    const previous = RunRegistry.current()
+      || ((typeof RunRegistry.last === 'function') ? RunRegistry.last() : null);
     const session = expertSessionForRun(requestDraft.sessionId);
     const run = RunRegistry.start({ id: requestDraft.sessionId });
     const parentRunId = requestDraft.parentRunId || (previous && previous.id) || this.lastRunId || null;

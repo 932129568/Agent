@@ -230,8 +230,8 @@ function planCardApprove() {
   // 前置守卫：批准后 planModeRun 会以任务文本走原发送链，若此刻有生成任务
   // 在途，sendMessage 入口的 isStreaming 检查会把这次发送静默吞掉（任务永不
   // 执行）。根因在 100-send 的裸 sendMessage；此处先行拦截并给用户人话。
-  if (typeof isStreaming !== 'undefined' && isStreaming) {
-    pcToast('当前有生成任务进行中，请稍候再批准', 'warn');
+  if (typeof isSessionStreaming === 'function' ? isSessionStreaming() : !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming))) {
+    pcToast('本会话有生成任务进行中，请稍候再批准', 'warn');
     return;
   }
   const acts = pcEl('planActs');

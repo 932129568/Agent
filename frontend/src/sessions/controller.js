@@ -8,8 +8,8 @@ async function continueInNewSession() {
   if (btn) btn.textContent = '⏳ 总结中…';
   // 实现 v1.6 W28：生成中 compactNow 会静默跳过压缩（isStreaming 早退），原流程
   // 仍继续 newSession() → 用户在新会话丢失全部上下文且无感知。生成中直接中止并明示。
-  if (isStreaming) {
-    toast('AI 正在生成中，稍后再「新对话继续」（避免未压缩就开新会话丢失上下文）', 'warn');
+  if (typeof isSessionStreaming === 'function' ? isSessionStreaming(s.id) : !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming))) {
+    toast('本会话正在生成中，稍后再「新对话继续」（避免未压缩就开新会话丢失上下文）', 'warn');
     if (btn) btn.innerHTML = '<svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-arrow"></use></svg>新对话继续';
     return;
   }
@@ -242,6 +242,8 @@ function switchSession(id, silent) {
   if (typeof AppState !== 'undefined') AppState.currentSessionId = id;
   else currentSessionId = id;
   if (typeof syncAgentRunUiForSession === 'function') syncAgentRunUiForSession(id);
+  // R32：内置目录启用态按会话隔离，切会话即刷新可见 chip
+  if (typeof hubRenderChip === 'function') hubRenderChip();
   _setNewChatScreenVisible(false);
   window.__hitRate = 0;
   window.__turnTokens = 0;
@@ -477,7 +479,12 @@ async function deleteSession(id, e) {
   if (activeRun && !activeRun.cancelled && id === activeRun.sessionId) {
     toast('该会话正在后台运行，完成或停止后再删除', 'warn'); return;
   }
-  if (isStreaming && id === currentSessionId) { toast('正在生成回复，请先停止', 'warn'); return; }
+  // R31：只拦「该会话自己有在途 run」；单模块 harness 无按会话信息时仅拦当前会话
+  const _delBusy = (typeof isSessionStreaming === 'function')
+    ? isSessionStreaming(id)
+    : (id === (typeof currentSessionId !== 'undefined' ? currentSessionId : null)
+       && !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming)));
+  if (_delBusy) { toast('该会话正在生成回复，请先停止', 'warn'); return; }
   const r = await uiConfirm({ title: '删除对话', body: '确定彻底删除这条对话？历史条目、工作区绑定、计划与检查点快照都将真删除，不可恢复。', danger: true, okText: '彻底删除' });
   if (!r.ok) return;
   const s = sessions.find(x => x.id === id) || {};
@@ -514,9 +521,146 @@ function _renderHistoryRoot(box, options) {
   box.innerHTML = _sessionGroupsHtml(options || {});
   _bindSessionGroups(box, options || {});
 }
+/* ================= R31：历史会话页（统计 + 筛选 + 搜索 + 富卡片） =================
+ * 侧栏 #sidebarHistory 保持紧凑列表（_renderHistoryRoot 不变）；
+ * 「会话」面板 #sessionList 升级为富信息卡片。数据同源 sessions，
+ * 不新增后端接口、不改会话结构，纯前端渲染层重构。 */
+const sessionHubState = { filter: 'all', query: '' };
+
+function setSessionFilter(mode) {
+  const m = (mode === 'chat' || mode === 'group' || mode === 'running') ? mode : 'all';
+  sessionHubState.filter = m;
+  const seg = document.getElementById('sessionFilterSeg');
+  if (seg && seg.querySelectorAll) {
+    seg.querySelectorAll('[data-sfilter]').forEach(btn => {
+      const on = btn.dataset.sfilter === m;
+      btn.classList.toggle('on', on);
+      if (btn.setAttribute) btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
+  _renderSessionHub();
+}
+
+function setSessionQuery(text) {
+  sessionHubState.query = String(text || '');
+  _renderSessionHub();
+}
+
+function _renderSessionHub() {
+  const listBox = document.getElementById('sessionList');
+  const statsBox = document.getElementById('sessionStatsBar');
+  if (!listBox && !statsBox) return;
+  const esc = (v) => escapeHtml(String(v == null ? '' : v));
+  const attr = (v) => escapeHtml(String(v == null ? '' : v)).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+  const isGroup = (s) => !!(s && s.group && Array.isArray(s.group.members));
+  const isRunning = (s) => {
+    if (typeof RunRegistry !== 'undefined' && RunRegistry && typeof RunRegistry.has === 'function') {
+      return RunRegistry.has(s.id);
+    }
+    return s.runStatus === 'working';
+  };
+  const preview = (s) => {
+    const msgs = Array.isArray(s.messages) ? s.messages : [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (!m || m.role === 'system') continue;
+      let c = m.content;
+      if (Array.isArray(c)) c = c.map(p => (p && p.text) || '').join(' ');
+      const t = String(c == null ? '' : c).replace(/\s+/g, ' ').trim();
+      if (t) return t.slice(0, 120);
+    }
+    return '还没有消息，点开开始对话';
+  };
+  const all = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+    ? sessions.filter(s => s && s.id) : [];
+  const stats = {
+    total: all.length,
+    chat: all.filter(s => !isGroup(s)).length,
+    group: all.filter(isGroup).length,
+    running: all.filter(isRunning).length,
+  };
+  if (statsBox) {
+    const cell = (k, label, hint) =>
+      '<div class="sh-stat sh-stat-' + k + '" title="' + attr(hint) + '">' +
+        '<span class="sh-stat-value">' + stats[k] + '</span>' +
+        '<span class="sh-stat-label">' + esc(label) + '</span>' +
+      '</div>';
+    statsBox.innerHTML =
+      cell('total', '全部会话', '历史会话总数') +
+      cell('chat', '单聊', '普通一对一对话数') +
+      cell('group', '群聊', '多模型群聊会话数') +
+      cell('running', '进行中', '当前有在途生成/接力的会话数（可多个同时进行）');
+  }
+  if (!listBox) return;
+  const q = sessionHubState.query.trim().toLowerCase();
+  let list = all.slice();
+  if (sessionHubState.filter === 'group') list = list.filter(isGroup);
+  else if (sessionHubState.filter === 'chat') list = list.filter(s => !isGroup(s));
+  else if (sessionHubState.filter === 'running') list = list.filter(isRunning);
+  if (q) {
+    list = list.filter(s => {
+      if (String(s.title || '').toLowerCase().indexOf(q) >= 0) return true;
+      const msgs = Array.isArray(s.messages) ? s.messages : [];
+      const from = Math.max(0, msgs.length - 40);
+      for (let i = msgs.length - 1; i >= from; i--) {
+        const m = msgs[i];
+        if (!m) continue;
+        let c = m.content;
+        if (Array.isArray(c)) c = c.map(p => (p && p.text) || '').join(' ');
+        if (typeof c === 'string' && c.toLowerCase().indexOf(q) >= 0) return true;
+      }
+      return false;
+    });
+  }
+  list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!list.length) {
+    const why = q
+      ? '没有匹配「' + esc(sessionHubState.query.trim()) + '」的会话'
+      : (sessionHubState.filter === 'running' ? '当前没有正在进行的会话'
+        : sessionHubState.filter === 'group' ? '还没有群聊会话'
+        : sessionHubState.filter === 'chat' ? '还没有单聊会话' : '还没有历史会话');
+    listBox.innerHTML = '<div class="sh-empty">' +
+        '<div class="sh-empty-icon" aria-hidden="true">✦</div>' +
+        '<div class="sh-empty-title">' + why + '</div>' +
+        '<div class="sh-empty-sub">新建一个对话开始，或调整筛选条件</div>' +
+      '</div>';
+    return;
+  }
+  listBox.innerHTML = list.map(s => {
+    const g = isGroup(s);
+    const run = isRunning(s);
+    const members = g ? (s.group.members || []).length : 0;
+    const project = s.projectName || (s.projectWorkspace ? _shortDir(s.projectWorkspace) : '');
+    const active = s.id === currentSessionId;
+    const msgCount = Array.isArray(s.messages) ? s.messages.length : 0;
+    return '<article class="session-item sh-card' + (active ? ' active' : '') + (run ? ' running' : '') + '"' +
+        ' data-sid="' + _escId(s.id) + '" tabindex="0" role="button"' +
+        ' aria-label="' + attr(s.title || '新对话') + (g ? '（群聊）' : '（单聊）') + '">' +
+      '<div class="sh-card-top">' +
+        '<span class="sh-badge ' + (g ? 'sh-badge-group' : 'sh-badge-chat') + '">' + (g ? '群聊' : '单聊') + '</span>' +
+        '<span class="session-title sh-card-title">' + esc(s.title || '新对话') + '</span>' +
+        (run ? '<span class="sh-live" title="正在生成"><i aria-hidden="true"></i>进行中</span>' : '') +
+      '</div>' +
+      '<p class="sh-card-preview">' + esc(preview(s)) + '</p>' +
+      '<div class="sh-card-meta">' +
+        '<span class="sh-meta-item"><b>' + msgCount + '</b> 条消息</span>' +
+        (g ? '<span class="sh-meta-item"><b>' + members + '</b> 位成员</span>' : '') +
+        (project ? '<span class="sh-meta-item sh-meta-project" title="' + attr(project) + '">' + esc(project) + '</span>' : '') +
+        '<span class="sh-meta-item sh-meta-time session-time">' + formatTime(s.updatedAt) + '</span>' +
+      '</div>' +
+      '<span class="session-acts sh-card-acts">' +
+        '<button class="session-exp" title="导出为 Markdown" aria-label="导出会话" data-sid="' + _escId(s.id) + '"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-download"/></svg></button>' +
+        '<button class="session-del" aria-label="删除会话" title="删除会话" data-sid="' + _escId(s.id) + '">✕</button>' +
+      '</span>' +
+    '</article>';
+  }).join('');
+  _bindSessionGroups(listBox, { showActions: true });
+}
+
 function renderSessionList() {
   if (typeof ensureHistoryFoot === 'function') ensureHistoryFoot();
-  _renderHistoryRoot(document.getElementById('sessionList'), {showActions: true});
+  // R31：面板用富信息卡片；侧栏仍用紧凑列表
+  _renderSessionHub();
   // 迁移期（岛层）：侧栏由岛渲染时只推数据不重绘 DOM，
   // 避免两套渲染器同时写 #sidebarHistory（重复节点/事件重复绑定）。
   if (typeof harborIslandSidebarActive === 'function' && harborIslandSidebarActive()) {

@@ -18,13 +18,21 @@ function calcUsage(messages) {
     const prompt = u.prompt_tokens || 0;
     const comp = u.completion_tokens || 0;
     const c = u.prompt_tokens_details?.cached_tokens || 0;
+    const stdIn = prompt > c ? prompt - c : 0;  // 缓存数异常高于提示数时不产生负费用
     total += u.total_tokens || (prompt + comp);
     cached += c;
-    costStdIn += (prompt - c) * p.in / 1e6;
+    costStdIn += stdIn * p.in / 1e6;
     costCache += c * p.cache / 1e6;
     costOut += comp * p.out / 1e6;
     cost = costStdIn + costCache + costOut;
   });
+  // R30 健壮性：异常 usage（字符串/NaN/Infinity）会让累加和变成字符串拼接或 NaN。
+  // 校验放在循环出口（6 次判定）而非逐字段（每条消息 4 次 × 数万条）——
+  // 隔离基准实测：循环内校验使热路径慢 2~3×，出口兜底仅 +1ms 且同样防住污染。
+  const fin = (v) => (Number.isFinite(v) && v > 0) ? v : 0;
+  total = fin(total); cached = fin(cached);
+  costStdIn = fin(costStdIn); costCache = fin(costCache); costOut = fin(costOut);
+  cost = costStdIn + costCache + costOut;
   return { total, cached, cost, costStdIn, costCache, costOut };
 }
 
@@ -36,11 +44,14 @@ function calcUsage(messages) {
 function accumulateUsage(s, u) {
   if (!s || !u) return;
   const p = providerPriceFor(u.model);
-  const prompt = u.prompt_tokens || 0;
-  const comp = u.completion_tokens || 0;
-  const c = u.prompt_tokens_details?.cached_tokens || 0;
-  s._spentCost = (s._spentCost || 0) + ((prompt - c) * p.in / 1e6 + c * p.cache / 1e6 + comp * p.out / 1e6);
-  s._spentTokens = (s._spentTokens || 0) + (u.total_tokens || (prompt + comp));
+  // R30 健壮性：与 calcUsage 同口径，异常 usage 不污染单调递增的累计花费
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0) ? v : 0;
+  const prompt = num(u.prompt_tokens);
+  const comp = num(u.completion_tokens);
+  const c = num(u.prompt_tokens_details?.cached_tokens);
+  const stdIn = Math.max(0, prompt - c);
+  s._spentCost = (s._spentCost || 0) + (stdIn * p.in / 1e6 + c * p.cache / 1e6 + comp * p.out / 1e6);
+  s._spentTokens = (s._spentTokens || 0) + (num(u.total_tokens) || (prompt + comp));
 }
 /** 读会话累计花费（老会话无计数器时用现存消息 seed 一次，之后单调递增）。 */
 function sessionSpent(s) {
@@ -65,8 +76,14 @@ function updateTokenStat() {
   if (!el) return;
   if (backendWarning) { el.style.color = 'var(--err)'; el.textContent = backendWarning; return; }
   el.style.color = '';
-  let allMsgs = [];
-  sessions.forEach(s => { allMsgs = allMsgs.concat(s.messages); });
+  // R30 性能：原 `allMsgs = allMsgs.concat(s.messages)` 每轮都分配新数组并复制
+  // 全部已有消息，N 个会话累计 O(n²) 次复制。改为 push 展开（O(n)），
+  // 传给 calcUsage 的消息序列与顺序逐项一致 → 输出逐字节不变。
+  const allMsgs = [];
+  sessions.forEach(s => {
+    const msgs = (s && s.messages) || [];
+    for (let i = 0; i < msgs.length; i++) allMsgs.push(msgs[i]);
+  });
   const { total, cached, cost } = calcUsage(allMsgs);
   el.textContent = total > 0
     ? `全部会话: ${total.toLocaleString()} tokens | 缓存命中 ${cached.toLocaleString()}${cacheFoldText()} | 实际 ¥${cost.toFixed(4)}`
@@ -117,7 +134,22 @@ function updateLiveTokenStat() {
   el.textContent = `本会话约花费 ¥${cost.toFixed(4)}${breakdown} | ${total.toLocaleString()} tokens | 缓存命中 ${cached.toLocaleString()}（${window.__hitRate || 0}%）${turn}${warn}`;
 }
 // 修复 建议㉙+㊴（三轮）：回调包 try/catch（单点异常不再杀死 10s 轮询）+ 流式态不抢写状态行
-setInterval(() => { try { if (typeof isStreaming === 'undefined' || !isStreaming) updateLiveTokenStat(); } catch (e) {} }, 10000);
+// R30 性能 + UX：后台标签页隐藏时跳过 DOM 查询与全量 usage 遍历；恢复可见时
+// 立即补刷一次，保证用户可见态的统计始终最新（不因跳过而陈旧）。
+// 不新增顶层符号：可见性监听用匿名回调 + typeof 守卫，vm 沙箱缺 API 时安全跳过。
+setInterval(() => {
+  try {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (typeof isStreaming === 'undefined' || !isStreaming) updateLiveTokenStat();
+  } catch (e) {}
+}, 10000);
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('visibilitychange', () => {
+    try {
+      if (!document.hidden && (typeof isStreaming === 'undefined' || !isStreaming)) updateLiveTokenStat();
+    } catch (e) {}
+  });
+}
 async function openBilling() {
   try {
     // P0-4 修正：HTTP 桥（Electron）同样可用

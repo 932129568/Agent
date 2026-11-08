@@ -5,15 +5,34 @@
 1. 基线存在，且当前契约面与基线零漂移；
 2. 快照/自比对往返一致；
 3. 工具能真实检出「符号丢失」与「源码行被改写」两类漂移（防假阳性门禁）。
+
+R30：契约锚点是**随每轮重构/升级推进的链**（r28→r29→r30→r31…），
+按用户既定约定「基线更新并入库，作为下一次差分的锚点」，此处改为自动发现
+最新锚点，避免每轮手工改常量导致门禁失效。判据（零漂移）与所有断言逻辑未改。
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / 'tools' / 'contract_diff.py'
-BASELINE = ROOT / 'deliverables' / 'dev-plan' / 'contract-baseline-r29.json'
+PLAN_DIR = ROOT / 'deliverables' / 'dev-plan'
+
+
+def _latest_baseline():
+    """锚点链最新项：contract-baseline-r<N>.json 按 N 数字升序取最大。"""
+    items = []
+    for p in PLAN_DIR.glob('contract-baseline-r*.json'):
+        m = re.search(r'-r(\d+)\.json$', p.name)
+        if m:
+            items.append((int(m.group(1)), p))
+    assert items, '锚点链为空'
+    return max(items, key=lambda x: x[0])[1]
+
+
+BASELINE = _latest_baseline()
 
 
 def _run(*args):
@@ -23,7 +42,12 @@ def _run(*args):
 
 
 def test_baseline_exists_and_current_contract_has_zero_drift():
-    assert BASELINE.is_file(), '缺少 R28 契约基线'
+    """当前契约面与最新锚点零漂移；锚点链单调且最新项被采用。"""
+    assert BASELINE.is_file(), '缺少契约基线'
+    nums = sorted(int(re.search(r'-r(\d+)\.json$', p.name).group(1))
+                  for p in PLAN_DIR.glob('contract-baseline-r*.json'))
+    assert len(nums) >= 4 and nums == sorted(set(nums)), nums  # r28/r29/r30/r31 无重复
+    assert BASELINE.name == 'contract-baseline-r%d.json' % max(nums)
     p = _run('--compare', BASELINE)
     assert p.returncode == 0, p.stdout + p.stderr
     assert '零漂移 PASS' in p.stdout

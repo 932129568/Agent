@@ -8,6 +8,8 @@ from helpers.frontend import LEGACY_SCRIPT_PATHS, frontend_node_map, read_fronte
 
 ROOT = Path(__file__).resolve().parent.parent
 EXPECTED_ORDER = [
+    'frontend/src/shell/hub-catalog.js',
+    'frontend/src/shell/composer-hub.js',
     'frontend/src/core/motion.js',
     'frontend/src/core/state.js',
     'frontend/src/core/app-state.js',
@@ -129,7 +131,7 @@ def manifest():
 def test_exactly_58_modules_once_with_frozen_order_and_dependencies():
     entries = manifest()['scripts']
     paths = [entry['path'] for entry in entries]
-    assert len(paths) == len(set(paths)) == 111
+    assert len(paths) == len(set(paths)) == 113
     assert paths == EXPECTED_ORDER
     disk = {path.relative_to(ROOT).as_posix()
             for path in (ROOT / 'frontend' / 'src').rglob('*.js')}
@@ -149,7 +151,7 @@ def test_manifest_helper_resolves_every_new_path_without_duplicate_sources():
     for path in EXPECTED_ORDER:
         assert node_map[path].split(',')[-1] == path
         assert read_frontend_source(str(ROOT), path)
-    assert len(EXPECTED_ORDER) == 111
+    assert len(EXPECTED_ORDER) == 113
     assert len(LEGACY_SCRIPT_PATHS) == 57
     for old_name, new_path in LEGACY_SCRIPT_PATHS.items():
         assert read_frontend_source(str(ROOT), old_name) == \

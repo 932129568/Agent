@@ -171,3 +171,111 @@ function renderPreview() {
   box.classList.add('show');
   _attachCount = n;
 }
+
+/* ================= R32 · 统一附件入口（合并分类按钮 + 适配更多格式） =================
+ * 原本 4 个按钮各对应一个 accept 分支；现在统一由一个 file input 选取，按 MIME +
+ * 扩展名自动分派到既有 image / video / text / zip 处理链，并新增 gz/tar 文本提取。
+ * 二进制文档（PDF/Office/音频）不再被当文本误读成乱码，而是给出明确可操作提示。
+ */
+const HUB_TEXT_EXT = /\.(txt|md|markdown|json|jsonl|csv|tsv|log|srt|ass|vtt|py|pyw|js|mjs|cjs|ts|tsx|jsx|html|htm|css|scss|less|java|c|cpp|h|hpp|cs|go|rs|rb|php|lua|swift|kt|dart|scala|sh|bash|zsh|bat|ps1|sql|tex|rst|adoc|vue|svelte|yaml|yml|toml|ini|conf|cfg|xml|svg|graphql|proto|ipynb|patch|diff|env|gitignore|dockerignore|makefile|gradle|properties|lock|rego|tf|hcl|cmake|awk|sed|pl|r|m|f|for|f90|asm|s|vb|vbs|ahk|tfvars)$/i;
+const HUB_IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|ico|heic|heif|avif|tiff?|svg)$/i;
+// .ts 归 TypeScript（文本）；MPEG-TS 视频走 mime 判定或明确提示，避免误当视频
+const HUB_VIDEO_EXT = /\.(mp4|mov|mkv|avi|webm|flv|wmv|m4v|3gp|mts|m2ts)$/i;
+
+/** 判定文件应走哪条处理链。纯函数：便于 vm 沙箱逐格式验证。 */
+function hubFileKind(f) {
+  const name = String((f && f.name) || '');
+  const mime = String((f && f.type) || '').toLowerCase();
+  if (mime.startsWith('image/') || HUB_IMAGE_EXT.test(name)) return 'image';
+  if (mime.startsWith('video/') || HUB_VIDEO_EXT.test(name)) return 'video';
+  if (/\.zip$/i.test(name)) return 'zip';
+  if (/\.(tgz|tar\.gz|gz|tar)$/i.test(name)) return 'gztar';
+  if (/\.(rar|7z|bz2|xz)$/i.test(name)) return 'archive-unsupported';
+  if (HUB_TEXT_EXT.test(name) || mime.startsWith('text/') ||
+      /json|xml|javascript|typescript/.test(mime)) return 'text';
+  return 'unsupported';
+}
+
+/** 浏览器端提取 .gz / .tar / .tgz 里的文本（复用页面已有的 fflate 全局）。 */
+async function _hubReadGzTar(f) {
+  const raw = new Uint8Array(await f.arrayBuffer());
+  let buf = raw;
+  if (/\.(gz|tgz)$/i.test(f.name)) {
+    if (typeof flate === 'undefined' || typeof flate.gunzipSync !== 'function') {
+      throw new Error('当前环境缺少 gzip 解压器');
+    }
+    buf = flate.gunzipSync(raw);
+  }
+  const isTar = buf.length > 512 &&
+    String.fromCharCode.apply(null, buf.subarray(257, 262)) === 'ustar';
+  if (!isTar) {
+    for (let i = 0; i < Math.min(buf.length, 8192); i++) {
+      if (buf[i] === 0) throw new Error('压缩包内容含二进制数据，已拒绝作为文本读取');
+    }
+    let txt = '';
+    for (const enc of ['utf-8', 'gbk']) {
+      try { txt = new TextDecoder(enc, { fatal: true }).decode(buf); break; } catch (e) {}
+    }
+    return { text: txt || new TextDecoder().decode(buf), count: 1 };
+  }
+  let combined = '', count = 0;
+  const dec = new TextDecoder('utf-8');
+  for (let off = 0; off + 512 <= buf.length;) {
+    const header = buf.subarray(off, off + 512);
+    if (header[0] === 0) break;
+    let nm = '';
+    for (let i = 0; i < 100 && header[i]; i++) nm += String.fromCharCode(header[i]);
+    let sizeStr = '';
+    for (let i = 124; i < 136 && header[i]; i++) sizeStr += String.fromCharCode(header[i]);
+    const size = parseInt(String(sizeStr).trim(), 8) || 0;
+    const start = off + 512;
+    if (size < 0 || start + size > buf.length) break;
+    off = start + Math.ceil(size / 512) * 512;
+    if (header[156] !== 0 && header[156] !== 48) continue;   // 仅普通文件
+    if (!HUB_TEXT_EXT.test(nm) || size > 2 * 1024 * 1024) continue;
+    const part = buf.subarray(start, start + size);
+    let hasNul = false;
+    for (let i = 0; i < Math.min(part.length, 4096); i++) { if (part[i] === 0) { hasNul = true; break; } }
+    if (hasNul) continue;
+    let txt = '';
+    try { txt = new TextDecoder('utf-8', { fatal: true }).decode(part); }
+    catch (e) { try { txt = new TextDecoder('gbk').decode(part); } catch (e2) { continue; } }
+    combined += '\n===== ' + nm + ' =====\n' + txt;
+    count++;
+    if (combined.length > 100 * 1024) { combined = combined.slice(0, 100 * 1024) + '\n…(内容过长已截断)'; break; }
+  }
+  if (!count) throw new Error('包内没有可读取的文本文件');
+  return { text: combined, count: count };
+}
+
+/** 统一入口：一次选择多种格式，自动分派；保持原有大小限制与安全护栏。 */
+async function hubDispatchFiles(fileList) {
+  if (!attachmentsAllowed()) { toast(attachmentsDeniedText(), 'warn'); return false; }
+  const groups = { image: [], video: [], text: [], zip: [], gztar: [],
+                   'archive-unsupported': [], unsupported: [] };
+  (Array.from(fileList || [])).forEach(f => {
+    const k = hubFileKind(f);
+    (groups[k] || groups.unsupported).push(f);
+  });
+  for (const tp of ['image', 'video', 'text', 'zip']) {
+    if (groups[tp].length) await handleFiles(groups[tp], tp);
+  }
+  for (const f of groups.gztar) {
+    try {
+      if (f.size > 50 * 1024 * 1024) { toast(`压缩包 ${f.name} 超过 50MB，已跳过`, 'warn'); continue; }
+      const got = await _hubReadGzTar(f);
+      attachments.push({ type: 'text', text: got.text,
+        name: `${f.name}（含${got.count}个文件）` });
+    } catch (e) { toast(`读取 ${f.name} 失败: ${e.message || e}`, 'err'); }
+  }
+  if (groups['archive-unsupported'].length) {
+    toast('rar / 7z / bz2 / xz 暂不能在浏览器端解压；请先转成 zip，或解压后选取文本文件。', 'warn');
+  }
+  if (groups.unsupported.length) {
+    const names = groups.unsupported.slice(0, 3).map(f => f.name).join('、');
+    toast(`已识别 ${groups.unsupported.length} 个二进制文件（${names}${groups.unsupported.length > 3 ? '…' : ''}）：` +
+      'PDF / Office / 音频等暂不能解析内容，请另存为 .txt/.md 或截图后添加。', 'warn');
+  }
+  renderPreview();
+  return true;
+}

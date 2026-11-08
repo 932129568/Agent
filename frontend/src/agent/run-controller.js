@@ -104,9 +104,13 @@ function runAddMessage(run, role, content, extra) {
   return contentEl;
 }
 function syncAgentRunUiForSession(targetSessionId) {
-  const run = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : __agentActiveRun;
   const activeId = (targetSessionId !== undefined) ? targetSessionId
     : ((typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId);
+  // R31：按「该会话自己的 run」取，不再取全局最近启动的 run（切回后台会话时停止键才正确）
+  const run = (typeof RunRegistry !== 'undefined')
+    ? RunRegistry.current(activeId) : __agentActiveRun;
+  // R31：群聊 run 由群工具栏自行控制（暂停/继续），不接管单聊发送键与流式条
+  if (run && run.kind === 'group') return;
   const visible = !!run && !run.cancelled && activeId === run.sessionId;
   if (run && !run.cancelled) run.background = !visible;
   const bar = document.getElementById('streamBar');
@@ -123,14 +127,17 @@ function syncAgentRunUiForSession(targetSessionId) {
     btn.onclick = sendMessage;
   }
 }
-function cancelActiveAgentLoop() {
-  const run = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : __agentActiveRun;
+function cancelActiveAgentLoop(sessionId) {
+  // R31：只作用于目标会话（默认当前可见会话），并行中的其他会话不受影响
+  const run = (typeof RunRegistry !== 'undefined')
+    ? RunRegistry.current((typeof sessionId === 'string') ? sessionId : undefined)
+    : __agentActiveRun;
   if (!run) {
     if (abortController) { try { abortController.abort(); } catch (e) {} }
     return;
   }
   const wasVisible = agentRunVisible(run);
-  if (typeof RunRegistry !== 'undefined') RunRegistry.cancel();
+  if (typeof RunRegistry !== 'undefined') RunRegistry.cancel(run);
   else {
     run.cancelled = true;
     if (run.abortController) { try { run.abortController.abort(); } catch (e) {} }
@@ -139,7 +146,11 @@ function cancelActiveAgentLoop() {
   }
   if (typeof setSessionRunStatus === 'function') setSessionRunStatus(run.session, 'paused');
   run.statusFinalized = true;
-  if (__agentActiveRun === run && wasVisible) {
+  // 仅当该会话已无其他在途 run 时才复位流式态与发送键（并行实例互不干扰）
+  const stillRunning = (typeof RunRegistry !== 'undefined')
+    ? RunRegistry.has(run.sessionId)
+    : (!!__agentActiveRun && !__agentActiveRun.cancelled && __agentActiveRun.sessionId === run.sessionId);
+  if (wasVisible && !stillRunning) {
     if (typeof AppState !== 'undefined') AppState.isStreaming = false;
     else isStreaming = false;
     const bar = document.getElementById('streamBar');
@@ -150,14 +161,15 @@ function cancelActiveAgentLoop() {
 }
 async function runAgentLoop(s, apiKey, opts) {
   let parallel = !!(opts && opts.parallel);
-  // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——存在其他会话的在途 run
-  // 时，本调用自动升级为并行 run（不再取消他方）；同会话重入仍走单活跃取消
-  // 语义（S20 双发保护不变）。「并行」按钮保留为显式入口。
-  if (__agentActiveRun && !__agentActiveRun.cancelled
-      && __agentActiveRun.sessionId !== s.id) {
-    parallel = true;
+  // R31：全局默认「不限数量的会话并行」——群聊/单聊任意组合同时进行，不设上限。
+  // 唯一保留的串行语义是**同一会话重入**：同一 session 已有在途 run 时取消旧的
+  // （S20 双发保护，防消息交错与计费翻倍）；跨会话一律不取消、互不影响。
+  const _sameSidRun = (typeof __agentRuns !== 'undefined') ? __agentRuns.get(s.id) : null;
+  if (_sameSidRun && !_sameSidRun.cancelled) {
+    cancelActiveAgentLoop(s.id);
+  } else if (typeof __agentRuns !== 'undefined' && __agentRuns.size > 0) {
+    parallel = true;   // 已有其他会话在跑 → 本 run 是并行实例（自动，无需用户操作）
   }
-  if (__agentActiveRun && !parallel) cancelActiveAgentLoop();
   const run = (typeof RunRegistry !== 'undefined') ? RunRegistry.start(s) : {
     id: ++__agentRunSeq, sessionId: s.id, session: s, cancelled: false,
     assistantMsg: null, abortController: null, nudgeTimer: null, localWaitTimer: null };
@@ -255,7 +267,13 @@ async function runAgentLoop(s, apiKey, opts) {
         (s.messages[i].tool_calls || []).forEach(tc => taskUsed.add(tc.function ? tc.function.name : tc.name));
     }
     {   // 修复 ㉗：以下为原 try 块主体（保持缩进层级一致）
-    const sysPrompt = document.getElementById('systemPrompt').value.trim();
+    // R32：内置目录选中项 → 真实人格/工作流指令，随本次请求的系统提示生效；
+    // 不写 config.json、不改 #systemPrompt 的值、不新增 js_api。
+    const _baseSys = document.getElementById('systemPrompt').value.trim();
+    const _hubDirective = (typeof hubDirectiveFor === 'function') ? hubDirectiveFor() : '';
+    const sysPrompt = _hubDirective
+      ? (_baseSys ? _baseSys + '\n\n' + _hubDirective : _hubDirective)
+      : _baseSys;
     const enableSearch = document.getElementById('enableSearch').checked;
     // schema 唯一数据源：后端 build_tools（v1.0.0 前端硬编码 TOOLS 与后端双源且已漂移，
     // 缺 clipboard/process/memory 工具；后端失败时 v1.0.0 静默降级导致 AI 悄悄丢能力）。
@@ -1139,7 +1157,13 @@ async function runAgentLoop(s, apiKey, opts) {
             const ss = (typeof sessions !== 'undefined' && Array.isArray(sessions))
               ? sessions.find(x => x.id === _sid) : null;
             if (!ss || cur !== _sid) return;                       // 已切走 → 横幅承接
-            if ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming) return;
+            // R31：只判本会话（单模块 harness 缺该函数/注册表时退回全局标志）
+            const _retryBusy = (typeof isSessionStreaming === 'function')
+              ? isSessionStreaming(_sid)
+              : ((typeof __agentRuns !== 'undefined' && __agentRuns
+                  && !!__agentRuns.get(_sid) && !__agentRuns.get(_sid).cancelled)
+                 || !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming)));
+            if (_retryBusy) return;
             if (typeof toast === 'function') toast('网络中断已恢复，正在自动继续任务…', 'info');
             if (typeof continueLastGeneration === 'function') continueLastGeneration(ss, _apiKey);
           }, 2500);
@@ -1178,8 +1202,14 @@ async function runAgentLoop(s, apiKey, opts) {
     if (__agentRuns.get(run.sessionId) === run) __agentRuns.delete(run.sessionId);
     if (ownedFinish) {
       if (typeof RunRegistry === 'undefined') __agentActiveRun = null;
-      if (typeof AppState !== 'undefined') AppState.isStreaming = false;
-      else isStreaming = false;
+      // R31：流式态按「当前可见会话是否仍有在途 run」重算。
+      // 原实现无条件置 false → 后台会话 A 结束会误清正在生成的 B 的流式态。
+      const _visibleSid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
+      const _stillStreaming = (typeof RunRegistry !== 'undefined')
+        ? RunRegistry.has(_visibleSid)
+        : (!!__agentActiveRun && !__agentActiveRun.cancelled);
+      if (typeof AppState !== 'undefined') AppState.isStreaming = _stillStreaming;
+      else isStreaming = _stillStreaming;
       if (wasVisible) {
         const bar = document.getElementById('streamBar');
         if (bar) bar.classList.remove('on');

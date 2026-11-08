@@ -40,8 +40,8 @@ button:active,[role="button"]:active{transform:translateY(1px)}
 .ui-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;
   stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;pointer-events:none;vertical-align:-3px}
 .ui-icon-16{width:16px;height:16px}.ui-icon-20{width:20px;height:20px}
-button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
-button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:var(--disabled-opacity);cursor:not-allowed;box-shadow:none}
+button:focus-visible,[role="button"]:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
 .icon-btn,.tool-btn,.send-btn,.cm-back,.set-win-close,.sp-fold,.sp-close{
   width:44px;min-width:44px;height:44px;min-height:44px;border-radius:10px;
   border:1px solid var(--border);background:var(--card-bg);box-shadow:none}
@@ -133,14 +133,14 @@ body.fx-off .loading::after,body.fx-off .is-loading::after{animation:none}
 .gg-rule-del:focus-visible,.brw-act:focus-visible,.sw-del-btn:focus-visible,
 .history-dir-btn:focus-visible,.hd-btn:not(.hd-primary):focus-visible,.mcp-tab:focus-visible,
 .cn-cont:focus-visible,.msg-ic:focus-visible,.err-detail-btn:focus-visible{
-  outline:2px solid var(--accent);outline-offset:2px;border-color:var(--border)}
+  outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset);border-color:var(--border)}
 .mcp-tab.on,.seg-btn.on,.history-dir-btn.on,.hd-btn.on{border-color:transparent;
   background:var(--primary-soft);color:var(--primary)}
 .mcp-tab.on:hover,.mcp-tab.on:focus-visible{border-color:var(--border)}
 .attach-item .remove{width:44px;min-width:44px;height:44px;min-height:44px}
 #continueNewBtn{min-height:44px;border:1px solid transparent;background:transparent;box-shadow:none}
 #continueNewBtn:hover{border-color:var(--border);background:var(--hover)}
-#continueNewBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:var(--border)}
+#continueNewBtn:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset);border-color:var(--border)}
 .session-acts{transform:none}
 .input-row .tool-btn{border-color:transparent;background:transparent}
 .input-row .tool-btn:hover{border-color:var(--border);background:var(--hover)}

@@ -286,7 +286,10 @@ async function saveSessions() {
   } catch (e) { toast('会话历史保存失败：' + e.message, 'warn'); }   // v1.2 R3：静默吞错 → 可见
   };
   const now = Date.now();
-  const streaming = (typeof isStreaming !== 'undefined' && isStreaming);
+  // R31：任意会话有在途 run 都走快速节流（后台并行的输出同样不能丢）
+  const streaming = (typeof getActiveRuns === 'function')
+    ? getActiveRuns().length > 0
+    : (typeof isStreaming !== 'undefined' && isStreaming);
   const windowMs = streaming ? SAVE_THROTTLE_BUSY_MS : SAVE_THROTTLE_MS;
   if (now - _saveLastRun >= windowMs) {
     _saveLastRun = now;

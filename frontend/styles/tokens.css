@@ -41,6 +41,8 @@
   --chart-area-from:rgba(37,99,235,.16);--chart-area-to:rgba(37,99,235,0);
   --on-accent:#FFFFFF;--on-ok:#FFFFFF;--on-warn:#FFFFFF;--on-danger:#FFFFFF;
   --focus-ring:var(--accent);--control-h:44px;
+  /* R30 UI 重构：焦点/禁用/滚动条单一事实源（默认零视觉变化） */
+  --focus-ring-w:2px;--focus-ring-offset:2px;--disabled-opacity:.5;--scrollbar-size:10px;
 }
 body.dark{
   --w4-bg:#101114;--w4-sidebar:#141518;--w4-surface:#17181B;
@@ -66,4 +68,22 @@ body.dark{
   --chart-grid:rgba(245,245,247,.12);--chart-axis:#A1A1A6;
   --chart-area-from:rgba(96,165,250,.18);--chart-area-to:rgba(96,165,250,0);
   --on-accent:#101114;--on-ok:#20382C;--on-warn:#3B3322;--on-danger:#3D2624;
+  /* R30：深色下焦点环独立提亮（WCAG 2.4.7 非文本对比 ≥3:1） */
+  --focus-ring:#93C5FD;
+}
+
+/* ===== R30 UI 重构：系统级无障碍偏好（纯新增，默认视觉零变化） ===== */
+/* 高对比度偏好：加粗焦点环 + 提升边框/文本对比（WCAG 1.4.11 / 2.4.7） */
+@media (prefers-contrast:more){
+  :root{--focus-ring-w:3px;--border:#9AA0AA;--border-strong:#6B707A;--text-3:#4A4D55}
+  body.dark{--border:#7A8090;--border-strong:#A8AEBE;--text-3:#C9CDD6;--focus-ring:#BFDBFE}
+}
+/* Windows 强制颜色模式：用系统色保证焦点环与禁用态可辨识（WCAG 1.4.1 不靠颜色） */
+@media (forced-colors:active){
+  :focus-visible,[role="button"]:focus-visible,button:focus-visible,
+  a:focus-visible,[tabindex]:focus-visible,summary:focus-visible{
+    outline:var(--focus-ring-w) solid Highlight;outline-offset:var(--focus-ring-offset)}
+  button:disabled,input:disabled,textarea:disabled,select:disabled{
+    opacity:1;color:GrayText;border-color:GrayText}
+  .ui-stat-tile:focus,.ui-card:focus{outline:var(--focus-ring-w) solid Highlight}
 }

@@ -193,9 +193,9 @@ body{font-family:var(--font-sans);background:var(--bg);height:100vh;display:flex
 .seg-btn:active,.audit-chip:active,.pause-btn:active{transform:scale(.94);}
 .pill-btn:active,.ghost-btn:active,.ws-btn:active,.modal-btn:active{transform:scale(.97);}
 .send-btn:disabled:active{transform:none;}
-:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset);}
 ::selection{background:var(--primary-soft);color:var(--primary);}
-::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar{width:var(--scrollbar-size);height:var(--scrollbar-size);}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:var(--radius-full);
   border:2px solid transparent;background-clip:content-box;}
@@ -536,7 +536,7 @@ body.fx-off .set-content .set-block.active{animation:none}
 #toolsPop .mn-btn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rail-notify-badge{position:absolute;top:1px;right:0;margin:0;pointer-events:none;}
 #notifyClearBtn{min-height:44px;justify-content:center;}
-.rail-btn:focus-visible,.wsq-chip:focus-visible,.ws-section-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+.rail-btn:focus-visible,.wsq-chip:focus-visible,.ws-section-btn:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset);}
 .notify-head{font-size:12px;font-weight:600;color:var(--text-2);padding:2px 4px 8px;display:flex;justify-content:space-between;}
 .notify-item{font-size:12px;padding:6px 8px;border-radius:var(--radius-sm);background:var(--chip-bg);margin-bottom:4px;color:var(--text);line-height:1.5;}
 .notify-item .nt-time{color:var(--text-3);font-size:10px;margin-right:6px;}
@@ -1734,9 +1734,9 @@ body.fx-off .ob-card:active,body.fx-off .sc-ok:active{transform:none}
    覆盖全部现存与未来可交互元素；静态环无需 fx-off 降级 */
 button:focus-visible,a:focus-visible,[tabindex]:focus-visible,summary:focus-visible,
 .notify-item:focus-visible,.think-line:focus-visible{
-  outline:2px solid var(--primary);outline-offset:1px;border-radius:var(--radius-sm)}
+  outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:1px;border-radius:var(--radius-sm)}
 input:focus-visible,textarea:focus-visible,select:focus-visible{
-  outline:2px solid var(--primary);outline-offset:1px}
+  outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:1px}
 /* ③ notify 入场 stagger（40ms 阶梯，5 项封顶 160ms——v4 §编排） */
 .notify-item{animation:v4LineIn var(--dur-comp) var(--ease-out-soft) both}
 .notify-item:nth-child(2){animation-delay:var(--stagger-xs)}
@@ -2135,7 +2135,7 @@ body.fx-off .mc-pop.on{animation:none}
 .mc-pref{cursor:default}
 .mc-pref-select{flex-shrink:0;max-width:150px;height:30px;padding:0 8px;border:1px solid var(--border);
   border-radius:var(--radius-sm);background:var(--card-bg);color:var(--text);font:var(--fs-caption) var(--font-sans)}
-.mc-pref-select:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+.mc-pref-select:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:1px}
 body.theming .at-pop,body.theming .mc-pop,body.theming .model-chip,body.theming .at-item,body.theming .mc-item{
   transition-property:background-color,color,border-color,transform}
 
@@ -2341,9 +2341,9 @@ body{font-family:var(--font-sans);font-size:13.5px;line-height:1.65;letter-spaci
   background:var(--bg);color:var(--text)}
 button,input,textarea,select{font-family:var(--font-sans)}
 button{color:inherit}
-button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:var(--disabled-opacity);cursor:not-allowed;box-shadow:none}
 input::placeholder,textarea::placeholder{color:var(--text-3);opacity:1}
-:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
 ::selection{background:var(--primary-soft);color:var(--text)}
 #auroraBg{background:var(--bg);opacity:1}
 #auroraBg .au{display:none;animation:none;filter:none;will-change:auto}
@@ -2929,7 +2929,7 @@ mark.gf-hit{background:color-mix(in srgb,var(--primary) 28%,transparent);color:v
   -webkit-line-clamp:6;-webkit-box-orient:vertical}
 
 /* R23 UI：键盘可达性——focus-visible 统一焦点环（鼠标点击不显示，Tab 导航显示） */
-:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}
+:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset);border-radius:6px}
 .btn:focus-visible,.modal-btn:focus-visible,.icon-btn:focus-visible,.rail-btn:focus-visible,
 .session-item:focus-visible,.gf-item:focus-visible,.gb-chip:focus-visible{outline-offset:1px}
 /* 会话状态徽标对齐 sprite 尺寸 */

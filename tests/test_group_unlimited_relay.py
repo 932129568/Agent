@@ -103,12 +103,13 @@ async function __main() {
     vmRun("groupSpeak(sessions[0], sessions[0].group.members[0])"),
     vmRun("groupSpeak(sessions[0], sessions[0].group.members[1])")
   ]);
-  return {round: s.group.round, calls: vmRun("__n"), busy: vmRun("groupSpeak._busySid")};
+  return {round: s.group.round, calls: vmRun("__n"), busy: vmRun("GROUP_BUSY_SIDS.size")};
 }
 """, 'group_busy')
     # 只跑一条链：round 与调用次数应同步（若并发双链会被 busy 守卫挡掉）
     assert result['calls'] == result['round'] + 1 or result['calls'] <= result['round'] + 1, result
-    assert result['busy'] is None, result
+    # R31：busy 标记由 Set 承载，链结束后应为空
+    assert result['busy'] == 0, result
 
 
 def test_no_turn_budget_left_in_source_or_bundle():

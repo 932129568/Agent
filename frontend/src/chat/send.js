@@ -1,11 +1,32 @@
 /* ================= 发送 ================= */
+/* R31：按会话判定的防御式包装。
+ * 生产环境（全模块装载）走 isSessionStreaming/RunRegistry 的精确判定；
+ * 单模块 harness（旧测试只装载 send.js）缺这些符号时按 run 自身 sessionId 判定，
+ * 再退回全局标志——保证「跨会话并行」与「同会话双发保护」在两种环境都成立。 */
+function _sendSessionBusy(sid) {
+  if (typeof isSessionStreaming === 'function') return isSessionStreaming(sid);
+  const run = (typeof RunRegistry !== 'undefined' && RunRegistry && typeof RunRegistry.current === 'function')
+    ? RunRegistry.current(sid) : null;
+  if (run) return !run.cancelled && (!sid || run.sessionId === sid);
+  return (typeof AppState !== 'undefined') ? !!AppState.isStreaming
+    : (typeof isStreaming !== 'undefined' && !!isStreaming);
+}
+function _sendRefreshStreaming() {
+  if (typeof refreshStreamingFlag === 'function') return refreshStreamingFlag();
+  if (typeof AppState !== 'undefined') AppState.isStreaming = false;
+  else isStreaming = false;
+  return false;
+}
 async function sendMessage() {
   const appState = (typeof AppState !== 'undefined') ? AppState : null;
   const appAttachments = appState ? appState.attachments : attachments;
-  const activeRun = (typeof RunRegistry !== 'undefined') ? RunRegistry.current() : null;
   const activeSessionId = appState ? appState.currentSessionId : currentSessionId;
-  const __crossRun = !!(activeRun && !activeRun.cancelled && activeRun.sessionId !== activeSessionId);
-  if (activeRun && !activeRun.cancelled && !__crossRun) {
+  const activeRun = (typeof RunRegistry !== 'undefined' && RunRegistry && typeof RunRegistry.current === 'function')
+    ? RunRegistry.current(activeSessionId) : null;
+  // R31：只有「本会话自己的 run」才拦截；其他会话在途一律并行放行
+  const _sameRun = (activeRun && !activeRun.cancelled && (!activeSessionId || activeRun.sessionId === activeSessionId))
+    ? activeRun : null;
+  if (_sameRun) {
     // R1-UX[7]：生成中零反馈让新用户以为卡住——一次性轻提示（节流）
     if (typeof toast === 'function' && !sendMessage._busyToastAt) {
       sendMessage._busyToastAt = Date.now();
@@ -17,7 +38,8 @@ async function sendMessage() {
   // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——__crossRun 时不再拦截
   // 提示，runAgentLoop 入口自动升级为并行 run；isStreaming 全局标志由 run
   // 所有权管理（P0-3「并行」按钮路径同口径）
-  if (!__crossRun && (appState ? appState.isStreaming : isStreaming)) return;
+  // R31：同会话在途 run 已在上方拦截；此处按会话判定，跨会话并行不再阻塞
+  if (_sendSessionBusy(activeSessionId)) return;
   // 群聊协作（Beta）：群会话由 group.js 接管发送链（成员调度/交接/接力）
   if (typeof groupHandleOutgoing === 'function') {
     const _gSid = appState ? appState.currentSessionId : currentSessionId;
@@ -84,17 +106,17 @@ async function sendMessage() {
   if (text === '/compact') {
     input.value = ''; attachments = []; renderPreview();
     if (s.messages.length && String(s.messages[0]?.content || '').includes('【历史纪要】')) {
-      isStreaming = false;   // 修复 S20：提前 return 路径复位
+      _sendRefreshStreaming();   // 修复 S20：提前 return 路径复位（R31 按会话重算）
       addMessage('assistant', '刚刚已做过压缩，历史已是纪要态，无需重复。'); return;
     }
     // 复核修正：压缩期间保持流式锁——原提前复位使 30s 压缩窗口内可并发
     // 发送，compactNow 整体替换 s.messages 会把并发写入的用户消息/在途
     // 回复从历史与 UI 一并抹掉。force 绕过 compactNow 的 isStreaming 早退。
-    isStreaming = true;
+    if (appState) appState.isStreaming = true; else isStreaming = true;
     try {
       await compactNow(s, apiKey, { force: true });
     } finally {
-      isStreaming = false;
+      _sendRefreshStreaming();
     }
     return;
   }
@@ -105,11 +127,11 @@ async function sendMessage() {
     input.value = ''; attachments = []; renderPreview();
     const task = text.slice(5).trim() || (text ? '' : '');
     if (!task) {
-      isStreaming = false;
+      _sendRefreshStreaming();
       addMessage('assistant', '用法：/plan <任务描述>\n例：/plan 查一下 Qwen3 发布信息并整理成笔记保存到工作区');
       return;
     }
-    isStreaming = false;   // 计划阶段不占流式；批准后由内层发送逻辑重新置位
+    _sendRefreshStreaming();   // 计划阶段不占流式；批准后由内层发送逻辑重新置位
     await planModeRun(task);
     return;
   }
@@ -172,18 +194,17 @@ async function sendMessage() {
   renderPreview();
   runAgentLoop(s, apiKey);
   } catch (e) {
-    if (appState) appState.isStreaming = false;
-    else isStreaming = false;   // S20：异常不卡在生成中
+    _sendRefreshStreaming();   // S20：异常不卡在生成中（R31 按会话重算）
     toast('发送失败: ' + (e && e.message ? e.message : e), 'err');
   }
 }
 async function continueLastGeneration(s, apiKey) {
-  if ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming) return;
+  if (_sendSessionBusy(s && s.id)) return;   // R31：只拦本会话
   runAgentLoop(s, apiKey);
 }
 async function regenerate() {
   const s = getCurrentSession();
-  if (!s || ((typeof AppState !== 'undefined') ? AppState.isStreaming : isStreaming)) return;
+  if (!s || _sendSessionBusy(s.id)) return;   // R31：只拦本会话
   // 复核修正：截断到最后一条 user 消息之后——原 splice(lastAssistant) 会把
   // Agent 循环早退/报错留下的悬挂 user 消息一并删掉（历史与 UI 同时丢消息）；
   // 悬挂的 user 提问正是重生成应回应的对象，保留。

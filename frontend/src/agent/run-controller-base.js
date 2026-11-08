@@ -50,8 +50,31 @@ function getActiveRunSid() {
 function getActiveRuns() {
   return [...__agentRuns.values()].filter(r => !r.cancelled).map(r => ({
     sessionId: r.sessionId, title: r.session.title || '', status: r.status,
+    kind: r.kind || 'chat',
     parallel: !!r.parallel, currentTool: r.currentTool || '', startedAt: r.startedAt,
   }));
+}
+
+/** R31：指定会话是否有在途 run（不传参 = 当前可见会话）。
+ *  并行会话互不干扰的判定入口——替代对全局 isStreaming 的跨会话误用：
+ *  A 会话生成中不应阻断 B 会话的发送/搜索/压缩/切面板。 */
+function isSessionStreaming(sessionId) {
+  const sid = (sessionId !== undefined && sessionId !== null)
+    ? sessionId
+    : ((typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId);
+  if (!sid) return false;
+  const run = __agentRuns.get(sid);
+  return !!run && !run.cancelled;
+}
+
+/** R31：按「当前可见会话是否仍有在途 run」重算全局流式标志。
+ *  多会话并行时唯一的正确写入口——后台会话结束不得清掉可见会话的流式态，
+ *  反之亦然。返回重算后的布尔值。 */
+function refreshStreamingFlag() {
+  const on = isSessionStreaming();
+  if (typeof AppState !== 'undefined') AppState.isStreaming = on;
+  else isStreaming = on;
+  return on;
 }
 
 /** P0-3（Q5）：显式「并行运行」入口（React 岛按钮调用）——对指定会话启动 run
@@ -61,6 +84,10 @@ function harborStopRun(sessionId) {
   if (!run || run.cancelled) return;
   run.cancelled = true;
   try { if (run.abortController) run.abortController.abort(); } catch (e) {}
+  // R31：群聊 run 走群自己的暂停通道（否则停不掉接力循环）
+  if (run.kind === 'group' && typeof groupToggleRelay === 'function') {
+    try { groupToggleRelay(sessionId); } catch (e) {}
+  }
 }
 
 let __agentActiveRun = null;

@@ -25,6 +25,12 @@ const GROUP_LIMITS = Object.freeze({
 /* 群主（人类）作为一等公民的交接目标：成员 @群主 / 交接给: 群主 时，
  * 系统暂停接力并把问题显式交还给人（原先仅暂停且提示「没有明确交接对象」，
  * 主理人报障：明明说好要问我，实际谁也没问到我）。 */
+/* R31：多群并行——busy/paused 标记按会话集合存储。
+ * 原 `groupSpeak._busySid` / `_pausedSid` 是单值，第二个群启动会覆盖第一个群的
+ * 标记，导致忙闲判定错乱、暂停互相串台。改为 Set 后任意数量群聊互不干扰。 */
+const GROUP_BUSY_SIDS = new Set();
+const GROUP_PAUSED_SIDS = new Set();
+
 const GROUP_OWNER = Object.freeze({ __owner: true });
 
 /** 清理模型回声的【xx】前缀：成员看到的群聊流里每条都带【名字】标注，
@@ -361,22 +367,26 @@ function groupToolbarRefresh(sid) {
   groupToolbarRender(s);
 }
 
-function groupToggleRelay() {
-  const sid = (typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId;
+function groupToggleRelay(sidArg) {
+  // R31：可选指定会话（多任务面板/停止按钮可精确暂停后台群）；不传=当前可见会话
+  const sid = (typeof sidArg === 'string' && sidArg)
+    ? sidArg
+    : ((typeof AppState !== 'undefined') ? AppState.currentSessionId : currentSessionId);
   const s = groupSessionOf(sid);
   if (!s) return;
   if (s.group.phase === 'running') {
     s.group.phase = 'paused';
-    groupSpeak._pausedSid = s.id;   // 在途循环据此立即退出（勿再开下一轮）
+    GROUP_PAUSED_SIDS.add(s.id);   // 在途循环据此立即退出（勿再开下一轮）
     // Round 8 自审修复：暂停必须真的中断在途请求——groupAbort 是模块级单例，
     // abort 后 renew（下一位成员调用用新 controller）。原先只有暂停语义、
     // 请求照跑，暂停按钮形同虚设。
-    try { groupAbort.controller.abort(); } catch (e) {}
-    groupAbort.controller = new AbortController();
+    // R31：只中断本群的请求（原模块级单例会连坐其他并行群）
+    try { groupAbortController(s.id).abort(); } catch (e) {}
+    groupAbortRenew(s.id);
     if (typeof toast === 'function') toast('接力已暂停（在途请求已中断）；群主可插话，点「继续接力」恢复', 'info');
   } else if (s.group.phase === 'paused') {
     s.group.phase = 'running';
-    if (groupSpeak._pausedSid === s.id) groupSpeak._pausedSid = null;
+    GROUP_PAUSED_SIDS.delete(s.id);
     if (typeof toast === 'function') toast('接力已恢复，下一位：' + groupMemberName(s, s.group.turn), 'info');
     void groupAdvance(sid);
   } else {
@@ -758,14 +768,25 @@ async function groupAdvance(sid) {
 async function groupSpeak(s, member) {
   const g = s.group;
   if (!g) return;
-  // 同一会话已有在途循环（继续接力/插话都会触发）→ 交给那个循环接手，避免并发双接力
-  if (groupSpeak._busySid === s.id) return;
-  groupSpeak._busySid = s.id;
-  if (groupSpeak._pausedSid === s.id) groupSpeak._pausedSid = null;   // 新发起的一轮不受旧暂停标志影响
+  // 同一会话已有在途循环（继续接力/插话都会触发）→ 交给那个循环接手，避免并发双接力。
+  // R31：按会话集合判定——不同群可同时各跑各的循环。
+  if (GROUP_BUSY_SIDS.has(s.id)) return;
+  GROUP_BUSY_SIDS.add(s.id);
+  GROUP_PAUSED_SIDS.delete(s.id);   // 新发起的一轮不受旧暂停标志影响
+  // R31：群聊 run 登记进统一注册表——多任务面板/历史页「进行中」可感知；
+  // kind='group' 使单聊发送键/流式条不被群聊接管（群有自己的工具栏）。
+  let _groupRun = null;
+  if (typeof RunRegistry !== 'undefined') {
+    _groupRun = RunRegistry.start(s);
+    _groupRun.kind = 'group';
+    _groupRun.parallel = true;
+    _groupRun.startedAt = Date.now();
+    _groupRun.stopHandler = () => { try { groupToggleRelay(s.id); } catch (e) {} };
+  }
   try {
     let current = member;
     while (current) {
-    if (g.phase !== 'running' || groupSpeak._pausedSid === s.id) return;   // 群主暂停/群被关闭
+    if (g.phase !== 'running' || GROUP_PAUSED_SIDS.has(s.id)) return;   // 群主暂停/群被关闭
     const phase = document.getElementById('gbPhase');
     if (phase) phase.textContent = current.name + ' 工作中…';
     const box = document.getElementById('chatContainer');
@@ -844,7 +865,9 @@ async function groupSpeak(s, member) {
     current = next;
   }
   } finally {
-    if (groupSpeak._busySid === s.id) groupSpeak._busySid = null;
+    GROUP_BUSY_SIDS.delete(s.id);
+    if (_groupRun && typeof RunRegistry !== 'undefined') RunRegistry.finish(_groupRun);
+    if (typeof groupAbortRelease === 'function') groupAbortRelease(s.id);
   }
 }
 
@@ -1005,7 +1028,7 @@ async function groupCallModel(s, member, messages, onDelta, onTool) {
       body, local,
       // 跨端点直连：不走当前端点的代理目标头（否则会被转发回当前端点）
       proxyHeaders: useEp ? {} : ((typeof localProxyHeaders === 'function') ? localProxyHeaders() : {}),
-    }, groupAbort.controller.signal);
+    }, groupAbortController(s.id).signal);
     if (!resp || !resp.ok || !resp.body) {
       let detail = '';
       try { detail = (await resp.text()).slice(0, 200); } catch (e) {}
@@ -1050,7 +1073,24 @@ async function groupCallModel(s, member, messages, onDelta, onTool) {
   return text;
 }
 
-const groupAbort = { controller: new AbortController() };
+const groupAbort = { controller: new AbortController(), bySid: new Map() };
+
+/** R31：按会话取 abort controller —— 暂停 A 群不中断并行中的 B 群。 */
+function groupAbortController(sid) {
+  let c = groupAbort.bySid.get(sid);
+  if (!c) { c = new AbortController(); groupAbort.bySid.set(sid, c); }
+  return c;
+}
+/** R31：会话内换新 controller（暂停后下一位成员用新信号）。 */
+function groupAbortRenew(sid) {
+  const c = new AbortController();
+  groupAbort.bySid.set(sid, c);
+  return c;
+}
+/** R31：会话循环结束时释放信号，防 Map 随会话数增长。 */
+function groupAbortRelease(sid) {
+  groupAbort.bySid.delete(sid);
+}
 
 /* ---------- 会话切换/渲染联动 ---------- */
 

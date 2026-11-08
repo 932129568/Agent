@@ -9,9 +9,9 @@ button{color:inherit}
 h1,h2,h3,.panel-title,.brand-name,.set-win-t{font-family:var(--font-display)}
 code,pre,kbd,.msg-time,.usage-info,.session-time,.audit-ts,.plan-eta,.ckpt-count,
 .stat-value,.chart-value{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
+button:disabled,input:disabled,textarea:disabled,select:disabled{opacity:var(--disabled-opacity);cursor:not-allowed;box-shadow:none}
 input::placeholder,textarea::placeholder{color:var(--text-3);opacity:1}
-:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+:focus-visible{outline:var(--focus-ring-w) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
 ::selection{background:var(--primary-soft);color:var(--text)}
 #auroraBg{display:none}
 #chatContainer::before{display:none}

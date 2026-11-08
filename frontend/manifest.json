@@ -28,6 +28,42 @@
   ],
   "scripts": [
     {
+      "path": "frontend/src/shell/hub-catalog.js",
+      "provides": [
+        "HUB_CATALOG",
+        "hubCatalogById",
+        "hubCatalogPrompt",
+        "hubCatalogSearch",
+        "hubCatalogSections"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/shell/composer-hub.js",
+      "provides": [
+        "HUB_STATE",
+        "hubClearPick",
+        "hubCloseAll",
+        "hubCloseMenu",
+        "hubCloseSub",
+        "hubCurrentSid",
+        "hubDirectiveFor",
+        "hubEsc",
+        "hubInitComposer",
+        "hubOpenAll",
+        "hubOpenSub",
+        "hubPick",
+        "hubRenderAll",
+        "hubRenderChip",
+        "hubRenderSub",
+        "hubSetAllQuery",
+        "hubSetQuery",
+        "hubSubPools",
+        "hubToggleMenu"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/core/motion.js",
       "provides": [
         "MOTION"
@@ -963,9 +999,14 @@
         "harborTakeoverAwaitTerminal",
         "harborTakeoverNotify",
         "harborTakeoverStopPoll",
-        "harborTakeoverWaitResolve"
+        "harborTakeoverWaitResolve",
+        "isSessionStreaming",
+        "refreshStreamingFlag"
       ],
-      "requires": []
+      "requires": [
+        "AppState",
+        "currentSessionId"
+      ]
     },
     {
       "path": "frontend/src/agent/run-controller.js",
@@ -1027,7 +1068,13 @@
     {
       "path": "frontend/src/agent/run-registry.js",
       "provides": [
-        "RunRegistry"
+        "RunRegistry",
+        "_runStore",
+        "_getActiveRun",
+        "_setActiveRun",
+        "_nextRunId",
+        "_getLastRun",
+        "_setLastRun"
       ],
       "requires": [
         "AppState",
@@ -1684,7 +1731,11 @@
         "setSessionRunStatus",
         "switchSession",
         "toggleProjectGroup",
-        "toggleTaskGroup"
+        "toggleTaskGroup",
+        "_renderSessionHub",
+        "sessionHubState",
+        "setSessionFilter",
+        "setSessionQuery"
       ],
       "requires": [
         "sessions",
@@ -1741,7 +1792,13 @@
         "handleFiles",
         "readAttachmentText",
         "removeAttachment",
-        "renderPreview"
+        "renderPreview",
+        "HUB_TEXT_EXT",
+        "HUB_IMAGE_EXT",
+        "HUB_VIDEO_EXT",
+        "hubFileKind",
+        "_hubReadGzTar",
+        "hubDispatchFiles"
       ],
       "requires": [
         "attachments",
@@ -1799,7 +1856,9 @@
         "regenerate",
         "sendMessage",
         "toggleSettings",
-        "toggleSidebar"
+        "toggleSidebar",
+        "_sendSessionBusy",
+        "_sendRefreshStreaming"
       ],
       "requires": [
         "isStreaming",
@@ -1855,7 +1914,12 @@
         "groupToolbarRender",
         "groupToolsCacheReset",
         "groupWizardClose",
-        "groupWizardOpen"
+        "groupWizardOpen",
+        "GROUP_BUSY_SIDS",
+        "GROUP_PAUSED_SIDS",
+        "groupAbortController",
+        "groupAbortRenew",
+        "groupAbortRelease"
       ],
       "requires": [
         "sessions",
@@ -1869,7 +1933,8 @@
         "saveSessions",
         "addMessage",
         "toast",
-        "renderChatHistory"
+        "renderChatHistory",
+        "RunRegistry"
       ]
     },
     {

@@ -82,12 +82,18 @@ async function __main() {
   ctx.setSessionRunStatus('done', 'paused');
   return {migrated: migrated, statuses: statusesBefore, initialSidebar: initialSidebar,
     sidebar: sidebar, panel: panel, same: sidebar === panel, statusCount: statusCount,
+    sidebarSids: (sidebar.match(/data-sid=/g) || []).length,
+    panelSids: (panel.match(/data-sid=/g) || []).length,
     saves: saves, afterUpdate: sessions[1].runStatus};
 }
 """, 'run_status_sidebar')
     assert result['migrated'] == 1
     assert result['statuses'] == ['paused', 'completed', 'paused', 'failed', '']
-    assert result['same'] is True
+    # R31：会话面板升级为富卡片（sk-card），侧栏仍为紧凑列表——不再共用同一渲染；
+    # 但两者必须覆盖同一批会话（同一数据源）。
+    assert result['same'] is False
+    assert result['sidebarSids'] >= result['panelSids'] > 0
+    assert 'sh-card' in result['panel'] and 'sh-card' not in result['sidebar']
     assert result['statusCount'] == 4
     assert 'session-status working' in result['initialSidebar']
     assert 'session-status completed' in result['initialSidebar']

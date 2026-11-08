@@ -187,21 +187,28 @@ def test_stale_run_and_session_switch_cannot_finish_new_owner():
     result = run_case(r'''
 AppState.currentSessionId = 'a';
 const first = RunRegistry.start({ id: 'a' });
+// R31：跨会话启动不取消他方（不限数量并行）
 AppState.currentSessionId = 'b';
+const other = RunRegistry.start({ id: 'b' });
+const crossAlive = !first.cancelled && RunRegistry.has('a');
 const staleAfterSwitch = RunRegistry.isCurrent(first);
-const second = RunRegistry.start({ id: 'b' });
+// R31：同会话重入才取代旧 run —— 旧 run 不得 finish 新 owner
+AppState.currentSessionId = 'a';
+const second = RunRegistry.start({ id: 'a' });
 const staleFinish = RunRegistry.finish(first);
-return { staleAfterSwitch, staleFinish,
+return { crossAlive, staleAfterSwitch, staleFinish,
          firstCancelled: first.cancelled,
          newCurrent: RunRegistry.current() === second,
          agentCurrent: agentRunCurrent(second),
          newFinished: RunRegistry.finish(second),
-         empty: RunRegistry.current() === null };
+         empty: RunRegistry.current() === null,
+         otherAlive: RunRegistry.has('b') && !other.cancelled };
 ''', [CORE, APP, RUN, REGISTRY])
     assert result == {
-        'staleAfterSwitch': True, 'staleFinish': False,
+        'crossAlive': True, 'staleAfterSwitch': True, 'staleFinish': False,
         'firstCancelled': True, 'newCurrent': True,
         'agentCurrent': True, 'newFinished': True, 'empty': True,
+        'otherAlive': True,
     }
 
 
