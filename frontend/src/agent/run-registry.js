@@ -57,6 +57,10 @@ const RunRegistry = Object.freeze({
       sessionId: session.id,
       session,
       cancelled: false,
+      // R37 修复（D21）：补 status/startedAt 真实写入者——getActiveRuns() 的
+      // 这两字段原无任何写者，多任务面板恒兜底 'working'。
+      status: 'working',
+      startedAt: Date.now(),
       assistantMsg: null,
       abortController: null,
       nudgeTimer: null,

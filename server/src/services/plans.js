@@ -192,6 +192,12 @@ export async function checkpointCreate(taskId, files, wsDir = '') {
     if (!head) {
       try {
         const target = path.join(dest, rel)
+        // R37 修复（S2-23）：快照目标防逃逸——rel 来自 manifest，镜像式 `..`
+        // 可越出检查点目录（内容=工作区原件副本）。归一后必须仍在 dest 内。
+        if (!path.resolve(target).startsWith(path.resolve(dest) + path.sep)) {
+          warnings.push(`快照路径越界已拒 ${rel}`)
+          manifest.files.push({ path: rel, snapshot: false }); continue
+        }
         fs.mkdirSync(path.dirname(target), { recursive: true })
         fs.copyFileSync(full, target)
         count += 1; total += size

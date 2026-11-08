@@ -125,7 +125,19 @@ async function _modelTransportStreamInner(request, signal) {
   // **分钟级**配额/并发限制，原逻辑只重试 1 次且仅等 2 秒——秒级重试必然再次
   // 撞墙，用户观感就是「一装就废」。改为 3 次指数退避（4s/12s/30s 跨越配额
   // 窗口），并优先遵循服务端 Retry-After。
-  const RATE_LIMIT_BACKOFF = [4000, 12000, 30000];
+  // R37（F4b 调研裁决）：固定阶梯 4s/12s/30s → **full jitter**（AWS 仿真无状态
+  // 最优；OpenAI/Anthropic 官方 SDK 口径=指数+抖动+RA 夹紧 120s 上限）。尝试
+  // 次数语义不变（3 次）；Retry-After 存在时取 [RA, RA+1s) 小抖动并夹紧 120s，
+  // 缺失时 sleep = random(1s, min(30s, 1s·2^attempt))。防多会话同时 429 齐轰。
+  const RATE_LIMIT_MAX_WAIT_MS = 120000;
+  const rateLimitWaitMs = (attemptIdx, raSeconds) => {
+    if (Number.isFinite(raSeconds) && raSeconds > 0) {
+      const floorMs = Math.min(RATE_LIMIT_MAX_WAIT_MS, raSeconds * 1000);
+      return floorMs + Math.floor(Math.random() * Math.min(floorMs, 1000));
+    }
+    const exp = Math.min(30000, 1000 * Math.pow(2, attemptIdx));
+    return 1000 + Math.floor(Math.random() * exp);
+  };
   while (true) {
     try {
       const endpoint = (typeof request.endpoint === 'function')
@@ -148,12 +160,10 @@ async function _modelTransportStreamInner(request, signal) {
         try { body429 = await resp.clone().text().catch(() => ''); } catch (e) { body429 = ''; }
         // 余额/欠费类不是限流，重试无意义，立刻交回上层给准确提示
         if (/余额|欠费|arrears|insufficient|quota|exhaust|billing|账户|充值/i.test(body429)) return resp;
-        if (rateLimitAttempt < RATE_LIMIT_BACKOFF.length) {
+        if (rateLimitAttempt < 3) {
           let ra = NaN;
           try { ra = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')); } catch (e) {}
-          const waitMs = Number.isFinite(ra) && ra > 0
-            ? Math.min(60000, ra * 1000)
-            : RATE_LIMIT_BACKOFF[rateLimitAttempt];
+          const waitMs = rateLimitWaitMs(rateLimitAttempt, ra);
           rateLimitAttempt++;
           await sleepAbortable(waitMs);
           continue;

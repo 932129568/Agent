@@ -944,6 +944,10 @@ class SoftwareService:
                     return {'error': 'version_args 占位符 {%s} 未在 '
                             'arg_schema.properties 中声明' % key}
         with self._lock:
+            # R37 修复（N12）：持久化失败回滚内存态——原内存先改后落盘，失败时
+            # 返回 error 但内存已生效（内存/磁盘分裂，重启才恢复）。
+            prev_user = self._user.get(name)
+            prev_probe = self._probe_cache.get(name)
             self._user[name] = self._normalize({
                 'name': name, 'kind': kind, 'risk_default': risk,
                 'exec': str(entry.get('exec') or '').strip(),
@@ -959,6 +963,14 @@ class SoftwareService:
             self._probe_cache.pop(name, None)
             self._rebuild()
             ok = self._persist()
+            if not ok:
+                if prev_user is None:
+                    self._user.pop(name, None)
+                else:
+                    self._user[name] = prev_user
+                if prev_probe is not None:
+                    self._probe_cache[name] = prev_probe
+                self._rebuild()
         return {'ok': True, 'name': name} if ok else \
             {'error': '写入 software.json 失败'}
 
@@ -968,10 +980,20 @@ class SoftwareService:
         with self._lock:
             if name not in self._user:
                 return {'ok': True, 'removed': False}
-            self._user.pop(name, None)
+            # R37 修复（N12）：删除同款回滚——原 persist 失败仍返回 removed:True
+            # （重启复活）。
+            popped = self._user.pop(name, None)
+            prev_probe = self._probe_cache.get(name)
             self._probe_cache.pop(name, None)
             self._rebuild()
-            self._persist()
+            if not self._persist():
+                if popped is not None:
+                    self._user[name] = popped
+                if prev_probe is not None:
+                    self._probe_cache[name] = prev_probe
+                self._rebuild()
+                return {'ok': False, 'removed': False,
+                        'error': '写入 software.json 失败（条目保留）'}
             return {'ok': True, 'removed': True}
 
     # ================================================== software_list（S1）
