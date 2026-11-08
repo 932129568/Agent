@@ -1,4 +1,21 @@
 /* W5B isolated ActorContext and host∩package tool boundary. */
+
+/* R45（F2d 改进⑧，Skills 三层渐进披露）：专家正文注入预算——validator 的
+ * maxPromptBytes=256KB 是防滥用上限而非注入预算（≈12 万 token 全量常驻）。
+ * 超预算正文裁剪为「头部 + 截断声明」（三层：元数据常驻→正文按预算→资源
+ * 经 skill 检索面按需，research 轮 7/24 的 <500 行口径取 16000 字符）。 */
+const EXPERT_PROMPT_BUDGET_CHARS = 16000;
+function expertPromptBudget(text) {
+  const src = String(text || '');
+  if (src.length <= EXPERT_PROMPT_BUDGET_CHARS) return src;
+  const cut = src.slice(0, EXPERT_PROMPT_BUDGET_CHARS);
+  const head = cut.lastIndexOf('\n\n');
+  return (head > EXPERT_PROMPT_BUDGET_CHARS / 2 ? cut.slice(0, head) : cut) +
+    '\n\n[专家正文超出注入预算，已截断——完整正文 ' + src.length +
+    ' 字符存于专家包快照（sha256 校验），关键段落可请用户提供或拆分为 skill 资源]';
+}
+
+/* W5B isolated ActorContext and host∩package tool boundary. */
 function expertToolName(schema) {
   return schema && (schema.name || (schema.function && schema.function.name)) || '';
 }
@@ -69,7 +86,16 @@ class ActorContext {
       }
       throw new Error('EXPERT_TOOL_RUNTIME_MISSING');
     };
-    const packageParts = [source.actor.text];
+    const packageParts = [expertPromptBudget(source.actor.text)];
+    // R45：包内资源索引常驻（轻量行清单——正文三层化的「资源目录」层；
+    // 模型可见有哪些 skill/references 可按需索取，不再盲猜包内有什么）
+    (snapshot.skills || []).forEach(skill => {
+      packageParts.push('[skill] ' + skill.name + ' · ' + (skill.description || '') +
+        (skill.path ? '（资源目录 ' + skill.path + '）' : ''));
+      (skill.resources || []).forEach(res => packageParts.push(
+        '  - ' + res.path + '（' + (res.kind || 'resource') + '，' +
+        Math.max(1, Math.round((res.size || 0) / 1024)) + ' KB）'));
+    });
     if (source.skill) {
       packageParts.push(source.skill.text);
       source.skill.resources.forEach(resource => packageParts.push(resource.text));

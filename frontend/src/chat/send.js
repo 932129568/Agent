@@ -27,13 +27,34 @@ async function sendMessage() {
   const _sameRun = (activeRun && !activeRun.cancelled && (!activeSessionId || activeRun.sessionId === activeSessionId))
     ? activeRun : null;
   if (_sameRun) {
-    // R1-UX[7]：生成中零反馈让新用户以为卡住——一次性轻提示（节流）
-    if (typeof toast === 'function' && !sendMessage._busyToastAt) {
-      sendMessage._busyToastAt = Date.now();
-      toast('正在生成中，点红色停止键可中断', 'info');
-      setTimeout(() => { sendMessage._busyToastAt = 0; }, 8000);
+    // R45（排队式 steering，F2d 改进⑥）：同会话 run 在途 → 消息**排队**而非
+    // 拦截——走下方主路径入库（气泡+历史），runAgentLoop 调用点按标志跳过；
+    // 下一轮 beforeRound 重建请求时自然带上（轮边界注入=Claude Code 语义的
+    // Harbor 化，调研轮 21）。群聊会话不排队（调度器另有 _busySid 语义）；
+    // 专家一次性消费不排队。
+    const _qInput = document.getElementById('userInput');
+    const _qText = _qInput ? _qInput.value.trim() : '';
+    const _qAtt = appState ? appState.attachments : attachments;
+    const _qSid = appState ? appState.currentSessionId : currentSessionId;
+    const _isGroup = (typeof sessions !== 'undefined' && Array.isArray(sessions) &&
+      (sessions.find(x => x.id === _qSid) || {}).group &&
+      Array.isArray((sessions.find(x => x.id === _qSid) || {}).group.members));
+    const _expertPending = (typeof expertNextSelection !== 'undefined' && expertNextSelection);
+    if ((_qText || _qAtt.length > 0) && !_isGroup && !_expertPending) {
+      sendMessage._queued = true;
+      // R1-UX[7]：排队明示（替代「点停止键」提示——纠偏无需打断）
+      if (typeof toast === 'function') {
+        toast('已排队：当前工具步骤结束后，AI 将看到这条消息（无需打断任务）', 'info');
+      }
+    } else {
+      // 群聊/专家/空输入维持原行为（一次性节流提示）
+      if (typeof toast === 'function' && !sendMessage._busyToastAt) {
+        sendMessage._busyToastAt = Date.now();
+        toast('正在生成中，点红色停止键可中断', 'info');
+        setTimeout(() => { sendMessage._busyToastAt = 0; }, 8000);
+      }
+      return;   // 当前会话已有活动 run，不启动第二 run
     }
-    return;   // 当前会话已有活动 run，不启动第二 run
   }
   // 主理人追加裁定（2026-11-01）：跨会话发送默认并行——__crossRun 时不再拦截
   // 提示，runAgentLoop 入口自动升级为并行 run；isStreaming 全局标志由 run
@@ -200,6 +221,13 @@ async function sendMessage() {
   if (appState) appState.attachments = [];
   else attachments = [];
   renderPreview();
+  if (sendMessage._queued) {
+    // R45（排队式 steering）：消息已入库——在途 run 的下一轮 beforeRound
+    // 重建请求时自然带上；不启动第二 run。清标志，后续发送恢复正常语义。
+    // isStreaming 由在途 run 所有权管理——此处不得复位（防误伤在途 run）。
+    sendMessage._queued = false;
+    return;
+  }
   runAgentLoop(s, apiKey);
   } catch (e) {
     _sendRefreshStreaming();   // S20：异常不卡在生成中（R31 按会话重算）

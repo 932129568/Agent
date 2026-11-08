@@ -2120,6 +2120,8 @@
     {
       "path": "frontend/src/expert/context.js",
       "provides": [
+        "EXPERT_PROMPT_BUDGET_CHARS",
+        "expertPromptBudget",
         "expertToolName",
         "expertPackageTools",
         "expertApiMessages",
