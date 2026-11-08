@@ -169,8 +169,21 @@ class MemoryDbService:
         if mm is None:
             return None
         try:
-            return mm.build_context(user_id, session_id, mode=mode,
-                                    query=query, token_budget=token_budget)
+            ctx = mm.build_context(user_id, session_id, mode=mode,
+                                   query=query, token_budget=token_budget)
+            # R40-4：钉选条目在 full/profile_only 派生视图同样置前
+            # （R39 仅 extras_block 生效，且 fact 键域错位——见 _pinned_keys）
+            if ctx:
+                fact_attrs, profile_keys = self._pinned_keys(mm)
+                if fact_attrs or profile_keys:
+                    for k, want, ns in (('current_facts', fact_attrs, 'fact'),
+                                        ('profile', profile_keys, 'profile')):
+                        items = ctx.get(k)
+                        if isinstance(items, dict) and want:
+                            ctx[k] = dict(sorted(
+                                items.items(),
+                                key=lambda kv: 0 if str(kv[0]) in want else 1))
+            return ctx
         except Exception as e:
             if self._log:
                 self._log.warning('build_context 失败: %r', e)
@@ -203,8 +216,14 @@ class MemoryDbService:
                        if not str(k).startswith(LEGACY_KEY_PREFIX)}
             facts = {k: v for k, v in facts.items()
                      if not str(k).startswith(LEGACY_ATTR)}
-            # R39：钉选条目恒置前（用户显式「这条必须每次带上」的语义）
-            pinned = self._pinned_ids(mm)
+            # R39/R40-D2：钉选条目恒置前（用户显式「这条必须每次带上」的语义）。
+            # R40 修复（R39-D2 键域错位）：fact 钉选按 fact_id 存（list_entries），
+            # 注入排序比对的是 attribute——原比对恒不命中，钉选对事实条目完全
+            # 无效（实证：pin 后顺序不变）。_pinned_keys 先解析 id→attribute。
+            fact_attrs, profile_keys = self._pinned_keys(mm)
+            pinned = set()
+            pinned |= {('fact', a) for a in fact_attrs}
+            pinned |= {('profile', k) for k in profile_keys}
             def _pin_first(items, keyfn):
                 return (sorted(items, key=lambda kv: 0 if keyfn(kv[0]) in pinned else 1)
                         if pinned else list(items))
@@ -236,6 +255,27 @@ class MemoryDbService:
             return {(r['kind'], r['eid']) for r in rows}
         except Exception:
             return set()
+
+    def _pinned_keys(self, mm):
+        """钉选条目的注入域键（R40-D2）：profile 按 key，fact 解析 fact_id→
+        attribute（is_current=1；钉选条目被软关闭后自然退出排序）。"""
+        try:
+            rows = mm.conn.execute(
+                "SELECT kind, eid FROM ui_meta WHERE pinned=1").fetchall()
+            attrs, keys = set(), set()
+            for r in rows:
+                if r['kind'] == 'profile':
+                    keys.add(str(r['eid']))
+                elif r['kind'] == 'fact':
+                    row = mm.conn.execute(
+                        "SELECT attribute FROM fact_records"
+                        " WHERE fact_id=? AND is_current=1",
+                        (r['eid'],)).fetchone()
+                    if row:
+                        attrs.add(str(row['attribute']))
+            return attrs, keys
+        except Exception:
+            return set(), set()
 
     def list_entries(self, user_id):
         """面板逐条视图：profile_kv + 当前事实合并（钉选/来源/置信度/命中）。"""

@@ -145,13 +145,16 @@ class WorkspaceService:
 
     # ---- recent 列表（legacy L847-864）----
     def touch_recent_ws(self, path):
-        rec = []
-        if os.path.exists(paths.RECENT_WS_FILE):
-            with open(paths.RECENT_WS_FILE, 'r', encoding='utf-8') as f:
-                rec = json.load(f)
-        rec = [r for r in rec if r.get('path') != path]
-        rec.insert(0, {'path': path, 'name': os.path.basename(path) or path, 'ts': time.time()})
-        atomic_write_json(paths.RECENT_WS_FILE, rec[:12], indent=1)   # 修复 S8：原子写
+        # R40 修复（N15）：读改写包进实例锁——原无锁，并行会话 set_session_ws
+        # 交叠时后写覆盖前写（recent 条目丢失）。调用方持锁场景 RLock 可重入。
+        with self._lock:
+            rec = []
+            if os.path.exists(paths.RECENT_WS_FILE):
+                with open(paths.RECENT_WS_FILE, 'r', encoding='utf-8') as f:
+                    rec = json.load(f)
+            rec = [r for r in rec if r.get('path') != path]
+            rec.insert(0, {'path': path, 'name': os.path.basename(path) or path, 'ts': time.time()})
+            atomic_write_json(paths.RECENT_WS_FILE, rec[:12], indent=1)   # 修复 S8：原子写
 
     def list_recent_ws(self):
         try:

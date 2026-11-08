@@ -140,21 +140,31 @@ def test_hard_erase_tombstone(mem_env):
 def test_entries_pin_erase_and_extras_priority(mem_env):
     """R39 面板逐条能力：list_entries 视图 / 钉选注入置前 / 单条擦除。"""
     svc, _ = mem_env
-    svc.remember('s1', 'local', '部署脚本在 D 盘 deploy 目录', attribute='deploy')
-    svc.remember('s1', 'local', '数据备份在 E 盘 bak 目录', attribute='backup')
+    # R40-D2 回归锁：attribute 用反字母序（z/a）——原实现按字母序恰好把
+    # backup 排前使断言巧合通过，fact 钉选实际完全无效（键域 fact_id≠attribute）
+    svc.remember('s1', 'local', '部署脚本在 D 盘 deploy 目录', attribute='z_deploy')
+    svc.remember('s1', 'local', '数据备份在 E 盘 bak 目录', attribute='a_backup')
     entries = svc.list_entries('local')
     facts = [e for e in entries if e['kind'] == 'fact']
     assert len(facts) == 2 and not any(e['pinned'] for e in facts)
     assert all(e['source'] == 'session' for e in facts)
-    # 钉选 → 视图标位 + 注入段置前 + 审计不断链
-    fid = [e for e in facts if '备份' in e['text']][0]['id']
+    # 未钉选：注入段按 attribute 字母序 → backup（a_*）在前
+    out0 = svc.extras_block('local', 's1')
+    assert '【长期记忆·扩展】' in out0
+    assert out0.index('备份') < out0.index('部署')
+    # 钉选 deploy → 注入段置前（R40-D2 修复生效）+ 视图标位 + 审计不断链
+    fid = [e for e in facts if '部署' in e['text']][0]['id']
     assert svc.pin('local', 'fact', fid, True)['ok']
     entries = svc.list_entries('local')
     f = [e for e in entries if e['kind'] == 'fact' and e['id'] == fid][0]
     assert f['pinned'] is True
     out = svc.extras_block('local', 's1')
-    assert '【长期记忆·扩展】' in out and out.index('备份') < out.index('deploy')
+    assert out.index('部署') < out.index('备份'), out
     assert svc.stats()['integrity'] is True
+    # R40-4：full 派生视图（memory_context_build 面）同样钉选置前
+    ctx = svc.context('local', 's1')
+    keys = list((ctx.get('current_facts') or {}).keys())
+    assert keys[0] == 'z_deploy', keys
     # 单条软关闭：视图消失 + 其余保留 + 审计不断链
     assert svc.erase_entry('local', 'fact', fid)['ok']
     entries = svc.list_entries('local')

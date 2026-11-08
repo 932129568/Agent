@@ -507,8 +507,11 @@ class Api:
     def begin_task(self):
         """修复 W2（三轮）：任务开始重置后端命令去重器——原进程级存活（仅 clear_caches
         清），跨任务「上一条」假拒绝；前端 deduper 是 per-task 预记账，两层生命周期
-        经此钩子对齐。前端 runAgentLoop 起始调用（_V12_EXTRA 隐身，契约零漂移）。"""
-        self._cmds.cmd_deduper.reset()
+        经此钩子对齐。前端 runAgentLoop 起始调用（_V12_EXTRA 隐身，契约零漂移）。
+        R40 修复（K10）：只清**当前 sid** 的去重窗口（Node commands.js P0-3 同款）
+        ——原无条件清全局实例，与他会话在飞 run_command 交叠时其在飞登记被洗白
+        （模型循环写命令的安全网失效）；空 sid（legacy 未设会话）保持旧全局语义。"""
+        self._cmds.dedup_reset(self._runtime.get_current_sid())
         return 'ok'
 
     # ============ 配置 ============

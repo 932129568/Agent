@@ -215,7 +215,41 @@ class CmdService:
         self._log = get_logger()
         self.workspace = workspace
         self.toolcache = toolcache
-        self.cmd_deduper = RunDeduper()
+        self.cmd_deduper = RunDeduper()          # 空 sid 兜底通道（未知来源调用）
+        # R40 修复（K10）：per-sid 命名空间——begin_task 只清当前会话的去重窗口，
+        # 他会话在飞 run 的登记不再被洗白（Node commands.js P0-3 同款语义）。
+        import threading as _t
+        self._sid_dedupers = {}
+        self._sid_dedupers_lock = _t.Lock()
+
+    def _deduper_for(self, sid):
+        """按 sid 取去重器（未知/空 sid 回落 legacy 单实例——契约兼容）。"""
+        key = str(sid or '')
+        if not key:
+            return self.cmd_deduper
+        lock = getattr(self, '_sid_dedupers_lock', None)
+        if lock is None:   # __new__ 直构的测试桩兜底（懒建；赋值原子，竞态良性）
+            import threading
+            lock = self._sid_dedupers_lock = threading.Lock()
+            self._sid_dedupers = {}
+        with lock:
+            d = self._sid_dedupers.get(key)
+            if d is None:
+                if len(self._sid_dedupers) >= 64:   # 容量防线（FIFO 逐出；会话删除/重启自然回收）
+                    self._sid_dedupers.pop(next(iter(self._sid_dedupers)))
+                d = self._sid_dedupers[key] = RunDeduper()
+            return d
+
+    def dedup_reset(self, sid):
+        """begin_task 入口：仅清当前 sid 的去重窗口（K10；他 sid 在飞登记保留）。"""
+        key = str(sid or '')
+        if not key:
+            self.cmd_deduper.reset()
+            return
+        with self._sid_dedupers_lock:
+            d = self._sid_dedupers.get(key)
+        if d is not None:
+            d.reset()
 
     # ---- 输出截断（legacy L602-605/L626-629 逐行复制 → 统一实现）----
     def _truncate_output(self, output):
@@ -225,9 +259,10 @@ class CmdService:
             return output[:1500] + ('\n…[输出共 %d 字已截断;%s]…\n' % (len(output), tip)) + output[-800:]
         return output
 
-    def _dedup_reject(self, cmd):
-        """去重拒绝：与 legacy run_admin_command 的返回形态保持一致（info+skipped）。"""
-        tip = self.cmd_deduper.check(cmd)
+    def _dedup_reject(self, cmd, sid=None):
+        """去重拒绝：与 legacy run_admin_command 的返回形态保持一致（info+skipped）。
+        R40（K10）：按 sid 命名空间判定。"""
+        tip = self._deduper_for(sid).check(cmd)
         if tip:
             return ok({'info': tip, 'skipped': True})
         return None
@@ -314,7 +349,7 @@ class CmdService:
     # ---- cmd（legacy L582-612）----
     def run_command(self, sid, cmd, timeout=60, sandbox=None):
         try:
-            rejected = self._dedup_reject(cmd)
+            rejected = self._dedup_reject(cmd, sid)
             if rejected:
                 return rejected
             try:
@@ -335,17 +370,17 @@ class CmdService:
                 info['note'] = '命令执行完毕，无任何输出'
             return ok(info)
         except subprocess.TimeoutExpired:
-            self.cmd_deduper.unmark(cmd)   # 修复 W1（三轮）：超时未执行完，回滚登记放行合法重试
+            self._deduper_for(sid).unmark(cmd)   # 修复 W1（三轮）：超时未执行完，回滚登记放行合法重试
             return err(f'命令执行超时({timeout}s)')
         except Exception as e:
-            self.cmd_deduper.unmark(cmd)   # 修复 W1（三轮）：执行级失败回滚登记
+            self._deduper_for(sid).unmark(cmd)   # 修复 W1（三轮）：执行级失败回滚登记
             self._log.exception('run_command 失败')
             return err(e)
 
     # ---- PowerShell（legacy L614-636）----
     def run_powershell(self, sid, cmd, timeout=60, sandbox=None):
         try:
-            rejected = self._dedup_reject(cmd)
+            rejected = self._dedup_reject(cmd, sid)
             if rejected:
                 return rejected
             try:
@@ -366,10 +401,10 @@ class CmdService:
                 info['note'] = '命令执行完毕，无任何输出'
             return ok(info)
         except subprocess.TimeoutExpired:
-            self.cmd_deduper.unmark(cmd)   # 修复 W1（三轮）：超时未执行完，回滚登记放行合法重试
+            self._deduper_for(sid).unmark(cmd)   # 修复 W1（三轮）：超时未执行完，回滚登记放行合法重试
             return err(f'命令执行超时({timeout}s)')
         except Exception as e:
-            self.cmd_deduper.unmark(cmd)   # 修复 W1（三轮）：执行级失败回滚登记
+            self._deduper_for(sid).unmark(cmd)   # 修复 W1（三轮）：执行级失败回滚登记
             self._log.exception('run_powershell 失败')
             return err(e)
 
@@ -390,19 +425,19 @@ class CmdService:
         try:
             # 修复 W5（三轮）：去掉 '[admin] ' 键域前缀——前端 deduper 对同一命令不带
             # 前缀，两层键域不一会导致换通道重放「前端误拦/后端放行」方向分裂
-            tip = self.cmd_deduper.check(cmd)
+            tip = self._deduper_for(sid).check(cmd)
             if tip:
                 return ok({'info': tip, 'skipped': True})
             # 修复 W7（三轮）：畸形命令提前拒绝——未闭合引号会让 bat 重定向失效
             # （命令吞掉 "> 输出路径" 段，走满 60s 超时且无输出）；mbcs 不可表字符
             # 会被 errors='replace' 静默写成 '?'（命令内容被篡改后提权执行）
             if str(cmd).count('"') % 2 == 1:
-                self.cmd_deduper.unmark(cmd)
+                self._deduper_for(sid).unmark(cmd)
                 return err('命令含未闭合的双引号，管理员通道无法安全包装（重定向会失效）；请修正引号后重试。')
             try:
                 str(cmd).encode('mbcs')
             except UnicodeEncodeError:
-                self.cmd_deduper.unmark(cmd)
+                self._deduper_for(sid).unmark(cmd)
                 return err('命令含当前系统代码页（GBK/mbcs）不可表示的字符，管理员通道（.bat 包装）'
                            '无法无损传递；请改用 run_command/run_powershell（UTF-8 通道）。')
             _apply_win32_signatures()
@@ -411,7 +446,7 @@ class CmdService:
                 'Harbor · 管理员确认', 0x04 | 0x30)
             if r != 6:
                 # 修复 W1（三轮）：用户拒绝的命令回滚登记（用户改主意后合法重试不被误拦）
-                self.cmd_deduper.unmark(cmd)
+                self._deduper_for(sid).unmark(cmd)
                 return ok({'info': '用户拒绝了本次管理员命令，请改用无需提权的方案。', 'skipped': True})
             # 修复 W7（二轮）：mkstemp 唯一名（pid+毫秒同毫秒并发互删对方文件）
             fd, tmp_out = tempfile.mkstemp(prefix='glm_admin_out_', suffix='.txt'); os.close(fd)
@@ -425,7 +460,7 @@ class CmdService:
                 f.write(bat_body)
             ret = ctypes.windll.shell32.ShellExecuteW(None, 'runas', 'cmd', f'/c "{tmp_bat}"', None, 0)
             if (ret or 0) <= 32:
-                self.cmd_deduper.unmark(cmd)   # 修复 W1（三轮）：授权失败未执行，回滚登记
+                self._deduper_for(sid).unmark(cmd)   # 修复 W1（三轮）：授权失败未执行，回滚登记
                 return err(f'授权失败，错误码 {ret}（可能用户拒绝了 UAC）')
             # 修复 W13（二轮）：超时阈值可调（默认 60s）
             max_rounds = int((timeout or 60) * 2)
@@ -449,7 +484,7 @@ class CmdService:
             return ok({'exit_code': None, 'output': '（命令已执行，输出读取超时，退出码未知）',
                        'note': '已通过管理员权限执行'})
         except Exception as e:
-            self.cmd_deduper.unmark(cmd)   # 修复 W1（三轮）：异常路径回滚登记
+            self._deduper_for(sid).unmark(cmd)   # 修复 W1（三轮）：异常路径回滚登记
             self._log.exception('run_admin_command 失败')
             return err(e)
         finally:

@@ -6,8 +6,10 @@
  *   探测日志 + codec 路径披露 → dynamic import server/src/app.js（A1：fastify
  *   宿主于主进程）→ 动态端口 → ensureSchema 建表 → bootstrap 迁移后台链 →
  *   BrowserWindow(preload, contextIsolation:true, nodeIntegration:false)（HEADLESS
- *   跳过）→ loadFile harbor.html → 关窗优雅停机（app.close 触发 onClose 钩子的
- *   mcpShutdown + browserShutdown → disconnectDb → app.quit）。
+ *   跳过）→ R40 起 harbor://app/harbor.html 加载（privileged scheme=code cache
+ *   解锁；HARBOR_LEGACY_FILE_PROTOCOL=1 回退 loadFile）→ 关窗优雅停机
+ *   （app.close 触发 onClose 钩子的 mcpShutdown + browserShutdown →
+ *   disconnectDb → app.quit）。
  *
  * spike 结论（2026-10-31，electron 45.2.1，实测见交付报告）：
  *   a. 内嵌 Node 24.22.1 ≥ 24.22 实测验证基线 —— A1 维持，不触发 A1→A3 降级；
@@ -38,7 +40,7 @@
  * 红线对位：main.py / backend/ Python 零改动；config.json 零污染（shell 配置仅
  * 经本进程 env 注入）；server 只绑 127.0.0.1；dist/ 不触碰。
  */
-const { app, BrowserWindow, dialog, safeStorage } = require('electron')
+const { app, BrowserWindow, dialog, safeStorage, protocol } = require('electron')
 const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -47,6 +49,27 @@ const ROOT = path.join(__dirname, '..')
 
 /** §6.2/Q10：HARBOR_HEADLESS=1 → server-only（产物验收基建；env 缺省零行为） */
 const HEADLESS = process.env.HARBOR_HEADLESS === '1'
+
+/* R40（F2d 改法①）：harbor:// 自定义协议替代 file:// 加载——file:// 页在
+ * Chromium 永远无 V8 code cache（crbug 40288216：仅 http(s)/WebUI 启用），
+ * privileged standard+secure+codeCache scheme 解锁持久化 code cache，二次
+ * 启动编译省约一半（v8.dev：命中反序列化≈快 2×）。回退开关：
+ * HARBOR_LEGACY_FILE_PROTOCOL=1 恢复 file:// 加载（排障用）。
+ * registerSchemesAsPrivileged 必须先于 app ready（模块顶层即 ready 前）。 */
+const HARBOR_SCHEME = 'harbor'
+const USE_CUSTOM_PROTOCOL = process.env.HARBOR_LEGACY_FILE_PROTOCOL !== '1'
+if (USE_CUSTOM_PROTOCOL) {
+  protocol.registerSchemesAsPrivileged([
+    { scheme: HARBOR_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true,
+                    stream: true, codeCache: true } },
+  ])
+}
+/** 页面可经 harbor:// 取得的资源白名单（单文件应用：harbor.html + libs 内联库）。
+ * build.js REQUIRED_LIBS 同源；严格白名单——协议面即攻击面（绝不映射目录遍历）。 */
+const HARBOR_PAGE_FILES = new Set(['harbor.html', 'libs/marked.min.js',
+  'libs/purify.min.js', 'libs/flate.js', 'libs/highlight.min.js',
+  'libs/ui-schema.bundle.js'])
 
 /** @type {BrowserWindow|null} */
 let win = null
@@ -74,10 +97,12 @@ function injectEnv() {
   }
   process.env.HOST = '127.0.0.1'
   if (!process.env.PORT) process.env.PORT = '0' // 动态端口（listen 后回读实际值）
-  // 桥 CORS：页面经 loadFile 以 file:// 加载，源为不透明 "null"；server 的 CORS
-  // 默认关闭会拦下桥调用。按 config.js 既有口径（「浏览器直开 file:// 调试时
-  // CORS_ORIGIN=null」）显式放行；env 作用域仅本进程，不影响差分环境。
-  if (!process.env.CORS_ORIGIN) process.env.CORS_ORIGIN = 'null'
+  // 桥 CORS：页面源=加载方式（R40 起 harbor://app；HARBOR_LEGACY_FILE_PROTOCOL=1
+  // 回退 file:// 时源为不透明 "null"）。server 的 CORS 精确匹配放行；env 作用域
+  // 仅本进程，不影响差分环境。
+  if (!process.env.CORS_ORIGIN) {
+    process.env.CORS_ORIGIN = USE_CUSTOM_PROTOCOL ? 'null,harbor://app' : 'null'
+  }
 }
 
 async function boot() {
@@ -177,6 +202,26 @@ async function boot() {
   // 前端 frontend/src 零改动（bridge.js 判序 pywebview → HARBOR_API_BASE）。
   process.env.HARBOR_API_BASE = `http://127.0.0.1:${port}`
 
+  // R40（F2d）：harbor:// 协议处理器——只服务白名单页面文件（相对路径按 ROOT
+  // 解析，与 file:// 时代一致）。非白名单/越界一律 404；处理器异常 fail-closed。
+  if (USE_CUSTOM_PROTOCOL) {
+    const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8' }
+    protocol.handle(HARBOR_SCHEME, async (request) => {
+      try {
+        const u = new URL(request.url)
+        if (u.hostname !== 'app') return new Response('not found', { status: 404 })
+        const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ''))
+        if (!HARBOR_PAGE_FILES.has(rel)) return new Response('not found', { status: 404 })
+        const body = await require('node:fs').promises.readFile(path.join(ROOT, rel))
+        const type = MIME[path.extname(rel)] || 'application/octet-stream'
+        return new Response(body, { headers: { 'Content-Type': type } })
+      } catch (error) {
+        console.error('[harbor] protocol.handle 失败:', error && error.message)
+        return new Response('error', { status: 500 })
+      }
+    })
+  }
+
   win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -190,15 +235,22 @@ async function boot() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   // R37 修复（S2-14）：禁导航逃逸——window.open 已 deny，但 location/表单
   // 导航仍可把宿主窗口带离 harbor.html（桥与 CSP 域外）。外链一律走后端
-  // open_url 的系统浏览器路径。
+  // open_url 的系统浏览器路径。R40：本页面合法源随加载方式二选一。
+  const PAGE_ORIGIN_OK = USE_CUSTOM_PROTOCOL
+    ? (u => String(u || '').startsWith(HARBOR_SCHEME + '://app/'))
+    : (u => String(u || '').startsWith('file://'))
   win.webContents.on('will-navigate', (event, url) => {
-    if (!String(url || '').startsWith('file://')) event.preventDefault()
+    if (!PAGE_ORIGIN_OK(url)) event.preventDefault()
   })
   win.on('closed', () => {
     win = null
     gracefulShutdown()
   })
-  await win.loadFile(path.join(ROOT, 'harbor.html'))
+  if (USE_CUSTOM_PROTOCOL) {
+    await win.loadURL(`${HARBOR_SCHEME}://app/harbor.html`)
+  } else {
+    await win.loadFile(path.join(ROOT, 'harbor.html'))
+  }
   console.log('[harbor] window loaded; bridge base =', process.env.HARBOR_API_BASE)
 }
 

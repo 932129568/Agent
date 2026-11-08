@@ -20,7 +20,12 @@
 import json
 import os
 import re
+import threading
 import time
+
+# R40 修复（N14）：交接文档查名+落盘临界区互斥（exists 探测与原子写之间
+# 原无锁，同秒同标题并发互覆）。写入低频，进程级单锁足够。
+_WRITE_LOCK = threading.Lock()
 
 from ... import paths
 from ...errors import err, ok
@@ -115,7 +120,10 @@ class GroupFilesService:
 
     # ---------------- 写入 ----------------
     def write(self, group_id, group_name, member, title, content, meta=None):
-        """归档一份交接文档。返回落盘路径与可搜索的索引条目。"""
+        """归档一份交接文档。返回落盘路径与可搜索的索引条目。
+
+        R40 修复（N14）：查名与落盘包进模块级写锁——原 exists 探测与
+        atomic_write_text 之间无锁，同秒同标题并发互覆（第二个写覆盖第一个）。"""
         body = str(content or '').strip()
         if not body:
             return err('[BAD_PARAMS] 交接文档内容为空')
@@ -125,31 +133,32 @@ class GroupFilesService:
             os.makedirs(d, exist_ok=True)
         except Exception as e:
             return err('[IO_ERROR] 群文件目录不可用：%s' % e)
-        stamp = time.strftime('%Y%m%d-%H%M%S')
-        seq = 1
-        base = '%s_%s_%s' % (stamp, _safe_seg(member or '未知成员', 24), _safe_seg(title or '交接', 40))
-        path = os.path.join(d, base + '.md')
-        while os.path.exists(path):   # 同秒同名：追加序号，绝不覆盖
-            seq += 1
-            path = os.path.join(d, '%s-%d.md' % (base, seq))
-        info = meta if isinstance(meta, dict) else {}
-        header = [
-            '<!-- harbor-group-file',
-            'group: %s' % (group_name or group_id or ''),
-            'member: %s' % (member or ''),
-            'to: %s' % (info.get('to') or ''),
-            'title: %s' % (title or ''),
-            'keywords: %s' % (info.get('keywords') or ''),
-            'round: %s' % (info.get('round') or ''),
-            'created: %s' % time.strftime('%Y-%m-%d %H:%M:%S'),
-            '-->',
-            '',
-        ]
-        text = '\n'.join(header) + body + '\n'
-        try:
-            atomic_write_text(path, text)
-        except Exception as e:
-            return err('[IO_ERROR] 写入失败：%s' % e)
+        with _WRITE_LOCK:
+            stamp = time.strftime('%Y%m%d-%H%M%S')
+            seq = 1
+            base = '%s_%s_%s' % (stamp, _safe_seg(member or '未知成员', 24), _safe_seg(title or '交接', 40))
+            path = os.path.join(d, base + '.md')
+            while os.path.exists(path):   # 同秒同名：追加序号，绝不覆盖
+                seq += 1
+                path = os.path.join(d, '%s-%d.md' % (base, seq))
+            info = meta if isinstance(meta, dict) else {}
+            header = [
+                '<!-- harbor-group-file',
+                'group: %s' % (group_name or group_id or ''),
+                'member: %s' % (member or ''),
+                'to: %s' % (info.get('to') or ''),
+                'title: %s' % (title or ''),
+                'keywords: %s' % (info.get('keywords') or ''),
+                'round: %s' % (info.get('round') or ''),
+                'created: %s' % time.strftime('%Y-%m-%d %H:%M:%S'),
+                '-->',
+                '',
+            ]
+            text = '\n'.join(header) + body + '\n'
+            try:
+                atomic_write_text(path, text)
+            except Exception as e:
+                return err('[IO_ERROR] 写入失败：%s' % e)
         entry = {
             'path': path,
             'name': os.path.basename(path),
