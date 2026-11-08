@@ -238,7 +238,10 @@ export async function runAdminCommand(command, token, timeout) {
 
   markDedup(cmd)
   // admin 路径：token 已在人审前消费、去重已在用户命令域登记——execute 全跳过
-  const script = `Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/s','/c',${JSON.stringify(cmd)} -Verb RunAs -Wait`
+  // R38 修复（S2-13）：cmd 以 PS 单引号字面量内联（'' 转义、零插值）——原
+  // JSON.stringify 双引号串被 PS 当裸词解析，载荷中的 $( ) 子表达式可执行。
+  const psLit = v => `'` + String(v ?? '').replace(/'/g, `''`) + `'`
+  const script = `Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/s','/c',${psLit(cmd)} -Verb RunAs -Wait`
   const raw = await execute(script, timeout, null, 'powershell', 'run_admin_command', cmd, true, true)
   let payload
   try { payload = JSON.parse(raw) } catch { return raw }

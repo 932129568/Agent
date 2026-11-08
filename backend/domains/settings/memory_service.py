@@ -339,7 +339,9 @@ class MemoryService:
         if items is None:
             items = []
         if index < 0 or index >= len(items):
-            return {'error': '下标越界：%d（当前共 %d 条记忆）' % (index, len(items))}
+            # R38（K3）：越界文案与 config_service.delete_memory 同口径统一
+            #（js_api 主路径被 config 层截住，此为服务层直调的一致性收口）
+            return {'error': '序号越界：当前共 %d 条记忆' % len(items)}
         removed = items.pop(index)
         try:
             self._save(items)

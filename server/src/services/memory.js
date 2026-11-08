@@ -72,8 +72,9 @@ export async function appendMemory(entry) {
   }
   if (!input || typeof input !== 'object') input = { text: String(input ?? '') }
 
-  const text = String(input.text || '').trim()
-  if (!text) return JSON.stringify({ error: '记忆内容为空' })
+  // R38 修复（K2 双端对齐）：空 text 条目与 Python legacy 契约同口径**允许入库**
+  // （{'k':'v'} 无 text 形态也入；检索/注入层自然跳过空条目）——原 Node 单端拒绝。
+  const text = String(input.text ?? '').trim()
 
   const kind = input.kind || classify(text)
   const key = normalize(text)
@@ -159,8 +160,11 @@ export async function memoryRetrieve(query, limit = 5) {
     grams.forEach(gram => { if (q.has(gram)) overlap += 1 })
     if (overlap <= 0) return
     const base = overlap / Math.max(1, q.size)
-    const kindBoost = item.kind === 'rule' ? 0.25 : (item.kind === 'preference' ? 0.1 : 0)
-    let score = base + kindBoost
+    // R38 修复（K4 双端对齐）：kind 加成改**乘法**（×1.3/×1.1，memory_service.py
+    // :98-101 同口径）——原 Node 加法变体使同一记忆两端排序可不同。
+    let score = base
+    if (item.kind === 'rule') score *= 1.3
+    else if (item.kind === 'preference') score *= 1.1
     const t = itemTime(item)
     if (t !== null) {
       const ageDays = Math.max(0, (now - t) / 86400000)

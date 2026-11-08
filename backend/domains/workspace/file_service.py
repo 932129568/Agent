@@ -70,6 +70,23 @@ class FileFingerprintCache:
 
 
 class FileService:
+    # R37 修复（N4）：按路径互斥——write/append/search_replace 的读-改-写
+    # 在 pywebview 多线程回调下并发互覆丢更新。锁粒度=归一路径字符串；
+    # 上限 1024 键防无界（超出整体清空，路径集合随会话轮换可安全重建）。
+    _io_locks = {}
+    _io_locks_guard = threading.Lock()
+
+    def _path_lock(self, path):
+        key = os.path.normcase(os.path.abspath(path))
+        with FileService._io_locks_guard:
+            lk = FileService._io_locks.get(key)
+            if lk is None:
+                if len(FileService._io_locks) > 1024:
+                    FileService._io_locks.clear()
+                lk = threading.Lock()
+                FileService._io_locks[key] = lk
+            return lk
+
     def __init__(self, runtime, workspace):
         self._log = get_logger()
         self.runtime = runtime
@@ -256,13 +273,14 @@ class FileService:
             path, e = self._resolve_ws(sid, path)
             if e:
                 return e
-            if os.path.exists(path) and os.path.getsize(path) > 20000:
-                return err('目标文件已存在且 >20KB。请改用 search_replace 局部修改；'
-                           '确需整体重写，先 delete_path 删掉它再 write_file。')
-            os.makedirs(os.path.dirname(path) or self._effective_root(sid), exist_ok=True)
-            # 修复 W12（二轮）：write_file 接入原子写（原截断式直写，崩溃即半截文件；
-            # newline='' 参数与原 open() 逐字节一致，契约零漂移）
-            atomic_write_text(path, content)
+            with self._path_lock(path):     # R37（N4）：路径互斥
+                if os.path.exists(path) and os.path.getsize(path) > 20000:
+                    return err('目标文件已存在且 >20KB。请改用 search_replace 局部修改；'
+                               '确需整体重写，先 delete_path 删掉它再 write_file。')
+                os.makedirs(os.path.dirname(path) or self._effective_root(sid), exist_ok=True)
+                # 修复 W12（二轮）：write_file 接入原子写（原截断式直写，崩溃即半截文件；
+                # newline='' 参数与原 open() 逐字节一致，契约零漂移）
+                atomic_write_text(path, content)
             self.file_fp.mark_written(path)
             self._append_hist.pop(path, None)
             return ok({'ok': True, 'path': self._short_path(sid, path),
@@ -291,9 +309,10 @@ class FileService:
             if tripped:
                 return err('append_file 已达频次上限（10 分钟 6 次），本次未写入，计数已重置。'
                            '请改用 write_file 一次性重写，或稍后再追加。')
-            os.makedirs(os.path.dirname(path) or self._effective_root(sid), exist_ok=True)
-            with open(path, 'a', encoding='utf-8', newline='') as f:
-                f.write(content)
+            with self._path_lock(path):     # R37（N4）：路径互斥
+                os.makedirs(os.path.dirname(path) or self._effective_root(sid), exist_ok=True)
+                with open(path, 'a', encoding='utf-8', newline='') as f:
+                    f.write(content)
             self.file_fp.invalidate(path)
             return ok({'ok': True, 'path': self._short_path(sid, path),
                        'bytes': len(content.encode('utf-8'))})
@@ -316,41 +335,42 @@ class FileService:
                     return err('文件超过 64MB，不支持 search_replace 整读改写；请用 run_powershell 分段处理。')
             except OSError:
                 pass
-            with open(path, 'rb') as f:   # 修复 建议②：with 管理句柄
-                raw = f.read()
-            # 修复 S6③：二进制短路（与 read_file 同口径）
-            if b'\x00' in raw[:8192]:
-                return err('二进制文件不支持 search_replace，请勿尝试修改')
-            text, enc, lossy = FileService._decode_bytes_ex(raw)
-            # 修复 S6②：解码已失真（含 U+FFFD）的文件禁止写回（原会以 UTF-8 写回全毁）
-            if lossy:
-                return err('文件编码无法无损识别（既非 UTF-8 也非 GBK），为避免损坏已拒绝写入；'
-                           '请先人工转换为 UTF-8。')
-            if old not in text:
-                lines = text.splitlines()
-                probe = (old.strip().splitlines() or [''])[0][:80]
-                best_no, best_ratio, best_line = -1, 0.0, ''
-                for i, l in enumerate(lines):
-                    r = difflib.SequenceMatcher(None, probe, l.strip()[:80]).ratio()
-                    if r > best_ratio:
-                        best_ratio, best_no, best_line = r, i, l
-                hint = f'；最相似内容在第 {best_no+1} 行: {best_line.strip()[:80]}' if best_ratio > 0.6 else ''
-                return err(f'未找到匹配内容: old 必须与文件原文逐字符一致{hint}')
-            count = text.count(old)
-            if count > 1 and not replace_all:
-                return err(f'匹配到 {count} 处，请提供更长上下文或传 replace_all=true')
-            new_text = text.replace(old, new) if replace_all else text.replace(old, new, 1)
-            # 修复 S6①：写回前按原编码预检（GBK 文件插入 emoji 等不再静默写成 ?）
-            try:
-                new_bytes = new_text.encode(enc)
-            except UnicodeEncodeError as ue:
-                return err('新内容含原编码（%s）无法表示的字符（%s），已拒绝写入；'
-                           '请改用 UTF-8 字符集或先转换文件编码。' % (enc, ue))
-            # 修复 S6④：tmp+os.replace 原子写（原截断式直写，崩溃即半截文件）。
-            # 契约保真：文本模式换行翻译与 legacy open('w', encoding=enc) 逐字节一致
-            # （legacy 写回带平台换行翻译是被契约测试钉死的行为，见 fio.atomic_write_text_mode）
-            from ...fio import atomic_write_text_mode
-            atomic_write_text_mode(path, new_text, enc)
+            with self._path_lock(path):     # R37（N4）：读-改-写全程路径互斥
+                with open(path, 'rb') as f:   # 修复 建议②：with 管理句柄
+                    raw = f.read()
+                # 修复 S6③：二进制短路（与 read_file 同口径）
+                if b'\x00' in raw[:8192]:
+                    return err('二进制文件不支持 search_replace，请勿尝试修改')
+                text, enc, lossy = FileService._decode_bytes_ex(raw)
+                # 修复 S6②：解码已失真（含 U+FFFD）的文件禁止写回（原会以 UTF-8 写回全毁）
+                if lossy:
+                    return err('文件编码无法无损识别（既非 UTF-8 也非 GBK），为避免损坏已拒绝写入；'
+                               '请先人工转换为 UTF-8。')
+                if old not in text:
+                    lines = text.splitlines()
+                    probe = (old.strip().splitlines() or [''])[0][:80]
+                    best_no, best_ratio, best_line = -1, 0.0, ''
+                    for i, l in enumerate(lines):
+                        r = difflib.SequenceMatcher(None, probe, l.strip()[:80]).ratio()
+                        if r > best_ratio:
+                            best_ratio, best_no, best_line = r, i, l
+                    hint = f'；最相似内容在第 {best_no+1} 行: {best_line.strip()[:80]}' if best_ratio > 0.6 else ''
+                    return err(f'未找到匹配内容: old 必须与文件原文逐字符一致{hint}')
+                count = text.count(old)
+                if count > 1 and not replace_all:
+                    return err(f'匹配到 {count} 处，请提供更长上下文或传 replace_all=true')
+                new_text = text.replace(old, new) if replace_all else text.replace(old, new, 1)
+                # 修复 S6①：写回前按原编码预检（GBK 文件插入 emoji 等不再静默写成 ?）
+                try:
+                    new_bytes = new_text.encode(enc)
+                except UnicodeEncodeError as ue:
+                    return err('新内容含原编码（%s）无法表示的字符（%s），已拒绝写入；'
+                               '请改用 UTF-8 字符集或先转换文件编码。' % (enc, ue))
+                # 修复 S6④：tmp+os.replace 原子写（原截断式直写，崩溃即半截文件）。
+                # 契约保真：文本模式换行翻译与 legacy open('w', encoding=enc) 逐字节一致
+                # （legacy 写回带平台换行翻译是被契约测试钉死的行为，见 fio.atomic_write_text_mode）
+                from ...fio import atomic_write_text_mode
+                atomic_write_text_mode(path, new_text, enc)
             self.file_fp.invalidate(path)
             return ok({'ok': True, 'path': self._short_path(sid, path), 'replaced': count if replace_all else 1})
         except Exception as e:
