@@ -92,9 +92,22 @@ HARBOR_SMOKE=1 实跑          → origin OK（harbor://app/harbor.html）
 3. S2-16 扫描原报「漏 febx::」实为误报（feb 前缀已覆盖 fe80::/10）；真缺口是
    **fec0::/10** 与 fake-ip 分叉——扫描结论要复核不要照单全收。
 
-## 6. 打包（P2）
-- PyInstaller `dist/Harbor.exe`（vendor Py3.13，Harbor.spec）：见提交产物。
-- Electron NSIS Setup：见提交产物。安装版此后包含 R39-R41 全部改动。
+## 6. 打包（P2）——含预存失败根治与真机冒烟抓缺陷
+- **预存失败根治**（R37 起挂账的 `test_isolated_build_environment…`）：
+  ①隔离 venv（outputs/release-w9-candidate/venv）补装 requirements-win.txt；
+  ②check_build_dependencies 门禁与测试剥继承 PYTHONPATH（隔离 venv 本就完整，
+  外层开发 shell 的共享 env 漂移版 pywebview 6.x 会假性 mismatch）→ 测试翻绿。
+- **真机冒烟抓到 R39-D3（跨线程 SQLite）**：dist/Harbor.exe 启动冒烟实证
+  `memory_entries_list` 炸 `SQLite objects created in a thread…`（pywebview
+  每调用一线程；单测单线程全绿、真机必炸）。修复=MemoryManager conn
+  `check_same_thread=False`（调用方 MemoryDbService._lock 串行化，安全）。
+  修复后二次冒烟零 Traceback。**冒烟=打包交付的一部分。**
+- 产物（2026-11-07 全新鲜，sha256 前 24 位）：
+  | 产物 | 大小 | sha |
+  |---|---|---|
+  | `dist/Harbor.exe`（pywebview 链） | 22 MB | `151d2ecbafd3f45abe62acf5` |
+  | `dist/Harbor-Setup-1.9.0.exe`（legacy 安装器） | 46 MB | `2edcc966cf74f634022ae607` |
+  | `dist-electron/Harbor-Setup-1.9.0.exe`（NSIS，含 R39-R41） | 225 MB | `c30a9891bcd7cd4307cac722` |
 - ⚠ 安装动作（覆盖 %LOCALAPPDATA%\Programs\harbor-desktop）留主理人执行。
 
 ## 7. 交付物索引

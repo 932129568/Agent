@@ -4,6 +4,7 @@ import ast
 import importlib.metadata
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -104,8 +105,13 @@ def test_build_setup_runs_dependency_gate_before_pyinstaller(monkeypatch):
 
 @pytest.mark.skipif(not ISOLATED_PYTHON.is_file(), reason='isolated Windows build venv is unavailable')
 def test_isolated_build_environment_has_complete_pywebview_runtime():
+    # R41 根因修复：剥掉外层 shell 的 PYTHONPATH——隔离 venv（include-system-
+    # site-packages）本就自带完整依赖，继承的开发 shell PYTHONPATH（共享
+    # envs/default）会让 importlib.metadata 先读到漂移版本（pywebview 6.x），
+    # 产生假性 mismatch。检查对象是「venv 自己的解析面」，外层噪声必须剥离。
+    env = {k: v for k, v in os.environ.items() if k != 'PYTHONPATH'}
     result = subprocess.run([str(ISOLATED_PYTHON), str(CHECKER)], cwd=ROOT,
-                            capture_output=True, text=True, timeout=120)
+                            capture_output=True, text=True, timeout=120, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads(result.stdout)
     assert report['ok'] is True

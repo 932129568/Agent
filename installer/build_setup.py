@@ -35,9 +35,14 @@ def _check(r):
 
 
 def check_build_dependencies():
-    """Fail before PyInstaller if pywebview or another frozen dependency is absent."""
+    """Fail before PyInstaller if pywebview or another frozen dependency is absent.
+
+    R41：剥离继承的 PYTHONPATH——用隔离 venv 构建时，外层开发 shell 的
+    PYTHONPATH（共享 envs/default）会让检查读到漂移版本产生假性 mismatch。
+    检查对象是「本解释器自己的解析面」。"""
     print('+ 检查Windows冻结构建依赖')
-    r = subprocess.run([sys.executable, CHECK_DEPS], cwd=ROOT)
+    env = {k: v for k, v in os.environ.items() if k != 'PYTHONPATH'}
+    r = subprocess.run([sys.executable, CHECK_DEPS], cwd=ROOT, env=env)
     _check(r)
 
 

@@ -876,7 +876,11 @@ class ProceduralMemory:
 class MemoryManager:
     def __init__(self, db_path: str = ":memory:", window_turns: int = 10):
         # R14：WAL + busy_timeout（并行会话）；:memory: 库无 WAL 形态（SQLite 限制），自动回落
-        self.conn = sqlite3.connect(db_path, timeout=30.0)
+        # R41：check_same_thread=False——宿主（Harbor MemoryDbService）的 js_api
+        # 调用来自不同线程（pywebview 每调用一线程），conn 由调用方锁（RLock）
+        # 串行化后跨线程复用安全；默认 True 会在真机链上直接 ProgrammingError
+        # （打包产物启动冒烟实证）。:memory: 单测不受影响。
+        self.conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.isolation_level = None          # 显式 BEGIN IMMEDIATE 事务
         self.conn.execute("PRAGMA foreign_keys = ON")
