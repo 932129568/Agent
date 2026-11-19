@@ -133,7 +133,8 @@
     {
       "path": "frontend/src/core/motion.js",
       "provides": [
-        "MOTION"
+        "MOTION",
+        "createAnalyticalSpring"
       ],
       "requires": []
     },

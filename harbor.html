@@ -7534,6 +7534,37 @@ setTimeout(fin, ms + 80);
 })
 };
 })();
+function createAnalyticalSpring(opts) {
+const o = opts || {};
+let omega = Number(o.omega);
+if (!isFinite(omega) || omega <= 0) omega = 24.0;
+let zeta = Number(o.zeta);
+if (!isFinite(zeta)) zeta = 0.72;
+if (zeta < 0.05) zeta = 0.05;
+if (zeta >= 0.99) zeta = 0.989;
+const omegaD = omega * Math.sqrt(1 - zeta * zeta);
+const decay = zeta * omega;
+return function evaluate(x0, v0, dtSec) {
+const a0 = Number(x0);
+const v = Number(v0);
+const t = Number(dtSec);
+if (!isFinite(a0) || !isFinite(v) || !isFinite(t) || t <= 0) {
+const p0 = isFinite(a0) ? a0 : 0;
+const w0 = isFinite(v) ? v : 0;
+return { pos: p0, vel: (t === 0 ? w0 : 0), settled: Math.abs(p0) < 1e-3 && Math.abs(w0) < 1e-2 };
+}
+const A = a0;
+const B = (v + decay * a0) / omegaD;
+const wt = omegaD * t;
+const e = Math.exp(-decay * t);
+const c = Math.cos(wt);
+const s = Math.sin(wt);
+const pos = e * (A * c + B * s);
+const vel = e * ((B * omegaD - decay * A) * c - (A * omegaD + decay * B) * s);
+const settled = Math.abs(pos) < 1e-3 && Math.abs(vel) < 1e-2;
+return { pos: pos, vel: vel, settled: settled };
+};
+}
 
 
 /* ===== frontend/src/core/state.js ===== */

@@ -30,6 +30,9 @@ directories:
   buildResources: electron/build-resources
 files:
   - electron/**/*
+  # native/harbor-glass/build/Release/ 目录尚未创建，此 glob 当前零匹配；
+  # M3 落地 .node 后自动生效（不进 asar，由 asarUnpack '**/*.node' 兜底）
+  - native/harbor-glass/build/Release/**/*.node
   - harbor.html
   - libs/**/*
   - VERSION
