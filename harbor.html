@@ -4385,6 +4385,20 @@ html[data-skin="lightwell"][data-lw-liquid="1"] body.fx-off #glass-ribbon{
 -webkit-backdrop-filter:none;backdrop-filter:none;
 }
 html[data-skin="lightwell"] .gd-page{background:var(--bg)}
+html[data-skin="lightwell"][data-glass-engine="native"]{
+background-color:transparent;
+}
+html[data-skin="lightwell"][data-glass-engine="native"] #lw-ambient-wallpaper{
+display:none!important;
+}
+html[data-skin="lightwell"][data-glass-engine="native"] header.header,
+html[data-skin="lightwell"][data-glass-engine="native"] #mainStage,
+html[data-skin="lightwell"][data-glass-engine="native"] #observerWindow,
+html[data-skin="lightwell"][data-glass-engine="native"] #glass-ribbon{
+-webkit-backdrop-filter:none;
+backdrop-filter:none;
+background-color:transparent;
+}
 
 </style>
 </head>
@@ -5730,7 +5744,7 @@ var PROTOTYPE_VIEWS = [
 ];
 var state = {
 activePrototype: 'flow-track',
-observerOpen: true,
+observerOpen: false,
 callCount: 0,
 estTokens: 0,
 lastMethod: 'idle',

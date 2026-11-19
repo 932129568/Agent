@@ -763,3 +763,30 @@ html[data-skin="lightwell"][data-lw-liquid="1"] body.fx-off #glass-ribbon{
         将来新增皮肤若也把 --main-bg 置透明，必须在对应段补同名规则
        （qa/r96/gd-transparency-probe.mjs 的 T2 会当场抓住）。*/
 html[data-skin="lightwell"] .gd-page{background:var(--bg)}
+
+/* ===== R100 原生实时透色引擎隔离层（双态共存，不破坏 R98 回退档）=====
+   作用：原生引擎属性存在时（M3 由原生侧写入），CSS 侧必须让位 ——
+     ① 页面底色透明（透出原生背板）；
+     ② 隐藏静态壁纸（否则静态壁纸盖在真透色窗口上）；
+     ③ 四宿主模糊归零（否则与 D3D11 HLSL 的模糊叠加成二次模糊，既掉帧又糊）。
+   属性缺失时（Win10 低版 / RDP / 无原生插件）本段零命中，完整回退 R98 档。
+   四条编写约束（每条都有对应门禁，见 server/test/lightwell-skin-gate.mjs 的 R100 段）：
+     ① 每个选择器都必须带 html[data-skin="lightwell"] 前缀（css-lint 逐条校验）；
+     ② 不得写 id 属性字面量（会污染 contract_diff 的 dom_ids）；
+     ③ 本段规则不得挂壁纸就绪门控、不得消费壁纸 url 自定义属性，
+        否则会被壁纸桶判据算成第二条明档/暗档规则（桶计数 1/1 立刻变 2）；
+     ④ 模糊属性只允许 none 一种取值，不得在本段重新开启模糊。*/
+html[data-skin="lightwell"][data-glass-engine="native"]{
+  background-color:transparent;
+}
+html[data-skin="lightwell"][data-glass-engine="native"] #lw-ambient-wallpaper{
+  display:none!important;
+}
+html[data-skin="lightwell"][data-glass-engine="native"] header.header,
+html[data-skin="lightwell"][data-glass-engine="native"] #mainStage,
+html[data-skin="lightwell"][data-glass-engine="native"] #observerWindow,
+html[data-skin="lightwell"][data-glass-engine="native"] #glass-ribbon{
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  background-color:transparent;
+}

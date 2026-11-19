@@ -32,7 +32,7 @@
 
   var state = {
     activePrototype: 'flow-track',
-    observerOpen: true,
+    observerOpen: false, // R100：生产态默认收起，释放 360px 主舞台；按 Ctrl+Shift+D 呼出诊断
     callCount: 0,
     estTokens: 0,
     lastMethod: 'idle',

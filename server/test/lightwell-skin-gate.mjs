@@ -30,6 +30,16 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
  */
 const R98_WP_OPACITY = { light: 0.62, dark: 0.65 };
 
+/* ── R100 决策（原生实时透色门禁升级）──────────────────────────────────────────
+ * 原生引擎（M3 起由原生侧把 `data-glass-engine="native"` 写到 <html>）接管模糊与壁纸后，
+ * CSS 侧必须让位：模糊归零 + 静态壁纸隐藏 —— 否则与 D3D11 HLSL 叠成二次模糊（掉帧又糊），
+ * 且静态壁纸会盖住真透色窗口。属性缺失（Win10 低版 / RDP / 无原生插件）时隔离层零命中，
+ * 完整回退 R98 档，M1–M6 继续守卫壁纸层。
+ * 纪律：判据一律引用下面两个常量，不写选择器字面量（同 R98_WP_OPACITY 的单点纪律）。
+ */
+const R100_NATIVE_ATTR = '[data-glass-engine="native"]';
+const R100_HOSTS = ['header.header', '#mainStage', '#observerWindow', '#glass-ribbon'];
+
 const responsiveCss = read('frontend/styles/responsive.css');
 const templateHtml = read('frontend/index.template.html');
 const shellJs = read('frontend/skin/lightwellShell.js');
@@ -170,6 +180,91 @@ check('九大原型视图齐备', () => {
   }
   assert.equal((shellJs.match(/id: '[a-z-]+', label:/g) || []).length, 9,
     'PROTOTYPE_VIEWS 条目数不是 9');
+});
+
+/* ── 7b. R100 生产态收口：observerWindow 默认折叠 ─────────────────────────────
+ * 为什么不能只写 /observerOpen\s*:\s*false/ 了事：
+ *   ① 只判「存在 false」时，注释里留一句 observerOpen: false、代码里仍写 true，照样全绿；
+ *   ② 壳层里 `state.observerOpen = !state.observerOpen`（toggle）、
+ *      `state.observerOpen = false/true`（尺寸同步）、
+ *      `observerOpen: state.observerOpen`（遥测快照）都含 observerOpen 字样，
+ *      用宽正则会被这些合法行误伤 → 假红（工程师会去改本来就正确的代码）。
+ * 故判据落在**解析出的 state 对象字面量**上：剥注释 → 截出 `var state = {` 的配平块 →
+ * 要求 `observerOpen:` 在该块内恰好 1 次且取值恰为 `false`。
+ */
+const stripJsComments = js => String(js)
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+/** 从 openIdx 处的 `{` 起按花括号配平截出对象体（注释已剥，故不含伪装的花括号） */
+function sliceBalancedObject(js, openIdx) {
+  let depth = 0;
+  for (let i = openIdx; i < js.length; i += 1) {
+    if (js[i] === '{') depth += 1;
+    else if (js[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return js.slice(openIdx + 1, i);
+    }
+  }
+  return null;
+}
+
+/**
+ * 生产态折叠判据（纯函数：喂任意 JS 文本 → 违规清单，正样本与变异负控共用同一份逻辑）。
+ * @param {string} jsText 壳层 JS 全文
+ * @returns {string[]} 违规消息（空数组 = 合规）
+ */
+function checkR100FoldGate(jsText) {
+  const out = [];
+  const text = stripJsComments(jsText);
+  const at = text.indexOf('var state = {');
+  if (at < 0) {
+    out.push('未找到 `var state = {` 初始状态字面量 —— 壳层结构被改，判据无从下手');
+    return out;
+  }
+  const openIdx = text.indexOf('{', at);
+  const body = openIdx < 0 ? null : sliceBalancedObject(text, openIdx);
+  if (body === null) {
+    out.push('`var state = {` 的花括号未配平，无法截出初始状态字面量');
+    return out;
+  }
+  // ① 主判据：字面量内 observerOpen 恰好 1 条、取值恰为 false
+  const decls = [];
+  const declRe = /(?:^|,)\s*observerOpen\s*:\s*([^,}]+)/g;
+  let m = declRe.exec(body);
+  while (m !== null) {
+    decls.push(m[1].trim());
+    m = declRe.exec(body);
+  }
+  if (decls.length !== 1) {
+    out.push(`state 字面量里 observerOpen 应恰好声明 1 次，实为 ${decls.length} 次`
+      + '（重复键后者覆盖前者，只判「存在 false」会假绿）');
+  } else if (decls[0] !== 'false') {
+    out.push(`state.observerOpen 默认值必须是 false（生产态折叠，释放 360px 主舞台），实为 ${decls[0]}`);
+  }
+  // ② 全文不得再出现「对象字面量形态」的 observerOpen: true —— 堵「另起一个对象把它盖回去」
+  const objTrue = text.match(/\bobserverOpen\s*:\s*true\b/g) || [];
+  if (objTrue.length > 0) {
+    out.push(`全文出现 ${objTrue.length} 处 observerOpen: true（对象字面量形态），默认折叠可被覆盖`);
+  }
+  // ③ 任何 state.observerOpen = true 赋值都不得早于窗口宽度逻辑 —— 堵「初始化后立刻改回展开」
+  const anchor = text.indexOf('var NARROW_MAX_WIDTH');
+  const asgRe = /state\.observerOpen\s*=\s*true\b/g;
+  let a = asgRe.exec(text);
+  while (a !== null) {
+    if (anchor < 0 || a.index < anchor) {
+      out.push('state.observerOpen = true 出现在「窗口宽度逻辑（NARROW_MAX_WIDTH）」之前，'
+        + '等于初始化后立刻改回展开，生产态并未收口');
+      break;
+    }
+    a = asgRe.exec(text);
+  }
+  return out;
+}
+
+check('R100 生产态收口：observerWindow 默认折叠（state.observerOpen 默认值为 false）', () => {
+  const v = checkR100FoldGate(shellJs);
+  assert.equal(v.length, 0, v.join(' | '));
 });
 
 check('callApi 遥测带重试，不是「找不到就放弃」', () => {
@@ -362,6 +457,107 @@ check('壁纸层暗档：必须声明 opacity=R98 决策值，且显式声明 ba
   assert.equal(r.dark.length, 0, r.dark.join(' | '));
 });
 
+/* ── 11. R100 原生实时透色双态隔离层（惰性 CSS：属性存在才生效）─────────────────
+ * 前提（必须写进验收说明，否则会被误判「功能没生效」）：全仓目前**无任何地方**写
+ * `data-glass-engine`（grep 0 命中）。本段守的是「当 M3 把属性挂上时，CSS 必须已经让位」
+ * 这一**静态承诺**，不是运行时效果；真透色在 M3 验。
+ *
+ * 判据口径（每条都可失败）：
+ *   ① 必须存在选择器含 R100_NATIVE_ATTR 的规则块 —— 缺失即报「G02-A 未落盘」，
+ *      **不 SKIP**（SKIP 在汇总里就是绿，等于假绿）；
+ *   ② 原生模式下静态壁纸必须隐藏：存在**选择器段以 #lw-ambient-wallpaper 收尾**的
+ *      native 规则块，其 body 的 display 恰 1 处且为 none[!important]；
+ *   ③ 原生模式下四宿主 CSS 模糊必须归零：存在**四段选择器分别以 4 个宿主收尾**的
+ *      native 规则块，其 body 的 backdrop-filter 恰 1 处且为 none；
+ *      且任何 native 规则块内都不得出现非 none 的 backdrop-filter（防后面补一条盖回来）。
+ *
+ * 为什么用「选择器段 endsWith 宿主」而不是 includes：
+ *   既有「宿主内部禁模糊」规则写的是 `#mainStage *` 这类后代选择器，也含 #mainStage；
+ *   用 includes 会把「只管后代、不管宿主本身」的规则误认成「宿主已归零」→ 判据当场假绿。
+ *
+ * 为什么还要 countDecl === 1（与壁纸层 M6 同源教训）：
+ *   declVal 取第一处、浏览器取最后一处；`backdrop-filter:none; backdrop-filter:blur(30px)`
+ *   在只读第一处的判据下是绿的。
+ */
+const r100SelSegments = selector => selector.split(',').map(x => x.trim()).filter(Boolean);
+const r100SelEndsWith = (selector, tail) => r100SelSegments(selector).some(x => x.endsWith(tail));
+const r100DisplayIsNone = body => {
+  const v = declVal(body, 'display');
+  return v !== null && /^none\s*(!\s*important)?$/i.test(v);
+};
+const r100BlurIsNone = body => {
+  const v = declVal(body, 'backdrop-filter');
+  return v !== null && v.toLowerCase() === 'none';
+};
+/** 返回第一条「非 none 的 backdrop-filter」取值文本；没有则 null */
+const r100BlurRevived = body => {
+  const m = /backdrop-filter\s*:\s*((?!none\b)[^;}]+)/i.exec(body);
+  return m ? m[1].trim() : null;
+};
+
+/**
+ * 原生隔离层判据（纯函数：喂任意 CSS 文本 → 分桶违规清单，正样本与变异负控共用）。
+ * @param {string} cssText 完整 CSS 文本
+ * @returns {{presence: string[], wall: string[], blur: string[]}}
+ */
+function checkR100NativeGate(cssText) {
+  const out = { presence: [], wall: [], blur: [] };
+  const native = ruleBlocks(stripComments(cssText))
+    .filter(b => b.selector.includes(R100_NATIVE_ATTR));
+  if (native.length === 0) {
+    const msg = `CSS 中没有任何选择器含 ${R100_NATIVE_ATTR} 的规则块 —— G02-A 原生隔离层未落盘`;
+    out.presence.push(msg);
+    // 不许 SKIP：没落盘时下面两条也必须各自红，且消息直指 G02-A
+    out.wall.push('原生模式下必须有隐藏静态壁纸的规则（选择器段以 #lw-ambient-wallpaper 收尾 + display:none）；' + msg);
+    out.blur.push('原生模式下必须有四宿主模糊归零的规则（四段选择器各以宿主收尾 + backdrop-filter:none）；' + msg);
+    return out;
+  }
+  // ② 静态壁纸必须隐藏
+  const wallRules = native.filter(b => r100SelEndsWith(b.selector, '#lw-ambient-wallpaper'));
+  if (wallRules.length === 0) {
+    out.wall.push(`原生模式下缺少隐藏静态壁纸的规则：需存在选择器同时含 ${R100_NATIVE_ATTR} 与 #lw-ambient-wallpaper 的规则块`);
+  }
+  for (const b of wallRules) {
+    if (!r100DisplayIsNone(b.body)) {
+      out.wall.push('原生模式壁纸规则未声明 display:none → ' + b.selector);
+    } else if (countDecl(b.body, 'display') !== 1) {
+      out.wall.push(`原生模式壁纸规则 display 声明应恰好 1 处，实为 ${countDecl(b.body, 'display')} 处（后面的会覆盖前面的）`);
+    }
+  }
+  // ③ 四宿主模糊归零
+  const hostKiller = native.filter(b => R100_HOSTS.every(h => r100SelEndsWith(b.selector, h)));
+  if (hostKiller.length === 0) {
+    out.blur.push('原生模式下缺少「四宿主模糊归零」规则：需存在选择器覆盖 '
+      + R100_HOSTS.join(' / ') + ` 且带 ${R100_NATIVE_ATTR} 的规则块`);
+  }
+  for (const b of hostKiller) {
+    if (!r100BlurIsNone(b.body)) {
+      out.blur.push('原生模式下四宿主仍声明了非 none 的 backdrop-filter（'
+        + declVal(b.body, 'backdrop-filter') + '）—— 会与原生 HLSL 叠成二次模糊 → ' + b.selector);
+    } else if (countDecl(b.body, 'backdrop-filter') !== 1) {
+      out.blur.push('原生模式四宿主 backdrop-filter 声明应恰好 1 处，实为 '
+        + countDecl(b.body, 'backdrop-filter') + ' 处（declVal 读第一处、浏览器取最后一处）');
+    }
+  }
+  for (const b of native) {
+    const revived = r100BlurRevived(b.body);
+    if (revived !== null) {
+      out.blur.push(`原生模式规则块内出现非 none 的 backdrop-filter（${revived}）→ ${b.selector}`);
+    }
+  }
+  return out;
+}
+
+check('R100 原生模式：必须隐藏静态壁纸 #lw-ambient-wallpaper（display:none，防静态壁纸盖住真透色背板）', () => {
+  const r = checkR100NativeGate(responsiveCss);
+  assert.equal(r.wall.length, 0, r.wall.join(' | '));
+});
+
+check('R100 原生模式：四宿主 CSS 模糊必须归零（backdrop-filter:none，防与原生 HLSL 叠成二次模糊）', () => {
+  const r = checkR100NativeGate(responsiveCss);
+  assert.equal(r.blur.length, 0, r.blur.join(' | '));
+});
+
 /* 变异负控 —— 证明上面三条**真的会红**，而不是恒真式。
  * 纪律（沿用本文件第 5 段教训）：
  *   1. 变异一律**单点最小改动**，每条只动一处，对应「有人只改了明档」这种真实失误；
@@ -473,6 +669,88 @@ try {
   // 证据落盘失败不影响门禁判定，但必须显性可见
   mutationLog.push({ id: 'EVIDENCE', label: '证据 JSON 写盘失败：' + err.message, expect: '-', fired: false, violations: [] });
 }
+
+/* R100 原生层变异负控 —— **独立数组 + 独立循环**，理由（勿重构掉）：
+ *   · 既有 MUTATIONS 是「mutate 只接 CSS 文本」+ 循环里写死 checkWallpaperGate(mutated) 与
+ *     r[mu.expect]。M8 要变异的是 **shellJs**（不是 CSS）；硬塞进同一个数组就得把 M1–M6 的
+ *     签名全改一遍，等于动了 r98 的既有断言，违反「只加不改」纪律。
+ *   · 故此处每条各带 `pick`（从判据返回值里取哪个桶）与 `stdin`（变异作用的输入文本），
+ *     不强求统一签名；两个循环互不干扰，expect 桶名空间也不冲突。
+ *   · 锚点纪律沿用上面 M1–M6：一律取自解析结果（R100_HOST_BODY / R100_WALL_BODY），
+ *     不写 CSS 字面量；变异作用在剥注释后的文本上。 */
+const JS_NC = stripJsComments(shellJs);
+const R100_NATIVE_BLOCKS = ruleBlocks(CSS_NC).filter(b => b.selector.includes(R100_NATIVE_ATTR));
+const R100_HOST_BODY = (() => {
+  const b = R100_NATIVE_BLOCKS.find(x => R100_HOSTS.every(h => r100SelEndsWith(x.selector, h)));
+  return b ? b.body : null;
+})();
+const R100_WALL_BODY = (() => {
+  const b = R100_NATIVE_BLOCKS.find(x => r100SelEndsWith(x.selector, '#lw-ambient-wallpaper'));
+  return b ? b.body : null;
+})();
+
+const NATIVE_MUTATIONS = [
+  {
+    id: 'M7', expect: 'blur',
+    label: '原生模式下擅自把四宿主 CSS 模糊开回来（backdrop-filter:none → blur(20px)）',
+    anchor: '原生隔离层里覆盖四宿主那条规则的 body',
+    stdin: 'css',
+    // (^|;)\s* 锚点：只用裸 /backdrop-filter:\s*none/ 会先命中 -webkit-backdrop-filter 那行，
+    // 变异打在带前缀的那条上，主判据（标准属性）不动 —— 负控就成了「测变异脚本」而不是测产品。
+    mutate: () => swapBody(CSS_NC, R100_HOST_BODY,
+      R100_HOST_BODY && R100_HOST_BODY.replace(
+        /(^|;)(\s*)backdrop-filter\s*:\s*none/i, '$1$2backdrop-filter:blur(20px)')),
+    gate: checkR100NativeGate,
+    pick: r => r.blur,
+  },
+  {
+    id: 'M8', expect: 'fold',
+    label: '把 state.observerOpen 改回 true（生产态又占 360px 主舞台）',
+    anchor: 'state 字面量里的 observerOpen 默认值',
+    stdin: 'js',
+    // 这条不走 CSS 路径：变异对象是 shellJs，判据走 checkR100FoldGate
+    mutate: () => (JS_NC.includes('observerOpen: false')
+      ? JS_NC.replace(/(,\s*)observerOpen\s*:\s*false/, '$1observerOpen: true')
+      : null),
+    gate: checkR100FoldGate,
+    pick: r => r,
+  },
+  {
+    id: 'M9', expect: 'wall',
+    label: '原生模式未隐藏静态壁纸（删掉 display:none!important）',
+    anchor: '原生隔离层里含 #lw-ambient-wallpaper 那条规则的 body',
+    stdin: 'css',
+    mutate: () => swapBody(CSS_NC, R100_WALL_BODY,
+      R100_WALL_BODY && R100_WALL_BODY.replace(/display\s*:\s*none\s*!important\s*;?/i, '')),
+    gate: checkR100NativeGate,
+    pick: r => r.wall,
+  },
+  {
+    id: 'M10', expect: 'blur',
+    label: '四宿主先写 backdrop-filter:none、后面再补一行 blur(30px)（合规值在前、覆盖值在后）',
+    anchor: '原生隔离层四宿主规则的 body（末尾追加第二条 backdrop-filter）',
+    stdin: 'css',
+    // 与壁纸层 M6 同构：专治「声明存在但被后面覆盖」—— 没有 countDecl 守卫时判据恒真
+    mutate: () => swapBody(CSS_NC, R100_HOST_BODY,
+      R100_HOST_BODY && R100_HOST_BODY + 'backdrop-filter:blur(30px);'),
+    gate: checkR100NativeGate,
+    pick: r => r.blur,
+  },
+];
+
+check('R100 原生层变异负控：M7–M10 每条单点变异必须各自让对应桶变红（证明原生门与折叠门非恒真）', () => {
+  for (const mu of NATIVE_MUTATIONS) {
+    const base = mu.stdin === 'js' ? JS_NC : CSS_NC;
+    const mutated = mu.mutate();
+    assert.ok(mutated !== null && mutated !== base,
+      `${mu.id} 负控锚点「${mu.anchor}」在现行源码中已找不到：可能是产品声明被合法改值/删改。`
+      + '请先看上面 live 断言是否已红——若已红，先修产品；确认产品无误后，再更新本负控锚点。');
+    const bucket = mu.pick(mu.gate(mutated));
+    const fired = bucket.length > 0;
+    mutationLog.push({ id: mu.id, label: mu.label, anchor: mu.anchor, expect: mu.expect, fired, violations: bucket });
+    assert.ok(fired, `${mu.id} 期望 ${mu.expect} 变红，实际仍为绿 —— 该断言是恒真式`);
+  }
+});
 
 /* ── 汇总 ─────────────────────────────────────────────────────────────────── */
 if (mutationLog.length) {
