@@ -1,0 +1,23 @@
+{
+  "id": "webdav-offline",
+  "family": "webdav",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "WebDAV 数据主权族：默认读/配置保存回读/连通性测试（离线）/导出恢复错误路径（webdav.json 独立文件）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "webdav_get_config", "args": [], "note": "默认配置（未配置态）" },
+    { "id": "c02", "method": "webdav_save_config", "args": ["{\"url\": \"https://dav.example.com/dav/\", \"username\": \"diff-user\"}"], "note": "配置保存（密码未设）" },
+    { "id": "c03", "method": "webdav_get_config", "args": [], "note": "保存后回读" },
+    { "id": "c04", "method": "webdav_test", "args": ["{}"], "note": "连通性测试（离线错误路径）" },
+    { "id": "c05", "method": "webdav_export", "args": [], "note": "导出（配置不完整/离线错误路径）" },
+    { "id": "c06", "method": "webdav_restore", "args": ["{}"], "note": "恢复（错误路径）" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["webdav.json"]
+  }
+}

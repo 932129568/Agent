@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!--
+  v1.8.0 B1 fixture：仿真 DuckDuckGo 结果页（HTML 端点，tests/fixtures/v18/ddg_results.html）
+  覆盖点（fixture 即契约，随契约变更单更新）：
+  - .result.results_links 结果容器 ×5（驱动 search_adapters._parse_ddg 条数断言）；
+  - .result-body 内 h2 a.result__a 标题链接 + a.result__snippet 摘要；
+  - 第 2 条带 <span class="result_date">2026-09-28</span>（date 有形态；
+    DDG 实际 HTML 端点无日期元素，此处为仿真扩展，覆盖 date 两形态契约）；
+  - 首条为 duckduckgo.com 自身（domain 断言）。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>python 教程 at DuckDuckGo</title>
+</head>
+<body>
+<div class="results results_main">
+  <div class="result results_links results_links_deep">
+    <div class="result-body">
+      <h2><a rel="nofollow" class="result__a" href="https://duckduckgo.com/">DuckDuckGo — 隐私保护的搜索引擎</a></h2>
+      <a class="result__snippet" href="https://duckduckgo.com/">DuckDuckGo 不追踪用户搜索历史，提供匿名搜索与网页追踪拦截，是隐私优先的搜索引擎选择。</a>
+    </div>
+  </div>
+  <div class="result results_links results_links_deep">
+    <div class="result-body">
+      <h2><a rel="nofollow" class="result__a" href="https://example-book.com/python-crash-course">Python 编程：从入门到实践（第 3 版）</a></h2>
+      <span class="result_date">2026-09-28</span>
+      <a class="result__snippet" href="https://example-book.com/python-crash-course">经典 Python 入门书第 3 版，涵盖数据可视化、Web 应用与游戏项目实战。</a>
+    </div>
+  </div>
+  <div class="result results_links results_links_deep">
+    <div class="result-body">
+      <h2><a rel="nofollow" class="result__a" href="https://docs.python.org/zh-cn/3/library/index.html">Python 标准库中文文档</a></h2>
+      <a class="result__snippet" href="https://docs.python.org/zh-cn/3/library/index.html">Python 3 标准库中文参考，包含 os、sys、json、datetime 等常用模块的详细说明。</a>
+    </div>
+  </div>
+  <div class="result results_links results_links_deep">
+    <div class="result-body">
+      <h2><a rel="nofollow" class="result__a" href="https://automatetheboringstuff.com/">Automate the Boring Stuff with Python</a></h2>
+      <a class="result__snippet" href="https://automatetheboringstuff.com/">Practical programming for total beginners, covering Excel, PDF, email and file automation.</a>
+    </div>
+  </div>
+  <div class="result results_links results_links_deep">
+    <div class="result-body">
+      <h2><a rel="nofollow" class="result__a" href="https://bootcamp.example.net/python">Python 训练营（四周从零到部署）</a></h2>
+      <a class="result__snippet" href="https://bootcamp.example.net/python">四周全日制训练营，包含 FastAPI 部署、PostgreSQL 与 Docker 容器化实践。</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

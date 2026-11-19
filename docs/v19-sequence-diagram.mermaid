@@ -1,0 +1,93 @@
+# Harbor v1.9.0 M1+M2 · 时序图集（自 v19-m1m2-design.md §A4 提取）
+
+## S1 · 读取器管线（dual-LLM-lite 主管线）
+
+sequenceDiagram
+    participant FE as 前端 agent-loop
+    participant API as Api
+    participant SS as SearchService
+    participant AD as adapters/service 取数
+    participant SR as SearchReader
+    participant HR as HybridRouter
+    participant LLM as 本地 LLM（OpenAI 兼容）
+    FE->>API: browser_search({query, engine})
+    API->>SS: browser_search(params)（guard session 档先行）
+    SS->>AD: RSS 优先取数 → parse → results
+    AD-->>SS: results（channel=rss|html）
+    SS->>SR: read(results_text, source_url, channel)
+    SR->>HR: route_reader(local_available, budget_s)
+    HR-->>SR: channel=local|skip
+    alt channel=local 且调用成功
+        SR->>LLM: POST /chat/completions（response_format=json_object，max_tokens=512）
+        LLM-->>SR: 200 JSON digest
+        SR->>SR: _parse_json_strict → 五字段校验
+        SR->>HR: report_local_result(True)
+        SR-->>SS: {ok, mode:'reader', digest, text: wrap_untrusted(digest)}
+    else 不可用/超时/解析失败
+        SR->>HR: report_local_result(False)（连败 3 → unavailable 60s）
+        SR-->>SS: {ok, mode:'raw', text: wrap_untrusted(原文截断)}
+        Note over SR: schema_fail+1 或 degrade_count+1（不升云、不阻断）
+    end
+    SS->>SS: tag_payload(payload, source{engine, query_sha256})
+    SS-->>API: 成功载荷（untrusted=true + provenance）
+    API-->>FE: ok(payload)
+    Note over FE: 结果区 UNTRUSTED 三重编码渲染；search_reader_stats 供状态灯
+
+## S2 · 审计哈希链追加与断链检测
+
+sequenceDiagram
+    participant API as Api（js_api 挂点）
+    participant G as GuardService
+    participant AC as AuditChain
+    participant FS as ~/.glm-chat/
+    API->>G: audit(op, detail, action, decision, plan=..., evidence=...)
+    G->>G: 组装条目（ts/op/action/detail/decision/trace/五维）
+    G->>G: evidence.args_sha256 = sha256(canonical detail)（禁原文）
+    G->>AC: append(entry)（持链锁）
+    AC->>AC: canonical = dumps(sort_keys, compact)
+    AC->>AC: hash = sha256(prev_hash + canonical)
+    AC->>FS: atomic_write_json(audit_chain.json {head, len})
+    AC-->>G: entry + hash/prev_hash
+    G->>FS: append audit_log.jsonl（持 guard 锁：轮转+追加）
+    Note over API,FS: 读取校验：get_audit_log → 窗口重放 verify → 任一环断 → chain.valid=false + broken_at
+
+## S3 · 检查点创建（计划批准自动）与回滚
+
+sequenceDiagram
+    participant FE as 67-plan-card.js
+    participant API as Api
+    participant CS as CheckpointService
+    participant WS as WorkspaceSnapshot
+    participant FS as ~/.glm-chat/checkpoints/
+    FE->>API: plan_update(task_id, status='approved')
+    API->>CS: auto_create_for_plan(task_id)（files=None 自动发现）
+    CS->>WS: walk(ws, 500, 200MB)
+    WS-->>CS: [{path,size,mtime,sha256}]
+    CS->>FS: 快照/manifest.json 落盘（原子写）
+    CS->>CS: badges=diff(空, after)（全 add）+ prune(keep=3)
+    CS-->>API: {ok, id, kind, badges, file_count, size_mb}
+    API-->>FE: plan 更新（approved_at + 检查点 id）
+    Note over FE,FS: 回滚：checkpoint_list → 三态清单 → 用户确认 → checkpoint_rollback(confirmed=True)
+    FE->>API: checkpoint_rollback(task_id, confirmed=True)
+    API->>CS: rollback(task_id)
+    CS->>FS: 读 manifest → git checkout <head> -- files / 逐文件 .rollback-bak+恢复
+    CS->>CS: 恢复后重算 sha256 对拍 → verified
+    CS-->>API: {ok, restored[], failed[], verified{ok, mismatched[]}}
+    API-->>FE: 校验态提示（ckpt-verify ok/err 行）
+
+## S4 · MCP 定期重验（健康度联动）
+
+sequenceDiagram
+    participant Loop as _idle_loop（tick）
+    participant Svc as McpService
+    participant Cfg as mcp_servers.json
+    participant Srv as MCP 服务器
+    Loop->>Svc: 扫描：_reverify_due(name)（按 health 取 24h/1h/15min）
+    Svc->>Srv: tools/list（持 entry 锁取既有 client；无 client 跳过）
+    Srv-->>Svc: tools
+    Svc->>Svc: schema hash 对拍快照
+    alt hash 变更
+        Svc->>Svc: _schema_review 入列（check/call 阻断——TOFU）
+    else 一致
+        Svc->>Cfg: lastReverifyAt 落盘（纯增键）
+    end

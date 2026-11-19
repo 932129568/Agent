@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "generatedBy": "tools/arch_assessment.py",
+  "purpose": "R69 架构评估实测证据；判定见 ARCHITECTURE-ASSESSMENT-R69.md",
+  "scale": {
+    "layers": {
+      "legacyFrontend": {
+        "files": 117,
+        "lines": 26930
+      },
+      "reactProduction": {
+        "files": 16,
+        "lines": 2857
+      },
+      "normalizedApp": {
+        "files": 46,
+        "lines": 3254
+      },
+      "nodeServer": {
+        "files": 46,
+        "lines": 11469
+      },
+      "pythonContract": {
+        "files": 0,
+        "lines": 0,
+        "retired": true,
+        "contractFactSource": "deliverables/dev-plan/frozen-python-surface.json"
+      },
+      "electronMain": {
+        "files": 3,
+        "lines": 1043
+      },
+      "installer": {
+        "files": 4,
+        "lines": 1182
+      },
+      "tools": {
+        "files": 60,
+        "lines": 10668
+      },
+      "pytest": {
+        "files": 88,
+        "lines": 15964
+      }
+    },
+    "totalSourceLines": 46735,
+    "readErrors": [],
+    "harborHtmlBytes": 3631263,
+    "normalizedAppBundleBytes": 851045
+  },
+  "dependencyGraph": {
+    "modules": 117,
+    "symbols": 1317,
+    "edges": 3198,
+    "sccCycles": 17,
+    "cyclicSymbols": 104,
+    "largestScc": 34,
+    "topSccSizes": [
+      34,
+      26,
+      5,
+      5,
+      5,
+      3
+    ],
+    "note": "符号级强连通分量；与 R65「window.* 业务全局符号归零」是不同口径"
+  },
+  "typeSafety": {
+    "tsFiles": 10,
+    "generatedTsFiles": 10,
+    "handWrittenTsFiles": 0,
+    "typedConfig": false
+  },
+  "ci": {
+    "workflow": ".github/workflows/harbor-ci.yml",
+    "detectedTokens": [
+      "check_contract.py",
+      "round_runner.py",
+      "check_release.py",
+      "entry_sweep.py",
+      "arch-contract.mjs",
+      "server/test",
+      "smoke-render.mjs",
+      "unit.test.mjs",
+      "contract_diff.py",
+      "gen_allowlist.mjs",
+      "pytest",
+      "run_normalized_gates.py",
+      "gate_coverage.py",
+      "type_annotation_audit.py",
+      "scc_ratchet.py",
+      "post_deletion_audit.py",
+      "arch_assessment.py"
+    ],
+    "rootScripts": [
+      "build",
+      "build:all",
+      "build:island",
+      "build:ui-schema",
+      "desktop",
+      "diff:all",
+      "dist:win",
+      "perf:confirm",
+      "smoke:island"
+    ],
+    "serverScripts": [
+      "dev",
+      "diff",
+      "diff:all",
+      "diff:coverage",
+      "migrate:legacy",
+      "prisma:generate",
+      "prisma:push",
+      "smoke",
+      "start",
+      "test:auth",
+      "test:bridge",
+      "test:browser",
+      "test:checkpoint-git",
+      "test:commands",
+      "test:contract",
+      "test:experts",
+      "test:files",
+      "test:groupfiles",
+      "test:guard",
+      "test:localproxy",
+      "test:mcp",
+      "test:migration",
+      "test:parallel",
+      "test:provider",
+      "test:state",
+      "test:system",
+      "test:update",
+      "test:webdav"
+    ],
+    "serverTestScripts": 19
+  },
+  "coverage": {
+    "toolingDetected": false,
+    "detection": "importlib.find_spec(pytest_cov|coverage) + 包声明字段；不扫描注释文本",
+    "scannedFiles": [
+      "package.json",
+      "server/package.json",
+      "requirements-win.txt"
+    ],
+    "hits": []
+  },
+  "contractDiscipline": {
+    "frozenSymbols": 1318,
+    "frozenFunctionDefs": 1317,
+    "anchor": "contract-baseline-r68.json",
+    "frozenKeys": [
+      "api_version",
+      "api_py_sha256",
+      "golden_sha256",
+      "html",
+      "source_line_multiset_sha256"
+    ],
+    "publicMethods": 51,
+    "goldenSequences": 95,
+    "goldenSha256": "ad7cfe30c06b2df189d4504a9d87f95b86f94969c323d2b6ce58555c72fa5999"
+  },
+  "tests": {
+    "pytestFiles": 88,
+    "pytestLines": 15964,
+    "serverRunnableGates": 27,
+    "frontendL1": 12,
+    "frontendL2": 6,
+    "archContractChecks": 58,
+    "ratchetHiddenEdges": 157,
+    "domainMap": 9
+  },
+  "dualTrack": {
+    "productionRenderer": "frontend/react/src (R67 React IIFE inlined into harbor.html)",
+    "normalizedRenderer": "frontend/app/src (NOT wired into production)",
+    "legacyModules": 117,
+    "pythonContractLayer": "retired (R69 删除后审计；契约事实源=冻结快照)",
+    "pythonContractFactSource": "deliverables/dev-plan/frozen-python-surface.json",
+    "coupledPytestFiles": 74,
+    "behaviorReviewedPins": 24,
+    "blockingGaps": 0,
+    "openImplementationDefects": 0
+  }
+}

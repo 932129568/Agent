@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "_meta": {
+    "policy": "顺序钉死不是首选治理（掩盖而非根治）。仅当某污染短期无法根治时才登记：用例对 + 原因 + 目标根因编号（S1-S6 或 EXT-外部环境）+ 复审日期；验收前必须清零或逐项经 team-lead 评审。",
+    "schema": {
+      "id": "登记号",
+      "pair": "污染源用例 → 受害者用例（node id）",
+      "reason": "为何无法短期根治",
+      "rootCause": "目标根因编号（S1-S6 / EXT-*）",
+      "reviewDate": "复审日期（YYYY-MM-DD）",
+      "approvedBy": "team-lead 评审记录（空 = 未评审，验收不通过）"
+    }
+  },
+  "entries": []
+}

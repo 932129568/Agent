@@ -1,0 +1,65 @@
+{
+  "id": "sessions-basic",
+  "family": "sessions",
+  "priority": "P0",
+  "mode": "strict",
+  "unordered": true,
+  "description": "会话族：空起步→保存两条→回读→set_current_sid→替换保存→回读→真删（save→get 的 JSON 字符串往返语义）",
+  "setup": {
+    "workspaceFiles": [
+      { "path": "note.txt", "content": "工作区种子\n", "encoding": "utf-8" }
+    ],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "get_sessions",
+      "args": [],
+      "note": "空库起步返回 []"
+    },
+    {
+      "id": "c02",
+      "method": "save_sessions",
+      "args": [
+        "[{\"id\":\"s1\",\"title\":\"差分会话A\",\"messages\":[],\"createdAt\":1000,\"updatedAt\":1000},{\"id\":\"s2\",\"title\":\"差分会话B\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"createdAt\":2000,\"updatedAt\":2000}]"
+      ],
+      "note": "全量覆盖保存两条（messages 保真）"
+    },
+    {
+      "id": "c03",
+      "method": "get_sessions",
+      "args": [],
+      "unordered": true,
+      "note": "回读两条（Python 文件序 vs Node updatedAt 倒序——按多重集合比较）"
+    },
+    {
+      "id": "c04",
+      "method": "set_current_sid",
+      "args": ["s1"],
+      "note": "切换当前会话（Python 返回 {ok:true}，Node 返回 sid 原文——已知待裁决差异面）"
+    },
+    {
+      "id": "c05",
+      "method": "save_sessions",
+      "args": ["[{\"id\":\"s1\",\"title\":\"差分会话A2\",\"messages\":[],\"createdAt\":1000,\"updatedAt\":3000}]"],
+      "note": "替换保存（不在列表中的条目删除）"
+    },
+    {
+      "id": "c06",
+      "method": "get_sessions",
+      "args": [],
+      "note": "回读剩余一条"
+    },
+    {
+      "id": "c07",
+      "method": "session_purge",
+      "args": ["s1", "[]"],
+      "note": "真删：sessions 条目 + ws 绑定 + 关联 plan/checkpoint"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "metric": "gate-coverage (门禁覆盖率) —— 非代码覆盖率",
+  "policy": "canonical 清单须在 CI YAML 非注释 run: 命令块或统一入口中出现；并由 GATES 解析式文件存在性校验兜底，缺一/失一即失败",
+  "checkedSurface": [
+    ".github/workflows/harbor-ci.yml",
+    "tools/run_normalized_gates.py"
+  ],
+  "total": 17,
+  "covered": 17,
+  "percentage": 100.0,
+  "coveredGates": [
+    "allowlist-ratchet",
+    "arch-assessment",
+    "arch-contract",
+    "contract-diff",
+    "entry-sweep-selfcheck",
+    "frontend-l1",
+    "frontend-l2",
+    "gate-coverage",
+    "golden-replay",
+    "normalized-gate-entry",
+    "post-deletion-audit",
+    "pytest-full",
+    "release-discipline",
+    "scc-ratchet",
+    "server-gates",
+    "type-annotation",
+    "ui-contract"
+  ],
+  "missingGates": [],
+  "ciRunCommands": 55,
+  "structuralCheck": {
+    "parsedGates": 12,
+    "requiredTrue": 11,
+    "checkedPaths": [
+      "tools/gate_coverage.py",
+      "tools/post_deletion_audit.py",
+      "frontend/app/tests/arch-contract.mjs",
+      "frontend/app/tests/unit.test.mjs",
+      "frontend/app/src/features/_template/Feature.test.mjs",
+      "frontend/app/tests/smoke-render.mjs",
+      "tools/contract_golden_replay.py",
+      "tools/contract_diff.py",
+      "deliverables/dev-plan/contract-baseline-r99.json",
+      "tools/gen_allowlist.mjs",
+      "tools/scc_ratchet.py",
+      "tools/type_annotation_audit.py",
+      "tools/arch_assessment.py",
+      "deliverables/design/check_contract.py"
+    ],
+    "errors": [],
+    "status": "PASS"
+  },
+  "codeCoverage": {
+    "status": "blocked-by-environment",
+    "reason": "pytest-cov / coverage / c8 / nyc 均未安装，环境无外网不可安装",
+    "detectedTools": [],
+    "note": "按 QA 口径如实登记，不以 gate-coverage 冒充代码覆盖率",
+    "unblockCommand": "pip install pytest-cov coverage  （需有外网环境）"
+  },
+  "status": "PASS"
+}

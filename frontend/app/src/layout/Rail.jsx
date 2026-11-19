@@ -1,0 +1,115 @@
+/* B0 真实结构迁移：由 frontend/app/tools/gen-layout.mjs 从
+ * frontend/react/src/generated/Rail.jsx 投影，已剥离 13 处事件桥。
+ * AUTO-GENERATED — 请勿手改；改 R67 源后重跑本脚本。
+ * 规范：React 唯一 DOM 所有者、零业务状态、零后端调用、零原生 DOM API。 */
+export default function Rail() {
+  return (
+    <nav data-area="rail" className="rail" id="rail" aria-label="主导航">
+      {/* Round 8 UI 重构（对标 ChatGPT/Claude 单侧栏极简结构）：
+       ① 删除与 rail 5/6 重复的 main-nav 整层（杂乱主源）；
+       ② 低频工具（分析/审计/会话搜索/沙箱）收进「工具箱」二级弹出菜单；
+       ③ rail 收敛为 主链路(对话/历史/工作区/专家) + 工具箱 + 底部系统组。 */}
+      <button className="rail-btn on" data-panel="chat" data-tip="对话" aria-label="对话">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-chat" />
+        </svg>
+      </button>
+      <button className="rail-btn" data-panel="sessions" data-tip="会话历史" aria-label="会话历史">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-list" />
+        </svg>
+      </button>
+      <button className="rail-btn" data-panel="workspace" data-tip="工作区与工具权限" aria-label="工作区与工具权限">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-folder" />
+        </svg>
+      </button>
+      <button className="rail-btn" id="expertCenterBtn" data-tip="功能市场" aria-label="功能市场">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-market" />
+        </svg>
+      </button>
+      <div className="rail-sep" />
+      <button className="rail-btn" id="toolsBoxBtn" data-tip="工具箱（分析 · 审计 · 搜索 · 沙箱）" aria-label="工具箱" aria-controls="toolsPop" aria-expanded="false">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-wrench" />
+        </svg>
+      </button>
+      <div className="notify-pop" id="toolsPop" role="menu" aria-label="工具箱" style={{display: "none"}}>
+        <div className="notify-head">
+          <span>
+            工具箱
+          </span>
+        </div>
+        <button type="button" className="mn-btn" role="menuitem">
+          <svg className="ui-icon ui-icon-20" aria-hidden="true">
+            <use href="#i-chart" />
+          </svg>
+          分析 · 成本与工具统计
+        </button>
+        <button type="button" className="mn-btn" role="menuitem">
+          <svg className="ui-icon">
+            <use href="#i-audit" />
+          </svg>
+          审计日志
+        </button>
+        <button type="button" className="mn-btn" role="menuitem">
+          <svg className="ui-icon">
+            <use href="#i-search" />
+          </svg>
+          会话搜索
+        </button>
+        <button type="button" className="mn-btn" role="menuitem">
+          <svg className="ui-icon">
+            <use href="#i-sandbox" />
+          </svg>
+          沙箱
+        </button>
+      </div>
+      <div className="rail-spacer" />
+      <button className="rail-btn" id="railNotifyBtn" data-tip="通知中心" aria-label="通知中心" aria-controls="notifyPop" aria-expanded="false">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-notify" />
+        </svg>
+        <span className="mn-badge rail-notify-badge" id="railNotifyBadge" style={{display: "none"}}>
+          0
+        </span>
+      </button>
+      <div className="notify-pop" id="notifyPop" role="dialog" aria-label="通知中心" style={{display: "none"}}>
+        <div className="notify-head">
+          <span>
+            通知中心
+          </span>
+          <span id="notifyCount" />
+        </div>
+        {/* R46（F2d 改进⑪精简版）：后台任务面板——活跃 run 聚合（状态/时长/在跑工具）
+         + 点击切换会话；数据源 getActiveRuns（前端本地运行时态，零新 js_api） */}
+        <div id="bgTasksBlock" style={{borderBottom: "1px solid var(--border)", padding: "8px 10px"}}>
+          <div style={{fontSize: "12px", fontWeight: "600", color: "var(--text-2)", marginBottom: "6px"}}>
+            后台任务
+          </div>
+          <div id="bgTaskList" style={{display: "flex", flexDirection: "column", gap: "4px"}} />
+        </div>
+        <div className="notify-list" id="notifyList" />
+        <button type="button" className="mn-btn" id="notifyClearBtn">
+          清空通知
+        </button>
+      </div>
+      <button className="rail-btn" data-tip="余额" aria-label="余额">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-coin" />
+        </svg>
+      </button>
+      <button className="rail-btn" id="themeBtn" data-tip="切换深色/浅色" aria-label="切换深色/浅色">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-moon" />
+        </svg>
+      </button>
+      <button className="rail-btn" data-tip="设置" aria-label="设置">
+        <svg className="ui-icon ui-icon-20" aria-hidden="true">
+          <use href="#i-settings" />
+        </svg>
+      </button>
+    </nav>
+  )
+}

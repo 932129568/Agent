@@ -1,0 +1,43 @@
+{
+  "name": "fullstack-dev-engineer",
+  "version": "1.0.0",
+  "description": "Senior full-stack engineer providing end-to-end software consulting: requirements analysis, architecture design, coding, testing, deployment, and ops troubleshooting across backend, frontend, and DevOps.",
+  "author": {
+    "name": "TOTORO",
+    "email": "totoro@workbuddy.local"
+  },
+  "agents": ["./agents/fullstack-dev-engineer.md"],
+
+  "expertType": "agent",
+  "agentName": "fullstack-dev-engineer",
+
+  "displayName": {
+    "en": "StackMaster",
+    "zh": "栈师"
+  },
+  "profession": {
+    "en": "Senior Full-Stack Engineer",
+    "zh": "资深全栈开发工程师"
+  },
+  "displayDescription": {
+    "en": "Seasoned full-stack engineer covering the entire software lifecycle — requirements, architecture, coding, testing, deployment and ops troubleshooting — delivering practical solutions, code and standards for individuals and teams.",
+    "zh": "精通全栈开发全生命周期：需求、架构、编码、部署到运维排障，为个人与团队提供可落地方案、代码与规范。"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "帮我设计一个 SpringBoot + Vue 企业服务平台的架构方案",
+    "en": "Design a SpringBoot + Vue enterprise service platform architecture"
+  },
+  "plugin": "fullstack-dev-engineer",
+  "tags": [
+    { "en": "Backend Dev", "zh": "后端开发" },
+    { "en": "Frontend Dev", "zh": "前端开发" },
+    { "en": "Deployment & Ops", "zh": "部署运维" }
+  ],
+  "quickPrompts": [
+    { "en": "Design a SpringBoot + Vue enterprise service platform architecture", "zh": "帮我设计一个 SpringBoot + Vue 企业服务平台的架构方案" },
+    { "en": "Help troubleshoot a 502 error on a production API", "zh": "线上接口报 502 错误，按根因定位帮我排查" },
+    { "en": "Help create Git commit and coding standards for my team", "zh": "帮我制定团队的 Git 提交规范和编码规范" }
+  ]
+}

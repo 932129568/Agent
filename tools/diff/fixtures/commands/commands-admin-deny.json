@@ -1,0 +1,28 @@
+{
+  "id": "commands-admin-deny",
+  "family": "commands",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "admin 提权通道人审拒绝路径（方案 C4②/E4）：双侧 msgbox=7（IDNO）→ {info:'用户拒绝了本次管理员命令…', skipped:true}（不执行、不消费 token）",
+  "mocks": ["subprocess", "windll"],
+  "env": {
+    "python": { "GLM_TEST_MSGBOX": "7" },
+    "node": { "HARBOR_TEST_MSGBOX": "7" }
+  },
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "run_admin_command",
+      "args": ["echo hello"],
+      "note": "人审拒绝 → IDNO 同款回执；两侧均不得产生任何执行副作用"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

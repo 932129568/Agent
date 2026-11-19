@@ -1,0 +1,589 @@
+/**
+ * Harbor 桌面壳（P0-4 T01：Electron 壳基座与桥切换，A1 主进程宿主口径）。
+ *
+ * §2.3 启动时序（T02 修订：env 注入最先行）：单实例锁（HEADLESS 跳过）→
+ *   whenReady → env 注入（DATABASE_URL 绝对路径锚定 CONFIG_DIR）→ safeStorage
+ *   探测日志 + codec 路径披露 → dynamic import server/src/app.js（A1：fastify
+ *   宿主于主进程）→ 动态端口 → ensureSchema 建表 → bootstrap 迁移后台链 →
+ *   BrowserWindow(preload, contextIsolation:true, nodeIntegration:false)（HEADLESS
+ *   跳过）→ R40 起 harbor://app/harbor.html 加载（privileged scheme=code cache
+ *   解锁；HARBOR_LEGACY_FILE_PROTOCOL=1 回退 loadFile）→ 关窗优雅停机
+ *   （app.close 触发 onClose 钩子的 mcpShutdown + browserShutdown →
+ *   disconnectDb → app.quit）。
+ *
+ * spike 结论（2026-10-31，electron 45.2.1，实测见交付报告）：
+ *   a. 内嵌 Node 实测 v22.22.2（CI node-version '22'；package.json engines
+ *      声明 >=27.0.0-alpha 为未来基线口径，三方不一致但不改配置，见 I04 裁决）
+ *      —— A1 维持，不触发 A1→A3 降级；
+ *   b. `./generated/prisma/client.ts` 类型擦除在本运行时可用（Prisma 23.6+ 默认开）；
+ *   c. @libsql（napi 原生绑定）在 Electron 运行时可加载、可执行 SQL；
+ *   d. asar：开发模式不打包（loadFile + 相对路径 libs/ 实测可用）。生产打包为
+ *      T04 范围——原生模块 asarUnpack；PROJECT_ROOT 相对链在 asar 内若解析失败，
+ *      按预设路径改 env 锚 process.resourcesPath（HARBOR_BUILTIN_EXPERTS_DIR /
+ *      prompts 定位已 env 化，改动面收敛）。
+ *
+ * T02 增量（2026-10-31）：
+ *   - fresh-DB 建表：listen 后先 ensureSchema（幂等 DDL，db.js SCHEMA_DDL），
+ *     再挂 bootstrap 迁移后台链（bootstrapLegacyImport → migratePlaintextSecrets，
+ *     与 index.js 生产入口语义同构：listen 后、不阻塞、不在 import 期、零新迁移
+ *     代码——P0-2 §3.2 挂接纪律）；
+ *   - HARBOR_HEADLESS=1 server-only 分支（§6.2/Q10，历史 seam：main.py
+ *     GLM_CDP_PORT 先例已随 Python 契约层退役，仅作设计溯源）：不开窗、
+ *     不持单实例锁（产物验收可多实例隔离并行），env 缺省零行为；
+ *   - DPAPI codec 裁决（T02 互解实测偏差）：electron 45.2.1 safeStorage 密文为
+ *     'v10'+AES-GCM（userData Local State 密钥），违反 dpapi.js 'dpapi:' CurrentUser
+ *     裸 blob 契约、四向互解不成立 → dpapi.js 路径 1 默认停用（HARBOR_SAFESTORAGE=1
+ *     选回），全宿主统一 PS ProtectedData 保跨语言/双轨回退兼容。
+ *
+ * T03 增量（2026-10-31）：admin 人审对话框 provider（§4.2/Q7 原生 dialog）——
+ *   listen 后注册 setHostDialogProvider（HEADLESS 不注册=fail-closed 桩）；
+ *   并发人审经 Promise 队列串行弹窗、按 requestId 路由回执；sid 标注=DB 会话
+ *   名（不可查则短 sid）；默认按钮/Esc=拒绝（fail-closed）。
+ *
+ * 红线对位：契约事实源=冻结快照（deliverables/dev-plan/frozen-python-surface.json）；
+ * Python 契约层已退役、main.py / backend/ 为历史 seam；config.json 零污染（shell
+ * 配置仅经本进程 env 注入）；server 只绑 127.0.0.1；dist/ 不触碰。
+ */
+const { app, BrowserWindow, dialog, safeStorage, protocol, screen } = require('electron')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { pathToFileURL } = require('node:url')
+// R80 / W2：桌面壁纸镜像取数（注册表 + TranscodedWallpaper → data URI）
+const { readWallpaper, encodeMirrorImage, wallpaperOffset } = require(path.join(__dirname, 'wallpaper.js'))
+
+const ROOT = path.join(__dirname, '..')
+
+/** §6.2/Q10：HARBOR_HEADLESS=1 → server-only（产物验收基建；env 缺省零行为） */
+const HEADLESS = process.env.HARBOR_HEADLESS === '1'
+
+/** R41（F 批）：HARBOR_SMOKE=1 → 隐藏窗烟雾——完整走 protocol.handle 加载链，
+ * 校验页面源后自动收尾（协议回归验证基建；env 缺省零行为）。userData 隔离到
+ * <CONFIG_DIR>/electron-smoke-profile（与真实桌面实例零交集）。 */
+const SMOKE = process.env.HARBOR_SMOKE === '1'
+
+/* R40（F2d 改法①）：harbor:// 自定义协议替代 file:// 加载——file:// 页在
+ * Chromium 永远无 V8 code cache（crbug 40288216：仅 http(s)/WebUI 启用），
+ * privileged standard+secure+codeCache scheme 解锁持久化 code cache，二次
+ * 启动编译省约一半（v8.dev：命中反序列化≈快 2×）。回退开关：
+ * HARBOR_LEGACY_FILE_PROTOCOL=1 恢复 file:// 加载（排障用）。
+ * registerSchemesAsPrivileged 必须先于 app ready（模块顶层即 ready 前）。 */
+const HARBOR_SCHEME = 'harbor'
+const USE_CUSTOM_PROTOCOL = process.env.HARBOR_LEGACY_FILE_PROTOCOL !== '1'
+if (USE_CUSTOM_PROTOCOL) {
+  protocol.registerSchemesAsPrivileged([
+    { scheme: HARBOR_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true,
+                    stream: true, codeCache: true } },
+  ])
+}
+/** 页面可经 harbor:// 取得的资源白名单（单文件应用：harbor.html + libs 内联库）。
+ * build.js REQUIRED_LIBS 同源；严格白名单——协议面即攻击面（绝不映射目录遍历）。 */
+const HARBOR_PAGE_FILES = new Set(['harbor.html', 'libs/marked.min.js',
+  'libs/purify.min.js', 'libs/flate.js', 'libs/highlight.min.js',
+  'libs/ui-schema.bundle.js', 'libs/hub-catalog.json'])
+
+/** @type {BrowserWindow|null} */
+let win = null
+/** @type {import('fastify').FastifyInstance|null} A1 宿主：fastify 实例 */
+let serverApp = null
+/** @type {import('node:module').Module|null|undefined} db 模块缓存（ESM 单例） */
+let dbModule
+let shuttingDown = false
+
+async function importDb() {
+  if (!dbModule) dbModule = await import(pathToFileURL(path.join(ROOT, 'server', 'src', 'db.js')).href)
+  return dbModule
+}
+
+/* ================= R80 / W2：桌面壁纸镜像（主进程侧） =================
+ * 目标（契约 §6）：中栏液态厚玻璃要「透出桌面壁纸」。系统 Mica 在 Web 侧采不到
+ * 像素、透明窗口下 backdrop-filter 也采不到任何东西，唯一能被真实折射的是
+ * 「页面内自绘的壁纸副本」——所以本进程负责把壁纸读成 data URI 交给渲染进程，
+ * 并在窗口移动/缩放时推送反向偏移，让镜像层看起来钉在桌面上不动。
+ *
+ * 协议：webContents.send('harbor:wp', payload)
+ *   - 整包（首次 / 壁纸状态变化时）：{ url, style, tile, x, y, visible, partial:false }
+ *   - 增量（move / resize）：{ x, y, visible, partial:true } —— **不带 url**。
+ *     原因：壁纸 data URI 实测 3,046,407 字符，拖窗时每 120ms 发一次等于
+ *     25MB/s 的 IPC 结构化克隆，必然卡顿并打爆 GC；url 只在渲染进程首次拿到时
+ *     发一次，之后渲染侧沿用旧值（preload 已按 partial 判定，不会清空）。
+ *
+ * 失败语义：readWallpaper() 返回 null 时发 visible:false，渲染侧 --wp-visible:0
+ * 退回纯玻璃，绝不抛错、绝不阻塞启动。 */
+const WP_CHANNEL = 'harbor:wp'
+const WP_THROTTLE_MS = 120
+
+/** @type {null|{dataUri:string,width:number,height:number,style:string,tile:string,source:string,bytes:number,encodedWidth?:number,encodedHeight?:number,encodedBytes?:number}} */
+let wpState = null
+/** 渲染进程是否已就绪（did-finish-load 之后才允许 e.send，否则消息丢失） */
+let wpRendererReady = false
+/** 渲染进程是否已收到过非空 data URI（决定下一次推送要不要带整包） */
+let wpUrlSent = false
+let wpTimer = null
+let wpLastPushAt = 0
+let wpLoadStarted = false
+
+/** 异步读一次壁纸；不 await、不阻塞、失败静默降级（契约 §6.6）。
+ *  **只在首帧之后调用**：读盘+base64 约 60ms，但 3840×2160 解码降采样实测
+ *  667ms（nativeImage）——放启动路径上会把开通时间拖慢半秒多，必须让位给首屏。 */
+function startWallpaperRead() {
+  if (HEADLESS || SMOKE || wpLoadStarted) return  // 无窗模式不需要镜像
+  wpLoadStarted = true
+  const startedAt = Date.now()
+  readWallpaper()
+    .then(raw => {
+      wpState = encodeMirrorImage(raw)
+      if (wpState) {
+        console.log('[harbor] wallpaper mirror ready:',
+          wpState.width + '×' + wpState.height,
+          wpState.source, wpState.bytes + 'B',
+          'style=' + wpState.style, 'tile=' + wpState.tile,
+          'mirror=' + wpState.dataUri.length + 'ch',
+          wpState.encodedWidth ? '(' + wpState.encodedWidth + '×' + wpState.encodedHeight +
+            ', ' + wpState.encodedBytes + 'B jpeg)' : '(原分辨率)',
+          'took=' + (Date.now() - startedAt) + 'ms')
+      } else {
+        console.log('[harbor] wallpaper mirror unavailable → --wp-visible:0（静默降级）')
+      }
+    })
+    .catch(error => {
+      wpState = null
+      console.log('[harbor] wallpaper mirror read failed:', error && error.message)
+    })
+    .finally(() => { pushWallpaper() })
+}
+
+/**
+ * 组装一次推送载荷。坐标口径见 wallpaper.js wallpaperOffset()：物理像素负值，
+ * 渲染侧再除以 devicePixelRatio 还原成 CSS px。
+ * @param {boolean} full 是否带整包（url/style/tile）
+ * @returns {object|null}
+ */
+function buildWallpaperPayload(full) {
+  if (!win || win.isDestroyed()) return null
+  const bounds = win.getBounds()
+  let scaleFactor = 1
+  try {
+    const display = screen.getDisplayMatching(bounds)
+    if (display && Number(display.scaleFactor) > 0) scaleFactor = Number(display.scaleFactor)
+  } catch (error) { /* screen 不可用（极早期/异常平台）：按 1 处理，不中断 */ }
+  const offset = wallpaperOffset(bounds, scaleFactor)
+  const visible = !!(wpState && wpState.dataUri)
+  if (!full) return { x: offset.x, y: offset.y, visible, partial: true }
+  return {
+    url: visible ? wpState.dataUri : '',
+    style: wpState ? wpState.style : '10',
+    tile: wpState ? wpState.tile : '0',
+    x: offset.x,
+    y: offset.y,
+    visible,
+    partial: false,
+  }
+}
+
+/** 立即推送一次（窗口未就绪时静默丢弃——消息此时发出去渲染侧也收不到）。 */
+function pushWallpaper(forceFull) {
+  if (!wpRendererReady || !win || win.isDestroyed()) return
+  const contents = win.webContents
+  if (!contents || contents.isDestroyed()) return
+  const full = forceFull === true || !wpUrlSent
+  const payload = buildWallpaperPayload(full)
+  if (!payload) return
+  if (payload.url) wpUrlSent = true
+  try {
+    contents.send(WP_CHANNEL, payload)
+  } catch (error) {
+    console.log('[harbor] wallpaper push failed:', error && error.message)
+  }
+}
+
+/** 节流 120ms：move/resize 事件风暴合并成最多每 120ms 一次推送。 */
+function scheduleWallpaperPush() {
+  if (!wpRendererReady) return
+  if (wpTimer) return
+  const elapsed = Date.now() - wpLastPushAt
+  const wait = elapsed >= WP_THROTTLE_MS ? 0 : WP_THROTTLE_MS - elapsed
+  wpTimer = setTimeout(() => {
+    wpTimer = null
+    wpLastPushAt = Date.now()
+    pushWallpaper()
+  }, wait)
+}
+
+/** 窗口级接线：渲染就绪后推整包，移动/缩放推增量。 */
+function attachWallpaperToWindow() {
+  if (!win) return
+  win.webContents.on('did-finish-load', () => {
+    wpRendererReady = true
+    wpUrlSent = false
+    pushWallpaper(true)   // 先给渲染侧一个确定的初值（读不到也是 visible:false）
+    startWallpaperRead()  // 首帧之后再读图，不跟启动抢主线程
+  })
+  win.on('move', scheduleWallpaperPush)
+  win.on('resize', scheduleWallpaperPush)
+}
+
+/**
+ * §2.3 env 注入——必须先于 server 模块 import：server 的 config.js / paths.js
+ * 在模块加载时读取 env。已显式设置的变量一律尊重（隔离 CONFIG_DIR 测试与
+ * 开发调试依赖该语义）；HOST 强制 127.0.0.1（红线：只绑 loopback）。
+ */
+function injectEnv() {
+  const configDir = process.env.HARBOR_CONFIG_DIR || path.join(os.homedir(), '.glm-chat')
+  process.env.HARBOR_CONFIG_DIR = configDir
+  // R52（F2a⑥）：NODE_COMPILE_CACHE——V8 编译缓存持久化到 CONFIG_DIR/compile_cache，
+  // 二次启动跳过 ESM 编译直接反序列化（app.js 导入 1215ms 占 boot 80% 的主瓶颈）。
+  // 首次启动仍全量编译+写缓存；缓存损坏时 Node 自动回落全量编译（安全兜底）。
+  if (!process.env.NODE_COMPILE_CACHE) {
+    const ccDir = path.join(configDir, 'compile_cache')
+    try { fs.mkdirSync(ccDir, { recursive: true }) } catch (e) {}
+    process.env.NODE_COMPILE_CACHE = ccDir
+  }
+  if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = `file:${path.join(configDir, 'harbor.db')}`
+  }
+  process.env.HOST = '127.0.0.1'
+  if (!process.env.PORT) process.env.PORT = '0' // 动态端口（listen 后回读实际值）
+  // 桥 CORS：页面源=加载方式（R40 起 harbor://app；HARBOR_LEGACY_FILE_PROTOCOL=1
+  // 回退 file:// 时源为不透明 "null"）。server 的 CORS 精确匹配放行；env 作用域
+  // 仅本进程，不影响差分环境。
+  if (!process.env.CORS_ORIGIN) {
+    process.env.CORS_ORIGIN = USE_CUSTOM_PROTOCOL ? 'null,harbor://app' : 'null'
+  }
+}
+
+async function boot() {
+  // 时序⓪：env 注入必须最先行——server 侧 config.js / paths.js（含 logger 传递
+  // 依赖）在模块加载期读取 env；本函数后续任何 server 模块 import（含 codec
+  // 路径披露的 dpapi.js）都不得先于本调用（T02 实测教训：codec 日志先于
+  // injectEnv 触发 config.js 加载，DATABASE_URL 冻结为 dev 默认值）。
+  const __t0 = Date.now();
+  const __mark = n => { if (process.env.HARBOR_PERF_MARKS === '1') console.log('[perf] ' + n + ' +' + (Date.now() - __t0) + 'ms'); };
+  __mark('boot:start');
+  injectEnv()
+
+  // 时序⓪.5（T06 L2 QA 发现）：HEADLESS（server-only 验收）必须隔离 Electron
+  // userData——缺省 %APPDATA%\harbor-desktop 是用户真实桌面实例的 profile，headless
+  // 复跑会触碰其 GPU shader cache 等条目。锚到 <CONFIG_DIR>/electron-profile：
+  // 持久（HARBOR_SAFESTORAGE=1 时 Local State 同样归位）且与桌面实例零交集。
+  // 带窗模式不在此列（真实用户语义）。
+  if (HEADLESS) {
+    app.setPath('userData', path.join(process.env.HARBOR_CONFIG_DIR, 'electron-profile'))
+  }
+  // R41（F 批）：烟雾模式同款隔离（隐藏窗也写 GPU cache 等，勿碰真实 profile）
+  if (SMOKE) {
+    app.setPath('userData', path.join(process.env.HARBOR_CONFIG_DIR, 'electron-smoke-profile'))
+  }
+
+  // 时序①：safeStorage 探测日志（先于 server 启动）+ DPAPI codec 路径披露
+  // （T02：路径 1 默认停用、HARBOR_SAFESTORAGE=1 选回——见 dpapi.js T02 修订注）
+  try {
+    console.log('[harbor] safeStorage.isEncryptionAvailable =', safeStorage.isEncryptionAvailable())
+    const { activeCodecPath } = await import(
+      pathToFileURL(path.join(ROOT, 'server', 'src', 'services', 'dpapi.js')).href)
+    console.log('[harbor] dpapi codec path =', activeCodecPath())
+  } catch (error) {
+    console.log('[harbor] safeStorage probe failed:', error && error.message)
+  }
+
+  __mark('safeStorage-done');
+  // A1：server 宿主于主进程——进程内即 DPAPI codec 宿主（T02 裁决：默认 PS 路径，
+  // HARBOR_SAFESTORAGE=1 选回 safeStorage）；onClose 钩子（mcpShutdown +
+  // browserShutdown）随 app.close 触发。
+  const appModule = await import(pathToFileURL(path.join(ROOT, 'server', 'src', 'app.js')).href)
+  __mark('app-js-imported');
+  serverApp = await appModule.buildServer()
+  __mark('buildServer-done');
+  const base = await serverApp.listen({
+    host: process.env.HOST,
+    port: Number(process.env.PORT),
+  })
+  const port = serverApp.server.address().port
+  __mark('listen-done');
+  console.log('[harbor] server listening:', base, '(methods 面 /health)')
+  if (process.env.HARBOR_PERF_MARKS === '1') console.log('[perf] server-listening +' + Math.round(process.uptime() * 1000) + 'ms')
+
+  // T03（§4.2）：admin 人审对话框 provider 注册——任何 run_admin_command 人审
+  // 请求经 host 接缝路由到本进程的原生 dialog（并发排队串行 + requestId 回执
+  // 路由 + 会话名标注）。HEADLESS（server-only 验收）不注册 → 维持无宿主
+  // fail-closed 桩语义（与差分/dev 环境一致）。
+  if (!HEADLESS) {
+    const host = await import(pathToFileURL(path.join(ROOT, 'server', 'src', 'host.js')).href)
+    host.setHostDialogProvider({ adminMessageBox: adminMessageBoxProvider })
+    // R39 修复（S2-18）：ui_nudge 逼帧接真窗——流式期间前端每 800ms 请求逼帧，
+    // 宿主对 BrowserWindow webContents.invalidate()（对齐 Python RedrawWindow）
+    host.setHostRedrawProvider({
+      redraw: () => {
+        try {
+          if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return false
+          win.webContents.invalidate()
+          return true
+        } catch (e) { return false }
+      },
+    })
+    console.log('[harbor] host dialog provider registered (adminMessageBox, redraw)')
+  }
+
+  // 时序③（T02）：fresh-DB 建表先行——ensureSchema 幂等 DDL（db.js SCHEMA_DDL
+  // 与 prisma db push 逐字一致），避免首窗 /health、会话面与 bootstrap 后台链
+  // 的建表竞态；失败=数据库不可用，按 fail-fast 处理（boot 失败退出）。
+  const db = await importDb()
+  __mark('db-imported');
+  await db.ensureSchema(db.prisma)
+  __mark('db-schema-ready');
+  console.log('[harbor] db schema ready:', db.currentDbPath())
+  if (process.env.HARBOR_PERF_MARKS === '1') console.log('[perf] db-ready +' + Math.round(process.uptime() * 1000) + 'ms')
+
+  // 时序④（P0-2 §3.2 / T02）：bootstrap 迁移后台链——与 index.js 生产入口语义
+  // 同构（listen 后、不阻塞、不在 import 期，零新迁移代码）：① legacy
+  // sessions.json → DB 增量 merge 导入；② 存量明文密钥 DPAPI 迁移。
+  ;(async () => {
+    const { bootstrapLegacyImport } = await import(
+      pathToFileURL(path.join(ROOT, 'server', 'src', 'services', 'session-migrate.js')).href)
+    const { migratePlaintextSecrets } = await import(
+      pathToFileURL(path.join(ROOT, 'server', 'src', 'services', 'dpapi-migrate.js')).href)
+    const migrated = await bootstrapLegacyImport()
+    if (migrated.error) console.error('[harbor] legacy sessions 迁移失败（下回启动重试）:', migrated.error)
+    else console.log('[harbor] legacy sessions 迁移完成: imported=' + migrated.imported, 'skipped=' + migrated.skipped)
+    const secrets = await migratePlaintextSecrets()
+    if (secrets.error) console.warn('[harbor] 存量明文密钥迁移延后（W17）:', secrets.error, 'pending=' + secrets.pending)
+    else console.log('[harbor] 存量明文密钥 DPAPI 迁移完成: migrated=' + secrets.migrated)
+  })().catch(error => {
+    console.error('[harbor] 存储迁移后台任务异常（下回启动重试）:', error && error.message)
+  })
+
+  // HARBOR_HEADLESS=1（§6.2/Q10）：server-only 到此为止——不开窗，进程保持
+  // （listen 事件循环），SIGINT/SIGTERM 走既有优雅停机。T05/T06 live-replay /
+  // 产物验收以 /health 轮询就绪、以信号收尾。
+  if (HEADLESS) {
+    console.log('[harbor] HARBOR_HEADLESS=1 → server-only ready:', base)
+    return
+  }
+
+  // 时序②：桥切换注点（§2.4）——preload 经本进程 env 继承读取后 exposeInMainWorld，
+  // 前端 frontend/src 零改动（bridge.js 判序 pywebview → HARBOR_API_BASE）。
+  process.env.HARBOR_API_BASE = `http://127.0.0.1:${port}`
+
+  // R40（F2d）：harbor:// 协议处理器——只服务白名单页面文件（相对路径按 ROOT
+  // 解析，与 file:// 时代一致）。非白名单/越界一律 404；处理器异常 fail-closed。
+  if (USE_CUSTOM_PROTOCOL) {
+    const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+                   '.json': 'application/json' }
+    protocol.handle(HARBOR_SCHEME, async (request) => {
+      try {
+        const u = new URL(request.url)
+        if (u.hostname !== 'app') return new Response('not found', { status: 404 })
+        const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ''))
+        if (!HARBOR_PAGE_FILES.has(rel)) return new Response('not found', { status: 404 })
+        const body = await require('node:fs').promises.readFile(path.join(ROOT, rel))
+        const type = MIME[path.extname(rel)] || 'application/octet-stream'
+        return new Response(body, { headers: { 'Content-Type': type } })
+      } catch (error) {
+        console.error('[harbor] protocol.handle 失败:', error && error.message)
+        return new Response('error', { status: 500 })
+      }
+    })
+  }
+
+  __mark('pre-window');
+  win = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    show: !SMOKE,   // R41（F 批）：HARBOR_SMOKE=1 隐藏窗烟雾——协议链验证不闪窗
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true, // 显式声明口径（默认值亦为 true）
+      nodeIntegration: false,
+    },
+  })
+  // UNTRUSTED DATA 纪律（红线 4 / §2.3）：禁 window.open 逃逸面
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // R80 / W2：壁纸镜像 IPC 接线——did-finish-load 推整包（含 data URI），
+  // move/resize 节流 120ms 推增量偏移。必须在 load 之前挂，否则首包会丢。
+  attachWallpaperToWindow()
+  // R61：本地模型服务（FreeToken / Ollama / llama.cpp / vLLM 等）常不输出
+  // CORS 头。R61c 起模型请求统一经 server 的本地代理（代理自己回显可信
+  // Origin），此兜底只在响应**完全没有** ACAO 头时补 *，避免覆盖代理的
+  // 精确来源，也不与代理的 CORS 逻辑打架。仅改响应头，不转发任何请求。
+  try {
+    const LOOPBACK_RESPONSE = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\//i
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      try {
+        if (!LOOPBACK_RESPONSE.test(String(details.url || ''))) {
+          callback({ responseHeaders: details.responseHeaders })
+          return
+        }
+        const original = details.responseHeaders || {}
+        if (Object.keys(original).some(k => k.toLowerCase() === 'access-control-allow-origin')) {
+          callback({ responseHeaders: details.responseHeaders })
+          return
+        }
+        const headers = Object.assign({}, original)
+        headers['Access-Control-Allow-Origin'] = ['*']
+        callback({ responseHeaders: headers })
+      } catch (e) { callback({ responseHeaders: details.responseHeaders }) }
+    })
+  } catch (e) { /* webRequest 不可用时保持原行为，不劣化 */ }
+  // R37 修复（S2-14）：禁导航逃逸——window.open 已 deny，但 location/表单
+  // 导航仍可把宿主窗口带离 harbor.html（桥与 CSP 域外）。外链一律走后端
+  // open_url 的系统浏览器路径。R40：本页面合法源随加载方式二选一。
+  const PAGE_ORIGIN_OK = USE_CUSTOM_PROTOCOL
+    ? (u => String(u || '').startsWith(HARBOR_SCHEME + '://app/'))
+    : (u => String(u || '').startsWith('file://'))
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!PAGE_ORIGIN_OK(url)) event.preventDefault()
+  })
+  win.on('closed', () => {
+    win = null
+    // R80 / W2：窗口没了就停推——清节流定时器并复位就绪位（避免下次开窗
+    // 把增量包当成新窗口的首包，导致 url 一直发不出去）。
+    wpRendererReady = false
+    wpUrlSent = false
+    wpLoadStarted = false
+    wpState = null
+    if (wpTimer) { clearTimeout(wpTimer); wpTimer = null }
+    gracefulShutdown()
+  })
+  if (USE_CUSTOM_PROTOCOL) {
+    await win.loadURL(`${HARBOR_SCHEME}://app/harbor.html`)
+  } else {
+    await win.loadFile(path.join(ROOT, 'harbor.html'))
+  }
+  __mark('window-loaded');
+  console.log('[harbor] window loaded; bridge base =', process.env.HARBOR_API_BASE)
+  if (process.env.HARBOR_PERF_MARKS === '1') console.log('[perf] window-loaded +' + Math.round(process.uptime() * 1000) + 'ms')
+  if (SMOKE) {
+    // 烟雾：校验页面真落在本协议源 + 主框架文档可读，然后自动收尾
+    const actual = win.webContents.getURL()
+    const okOrigin = USE_CUSTOM_PROTOCOL
+      ? String(actual).startsWith(HARBOR_SCHEME + '://app/harbor.html')
+      : String(actual).startsWith('file://')
+    console.log('[harbor] smoke: url =', actual)
+    console.log('[harbor] smoke: origin', okOrigin ? 'OK' : 'MISMATCH',
+      '| protocol =', USE_CUSTOM_PROTOCOL ? HARBOR_SCHEME : 'file')
+    gracefulShutdown()
+  }
+}
+
+/* ================= T03：admin 人审对话框 provider（§4.2 / Q7 原生 dialog） =================
+ * 注册进 server/src/host.js 接缝：runAdminCommand 人审点经 hasHost() 调到此处。
+ * - 形态：Electron 原生 dialog.showMessageBox（模态、含命令全文 + 来源会话标识 +
+ *   允许/拒绝按钮；安全门独立于渲染进程存活——页面卡死人审仍可达）；
+ * - 并发排队（§4.2）：多并行 run 同时触发人审 → Promise 队列串行弹窗，每个请求
+ *   分配递增 requestId，回执携带 requestId 路由回对应调用方，杜绝「确认框与来源
+ *   会话错位」；
+ * - sid 标注：commands.js 经 ALS ctxSid() 传 sid → DB 可查会话名则标注会话名，
+ *   否则短 sid 兜底；
+ * - fail-closed：dialog 失败/异常一律回 {allow:false}（R9：唯一提权门不 fail-open）；
+ *   默认按钮与 Esc 均为「拒绝」（回车误触不提权）；
+ * - HARBOR_HEADLESS=1（server-only 验收）不注册：无 UI 可交互，维持无宿主
+ *   fail-closed 桩语义（与差分/dev 环境一致）。 */
+let adminDialogSeq = 0
+let adminDialogTail = Promise.resolve()
+
+async function adminSessionLabel(sid) {
+  const id = String(sid || '').trim()
+  if (!id) return '（未知会话）'
+  try {
+    const db = await importDb()
+    const row = await db.prisma.session.findUnique({ where: { id } })
+    const title = row && row.title ? String(row.title).trim() : ''
+    if (title) return title
+  } catch (error) { /* DB 不可查（未就绪/已断连）：短 sid 兜底 */ }
+  return id.length > 12 ? id.slice(0, 8) + '…' + id.slice(-4) : id
+}
+
+/** 单次弹窗（队列串行化后逐个执行）；回执 {allow, requestId}。 */
+async function showAdminMessageBoxOnce(requestId, req) {
+  const cmdText = String((req && req.cmd) || '')
+  const label = await adminSessionLabel(req && req.sid)
+  const opts = {
+    type: 'warning',
+    buttons: ['允许执行', '拒绝'],
+    defaultId: 1,   // 回车=拒绝（fail-closed 默认）
+    cancelId: 1,    // Esc=拒绝
+    noLink: true,
+    title: 'Harbor 管理员命令人审',
+    message: `AI 请求以管理员权限执行命令（请求 #${requestId}）`,
+    detail: `来源会话：${label}\n命令全文：\n${cmdText}\n\n允许后将弹出 UAC 提权确认；拒绝则该命令不执行。`,
+  }
+  try {
+    const parent = win && !win.isDestroyed() ? win : undefined
+    const { response } = parent
+      ? await dialog.showMessageBox(parent, opts)
+      : await dialog.showMessageBox(opts)
+    console.log(`[harbor] admin dialog #${requestId} resolved: response=${response} sid=${(req && req.sid) || ''}`)
+    return { allow: response === 0, requestId }
+  } catch (error) {
+    console.error(`[harbor] admin dialog #${requestId} failed (fail-closed):`, error && error.message)
+    return { allow: false, requestId }
+  }
+}
+
+/** provider 入口：并发请求入 Promise 队列（串行弹窗），回执按 requestId 路由。 */
+function adminMessageBoxProvider(req) {
+  const requestId = ++adminDialogSeq
+  const run = adminDialogTail.then(() => showAdminMessageBoxOnce(requestId, req))
+  adminDialogTail = run.then(() => {}, () => {})   // 队尾吞错：后续请求不受前序失败阻塞
+  return run
+}
+
+/** 关窗优雅停机（§2.3）：mcp/browser（app.close→onClose 钩子）→ db 断连 → quit。 */
+async function gracefulShutdown() {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log('[harbor] graceful shutdown: app.close(mcp/browser) → disconnectDb → quit')
+  try {
+    if (serverApp) await serverApp.close()
+  } catch (error) {
+    console.error('[harbor] server close error:', error && error.message)
+  }
+  try {
+    const db = await importDb()
+    await db.disconnectDb()
+  } catch (error) {
+    console.error('[harbor] db disconnect error:', error && error.message)
+  }
+  app.quit()
+}
+
+// §2.3：防双开双 server。HEADLESS 分支不持锁——产物验收（T05/T06）常需在
+/* R61 真机修复（T06 根因链）：用户机器挂 Clash 等系统代理时，渲染进程对
+ * 云端模型端点的直连 fetch 会被代理栈拦下，统一报 "Failed to fetch"，
+ * 群聊/单聊全部不可用。Node 后端 fetch 不读系统代理，但前端只能由
+ * Chromium 网络栈发出——此处让内置模型域名与本地回环服务绕过系统代理，
+ * 其余域名仍按系统代理（不破坏需要走代理的自定义端点）。
+ * 可用 HARBOR_PROXY_BYPASS 覆盖规则；置空字符串则完全关闭本绕行。
+ * 注：Chromium 开关必须在 app.whenReady() 之前追加才生效。 */
+const MODEL_PROXY_BYPASS = process.env.HARBOR_PROXY_BYPASS !== undefined
+  ? process.env.HARBOR_PROXY_BYPASS
+  : '*.bigmodel.cn;*.deepseek.com;*.moonshot.cn;*.aliyuncs.com;models.github.ai;127.0.0.1;localhost;::1'
+if (MODEL_PROXY_BYPASS) app.commandLine.appendSwitch('proxy-bypass-list', MODEL_PROXY_BYPASS)
+
+// 真机桌面应用旁并行拉起隔离 CONFIG_DIR 的 server-only 实例；缺省（不开
+// HARBOR_HEADLESS）单实例锁语义逐字不变。
+const gotLock = HEADLESS || app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  if (HEADLESS) {
+    console.log('[harbor] HARBOR_HEADLESS=1 → server-only（不开窗、不持单实例锁）')
+    // headless 无窗口：'window-all-closed' 永不触发，改挂进程信号收尾
+    // （仅 headless 分支注册——缺省模式信号行为零变化）。
+    process.on('SIGINT', () => { gracefulShutdown() })
+    process.on('SIGTERM', () => { gracefulShutdown() })
+  } else {
+    app.on('second-instance', () => {
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
+    })
+  }
+  app.whenReady().then(boot).catch(error => {
+    console.error('[harbor] boot failed:', error)
+    app.quit()
+  })
+  app.on('window-all-closed', () => { gracefulShutdown() })
+}

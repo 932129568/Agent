@@ -1,0 +1,879 @@
+{
+  "version": 1,
+  "generatedBy": "tools/classify_remaining_pins.py",
+  "policy": "按断言对象给出机器线索；不是行为复核结论，不得据此销项",
+  "unreviewedFiles": 64,
+  "totalPins": 1400,
+  "byAssertionTarget": {
+    "shape-assert": 465,
+    "python-service": 438,
+    "jsapi-contract": 248,
+    "unclassified": 199,
+    "frontend-vm": 27,
+    "frontend-static": 23
+  },
+  "categoryMeanings": {
+    "frontend-vm": "前端 JS VM 行为钉，需 B4+ 组件测试",
+    "frontend-static": "前端源码/打包 spec 静态钉，由字面量门承担",
+    "jsapi-contract": "js_api 契约形状钉，由 golden / contract-golden 承担",
+    "python-service": "Python 域服务内部行为，需 Node 等价门或随实现退役",
+    "shape-assert": "通用形状断言，需逐条读上下文判定",
+    "unclassified": "正则未命中，必须人工读断言原文"
+  },
+  "files": [
+    {
+      "file": "tests/test_agent_guard_chain.py",
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "pins": 9,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "python-service": 3,
+        "jsapi-contract": 6
+      }
+    },
+    {
+      "file": "tests/test_api_contract.py",
+      "domains": [],
+      "pins": 6,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 6
+      }
+    },
+    {
+      "file": "tests/test_collaboration_config.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 7,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 6,
+        "frontend-static": 1
+      }
+    },
+    {
+      "file": "tests/test_connect_merge.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 30,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 28,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_expert_package_api.py",
+      "domains": [],
+      "pins": 2,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_freetoken_preset.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 9,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "unclassified": 3,
+        "shape-assert": 1,
+        "python-service": 5
+      }
+    },
+    {
+      "file": "tests/test_glm_1211_rescue.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 10,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 9,
+        "unclassified": 1
+      }
+    },
+    {
+      "file": "tests/test_group_files.py",
+      "domains": [
+        "workspace"
+      ],
+      "pins": 9,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 4,
+        "frontend-vm": 4,
+        "python-service": 1
+      }
+    },
+    {
+      "file": "tests/test_harbor_fix.py",
+      "domains": [],
+      "pins": 36,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 18,
+        "unclassified": 8,
+        "frontend-static": 5,
+        "jsapi-contract": 5
+      }
+    },
+    {
+      "file": "tests/test_history_dir_purge.py",
+      "domains": [
+        "planning"
+      ],
+      "pins": 23,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 21,
+        "unclassified": 2
+      }
+    },
+    {
+      "file": "tests/test_local_proxy.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 20,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 15,
+        "unclassified": 3,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_mcp_floor_rules.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 17,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 16,
+        "jsapi-contract": 1
+      }
+    },
+    {
+      "file": "tests/test_memory_panel.py",
+      "domains": [
+        "security"
+      ],
+      "pins": 9,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 8,
+        "unclassified": 1
+      }
+    },
+    {
+      "file": "tests/test_modern_backend_architecture.py",
+      "domains": [],
+      "pins": 8,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "jsapi-contract": 3,
+        "shape-assert": 5
+      }
+    },
+    {
+      "file": "tests/test_modern_build.py",
+      "domains": [],
+      "pins": 13,
+      "dominantTarget": "frontend-static",
+      "assertionTargets": {
+        "frontend-static": 9,
+        "unclassified": 3,
+        "shape-assert": 1
+      }
+    },
+    {
+      "file": "tests/test_modern_scheduler.py",
+      "domains": [],
+      "pins": 9,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 8,
+        "jsapi-contract": 1
+      }
+    },
+    {
+      "file": "tests/test_native_ui.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 8,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 8
+      }
+    },
+    {
+      "file": "tests/test_plan_service.py",
+      "domains": [
+        "planning"
+      ],
+      "pins": 19,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 18,
+        "jsapi-contract": 1
+      }
+    },
+    {
+      "file": "tests/test_prompts_w0.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 12,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 7,
+        "jsapi-contract": 4,
+        "unclassified": 1
+      }
+    },
+    {
+      "file": "tests/test_r40_k10.py",
+      "domains": [
+        "workspace"
+      ],
+      "pins": 3,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 2,
+        "jsapi-contract": 1
+      }
+    },
+    {
+      "file": "tests/test_r41_registry_pipe.py",
+      "domains": [
+        "workspace"
+      ],
+      "pins": 2,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 1,
+        "python-service": 1
+      }
+    },
+    {
+      "file": "tests/test_r42_notes.py",
+      "domains": [],
+      "pins": 4,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 4
+      }
+    },
+    {
+      "file": "tests/test_r43_snapshot.py",
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "pins": 4,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 4
+      }
+    },
+    {
+      "file": "tests/test_r44_injection.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 4,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "unclassified": 2,
+        "shape-assert": 2
+      }
+    },
+    {
+      "file": "tests/test_r44_mcp_fold.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 5,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 2,
+        "python-service": 2,
+        "jsapi-contract": 1
+      }
+    },
+    {
+      "file": "tests/test_r49_scanfix.py",
+      "domains": [
+        "planning",
+        "providers"
+      ],
+      "pins": 18,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "python-service": 2,
+        "jsapi-contract": 2,
+        "unclassified": 12,
+        "frontend-static": 2
+      }
+    },
+    {
+      "file": "tests/test_r56_concurrency.py",
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "pins": 14,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "unclassified": 4,
+        "shape-assert": 2,
+        "python-service": 4,
+        "jsapi-contract": 4
+      }
+    },
+    {
+      "file": "tests/test_r57_conflicts.py",
+      "domains": [
+        "providers",
+        "security",
+        "settings",
+        "workspace"
+      ],
+      "pins": 19,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "unclassified": 6,
+        "shape-assert": 5,
+        "python-service": 5,
+        "frontend-static": 1,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_review_batch2.py",
+      "domains": [
+        "integrations",
+        "planning",
+        "security",
+        "workspace"
+      ],
+      "pins": 29,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "jsapi-contract": 8,
+        "shape-assert": 6,
+        "python-service": 15
+      }
+    },
+    {
+      "file": "tests/test_review_fixes.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 105,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 40,
+        "python-service": 12,
+        "shape-assert": 26,
+        "unclassified": 21,
+        "frontend-static": 3,
+        "frontend-vm": 3
+      }
+    },
+    {
+      "file": "tests/test_round6_adversarial.py",
+      "domains": [
+        "planning"
+      ],
+      "pins": 28,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "unclassified": 13,
+        "shape-assert": 4,
+        "jsapi-contract": 11
+      }
+    },
+    {
+      "file": "tests/test_sandbox.py",
+      "domains": [
+        "workspace"
+      ],
+      "pins": 24,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 10,
+        "shape-assert": 5,
+        "unclassified": 9
+      }
+    },
+    {
+      "file": "tests/test_security_fixes.py",
+      "domains": [],
+      "pins": 20,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 18,
+        "shape-assert": 1,
+        "unclassified": 1
+      }
+    },
+    {
+      "file": "tests/test_t9_sandbox_smoke.py",
+      "domains": [
+        "workspace"
+      ],
+      "pins": 7,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 6,
+        "python-service": 1
+      }
+    },
+    {
+      "file": "tests/test_tool_validator.py",
+      "domains": [
+        "security"
+      ],
+      "pins": 36,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 34,
+        "unclassified": 2
+      }
+    },
+    {
+      "file": "tests/test_v12_features.py",
+      "domains": [
+        "integrations",
+        "providers",
+        "security",
+        "workspace"
+      ],
+      "pins": 35,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 18,
+        "jsapi-contract": 5,
+        "unclassified": 4,
+        "python-service": 8
+      }
+    },
+    {
+      "file": "tests/test_v13_mcp.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 51,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 23,
+        "python-service": 13,
+        "unclassified": 7,
+        "jsapi-contract": 8
+      }
+    },
+    {
+      "file": "tests/test_v13_qa.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 35,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 17,
+        "shape-assert": 6,
+        "python-service": 9,
+        "unclassified": 3
+      }
+    },
+    {
+      "file": "tests/test_v14_experience.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 19,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 10,
+        "unclassified": 4,
+        "python-service": 4,
+        "jsapi-contract": 1
+      }
+    },
+    {
+      "file": "tests/test_v15_known_bugs.py",
+      "domains": [
+        "workspace"
+      ],
+      "pins": 15,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 7,
+        "shape-assert": 4,
+        "unclassified": 4
+      }
+    },
+    {
+      "file": "tests/test_v15_reserved.py",
+      "domains": [
+        "integrations",
+        "providers"
+      ],
+      "pins": 49,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 38,
+        "unclassified": 8,
+        "jsapi-contract": 3
+      }
+    },
+    {
+      "file": "tests/test_v15_wire.py",
+      "domains": [
+        "integrations",
+        "providers"
+      ],
+      "pins": 21,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 15,
+        "unclassified": 1,
+        "python-service": 5
+      }
+    },
+    {
+      "file": "tests/test_v16_batch1.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 34,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "unclassified": 13,
+        "frontend-vm": 7,
+        "frontend-static": 1,
+        "jsapi-contract": 2,
+        "python-service": 5,
+        "shape-assert": 6
+      }
+    },
+    {
+      "file": "tests/test_v16_batch2.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 30,
+      "dominantTarget": "frontend-vm",
+      "assertionTargets": {
+        "unclassified": 5,
+        "frontend-vm": 11,
+        "shape-assert": 2,
+        "python-service": 10,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_v16_github_catalog.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 10,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 6,
+        "jsapi-contract": 2,
+        "frontend-vm": 2
+      }
+    },
+    {
+      "file": "tests/test_v16_leftover.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 11,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "unclassified": 5,
+        "python-service": 6
+      }
+    },
+    {
+      "file": "tests/test_v18_search_adapters.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 47,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 43,
+        "unclassified": 4
+      }
+    },
+    {
+      "file": "tests/test_v18_search_service.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 44,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 30,
+        "shape-assert": 8,
+        "unclassified": 3,
+        "jsapi-contract": 3
+      }
+    },
+    {
+      "file": "tests/test_v18_software_hybrid.py",
+      "domains": [
+        "integrations",
+        "providers",
+        "security",
+        "workspace"
+      ],
+      "pins": 62,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "python-service": 22,
+        "shape-assert": 31,
+        "unclassified": 5,
+        "jsapi-contract": 4
+      }
+    },
+    {
+      "file": "tests/test_v18_tools_wiring.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 15,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "jsapi-contract": 5,
+        "shape-assert": 9,
+        "unclassified": 1
+      }
+    },
+    {
+      "file": "tests/test_v19_browser.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 36,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 13,
+        "unclassified": 9,
+        "python-service": 12,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_v19_checkpoint.py",
+      "domains": [
+        "planning"
+      ],
+      "pins": 15,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 11,
+        "unclassified": 1,
+        "python-service": 1,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_v19_driver.py",
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "pins": 62,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "shape-assert": 17,
+        "unclassified": 12,
+        "python-service": 26,
+        "jsapi-contract": 7
+      }
+    },
+    {
+      "file": "tests/test_v19_gate.py",
+      "domains": [
+        "planning",
+        "security"
+      ],
+      "pins": 31,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 15,
+        "python-service": 10,
+        "unclassified": 2,
+        "jsapi-contract": 4
+      }
+    },
+    {
+      "file": "tests/test_v19_mac.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 35,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 24,
+        "shape-assert": 4,
+        "unclassified": 5,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_v19_mcp_reverify.py",
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "pins": 38,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 38
+      }
+    },
+    {
+      "file": "tests/test_v19_paths.py",
+      "domains": [],
+      "pins": 4,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 2,
+        "unclassified": 1,
+        "frontend-static": 1
+      }
+    },
+    {
+      "file": "tests/test_v19_prompts.py",
+      "domains": [
+        "providers"
+      ],
+      "pins": 7,
+      "dominantTarget": "unclassified",
+      "assertionTargets": {
+        "python-service": 1,
+        "shape-assert": 1,
+        "unclassified": 5
+      }
+    },
+    {
+      "file": "tests/test_v19_reader.py",
+      "domains": [
+        "providers",
+        "settings"
+      ],
+      "pins": 29,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "shape-assert": 9,
+        "python-service": 16,
+        "jsapi-contract": 3,
+        "unclassified": 1
+      }
+    },
+    {
+      "file": "tests/test_v19_search_upgrade.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 27,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 27
+      }
+    },
+    {
+      "file": "tests/test_v19_wiring.py",
+      "domains": [
+        "integrations",
+        "providers",
+        "security",
+        "workspace"
+      ],
+      "pins": 13,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 11,
+        "jsapi-contract": 2
+      }
+    },
+    {
+      "file": "tests/test_w11_memory_f1_reflect.py",
+      "domains": [
+        "security",
+        "settings"
+      ],
+      "pins": 29,
+      "dominantTarget": "python-service",
+      "assertionTargets": {
+        "python-service": 15,
+        "shape-assert": 6,
+        "unclassified": 2,
+        "jsapi-contract": 6
+      }
+    },
+    {
+      "file": "tests/test_w1_trace_w2_readiness.py",
+      "domains": [
+        "providers",
+        "security"
+      ],
+      "pins": 12,
+      "dominantTarget": "jsapi-contract",
+      "assertionTargets": {
+        "jsapi-contract": 5,
+        "python-service": 5,
+        "unclassified": 2
+      }
+    },
+    {
+      "file": "tests/test_w6p1_parallel_gate.py",
+      "domains": [
+        "integrations"
+      ],
+      "pins": 6,
+      "dominantTarget": "shape-assert",
+      "assertionTargets": {
+        "shape-assert": 5,
+        "python-service": 1
+      }
+    }
+  ],
+  "caveat": "近半钉落在 shape-assert / unclassified，证实自动分类不足以替代逐条复核"
+}

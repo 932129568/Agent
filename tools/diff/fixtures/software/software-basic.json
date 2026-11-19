@@ -1,0 +1,74 @@
+{
+  "id": "software-basic",
+  "family": "software",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "软件族（校验拒绝路径 + B 类 mock 探测）：注册表清单/未知软件/未知动作/SCHEMA_INVALID 违规回显/探测身份校验/高危动作护栏",
+  "mocks": ["subprocess"],
+  "setup": {
+    "workspaceFiles": [
+      { "path": "seed.py", "content": "print('seed-ok')\n", "encoding": "utf-8" }
+    ],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "software_list",
+      "args": [],
+      "note": "注册表全量清单（presets 对等：name/kind/status/source/risk_default/actions）"
+    },
+    {
+      "id": "c02",
+      "method": "software_list",
+      "args": ["probed"],
+      "note": "未探测时 probed 过滤为空"
+    },
+    {
+      "id": "c03",
+      "method": "software_probe",
+      "args": ["nosuch"],
+      "note": "未注册软件探测 → BAD_PARAMS + hint 回显可用名"
+    },
+    {
+      "id": "c04",
+      "method": "software_call",
+      "args": ["{\"software\": \"nosuch\", \"action\": \"x\", \"args\": {}}"],
+      "note": "UNKNOWN_SOFTWARE"
+    },
+    {
+      "id": "c05",
+      "method": "software_call",
+      "args": ["{\"software\": \"git\", \"action\": \"nosuch\", \"args\": {}}"],
+      "note": "未知动作 → BAD_PARAMS + hint 回显可用动作"
+    },
+    {
+      "id": "c06",
+      "method": "software_call",
+      "args": ["{\"software\": \"git\", \"action\": \"commit\", \"args\": {}}"],
+      "note": "缺必填 message → SCHEMA_INVALID + violations/example 自校正回显"
+    },
+    {
+      "id": "c07",
+      "method": "software_probe",
+      "args": ["git"],
+      "note": "git 探测（mock which+version → probed/2.50.1）"
+    },
+    {
+      "id": "c08",
+      "method": "software_call",
+      "args": ["{\"software\": \"python\", \"action\": \"run_script\", \"args\": {\"script\": \"seed.py\"}}"],
+      "note": "高危动作强制确认：两侧 CONFIRM_REQUIRED（文案与 extra 字段比对）"
+    },
+    {
+      "id": "c09",
+      "method": "software_call",
+      "args": ["{\"software\": \"git\", \"action\": \"commit\", \"args\": {\"message\": \"fix: 差分\"}}"],
+      "note": "CLI 成功执行形状（mock stdout 空输出；Python output vs Node stdout 字段族）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["software.json"]
+  }
+}

@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Harbor v1.9.0 · 前端交接报告</title>
+<!--
+  ============================================================
+  设计系统：Harbor 设计系统 v4（deliverables/design/v4）
+  升级依据：deliverables/design/v19/token-upgrade-plan.md（彩格调）
+  文档类型：frontend-handover · v1.9.0 前端重构最终交接（自包含单文件）
+  导出：交付达（Jiao）· 2026-10-23 · 零外部依赖 · 双击可开
+  ============================================================
+-->
+<style>
+/* ============================================================
+   令牌块 —— v4 保留值 + v1.9.0 新增（与 prototypes/ 一致）
+   ============================================================ */
+:root{
+  --bg:#f6f7f9; --sidebar-bg:#ffffff; --main-bg:#f6f7f9; --header-bg:rgba(255,255,255,.78);
+  --card-bg:#ffffff; --surface-2:#f1f3f7;
+  --border:#e4e6ec; --border-strong:#d2d6e0;
+  --text:#14161c; --text-2:#5f6674; --text-3:#656b7a;
+  --primary:#4560e0; --primary-hover:#3a51cc; --primary-soft:#eef1fe;
+  --hover:#f1f3f7; --active:#eef1fe; --chip-bg:#f1f3f7;
+  --ok:#146b40; --warn:#8f5a0a; --err:#bd2a1c;
+  --ok-bg:#e8f6ee; --warn-bg:#fdf5e6; --err-bg:#fdecea;
+  --shadow-sm:0 1px 2px rgba(16,18,28,.05),0 1px 3px rgba(16,18,28,.07);
+  --shadow-md:0 2px 8px rgba(16,18,28,.07),0 4px 12px rgba(16,18,28,.06);
+  --shadow-lg:0 12px 28px rgba(16,18,28,.12),0 24px 48px rgba(16,18,28,.10);
+  --edge-hi:inset 0 1px 0 rgba(255,255,255,.65);
+  --radius-xs:4px; --radius-sm:6px; --radius-md:9px; --radius-lg:12px; --radius-xl:16px; --radius-full:999px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --font-mono:"JetBrains Mono","Cascadia Code",Consolas,"SFMono-Regular",Menlo,monospace;
+  --dur-fast:120ms; --dur-base:180ms; --dur-slow:280ms;
+  --ease:cubic-bezier(.4,0,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
+  --content-w:920px;
+  --brand-gradient:linear-gradient(135deg,#6b84ff,#4560e0);
+  --glass-bg:rgba(255,255,255,.62); --glass-bg-2:rgba(255,255,255,.80);
+  --glass-border:rgba(255,255,255,.72); --glass-blur:18px; --glass-fallback:#f4f6fb; --glass-saturate:1.15;
+  --aurora-1:#22d3ee; --aurora-3:#8b5cf6;
+  --aurora-opacity:.12; --aurora-bg-opacity:.50; --aurora-blur:64px;
+  --glow-color:rgba(79,110,247,.50);
+  --glow:0 0 0 1px var(--glass-border),0 0 22px -6px var(--glow-color);
+  --dur-press:90ms; --dur-micro:130ms; --dur-micro-out:90ms;
+  --dur-comp:200ms; --dur-comp-out:140ms;
+  --dur-panel:240ms; --dur-panel-out:200ms;
+  --dur-narr:220ms; --dur-theme:280ms;
+  --dur-ambient:34s; --dur-ambient-2:52s;
+  --ease-out-soft:cubic-bezier(.25,.8,.35,1);
+  --ease-in-soft:cubic-bezier(.42,0,1,1);
+  --ease-spring:cubic-bezier(.34,1.3,.5,1);
+  --ease-anticipate:cubic-bezier(.34,1.45,.64,1);
+  --stagger-xs:40ms; --stagger-sm:60ms; --stagger-max:160ms;
+  --shift-tip:4px; --shift-comp:6px; --shift-panel:12px;
+  --fs-display:19px; --fs-title:13.5px; --fs-body:13.5px; --fs-caption:12px; --fs-micro:11px;
+  --panel-gap:16px;
+  /* ===== v1.9.0 新增令牌（亮色）===== */
+  --aurora-5:rgba(69,96,224,.10);
+  --aurora-op-focus:.18;
+  --edge-hi-strong:inset 0 1px 0 rgba(255,255,255,.9);
+  --bg-deep:#0d0f16;
+  --skylight-strength:.5;
+  --untrusted:#8f5a0a;
+  --untrusted-bg:#fdf5e6;
+  --prov-line:1px dashed var(--border-strong);
+}
+body.dark{
+  --bg:#101114; --sidebar-bg:#16181d; --main-bg:#101114; --header-bg:rgba(22,24,29,.78);
+  --card-bg:#1a1c22; --surface-2:#212429;
+  --border:#272a32; --border-strong:#343843;
+  --text:#e6e7ea; --text-2:#8b909c; --text-3:#9298a6;
+  --primary:#6b84ff; --primary-hover:#8098ff; --primary-soft:#1d2337;
+  --hover:#212429; --active:#232a3f; --chip-bg:#212429;
+  --ok:#4ade80; --warn:#fbbf24; --err:#f87171;
+  --ok-bg:#12251b; --warn-bg:#2a2213; --err-bg:#2b1618;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.45);
+  --shadow-md:0 2px 10px rgba(0,0,0,.42),0 4px 14px rgba(0,0,0,.38);
+  --shadow-lg:0 16px 40px rgba(0,0,0,.55),0 24px 56px rgba(0,0,0,.5);
+  --edge-hi:inset 0 1px 0 rgba(255,255,255,.06);
+  --glass-bg:rgba(26,28,34,.60); --glass-bg-2:rgba(30,33,41,.78);
+  --glass-border:rgba(255,255,255,.10); --glass-blur:20px; --glass-fallback:#171a21; --glass-saturate:1.15;
+  --aurora-1:#22d3ee; --aurora-3:#8b5cf6;
+  --aurora-opacity:.15; --aurora-bg-opacity:.62; --aurora-blur:64px;
+  --glow-color:rgba(107,132,255,.55);
+  --glow:0 0 0 1px var(--glass-border),0 0 22px -6px var(--glow-color);
+  /* ===== v1.9.0 新增令牌（暗色）===== */
+  --aurora-5:rgba(69,96,224,.18);
+  --aurora-op-focus:.26;
+  --edge-hi-strong:inset 0 1px 0 rgba(255,255,255,.10);
+  --bg-deep:#07080d;
+  --skylight-strength:.7;
+  --untrusted:#fbbf24;
+  --untrusted-bg:#2a2213;
+}
+
+/* ============================================================
+   基座 / 降级矩阵
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--font-sans);background:var(--bg);min-height:100vh;color:var(--text);
+  font-size:14px;line-height:1.6;
+  transition:background var(--dur-theme) var(--ease-out-soft),color var(--dur-theme) var(--ease-out-soft);}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+::selection{background:var(--primary-soft);color:var(--primary);}
+body.fx-off{--dur-press:1ms;--dur-micro:1ms;--dur-micro-out:1ms;--dur-comp:1ms;--dur-comp-out:1ms;
+  --dur-panel:1ms;--dur-panel-out:1ms;--dur-narr:1ms;--dur-theme:1ms;--stagger-xs:0ms;--stagger-sm:0ms;--stagger-max:0ms;}
+body.fx-off #auroraBg .au{animation:none;}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;}
+  #auroraBg .au{animation:none!important;}
+}
+@media (prefers-reduced-transparency: reduce){
+  :root{--glass-bg:#f4f6fb; --glass-bg-2:#ffffff; --glass-blur:0px;}
+  body.dark{--glass-bg:#171a21; --glass-bg-2:#1a1c22; --glass-blur:0px;}
+}
+
+/* ============================================================
+   极光背景层（3 可见斑：青 / 紫 / 品牌蓝）
+   ============================================================ */
+#auroraBg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;
+  opacity:var(--aurora-bg-opacity);background:var(--bg);
+  transition:opacity var(--dur-panel) var(--ease-out-soft);}
+#auroraBg .au{position:absolute;width:58vmax;height:58vmax;border-radius:50%;
+  filter:blur(var(--aurora-blur));will-change:transform;}
+#auroraBg .au-1{top:-20vmax;left:-14vmax;opacity:.66;
+  background:radial-gradient(circle at 50% 50%,var(--aurora-1),transparent 62%);
+  animation:v4AuroraA var(--dur-ambient) ease-in-out infinite alternate;}
+#auroraBg .au-2{bottom:-22vmax;right:-16vmax;opacity:.62;
+  background:radial-gradient(circle at 50% 50%,var(--aurora-3),transparent 62%);
+  animation:v4AuroraB var(--dur-ambient-2) ease-in-out infinite alternate;}
+#auroraBg .au-5{top:26vmax;right:6vmax;width:44vmax;height:44vmax;opacity:.8;
+  background:radial-gradient(circle at 50% 50%,var(--aurora-5),transparent 62%);
+  animation:v4AuroraC var(--dur-ambient) ease-in-out infinite alternate;}
+@keyframes v4AuroraA{from{transform:translate3d(0,0,0)}to{transform:translate3d(8vmax,5vmax,0)}}
+@keyframes v4AuroraB{from{transform:translate3d(0,0,0)}to{transform:translate3d(-7vmax,-6vmax,0)}}
+@keyframes v4AuroraC{from{transform:translate3d(0,0,0)}to{transform:translate3d(-5vmax,4vmax,0)}}
+
+/* ============================================================
+   页头 / 页脚
+   ============================================================ */
+.proto-bar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:10px;
+  padding:10px 18px;border-bottom:1px solid var(--glass-border);
+  background:linear-gradient(var(--glass-bg),var(--glass-bg)),var(--glass-fallback);
+  backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));}
+.proto-bar-title{font-size:13px;font-weight:600;letter-spacing:-.1px;white-space:nowrap;}
+.proto-bar-sub{font-size:var(--fs-micro);color:var(--text-3);font-family:var(--font-mono);white-space:nowrap;}
+.proto-bar-acts{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.pill-btn{height:30px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--card-bg);cursor:pointer;font-size:12px;font-family:inherit;color:var(--text);
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none;
+  transition:background-color var(--dur-micro) var(--ease-out-soft),color var(--dur-micro) var(--ease-out-soft),
+    border-color var(--dur-micro) var(--ease-out-soft),box-shadow var(--dur-micro) var(--ease-out-soft),
+    transform var(--dur-press) var(--ease-out-soft);}
+.pill-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft);}
+.pill-btn:active{transform:scale(.97);}
+.pill-btn svg{width:14px;height:14px;flex-shrink:0;}
+.pill-btn[aria-pressed="true"]{background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:600;}
+
+.proto-stage{max-width:var(--content-w);margin:0 auto;padding:30px 20px 12px;position:relative;}
+.proto-foot{max-width:var(--content-w);margin:0 auto;padding:18px 20px 48px;font-size:var(--fs-micro);
+  color:var(--text-3);line-height:1.9;}
+.proto-foot b{color:var(--text-2);font-weight:600;}
+.proto-foot code{font-family:var(--font-mono);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius-xs);padding:0 5px;}
+
+/* ============================================================
+   总览头
+   ============================================================ */
+.hero{display:flex;flex-direction:column;gap:10px;margin-bottom:22px;
+  animation:v4MsgIn var(--dur-narr) var(--ease-out-soft);}
+@keyframes v4MsgIn{from{opacity:0;transform:translateY(var(--shift-comp))}to{opacity:1;transform:none}}
+.hero-brand{display:flex;align-items:center;gap:11px;}
+.brand-logo{width:36px;height:36px;border-radius:var(--radius-md);background:var(--brand-gradient);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;
+  letter-spacing:-.5px;flex-shrink:0;box-shadow:0 0 18px -4px var(--glow-color);}
+.hero h1{font-size:var(--fs-display);font-weight:650;letter-spacing:-.3px;}
+.hero .sub{font-size:var(--fs-caption);color:var(--text-2);line-height:1.8;max-width:760px;}
+.hero .meta{display:flex;flex-wrap:wrap;gap:6px;}
+.hero .meta span{font-size:var(--fs-micro);font-family:var(--font-mono);color:var(--text-3);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-full);
+  padding:2px 10px;font-variant-numeric:tabular-nums;}
+
+/* ============================================================
+   章节导航（TOC）
+   ============================================================ */
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px;
+  animation:v4MsgIn var(--dur-narr) var(--ease-out-soft) both;animation-delay:var(--stagger-xs);}
+.toc a{font-size:var(--fs-micro);font-family:var(--font-mono);color:var(--text-2);text-decoration:none;
+  background:linear-gradient(var(--glass-bg),var(--glass-bg)),var(--glass-fallback);
+  border:1px solid var(--glass-border);border-radius:var(--radius-full);
+  padding:3px 11px;box-shadow:var(--shadow-sm),var(--edge-hi);
+  transition:color var(--dur-micro) var(--ease-out-soft),border-color var(--dur-micro) var(--ease-out-soft),
+    background-color var(--dur-micro) var(--ease-out-soft);}
+.toc a:hover{color:var(--primary);border-color:var(--primary);background:var(--primary-soft);}
+.toc a b{color:var(--primary);font-weight:600;margin-right:4px;}
+
+/* ============================================================
+   章节面板（玻璃拟态）
+   ============================================================ */
+.panel{background:linear-gradient(var(--glass-bg),var(--glass-bg)),var(--glass-fallback);
+  backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-md),var(--edge-hi);
+  padding:22px 24px;margin-bottom:var(--panel-gap);
+  animation:v4MsgIn var(--dur-narr) var(--ease-out-soft) both;}
+.panel-h{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;}
+.panel-no{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--primary);font-weight:600;
+  background:var(--primary-soft);border:1px solid var(--primary);border-radius:var(--radius-full);
+  padding:1px 9px;flex-shrink:0;font-variant-numeric:tabular-nums;}
+.panel-h h2{font-size:var(--fs-title);font-weight:650;letter-spacing:-.2px;}
+.panel-lead{font-size:var(--fs-caption);color:var(--text-2);line-height:1.85;margin-bottom:14px;max-width:820px;}
+.panel h3{font-size:var(--fs-title);font-weight:650;margin:18px 0 8px;display:flex;align-items:center;gap:7px;}
+.panel h3::before{content:"";width:3px;height:12px;border-radius:var(--radius-full);background:var(--primary);flex-shrink:0;}
+.panel h3 .h3-tag{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--text-3);font-weight:400;}
+.panel p{font-size:var(--fs-caption);color:var(--text-2);line-height:1.85;margin-bottom:8px;}
+.panel p b,.panel li b{color:var(--text);font-weight:600;}
+.panel code{font-family:var(--font-mono);font-size:var(--fs-micro);background:var(--surface-2);
+  border:1px solid var(--border);border-radius:var(--radius-xs);padding:0 5px;}
+
+/* ============================================================
+   数据表格
+   ============================================================ */
+.tbl-wrap{overflow-x:auto;margin:10px 0 14px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--card-bg);box-shadow:var(--shadow-sm);}
+table.tbl{width:100%;border-collapse:collapse;font-size:var(--fs-caption);min-width:560px;}
+.tbl th{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--text-3);font-weight:600;
+  text-align:left;padding:8px 12px;border-bottom:1px solid var(--border-strong);
+  background:var(--surface-2);white-space:nowrap;letter-spacing:.2px;}
+.tbl td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text-2);
+  line-height:1.7;vertical-align:top;}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tbody tr{transition:background-color var(--dur-micro) var(--ease-out-soft);}
+.tbl tbody tr:hover{background:var(--hover);}
+.tbl td.mono,.tbl td code{font-family:var(--font-mono);font-size:var(--fs-micro);}
+.tbl td b{color:var(--text);font-weight:600;}
+.tbl .num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+/* 里程碑 / 状态徽标 */
+.ms{display:inline-block;font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--primary);
+  background:var(--primary-soft);border:1px solid var(--primary);border-radius:var(--radius-xs);
+  padding:0 6px;white-space:nowrap;font-weight:600;}
+.st{display:inline-block;font-family:var(--font-mono);font-size:var(--fs-micro);border-radius:var(--radius-xs);
+  padding:0 6px;white-space:nowrap;font-weight:600;border:1px solid;}
+.st-ok{color:var(--ok);background:var(--ok-bg);border-color:var(--ok);}
+.st-warn{color:var(--warn);background:var(--warn-bg);border-color:var(--warn);}
+.st-err{color:var(--err);background:var(--err-bg);border-color:var(--err);}
+.st-idle{color:var(--text-3);background:var(--surface-2);border-color:var(--border-strong);}
+
+/* ============================================================
+   列表 / 标注块
+   ============================================================ */
+ul.doc{list-style:none;display:flex;flex-direction:column;gap:5px;margin:6px 0 10px;}
+ul.doc li{font-size:var(--fs-caption);color:var(--text-2);line-height:1.8;display:flex;gap:8px;}
+ul.doc li::before{content:"—";color:var(--text-3);flex-shrink:0;}
+ul.doc li b{color:var(--text);font-weight:600;}
+ul.doc li code{font-family:var(--font-mono);font-size:var(--fs-micro);background:var(--surface-2);
+  border:1px solid var(--border);border-radius:var(--radius-xs);padding:0 5px;}
+ol.doc{margin:6px 0 10px;padding-left:20px;display:flex;flex-direction:column;gap:5px;}
+ol.doc li{font-size:var(--fs-caption);color:var(--text-2);line-height:1.8;}
+ol.doc li b{color:var(--text);font-weight:600;}
+ol.doc li code{font-family:var(--font-mono);font-size:var(--fs-micro);background:var(--surface-2);
+  border:1px solid var(--border);border-radius:var(--radius-xs);padding:0 5px;}
+
+.callout{border:1px solid var(--border-strong);border-left:3px solid var(--primary);
+  border-radius:var(--radius-sm);background:var(--surface-2);padding:11px 14px;margin:10px 0;}
+.callout.warn{border-left-color:var(--warn);}
+.callout.err{border-left-color:var(--err);}
+.callout .co-t{font-size:var(--fs-caption);font-weight:650;color:var(--text);margin-bottom:4px;
+  display:flex;align-items:center;gap:6px;}
+.callout p{font-size:var(--fs-caption);color:var(--text-2);line-height:1.8;margin:0;}
+.callout p + p{margin-top:5px;}
+.callout code{font-family:var(--font-mono);font-size:var(--fs-micro);background:var(--card-bg);
+  border:1px solid var(--border);border-radius:var(--radius-xs);padding:0 5px;}
+
+/* 原型入口链接卡 */
+.proto-link{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-caption);font-weight:600;
+  color:var(--primary);text-decoration:none;border:1px solid var(--primary);border-radius:var(--radius-md);
+  background:var(--primary-soft);padding:4px 12px;margin:4px 0 2px;
+  transition:background-color var(--dur-micro) var(--ease-out-soft),
+    box-shadow var(--dur-micro) var(--ease-out-soft),transform var(--dur-press) var(--ease-out-soft);}
+.proto-link:hover{box-shadow:var(--glow);}
+.proto-link:active{transform:scale(.97);}
+.proto-link svg{width:13px;height:13px;}
+.proto-link .pl-path{font-family:var(--font-mono);font-size:var(--fs-micro);font-weight:400;color:var(--text-3);}
+
+/* 评分 KPI */
+.kpi-row{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 14px;}
+.kpi{flex:1;min-width:130px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--card-bg);box-shadow:var(--shadow-sm);padding:11px 14px;}
+.kpi .k-v{font-family:var(--font-mono);font-size:var(--fs-display);font-weight:650;color:var(--primary);
+  font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
+.kpi .k-v small{font-size:var(--fs-caption);color:var(--text-3);font-weight:400;}
+.kpi .k-l{font-size:var(--fs-micro);color:var(--text-3);margin-top:2px;line-height:1.6;}
+.kpi.ok .k-v{color:var(--ok);}
+
+/* 推导链 */
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 12px;}
+.chain .node{font-size:var(--fs-caption);font-weight:600;color:var(--text);background:var(--card-bg);
+  border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:5px 12px;
+  box-shadow:var(--shadow-sm);white-space:nowrap;}
+.chain .node.hl{border-color:var(--primary);color:var(--primary);background:var(--primary-soft);}
+.chain .arr{color:var(--text-3);font-family:var(--font-mono);font-size:var(--fs-caption);flex-shrink:0;}
+
+/* 双栏 */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:var(--panel-gap);}
+@media (max-width:860px){ .two-col{grid-template-columns:1fr;} }
+
+body.theming .proto-bar,body.theming .panel,body.theming .toc a,body.theming .pill-btn,
+body.theming .tbl-wrap,body.theming .kpi,body.theming .chain .node,body.theming #auroraBg{
+  transition-property:background-color,color,border-color,box-shadow,opacity;
+  transition-duration:var(--dur-theme);
+  transition-timing-function:var(--ease-out-soft);}
+
+@media (max-width:720px){ .proto-bar-sub{display:none;} .panel{padding:16px 14px;} }
+</style>
+</head>
+<body>
+<div id="auroraBg" aria-hidden="true"><div class="au au-1"></div><div class="au au-2"></div><div class="au au-5"></div></div>
+
+<header class="proto-bar">
+  <span class="proto-bar-title">Harbor v1.9.0 · 前端交接报告</span>
+  <span class="proto-bar-sub">dev-plan · frontend-handover · 2026-10-23</span>
+  <div class="proto-bar-acts">
+    <a class="pill-btn" href="../design/v19/prototypes/index.html" title="前往 v1.9.0 新界面原型集">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+      原型集
+    </a>
+    <button class="pill-btn" id="fxBtn" aria-pressed="true" title="动效开关（fx-off 停列 + prefers-reduced-motion 降级）">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 4.6L18 8.2l-4.4 1.6L12 14.4l-1.6-4.6L6 8.2l4.4-1.6L12 2z"/><path d="M19 11l.9 2.5L22.4 14.4l-2.5.9L19 17.8l-.9-2.5-2.5-.9 2.5-.9L19 11z" opacity=".6"/></svg>
+      <span id="fxLabel">动效 开</span>
+    </button>
+    <button class="pill-btn" id="themeBtn" aria-pressed="false" title="亮/暗双主题（body.dark）">
+      <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      <span id="themeLabel">暗色</span>
+    </button>
+  </div>
+</header>
+
+<main class="proto-stage">
+  <!-- 总览头 -->
+  <section class="hero">
+    <div class="hero-brand">
+      <span class="brand-logo">H</span>
+      <h1>v1.9.0 前端重构 · 最终交接报告</h1>
+    </div>
+    <p class="sub">本报告是 Harbor v1.9.0「全域版」前端重构的单一交付入口：设计思路、五大新界面设计说明、接口与数据契约、组件结构与移植规范、前后端差异项对账、质量审查结论与移植注意事项。全部结论可回溯至《设计令牌升级方案（彩格调）》、6 个已评审原型与两份工程事实基线。</p>
+    <div class="meta">
+      <span>版本 v1.9.0 全域版</span>
+      <span>设计系统 v4 · 体系内升级</span>
+      <span>令牌方案 彩格调</span>
+      <span>原型 6 文件 · 评审 PASS</span>
+      <span>五维 24/25 · P0=0</span>
+      <span>UI 契约只增不改</span>
+      <span>零外部依赖 · 双击可开</span>
+    </div>
+  </section>
+
+  <!-- 章节导航 -->
+  <nav class="toc" aria-label="章节导航">
+    <a href="#ch1"><b>01</b>概述</a>
+    <a href="#ch2"><b>02</b>设计思路</a>
+    <a href="#ch3"><b>03</b>新界面设计说明</a>
+    <a href="#ch4"><b>04</b>接口与数据契约</a>
+    <a href="#ch5"><b>05</b>组件与移植规范</a>
+    <a href="#ch6"><b>06</b>两类差异项专项</a>
+    <a href="#ch7"><b>07</b>质量审查摘要</a>
+    <a href="#ch8"><b>08</b>注意事项与风险</a>
+    <a href="#ch9"><b>09</b>文件索引</a>
+  </nav>
+
+  <!-- ==================== §1 概述 ==================== -->
+  <section class="panel" id="ch1">
+    <div class="panel-h"><span class="panel-no">01</span><h2>概述</h2></div>
+    <p class="panel-lead">版本目标与设计思路总纲。本版前端不是风格切换，而是 Harbor v4 设计体系内的增量升级：在既有玻璃拟态 + 编辑部排版基底上，把 v1.9.0「全域版」的五类新能力落成可移植的界面契约。</p>
+
+    <h3>1.1 版本目标</h3>
+    <p><b>Harbor v1.9.0「全域版」</b>（单版本全量交付，不拆分）：① 补完 v1.8 路线图最后遗留（dual-LLM-lite 本地读取器等）；② 浏览器从「Windows 搜索专用」升级为 <b>Win / macOS 双端通用 AI 驱动浏览器</b>（六原语）；③ 完成 Harbor 整版 macOS 移植（平台服务 / UI / 安装器 / 打包公证分发）。</p>
+    <p>前端侧对应 <b>1 个新模块 + 8 个改动模块</b>（<code>69-platform.js</code> 新；<code>26-guard.js</code> / <code>66-plan.js</code> / <code>67-plan-card.js</code> / <code>39-search-panel.js</code> / <code>34-local-model.js</code> / <code>25-tool-exec.js</code> / <code>60-agent-loop.js</code> / <code>index.template.html</code> 改），外加审计视图 <code>74-audit-view.js</code>（新）。全部改动遵守一条铁律：<b>UI 契约只增不改</b>——新 DOM id / class 纯增，既有 40 id / 13 onclick / 43 callApi / 39 类 / 21 变量零改动。</p>
+
+    <h3>1.2 设计思路总纲（四条主线）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:130px">主线</th><th>内涵</th><th style="width:260px">落地证据</th></tr></thead>
+      <tbody>
+        <tr><td><b>体系内升级<br>不换风格</b></td><td>继承 Harbor v4 玻璃拟态 + 编辑部排版 + 极光环境层；品牌蓝 <code>#4560e0</code> 不变；新令牌两段式 <code>--{域}-{语义}</code> 纯增，既有选择器与权重零改动</td><td>令牌方案彩格调；原型新类纯增（<code>plan-eta / ckpt-list / brw-mode / grant-budget / mac-kbd</code> 等）</td></tr>
+        <tr><td><b>授权驱动<br>替代弹窗驱动</b></td><td>计划审查主关卡（Intent Preview 计划卡先行，批准才执行）+ 会话级审批预算 + 任务授权；确认弹窗 / 任务 -60% 是可证伪目标</td><td>计划卡三钮批准链、L2 全 low 自动批准、预算超限升级任务授权邀请、检查点 inline 卡禁模态叠模态</td></tr>
+        <tr><td><b>安全可视化<br>信任状</b></td><td>不靠单色传达安全语义：UNTRUSTED 内容「琥珀 45° 斜纹边 + mono 来源 caption」三重编码；审计哈希链虚线节点；断链 / 预算超限一律转 err；对比度 ≥4.5</td><td><code>--untrusted</code> / <code>--prov-line</code> / <code>--untrusted-bg</code> 新令牌；<code>audit-chain</code> 组件</td></tr>
+        <tr><td><b>双端一套令牌</b></td><td>Win / macOS 共用同一套令牌与组件；平台差异化由 <code>body[data-platform="mac"]</code> 注入驱动（SF 字体栈 / overlay 滚动条 / 圆角 8-6 / 双环焦点 / Cmd 双映射），Win 缺省即现行为——零 if 分支成本</td><td><code>--font-ui / --scrollbar-w / --radius-ctrl</code> 平台令牌；<code>mac-kbd / mac-badge / mac-switch</code> 组件</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>1.3 交付物清单</h3>
+    <ul class="doc">
+      <li><b>本报告</b>（<code>frontend-handover-v19-2026-10-23.html</code>，自包含单文件，双击可开）——设计 + 契约 + 移植规范的单一入口。</li>
+      <li><b>原型集 6 文件</b>（<code>design/v19/prototypes/</code>）：5 个新界面高保真原型 + 总览页，评审 PASS 后随报告交付，移植时按第 3 / 5 章对照。</li>
+      <li><b>两份工程事实基线</b>：接口契约对账（api-contract-baseline.md）+ 组件结构规范（component-structure-baseline.md），由主理人汇编，本报告第 4 / 5 / 6 章摘录。</li>
+    </ul>
+  </section>
+
+  <!-- ==================== §2 设计思路 ==================== -->
+  <section class="panel" id="ch2">
+    <div class="panel-h"><span class="panel-no">02</span><h2>设计思路</h2></div>
+    <p class="panel-lead">从需求摘要到原型的完整推导链：七项必做 → 令牌方案三维 → 原型验证 → 评审回写。每一步的结论都在后续章节给出可核对的落点。</p>
+
+    <h3>2.1 需求摘要：七项必做</h3>
+    <p>v1.9.0 前端需求摘要（Phase 1）收敛出七项必做，全部落在 master-plan §2.2 未交付清单与 §5.3 前端增量内：</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:36px">#</th><th style="width:220px">必做项</th><th>一句话定义</th><th style="width:110px">后端里程碑</th><th style="width:150px">前端落点</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><b>计划审查主关卡</b>（Intent Preview）</td><td>计划卡先行（步骤 + 时间估计 + 风险 + 边界声明），批准才执行；单命令确认收缩到 deny + 高风险档</td><td><span class="ms">M2.3 / M2.5</span></td><td><code>66-plan.js</code> + <code>60-agent-loop.js</code></td></tr>
+        <tr><td class="num">2</td><td><b>审批预算与授权条增强</b></td><td>会话级确认计数，超限升级「任务授权」而非继续弹窗；授权条常驻一键收回</td><td><span class="ms">M2.4 / M2.5</span></td><td><code>26-guard.js</code></td></tr>
+        <tr><td class="num">3</td><td><b>检查点三态 UI</b></td><td>清单 → 确认 → 校验三态对话框（禁模态叠模态）+ 计划卡回滚链接 + 恢复后校验提示</td><td><span class="ms">M2.7 / M2.8</span></td><td><code>67-plan-card.js</code></td></tr>
+        <tr><td class="num">4</td><td><b>浏览器驱动面板</b></td><td>可见 / 隐藏驱动模式 + 六原语状态行 + 反爬人工接管，结果区 UNTRUSTED 标记</td><td><span class="ms">M3.8 / M5</span></td><td><code>39-search-panel.js</code> + <code>25-tool-exec.js</code></td></tr>
+        <tr><td class="num">5</td><td><b>dual-LLM-lite 状态灯与安全标记</b></td><td>读取器可用性 / 降级计数状态灯；provenance 包裹（来源 URL + UNTRUSTED DATA）进搜索 / 浏览器 / 软件三类输出</td><td><span class="ms">M2.1 / M2.2</span></td><td><code>34-local-model.js</code></td></tr>
+        <tr><td class="num">6</td><td><b>审计五维哈希链可见性</b></td><td>双身份 / 意图 / 计划 / 执行证据 / 结果五维入账；条目哈希链防篡改，可见性只显示首 8 位 + 省略号，断链转 err</td><td><span class="ms">M2.6</span></td><td><code>74-audit-view.js</code>（新）</td></tr>
+        <tr><td class="num">7</td><td><b>macOS 适配层</b></td><td>双端一套令牌 + 平台差异化注入（字体 / 滚动条 / 圆角 / 焦点环 / Cmd 双映射）+ 权限引导入口</td><td><span class="ms">M6.10-6.12</span></td><td><code>69-platform.js</code>（新）+ <code>index.template.html</code></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>2.2 令牌方案三维（彩格调）</h3>
+    <p>设计系统专家据七项必做产出《设计令牌升级方案（彩格调）》——定位为 <b>v4 体系内增量升级</b>，双端一套令牌、平台差异化注入、UI 契约只增不改。三个维度：</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:120px">维度</th><th>要点</th></tr></thead>
+      <tbody>
+        <tr><td><b>色彩氛围</b></td><td>沉浸感新令牌（亮 / 暗双值）：<code>--aurora-5</code> 品牌蓝第 5 光斑（与青 / 紫 2 可见斑构成 3 斑漂移，品红斑已退役）、<code>--aurora-op-focus</code> 任务态极光加深一档、<code>--edge-hi-strong</code> 模态受光边第三档（白名单）、<code>--bg-deep</code> 暗色夜态环境色、<code>--skylight-strength</code> 聊天天光纱。安全信任色：<code>--untrusted</code> / <code>--untrusted-bg</code>（琥珀，复用已校准 warn 值）+ <code>--prov-line</code> 哈希链虚线节点。</td></tr>
+        <tr><td><b>组件规范</b></td><td>命名延续 v4 前缀（<code>plan- / ckpt- / brw- / grant- / mac-</code>）：计划卡升级（eta 徽标 / 风险条 / 边界声明 / 累计上下文 / 自动批准态）、检查点 inline 卡三态、浏览器面板（模式滑块 / 六原语行 / 反爬接管卡）、预算指示器（mono 计数 + 5 格 dot + 超限 err + 一键收回）、macOS 适配层（平台注入六件套 + 双映射键位 + 平台徽标 + mac 圆钮 switch）。</td></tr>
+        <tr><td><b>动效分配</b></td><td>模式切换 spring（形变生命感）、计划卡批准 anticipate（60ms 回缩再弹出两段式）、高风险档禁快捷确认（仅 press 90 不抢跑）、回滚 in-soft / 校验 narr 220（「后退用入场缓动，前进用 out-soft」）；模态入场 stagger 封顶 40 + panel 240；环境层禁与新界面同帧竞争；全部注册 fx-off 停列与 prefers-reduced-motion / transparency 降级表。</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout">
+      <div class="co-t">渲染状态纪律</div>
+      <p>方案附《v1.9 新令牌渲染状态表》区分「已渲染 / 留待挂载」：<code>--skylight-strength</code>（随对话区移植启用）、<code>--bg-deep</code>（原生窗口外圈，Web 原型无法呈现，需双端实测）、<code>--edge-hi-strong</code>（检查点禁模态叠模态，暂无挂载点）三项留待挂载，未强行渲染。方案另有 4 处勘误（暗态极光不透明度 / 滚动条宽度 / 控件圆角 / 光斑数）已按评审结论回写。</p>
+    </div>
+
+    <h3>2.3 原型验证推导链</h3>
+    <div class="chain">
+      <span class="node">需求摘要 · 七项必做</span><span class="arr">→</span>
+      <span class="node">令牌方案 · 彩格调三维</span><span class="arr">→</span>
+      <span class="node hl">原型 6 文件 · 高保真</span><span class="arr">→</span>
+      <span class="node">质量审查 · 五维 24/25 PASS</span><span class="arr">→</span>
+      <span class="node hl">本交接报告</span>
+    </div>
+    <ul class="doc">
+      <li><b>原型即验证</b>：5 个新界面全部产出可交互高保真原型（自包含 HTML，零外部依赖），每个原型页底「演示控制」可重播关键动效链（批准链 / 自动批准 / 检查点三态 / 执行一轮 / 预算推演）。</li>
+      <li><b>评审即校准</b>：严过审五维评审 24/25 PASS，7 项偏离全部采纳——其中 4 项回写为方案勘误（如暗态 <code>--aurora-bg-opacity</code> 维持 .62 而非 .56），3 项判定为「采纳（移植提示正确 / 留待移植绑定）」。详见第 7 章。</li>
+      <li><b>原型 ≠ 产品代码</b>：原型交互为演示级脚本，数据为页脚标注的示意内容；移植时以 <code>frontend/index.template.html</code> 的 40 DOM id / 43 callApi / 39 CSS 类名契约为准，UI 契约只增不改。</li>
+    </ul>
+  </section>
+
+  <!-- ==================== §3 新界面设计说明 ==================== -->
+  <section class="panel" id="ch3">
+    <div class="panel-h"><span class="panel-no">03</span><h2>新界面设计说明</h2></div>
+    <p class="panel-lead">五大新界面逐个说明：信息架构 + 交互 + 动效链。每个界面均有对应高保真原型（评审 PASS），点击原型链接可直接打开（相对路径，需与本报告保持目录关系）。</p>
+
+    <h3>3.1 Intent Preview 计划卡 <span class="h3-tag">M2.3 / M2.5 · 66-plan.js 改 · 计划审查主关卡</span></h3>
+    <p>「授权驱动替代弹窗驱动」的核心界面：用户发送后计划卡先行，<b>批准才执行</b>。单命令确认收缩到 deny + 高风险档，常规多步任务一律走计划审查。</p>
+    <ul class="doc">
+      <li><b>信息架构</b>：头部 badge + 标题 + <code>plan-eta</code> 徽标（mono「≈3 步 · 2 分钟」）→ 步骤 checklist（既有五态 pending / doing / done / blocked / skipped）→ <code>plan-riskbar</code> 卡左侧 3px 风险色条（取最高步骤风险）→ <code>plan-scope</code> 边界声明区（dashed 边框，「将修改 / 不访问」双栏）→ 审计哈希链（prov-strip，虚线节点圆点）→ <code>plan-ctx</code> 累计上下文（mono 62% 细进度条）→ 三钮区：批准（primary + glow 白名单）/ 编辑（ghost）/ 拒绝（err-soft）。</li>
+      <li><b>交互</b>：批准进入两段式 anticipate 动效；<b>L2 授权中且计划全 low 风险 → 自动批准态</b> <code>plan-auto</code>（ok 徽标「已自动批准 · 授权范围内」，3s 淡出）；拒绝 anticipate 收缩 + comp 淡出；UNTRUSTED 内容（外部来源数据）以琥珀 45° 斜纹边 + mono 来源 caption 标记，语义 = 内容可信度，区别于 err（操作失败）。</li>
+      <li><b>动效链（批准）</b>：press 90 → 三钮 comp-out 140 淡出 → badge pending→running 交叠（micro 130）→ steps stagger 60 入场 → eta micro 出场。高风险档禁快捷确认，仅 press 90 反馈、不抢跑。</li>
+      <li><b>移植落点</b>：<code>66-plan.js</code>（卡体升级）+ <code>60-agent-loop.js</code>（计划审查主关卡分支）；计划卡 &lt;30s 可扫、批准带累计上下文的渐进委托规格随 M2.5 落地。</li>
+    </ul>
+    <a class="proto-link" href="../design/v19/prototypes/plan-intent-preview.html">打开原型：Intent Preview 计划卡 <span class="pl-path">design/v19/prototypes/plan-intent-preview.html</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+
+    <h3>3.2 检查点三态对话框 <span class="h3-tag">M2.7 / M2.8 · 67-plan-card.js 改 · 六军规 UI</span></h3>
+    <p>任务执行中的「可后退」保障：计划卡内回滚链接进入，inline 卡三态流转，<b>禁模态叠模态</b>。</p>
+    <ul class="doc">
+      <li><b>信息架构（三态）</b>：清单态 <code>ckpt-list</code>（stagger 40 逐项入场；文件行 <code>ckpt-row</code> 带 mod / add / del 徽标 + 大小 / 数量）→ 确认态（<code>plan-rollback</code> 回滚链接 + 确认钮，高风险档禁快捷确认）→ 校验态 <code>ckpt-verify</code>（ok / err 行 + 「已恢复至检查点 #N」）。</li>
+      <li><b>交互</b>：确认后按检查点差异恢复；校验提示淡入告知恢复结果；清单数据源为 <code>checkpoints.json</code>（新配置文件，保留 3 份，超限随创建清理）。</li>
+      <li><b>动效链</b>：回滚用 in-soft 200ms（收缩到位感，「后退用入场缓动」）；校验提示 narr 220 淡入（「前进用 out-soft」）；清单 stagger 40 封顶 160ms。</li>
+      <li><b>移植落点</b>：<code>67-plan-card.js</code>（检查点入口）；后端 <code>checkpoint_service</code> 六军规（差异恢复 / 绝不删未备份 / 自有影子仓库 / shell 前后快照 / 清单 + 确认 / 恢复后校验）随 M2.7 交付。</li>
+    </ul>
+    <a class="proto-link" href="../design/v19/prototypes/checkpoint-dialog.html">打开原型：检查点对话框 <span class="pl-path">design/v19/prototypes/checkpoint-dialog.html</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+
+    <h3>3.3 浏览器驱动面板 <span class="h3-tag">M3.8 / M5 · 39-search-panel.js 改 · 六原语</span></h3>
+    <p>双端通用 AI 驱动浏览器的前端面孔：AI 后台驱动（隐藏）vs 用户可见浏览（可见）一键切换，六原语状态全程可见，反爬特征转人工接管。</p>
+    <ul class="doc">
+      <li><b>信息架构</b>：<code>brw-mode</code> 可见 / 隐藏切换（spring 滑块 200ms）→ 可见模式弹出浏览器预览窗口 → <code>brw-row</code> ×6 六原语状态行（12px 状态点：<span class="st st-ok">ok 待命</span> <span class="st st-warn">warn 运行</span> <span class="st st-err">err 失败</span>，mono 耗时）→ 结果区（markdown 提取 + UNTRUSTED 标记）→ <code>brw-takeover</code> 反爬接管卡（warn 边 + 1.4s 脉冲点，「需手动完成验证」）。</li>
+      <li><b>交互</b>：模式切换不影响会话池（预热 / 空闲 60s 回收 / 上限 3 + 排队）；验证码特征 → 面板人工接管（复用 takeover 机制）；提取结果经 dual-LLM-lite 读取器结构化后带 provenance 包裹进上下文。</li>
+      <li><b>动效链</b>：模式切换 spring 200ms 滑块形变；运行态 1.4s 脉冲点（有限循环，fx-off 即停）；结果 UNTRUSTED 标记同计划卡三重编码。</li>
+      <li><b>移植落点</b>：<code>39-search-panel.js</code>（面板）+ <code>25-tool-exec.js</code>（六工具分发 + isError 回传 + 校验反馈）；依赖后端 <code>browser_*</code> 六工具（M3 Win / M4 Mac / M5 工具面），详见第 6 章 B 类。</li>
+    </ul>
+    <a class="proto-link" href="../design/v19/prototypes/browser-driver-panel.html">打开原型：浏览器驱动面板 <span class="pl-path">design/v19/prototypes/browser-driver-panel.html</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+
+    <h3>3.4 审批预算指示器 <span class="h3-tag">M2.4 / M2.5 · 26-guard.js 改 · R27</span></h3>
+    <p>把「确认疲劳」变成可见数字：会话级审批计数内嵌授权条，超限不再续弹窗，而是升级为任务授权邀请。</p>
+    <ul class="doc">
+      <li><b>信息架构</b>：授权条内嵌 <code>grant-budget</code> mono「审批 3/5」+ 5 格 dot；超限态 <code>grant-budget.over</code> 转 err「已达上限，需显式批准」；一键收回钮（<code>grant-revoke</code>，hover 品牌蓝 glow，禁扩散）；L0 禁快捷确认。</li>
+      <li><b>交互</b>：计数随 guard 判定链实时更新；超限 → 升级为任务授权邀请（一次性授予范围授权）而非继续逐项弹窗；授权条常驻一键收回。</li>
+      <li><b>动效链</b>：收回钮 hover 品牌蓝 glow（glow 白名单两处之一）；超限转 err 微反馈；计数变化 mono tabular-nums 直切，无装饰动效。</li>
+      <li><b>移植落点</b>：<code>26-guard.js</code>（预算提示 + 高风险档差异化 + 授权条增强）；依赖后端 <code>guard_approval_budget</code>（M2.4）与 <code>guard.json</code> 纯增键 <code>approval_budget</code>。</li>
+    </ul>
+    <a class="proto-link" href="../design/v19/prototypes/grant-budget.html">打开原型：审批预算指示器 <span class="pl-path">design/v19/prototypes/grant-budget.html</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+
+    <h3>3.5 macOS 适配层 <span class="h3-tag">M6.10-6.12 · 69-platform.js 新 · 双端一套令牌</span></h3>
+    <p>同一组件在 Win / macOS 双形态并排：平台差异化由 <code>body[data-platform="mac"]</code> 根类注入驱动，Win 缺省即现行为——组件代码零分支。</p>
+    <ul class="doc">
+      <li><b>信息架构</b>：计划卡 + 设置页双形态并排 + 平台注入实况台（六件套注入状态）+ 差异对照表 + traffic lights / App Menu / 权限引导示意。</li>
+      <li><b>交互（平台注入六件套）</b>：<code>--font-ui</code> 注入 SF 栈（<code>-apple-system, BlinkMacSystemFont, "SF Pro Text"</code>）；<code>--scrollbar-w</code> Win 10px / mac 0（hover 显形 8px overlay）；<code>--radius-ctrl</code> Win 6px / mac 8px；focus ring mac 双环 3px primary-soft vs Win 2px；<code>mac-kbd</code> 键位提示（⌘K / Ctrl+K 双映射，Cmd+Enter 发送 / Esc 停止 / Cmd+F 搜索体例）；<code>mac-badge</code> 平台探测徽标（设置页 caption「macOS 模式 · Cmd 已映射」）；switch 用 mac 圆钮 32×18 spring。</li>
+      <li><b>动效链</b>：平台注入 spring 200ms 形变生命感；mac 圆钮 spring 滑块；其余与 Win 完全一致（同一套令牌）。</li>
+      <li><b>移植落点</b>：<code>69-platform.js</code>（新：平台探测展示 + macOS 分支根类 + 权限引导入口）+ <code>index.template.html</code>（纯增 mac 根类样式）；SF 栈须早于首屏渲染（boot 前设 <code>data-platform</code>，见第 8 章）。</li>
+    </ul>
+    <a class="proto-link" href="../design/v19/prototypes/macos-adaptation.html">打开原型：macOS 适配层 <span class="pl-path">design/v19/prototypes/macos-adaptation.html</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    <a class="proto-link" href="../design/v19/prototypes/index.html">原型集总览（index） <span class="pl-path">design/v19/prototypes/index.html</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+  </section>
+
+  <!-- ==================== §4 接口定义与数据契约 ==================== -->
+  <section class="panel" id="ch4">
+    <div class="panel-h"><span class="panel-no">04</span><h2>接口定义与数据契约</h2></div>
+    <p class="panel-lead">取自《api-contract-baseline.md》（主理人 2026-10-23 汇编，数据源：代码库两轮确定性扫描）。总账：前端 86 种调用 / 后端 126 个方法；<b>A 类悬空调用 0</b>（前端无欠后端的账）、B 类超前调用 0；v1.9 方案 12 个新 js_api 双方均未落地——属共同工作项。</p>
+
+    <h3>4.1 12 个 v1.9 新 js_api 总表</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:150px">方法</th><th style="width:200px">签名</th><th style="width:180px">返回</th><th style="width:110px">后端里程碑</th><th>前端依赖点</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>checkpoint_create</b></td><td class="mono">(label)</td><td class="mono">{ok, id}</td><td><span class="st st-ok">后端已备</span> <span class="ms">M2.7 升级</span></td><td>检查点创建入口（计划卡批准时自动 / 手动）</td></tr>
+        <tr><td class="mono"><b>checkpoint_list</b></td><td class="mono">()</td><td class="mono">列表</td><td><span class="st st-ok">后端已备</span></td><td>检查点列表渲染（任务历史面板挂载）</td></tr>
+        <tr><td class="mono"><b>checkpoint_rollback</b></td><td class="mono">(cp_id)</td><td class="mono">{ok, restored:[…]}</td><td><span class="st st-ok">后端已备</span> <span class="ms">M2.7 升级</span></td><td>回滚确认对话框 + 回滚后校验提示（原型三态已覆盖）</td></tr>
+        <tr><td class="mono"><b>browser_navigate</b></td><td class="mono">(url, wait_selector?, timeout?)</td><td class="mono">{ok, title, url, trace_id}</td><td><span class="ms">M3</span> Win / <span class="ms">M4</span> Mac</td><td>39-search-panel 驱动模式</td></tr>
+        <tr><td class="mono"><b>browser_extract</b></td><td class="mono">(selector?, mode)</td><td class="mono">{ok, markdown, links, truncated}</td><td><span class="ms">M3/M4</span> + <span class="ms">M2.1</span> 读取器</td><td>面板结果区 + UNTRUSTED 标记</td></tr>
+        <tr><td class="mono"><b>browser_click</b></td><td class="mono">(selector | text)</td><td class="mono">{ok, before_b64, after_b64}</td><td><span class="ms">M3/M4</span>（guard=always）</td><td>工具分发反馈</td></tr>
+        <tr><td class="mono"><b>browser_fill</b></td><td class="mono">(selector, text)</td><td class="mono">{ok, masked:true}</td><td><span class="ms">M3/M4</span>（guard=always）</td><td>工具分发反馈</td></tr>
+        <tr><td class="mono"><b>browser_screenshot</b></td><td class="mono">(full_page?)</td><td class="mono">{ok, b64}</td><td><span class="ms">M3/M4</span></td><td>面板状态行</td></tr>
+        <tr><td class="mono"><b>browser_close</b></td><td class="mono">(session_id)</td><td class="mono">{ok}</td><td><span class="ms">M3/M4</span></td><td>会话池回收</td></tr>
+        <tr><td class="mono"><b>get_platform_info</b></td><td class="mono">()</td><td class="mono">{os, arch, version, services:{…}}</td><td><span class="ms">M6.10</span></td><td>69-platform.js 平台徽标 + mac 分支根类</td></tr>
+        <tr><td class="mono"><b>guard_approval_budget</b></td><td class="mono">(limit?)</td><td class="mono">{used, limit, escalated}</td><td><span class="ms">M2.4</span></td><td>授权条预算指示器（原型已出）</td></tr>
+        <tr><td class="mono"><b>search_reader_stats</b></td><td class="mono">()</td><td class="mono">{reader_calls, schema_fail, degrade_count}</td><td><span class="ms">M2.1</span></td><td>34-local-model dual-LLM 状态灯</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout">
+      <div class="co-t">登记纪律</div>
+      <p>12 个新 js_api 全走 <code>_V12_EXTRA</code> 隐身登记（M1.9 先占位后实现），<code>get_api_info()</code> 逐字节零漂移；<code>build_tools</code> 默认路径（include_agent=False）不变。</p>
+    </div>
+
+    <h3>4.2 会话 / 配置层新字段（5 处，纯增）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:200px">位置</th><th style="width:260px">新字段</th><th>前端用途</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">sessions.json</td><td class="mono">browser:{session_id, mode}</td><td>会话恢复时重建浏览器面板状态</td></tr>
+        <tr><td class="mono">sessions.json</td><td class="mono">audit_chain:{head, len}</td><td>审计可见性（M2.6：head 首 8 位 + 省略号）</td></tr>
+        <tr><td class="mono">guard.json</td><td class="mono">approval_budget:{limit, used, escalated}</td><td>预算指示器数据源</td></tr>
+        <tr><td class="mono">browser_sessions.json（新文件）</td><td class="mono">sessions[]</td><td>驱动面板会话池展示</td></tr>
+        <tr><td class="mono">checkpoints.json（新文件）</td><td class="mono">items[]</td><td>检查点清单对话框数据源</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>4.3 纪律红线（5 条，移交前后端双方）</h3>
+    <ol class="doc">
+      <li><b>隐身登记</b>：12 个新 js_api 全走 <code>_V12_EXTRA</code>（M1.9 先占位后实现）——<code>get_api_info()</code> 逐字节零漂移。</li>
+      <li><b>配置零污染</b>：新配置全部独立文件——<code>config.json</code> 零写入零读取变更。</li>
+      <li><b>UI 契约只增不改</b>：新 DOM id / class 纯增（原型已按 <code>plan- / ckpt- / brw- / grant- / mac-</code> 前缀命名）。</li>
+      <li><b>guard 档位</b>：click / fill = always（前后态截图审计），其余 session 档。</li>
+      <li><b>超时口径</b>：前端调用超时沿用联调规范 §2.1（navigate 60s / extract 45s / 其余 30s，待 M3 实现时校准）。</li>
+    </ol>
+  </section>
+
+  <!-- ==================== §5 组件结构与移植规范 ==================== -->
+  <section class="panel" id="ch5">
+    <div class="panel-h"><span class="panel-no">05</span><h2>组件结构与移植规范</h2></div>
+    <p class="panel-lead">取自《component-structure-baseline.md》（主理人 2026-10-23 汇编）。移植时以本章为组件侧事实底稿：模块地图定「改哪里」，前缀表定「叫什么」，动效矩阵定「怎么动」，纪律定「什么不能动」。</p>
+
+    <h3>5.1 模块地图（v1.9 前端增量）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:170px">新 / 改模块</th><th>职责</th><th style="width:230px">依赖后端接口</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>66-plan.js</b>（改）</td><td>Intent Preview 计划卡：ETA / 风险条 / 边界声明 / 累计上下文 / 批准链动效 / 自动批准态</td><td class="mono">plan_propose（已交付）</td></tr>
+        <tr><td class="mono"><b>67-plan-card.js</b>（改）</td><td>检查点入口：回滚链接 + 清单对话框 + 校验提示</td><td class="mono">checkpoint_create / list / rollback（后端已备）</td></tr>
+        <tr><td class="mono"><b>26-guard.js</b>（改）</td><td>审批预算指示器 + 授权条增强（常驻一键收回 + 超限升级任务授权邀请）</td><td class="mono">guard_approval_budget（M2.4 后端）</td></tr>
+        <tr><td class="mono"><b>39-search-panel.js</b>（改）</td><td>浏览器驱动面板：可见 / 隐藏模式 + 六原语状态 + 反爬接管</td><td class="mono">browser_* 六工具（M3-M5 后端）</td></tr>
+        <tr><td class="mono"><b>34-local-model.js</b>（改）</td><td>dual-LLM-lite 状态灯（读取器可用性 / 降级计数）</td><td class="mono">search_reader_stats（M2.1 后端）</td></tr>
+        <tr><td class="mono"><b>25-tool-exec.js</b>（改）</td><td>browser_* 六工具分发 + isError 回传 + 校验反馈</td><td class="mono">同上</td></tr>
+        <tr><td class="mono"><b>69-platform.js</b>（新）</td><td>平台探测展示 + macOS 分支根类 + 权限引导入口</td><td class="mono">get_platform_info（M6.10 后端）</td></tr>
+        <tr><td class="mono"><b>60-agent-loop.js</b>（改）</td><td>计划审查主关卡分支（批准才执行）</td><td class="mono">plan_propose / approve（已交付）</td></tr>
+        <tr><td class="mono"><b>74-audit-view.js</b>（新）</td><td>审计五维哈希链可见性（head 8 位 + len + 断链 err）</td><td class="mono">sessions.audit_chain（M2.6 后端）</td></tr>
+        <tr><td class="mono"><b>index.template.html</b>（改）</td><td>纯新增：计划卡 / 检查点 / 浏览器面板 / 预算指示器 / mac 根类样式</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>5.2 新组件清单（纯增命名，前缀即域）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:80px">前缀</th><th>组件</th><th style="width:200px">状态枚举</th><th style="width:230px">原型</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>plan-</b></td><td>eta（ETA 徽标）/ riskbar（左 3px 风险条）/ scope（边界声明区）/ ctx（累计上下文）/ auto（自动批准态）</td><td class="mono">pending / doing / done / blocked / skipped（既有五态）</td><td class="mono">plan-intent-preview.html</td></tr>
+        <tr><td class="mono"><b>ckpt-</b></td><td>list（清单态）/ verify（校验态）/ row（文件行 mod / add / del 徽标）</td><td class="mono">清单 → 确认 → 校验三态</td><td class="mono">checkpoint-dialog.html</td></tr>
+        <tr><td class="mono"><b>brw-</b></td><td>mode（可见 / 隐藏切换）/ row（六原语状态行）/ takeover（反爬接管卡）</td><td class="mono">ok 待命 / warn 运行 / err 失败</td><td class="mono">browser-driver-panel.html</td></tr>
+        <tr><td class="mono"><b>grant-</b></td><td>budget（预算指示器）/ budget.over（超限态）/ revoke（一键收回）</td><td class="mono">used / limit / escalated</td><td class="mono">grant-budget.html</td></tr>
+        <tr><td class="mono"><b>mac-</b></td><td>kbd（键位提示）/ badge（平台徽标）/ switch（圆钮）</td><td class="mono">body[data-platform="mac"] 驱动</td><td class="mono">macos-adaptation.html</td></tr>
+        <tr><td class="mono"><b>audit-</b></td><td>chain（哈希链首 8 位）/ break（断链 err 态）</td><td class="mono">head / len</td><td class="mono">（随 74-audit-view.js 移植）</td></tr>
+        <tr><td class="mono"><b>untrusted</b></td><td>UNTRUSTED 内容标记（琥珀 45° 斜纹边 + mono 来源）</td><td>—</td><td class="mono">plan-intent-preview.html 内演示</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>5.3 动效分配矩阵（移植时直接引用）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:220px">场景</th><th style="width:130px">曲线</th><th style="width:170px">时长</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>模式切换（brw-mode / 平台注入）</td><td class="mono">spring</td><td class="mono num">200ms</td><td>形变生命感</td></tr>
+        <tr><td>计划卡批准</td><td class="mono">anticipate</td><td class="mono num">两段式 60ms 回缩 + comp 弹出</td><td>批准链：press 90 → 三钮 comp-out 140 → badge 交叠 micro 130 → steps stagger 60 → eta micro 出场</td></tr>
+        <tr><td>计划卡拒绝</td><td class="mono">anticipate 收缩 + comp 淡出</td><td class="mono num">200ms</td><td>—</td></tr>
+        <tr><td>检查点回滚</td><td class="mono">in-soft</td><td class="mono num">200ms</td><td>「后退用收缩到位感」</td></tr>
+        <tr><td>回滚后校验提示</td><td class="mono">out-soft（narr 220）</td><td class="mono num">220ms</td><td>「前进用入场缓动」</td></tr>
+        <tr><td>清单 stagger</td><td>—</td><td class="mono num">40ms 阶梯</td><td>封顶 160ms（既有令牌）</td></tr>
+        <tr><td>任务态挂载</td><td class="mono">aurora-op-focus</td><td>—</td><td>极光加深一档，fx-off 停列</td></tr>
+        <tr><td>高风险档禁快捷确认</td><td class="mono">仅 press 90</td><td>—</td><td>不抢跑</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>5.4 移植纪律（铁律）</h3>
+    <ol class="doc">
+      <li><b>UI 契约只增不改</b>：新 DOM id / class 纯增；既有 40 id / 13 onclick / 43 callApi / 39 类 / 21 变量零改动。</li>
+      <li><b>令牌单一事实源</b>：新令牌两段式 <code>--{域}-{语义}</code>；JS 禁硬编码 ms（走 MOTION）。</li>
+      <li><b>降级三件套</b>：每个新动效注册 fx-off 停列 + prefers-reduced-motion + prefers-reduced-transparency；<code>body.theming</code> 白名单同步追加。</li>
+      <li><b>双主题</b>：所有新组件亮 / 暗双值（<code>body.dark</code> 镜像）。</li>
+      <li><b>平台差异化注入</b>：<code>body[data-platform="mac"]</code> 驱动（--font-ui / --scrollbar-w / --radius-ctrl / focus ring 宽度），Win 缺省即现行为——零 if 分支成本。</li>
+      <li><b>安全三重编码</b>：UNTRUSTED / 哈希链 / 预算超限一律「色 + 形 + 字」三重编码，不靠单色传达语义。</li>
+      <li><b>移植顺序建议</b>：plan-card（M2.3-2.5）→ grant-budget（M2.4）→ ckpt（M2.7-2.8）→ audit-view（M2.6）→ brw-panel（M3.8 / M5.7）→ mac 层（M6.10）——按后端里程碑就绪顺序。</li>
+    </ol>
+  </section>
+
+  <!-- ==================== §6 两类差异项专项 ==================== -->
+  <section class="panel" id="ch6">
+    <div class="panel-h"><span class="panel-no">06</span><h2>两类差异项专项</h2></div>
+    <p class="panel-lead">用户点名专项：把「后端与前端谁欠谁」算成两本明白账。<b>A 类 = 后端已具备、前端需补齐</b>（前端主动项）；<b>B 类 = 前端将具备、需后端实现</b>（移交后端项）。前端按原型先行开发，后端按 M1-M5 里程碑补齐，两侧以第 4 章契约为唯一事实源。</p>
+
+    <h3>6.1 A 类：后端已具备、前端需补齐</h3>
+    <h3 style="margin-top:10px">A1 · checkpoint 三兄弟（v1.9 新接口中后端已备、前端未接）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:150px">方法</th><th style="width:250px">后端现状</th><th>前端需做</th><th style="width:90px">优先级</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>checkpoint_create</b></td><td>api.py 已有（plan_service 时代遗留，M2.7 将升级六军规）</td><td>检查点创建入口（计划卡批准时自动 / 手动）+ 清单对话框（原型已出：<code>checkpoint-dialog.html</code>）</td><td><span class="st st-err">P0</span></td></tr>
+        <tr><td class="mono"><b>checkpoint_list</b></td><td>已有</td><td>检查点列表渲染（任务历史面板挂载）</td><td><span class="st st-err">P0</span></td></tr>
+        <tr><td class="mono"><b>checkpoint_rollback</b></td><td>已有（M2.7 升级差异恢复）</td><td>回滚确认对话框 + 回滚后校验提示（原型三态已覆盖）</td><td><span class="st st-err">P0</span></td></tr>
+      </tbody>
+    </table></div>
+    <p>场景：检查点是「授权驱动」的安全网——计划卡批准执行后，用户可经回滚链接一键退回转检查点；三态对话框（清单 → 确认 → 校验）已在原型完整演示，前端按原型补齐即可，不等后端新交付（M2.7 仅为能力升级：差异恢复 / 绝不删未备份 / 影子仓库 / 快照 / 保留策略）。</p>
+
+    <h3>A2 · 历史项净剩余（后端在位、前端零调用，接续 2026-10-21 交接文档；原 6 项中 3 项已闭合）</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:150px">方法</th><th style="width:110px">优先级</th><th>状态与场景</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>plan_get</b></td><td><span class="st st-warn">P1（v1.9 上升）</span></td><td>后端在位，前端零调用。断线重连 / 刷新场景原为低优；<b>v1.9 计划审查主关卡上线后优先级上升</b>——关卡态刷新需要（用户批准前刷新页面，计划卡状态需可恢复）</td></tr>
+        <tr><td class="mono"><b>trace_new</b></td><td><span class="st st-warn">P1</span></td><td>后端在位，前端零调用。v1.9 审计五维哈希链（M2.6）上线时，应在发送入口显式分界（trace 起点与计划卡批准事件对齐）</td></tr>
+        <tr><td class="mono"><b>list_recent_ws</b></td><td><span class="st st-idle">登记不动作</span></td><td>后端在位，wsqList 走 config recent 数组有等效数据源——保持现状即可</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>6.2 B 类：前端将具备、需后端实现（9 项，移交后端）</h3>
+    <p>v1.9 方案 12 个新 js_api 中，除 checkpoint 三兄弟后端已有外，<b>9 个后端完全未实现</b>——前端按原型先行开发，后端按下列里程碑补齐：</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:160px">方法</th><th style="width:110px">后端里程碑</th><th>前端依赖点</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>browser_navigate</b></td><td><span class="ms">M3</span> Win / <span class="ms">M4</span> Mac</td><td>39-search-panel 驱动模式（导航 + 等待 + trace_id 落链）</td></tr>
+        <tr><td class="mono"><b>browser_extract</b></td><td><span class="ms">M3/M4</span> + <span class="ms">M2.1</span> 读取器</td><td>面板结果区 + UNTRUSTED 标记（provenance 包裹）</td></tr>
+        <tr><td class="mono"><b>browser_click</b></td><td><span class="ms">M3/M4</span>（guard=always）</td><td>工具分发反馈（前后态截图审计回传）</td></tr>
+        <tr><td class="mono"><b>browser_fill</b></td><td><span class="ms">M3/M4</span>（guard=always）</td><td>工具分发反馈（掩码回传 masked:true）</td></tr>
+        <tr><td class="mono"><b>browser_screenshot</b></td><td><span class="ms">M3/M4</span></td><td>面板状态行（可见模式预览 / 截图存档）</td></tr>
+        <tr><td class="mono"><b>browser_close</b></td><td><span class="ms">M3/M4</span></td><td>会话池回收（browser_sessions.json 状态同步）</td></tr>
+        <tr><td class="mono"><b>get_platform_info</b></td><td><span class="ms">M6.10</span></td><td>69-platform.js 平台徽标 + mac 分支根类（boot 前注入）</td></tr>
+        <tr><td class="mono"><b>guard_approval_budget</b></td><td><span class="ms">M2.4</span></td><td>授权条预算指示器（原型已出：<code>grant-budget.html</code>）</td></tr>
+        <tr><td class="mono"><b>search_reader_stats</b></td><td><span class="ms">M2.1</span></td><td>34-local-model dual-LLM 状态灯（reader_calls / schema_fail / degrade_count）</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout warn">
+      <div class="co-t">联接口径</div>
+      <p>B 类 9 项全部随 M1.9 <code>_V12_EXTRA</code> 占位先行（前端可发调用、后端返回未实现错误），按里程碑转正；前端开发不因后端未就绪而阻塞——面板 / 指示器 / 状态灯在无数据时有明确的降级呈现（idle 态），联调以第 4 章签名与返回契为准。</p>
+    </div>
+  </section>
+
+  <!-- ==================== §7 质量审查摘要 ==================== -->
+  <section class="panel" id="ch7">
+    <div class="panel-h"><span class="panel-no">07</span><h2>质量审查摘要</h2></div>
+    <p class="panel-lead">严过审（critique-reviewer）2026-10-23 对原型集 6 文件的评审结论摘要（原文归档于 <code>design/v19/quality-review.md</code>）。评审基准：彩格调令牌方案 + v4 既有设计语言 + master-plan §4 功能语义核对。</p>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="k-v">24<small>/25</small></div><div class="k-l">五维总分（各维 ≥3 达标）</div></div>
+      <div class="kpi ok"><div class="k-v">0</div><div class="k-l">P0 必须修复项</div></div>
+      <div class="kpi ok"><div class="k-v">2<small> 已闭环</small></div><div class="k-l">P1 建议修复项（≤3 达标）</div></div>
+      <div class="kpi ok"><div class="k-v">7<small>/7 采纳</small></div><div class="k-l">偏离项裁决（全部采纳）</div></div>
+    </div>
+
+    <h3>7.1 五维评分</h3>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:110px">维度</th><th style="width:70px">评分</th><th>一句依据</th></tr></thead>
+      <tbody>
+        <tr><td><b>设计哲学</b></td><td class="mono num">5/5</td><td>「授权驱动替代弹窗驱动」在每个原型可验证：计划卡三钮链、L2 全 low 自动批准、预算超限升级任务授权、检查点禁模态叠模态；信任状用 UNTRUSTED 三重编码与风险色条落地</td></tr>
+        <tr><td><b>视觉层次</b></td><td class="mono num">5/5</td><td>五级字阶严格按 token；机器数据（eta / trace / sha256 / 预算）一律 mono + tabular-nums 与正文分离；卡内信息架构与模板 plan-card 范式一致</td></tr>
+        <tr><td><b>执行质量</b></td><td class="mono num">4/5</td><td>令牌纪律优秀（新令牌 6 文件双主题齐全、MOTION 单一事实源、三重降级在位、纯增命名逐一对应、零外部依赖零 emoji）；扣分：3 处演示 dwell 内联字面量未收拢等</td></tr>
+        <tr><td><b>特异性</b></td><td class="mono num">5/5</td><td>Harbor 辨识度明确：「≈3 步·2 分钟」mono 徽标、3px 风险色条、dashed 边界声明双栏、sha256 审计链节点、mac traffic lights + ⌘ 双映射——均非通用模板语汇</td></tr>
+        <tr><td><b>克制</b></td><td class="mono num">5/5</td><td>无 emoji 无廉价渐变（brand-gradient 仅限 logo 且为品牌蓝单色相）；glow 白名单严守两处 hover；UI 动效全部 ≤240ms，无限循环仅环境层且 fx-off 即停</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>7.2 Anti-Slop 与偏离裁决</h3>
+    <ul class="doc">
+      <li><b>Anti-Slop 全过</b>：P0 = 0（紫 / 彩虹渐变、编造数据、emoji 图标、AI 套路组件、破碎布局、对比度不足、无响应式——逐项验证均不成立；WCAG AA 抽验亮暗双主题全部 ≥4.5:1，最弱项 dark 模式约 5.1:1）。</li>
+      <li><b>P1 = 2 且均已闭环</b>：① 新令牌「已定义未渲染」缺交付状态标注 → 方案已追加《v1.9 新令牌渲染状态表》；② 方案文本与模板实况 4 处不一致 → 已出 4 处勘误 + 勘误记录。</li>
+      <li><b>7 项偏离全部采纳</b>：暗态极光不透明度维持 .62；--radius-ctrl Win 6 / mac 8；--scrollbar-w Win 10 / mac 0+8；aurora-5 以 3 可见斑实现（品红斑已退役）；skylight 等 4 令牌留待挂载（入渲染状态表）；演示 dwell 常量判定为「演示节奏 ≠ UI 动效时长，不进 MOTION 正确」；.plan-badge 交叉淡入需增 opacity 过渡项（移植提示正确）。</li>
+    </ul>
+
+    <h3>7.3 最终裁决与移植备忘</h3>
+    <div class="callout">
+      <div class="co-t">裁决：通过 / PASS（P0=0，P1=2≤3，五维 24/25 且全部 ≥3）——进入导出</div>
+      <p>功能语义完备性核对 master-plan §4 通过——Intent Preview 字段齐全、检查点三态 + 六军规脚注齐全、六原语行齐全、审批预算 + 超限升级 + 一键收回齐全、macOS 双映射 / overlay 滚动条 / 双环焦点 / mac-badge / switch / traffic lights 齐全。</p>
+    </div>
+    <ol class="doc">
+      <li><b>.plan-badge 增 opacity 过渡项</b>：移植时在 <code>index.template.html</code> 的现行 transition 追加 <code>,opacity var(--dur-micro-out) var(--ease-out-soft)</code>（纯增属性，不改选择器权重）。</li>
+      <li><b>新令牌渲染状态表随交付</b>：「已渲染 / 留待挂载」边界随报告移交（见 2.2）。</li>
+      <li><b>DEMO 对象 ≠ MOTION</b>：演示 dwell 常量（原型页脚已标注）与动效令牌的边界写进移植清单（见第 8 章）。</li>
+    </ol>
+  </section>
+
+  <!-- ==================== §8 注意事项与风险 ==================== -->
+  <section class="panel" id="ch8">
+    <div class="panel-h"><span class="panel-no">08</span><h2>注意事项与风险</h2></div>
+    <p class="panel-lead">移植与联调阶段的四条硬注意事项 + 两条对齐备忘。均来自彩格调方案 §4 风险项与评审移植提示。</p>
+
+    <div class="callout warn">
+      <div class="co-t">1 · 双端 backdrop-filter 差异</div>
+      <p>WebView2（Chromium）与 WKWebView 的 backdrop-filter / overlay 滚动条表现不一致——mac 端玻璃拟态需双端实测矩阵。<b>备选</b>：mac 下提升 <code>--glass-bg</code> 不透明度补偿。本报告的玻璃效果在无 backdrop-filter 的环境自动回退 <code>--glass-fallback</code> 实色（prefers-reduced-transparency 亦走该回退）。</p>
+    </div>
+    <div class="callout warn">
+      <div class="co-t">2 · mac 字体注入时序</div>
+      <p>SF 字体栈须<b>早于首屏渲染</b>注入——boot 前由 <code>69-platform.js</code> 设 <code>body[data-platform="mac"]</code> 根类，避免首屏字体闪烁（FOUT）与回流。</p>
+    </div>
+    <div class="callout warn">
+      <div class="co-t">3 · 哈希链显示纪律</div>
+      <p>审计哈希链只显示<b>首 8 位 + 省略号</b>，禁长串全文（信息密度纪律）；断链一律转 err 态呈现，不静默。</p>
+    </div>
+    <div class="callout warn">
+      <div class="co-t">4 · 演示 dwell 常量不移植</div>
+      <p>原型中的 <code>stepDwell 900 / autoDwell 3000 / restoreDwell 1200 / primDwell 650</code> 为<b>原型演示专用</b>节奏常量，不进产品代码、不进 MOTION；3s 自动批准徽标淡出是<b>方案规格值需保留</b>。演示对象（DEMO）与动效令牌（MOTION）是两套东西。</p>
+    </div>
+
+    <h3>对齐备忘（2 条）</h3>
+    <ul class="doc">
+      <li><b>.plan-badge 过渡增补</b>：模板现行 transition 仅 background-color / color；移植时纯增 opacity 项（见 7.3）。</li>
+      <li><b>评审台宽度值</b>：原型 <code>--content-w:1080px</code> 为评审台加宽值（便于并排双形态展示），<b>产品值以 v4 令牌 920px 为准</b>；本报告即按 920px 排布。</li>
+    </ul>
+  </section>
+
+  <!-- ==================== §9 附：文件索引 ==================== -->
+  <section class="panel" id="ch9">
+    <div class="panel-h"><span class="panel-no">09</span><h2>附：文件索引</h2></div>
+    <p class="panel-lead">全部交付与依据文件的相对链接表（基于本报告所在目录 <code>deliverables/dev-plan/</code> 解析；原型链接指向 <code>deliverables/design/v19/prototypes/</code>，双击即可打开）。</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:300px">文件</th><th style="width:90px">类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><b>frontend-handover-v19-2026-10-23.html</b></td><td><span class="st st-ok">本报告</span></td><td>v1.9.0 前端重构最终交接（自包含单文件，9 章）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/token-upgrade-plan.md">../design/v19/token-upgrade-plan.md</a></td><td><span class="st st-idle">设计依据</span></td><td>设计令牌升级方案（彩格调）：色彩氛围 / 组件规范 / 动效分配 / 渲染状态表 / 勘误记录</td></tr>
+        <tr><td class="mono"><a href="../design/v19/prototypes/index.html">../design/v19/prototypes/index.html</a></td><td><span class="st st-idle">原型 · 总览</span></td><td>原型集总览页（5 个新界面入口 + 使用方式 + 实现纪律）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/prototypes/plan-intent-preview.html">../design/v19/prototypes/plan-intent-preview.html</a></td><td><span class="st st-idle">原型</span></td><td>Intent Preview 计划卡（M2.3 / M2.5）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/prototypes/checkpoint-dialog.html">../design/v19/prototypes/checkpoint-dialog.html</a></td><td><span class="st st-idle">原型</span></td><td>检查点三态对话框（M2.7 / M2.8）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/prototypes/browser-driver-panel.html">../design/v19/prototypes/browser-driver-panel.html</a></td><td><span class="st st-idle">原型</span></td><td>浏览器驱动面板（M3.8 / M5）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/prototypes/grant-budget.html">../design/v19/prototypes/grant-budget.html</a></td><td><span class="st st-idle">原型</span></td><td>审批预算指示器（M2.4 / M2.5）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/prototypes/macos-adaptation.html">../design/v19/prototypes/macos-adaptation.html</a></td><td><span class="st st-idle">原型</span></td><td>macOS 适配层（M6.10-6.12）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/api-contract-baseline.md">../design/v19/api-contract-baseline.md</a></td><td><span class="st st-idle">工程基线</span></td><td>接口契约与 A/B 差异项对账（12 新 js_api / 5 新字段 / 纪律红线）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/component-structure-baseline.md">../design/v19/component-structure-baseline.md</a></td><td><span class="st st-idle">工程基线</span></td><td>组件结构与移植规范（模块地图 / 前缀表 / 动效矩阵 / 移植纪律）</td></tr>
+        <tr><td class="mono"><a href="../design/v19/quality-review.md">../design/v19/quality-review.md</a></td><td><span class="st st-idle">评审归档</span></td><td>质量审查报告全文（五维 24/25 · P0=0 · 7 项偏离裁决）</td></tr>
+        <tr><td class="mono"><a href="master-plan-v19-2026-10-21.md">master-plan-v19-2026-10-21.md</a></td><td><span class="st st-idle">版本方案</span></td><td>v1.9.0「全域版」总集成方案（100 包 / 9 里程碑 / §5.3 前端增量 / §6.2 新 js_api）</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout">
+      <div class="co-t">导出信息</div>
+      <p>导出：交付达（Jiao）· 2026-10-23 · 格式：自包含 HTML（内联 CSS / JS，零外部依赖，双击可开）· 大小目标 &lt; 500KB · 字体：系统字体栈（无外部字体文件）· 排版：Harbor v4 设计语言（玻璃拟态 + 编辑部字阶 + 品牌蓝 #4560e0，亮 / 暗双主题，右上角切换）。</p>
+    </div>
+  </section>
+
+</main>
+<footer class="proto-foot">
+  <b>产物路径</b>：<code>deliverables/dev-plan/frontend-handover-v19-2026-10-23.html</code>（本报告）· <b>依据</b>：<code>design/v19/token-upgrade-plan.md</code>（彩格调）· <code>design/v19/prototypes/</code>（6 文件，评审 PASS）· <code>design/v19/api-contract-baseline.md</code> · <code>design/v19/component-structure-baseline.md</code> · <code>dev-plan/master-plan-v19-2026-10-21.md</code>。<br>
+  本报告为自包含单文件 HTML（内联 CSS / JS，零外部依赖，双击可开）；排版继承 Harbor v4 设计语言（玻璃拟态 + 编辑部字阶 + 品牌蓝 #4560e0，亮 / 暗双主题）。页面内相对链接基于 <code>dev-plan/</code> 目录解析。
+</footer>
+<script>
+/* MOTION 单一事实源（读 CSS 令牌） */
+const MOTION = (() => {
+  const cs = getComputedStyle(document.documentElement);
+  const ms = k => { const v = cs.getPropertyValue(k).trim(); return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000; };
+  return { theme: ms('--dur-theme') };
+})();
+const $ = s => document.querySelector(s);
+const body = document.body;
+
+/* ---------- 主题 / 动效开关 ---------- */
+const themeBtn = $('#themeBtn'), themeLabel = $('#themeLabel'), themeIcon = $('#themeIcon');
+const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+const MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>';
+function setTheme(dark){
+  body.classList.add('theming');
+  body.classList.toggle('dark', dark);
+  themeBtn.setAttribute('aria-pressed', String(dark));
+  themeLabel.textContent = dark ? '亮色' : '暗色';
+  themeIcon.innerHTML = dark ? SUN : MOON;
+  try{ localStorage.setItem('handover-theme', dark ? 'dark' : 'light'); }catch(e){}
+  setTimeout(() => body.classList.remove('theming'), MOTION.theme + 60);
+}
+themeBtn.addEventListener('click', () => setTheme(!body.classList.contains('dark')));
+try{ if (localStorage.getItem('handover-theme') === 'dark') setTheme(true); }catch(e){}
+const fxBtn = $('#fxBtn'), fxLabel = $('#fxLabel');
+function setFx(on){
+  body.classList.toggle('fx-off', !on);
+  fxBtn.setAttribute('aria-pressed', String(on));
+  fxLabel.textContent = on ? '动效 开' : '动效 关';
+}
+fxBtn.addEventListener('click', () => setFx(body.classList.contains('fx-off')));
+</script>
+</body>
+</html>

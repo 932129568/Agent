@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "status": "step3-frozen",
+  "policy": "C 路径（删除 Python 契约层）步骤 1–3 已完成：legacy 行为冻结为 golden 快照、Node 侧公开契约面等价门建立、golden sha256 进入契约冻结面。步骤 4–6（逐域处置测试 / 删实现 / 全量交接）尚未执行。",
+  "golden": "deliverables/dev-plan/contract-golden/api-suite.json",
+  "sha256": "ad7cfe30c06b2df189d4504a9d87f95b86f94969c323d2b6ce58555c72fa5999",
+  "sequenceCount": 95,
+  "frozenPublicMethods": 51,
+  "source": "tools/contract_golden_replay.py 在独立子进程调用 tests/test_api_contract.py::run_suite(legacy.Api(), stubs)",
+  "exportCommand": "python tools/contract_golden_replay.py --export",
+  "verifyCommand": "python tools/contract_golden_replay.py  （由 tests/test_contract_golden.py 以独立子进程调用）",
+  "normalization": [
+    "test_api_contract.norm（抹掉时间戳 / cache id / mtime 等非确定值）",
+    "golden_norm 额外把 pytest 随机临时 HOME 名 test_home_* 归一为 <TEST_HOME>（跨进程冻结必需）"
+  ],
+  "frozenBy": [
+    "frontend/app/tests/arch-contract.mjs 校验 sha256 与序列数",
+    "tests/test_contract_golden.py 静态冻结校验 + 独立子进程重放",
+    "tools/contract_diff.py 的 FROZEN 面含 golden_sha256，锚点 contract-baseline-r68.json",
+    "server/test/contract-golden.mjs 校验 Node 运行时公开契约面（51 方法逐项一致）"
+  ],
+  "completedSteps": [
+    { "step": 1, "result": "95 项调用序列 golden 冻结，跨进程确定性复验通过" },
+    { "step": 2, "result": "server/test/contract-golden.mjs：Node get_api_info() 的 version 与 51 个公开方法与 frozen golden 逐项一致（含顺序），165 个注册方法零幽灵。诚实边界：逐输出重放 95 项属步骤 2b，未完成" },
+    { "step": 3, "result": "tools/contract_diff.py 新增 golden_sha256 冻结项，生成 contract-baseline-r68.json，零漂移 PASS" }
+  ],
+  "nextSteps": [
+    "步骤 2b（可选增强）：Node 侧 fake stubs 等价化，逐输出重放 95 项调用序列",
+    "步骤 4：逐域处置 74/154 个 import backend 的 pytest 文件（第一批已建台账 + Node 等价门，物理删除留步骤 5）",
+    "步骤 5：删除 backend/*.py 与 4 个入口/spec；conftest.py 改为不再加载 main_v1.0.0_legacy.py",
+    "步骤 6：全量门禁 + asar 包内零 .py 核验 + 交接"
+  ],
+  "notExecuted": [
+    "未删除任何 Python 文件",
+    "未修改 tests/conftest.py（legacy 仍从 main_v1.0.0_legacy.py 加载）",
+    "未修改 backend/api.py（哈希 0bff58fe… 零漂移）",
+    "未逐输出重放 95 项调用序列（步骤 2b）"
+  ],
+  "historicalNote": "历史文档曾写 49/50 个公开方法，实测 golden 自省面为 51 个；以本 manifest 的 frozenPublicMethods 为准。"
+}

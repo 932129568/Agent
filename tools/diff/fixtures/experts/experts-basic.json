@@ -1,0 +1,25 @@
+{
+  "id": "experts-basic",
+  "family": "experts",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "专家包族：清单（内置包导入语义差异面）/导入不存在目录/读包/读资源/偏好保存/启停/删除（错误路径为主——内置包在 Node 侧未迁移，预期 suspect 集中）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "expert_list", "args": [""], "note": "注册表清单（Python 构造期导入 8 内置包 vs Node 空——预期 suspect）" },
+    { "id": "c02", "method": "expert_import_directory", "args": ["{WS}/no-such-pkg"], "note": "导入不存在目录错误" },
+    { "id": "c03", "method": "expert_get", "args": ["no-such-pkg"], "note": "读不存在包错误" },
+    { "id": "c04", "method": "expert_read_resource", "args": ["no-such-snap", "SKILL.md"], "note": "读不存在资源错误" },
+    { "id": "c05", "method": "expert_save_preferences", "args": ["{\"enabled\": {\"qa-testing\": true}}"], "note": "偏好保存（错误或空清单语境）" },
+    { "id": "c06", "method": "expert_set_enabled", "args": ["no-such-pkg", true], "note": "启停不存在包错误" },
+    { "id": "c07", "method": "expert_delete_package", "args": ["no-such-pkg"], "note": "删除不存在包（幂等/错误）" },
+    { "id": "c08", "method": "expert_list", "args": [], "note": "终态清单" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["experts.json"]
+  }
+}

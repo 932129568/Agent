@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "policy": "spec-first-rewrite",
+  "status": "spec-pending-review",
+  "source": "frontend/app/ARCHITECTURE.md §11 / HANDOVER-R67.md §5",
+  "reviewRequiredBefore": "任何生产链切换或 frontend/src 源码删除",
+  "rules": [
+    "删任一 legacy 模块必须同一次提交登记 oldPins -> newPins 映射与逐条理由",
+    "禁止以『生产零调用』作为删码依据（R65 教训：collaboration/hubAll 曾致 51 failed）",
+    "该域新 L1/L2 测试未全绿不得删源码",
+    "每批刷新 contract-baseline-r<N>.json 并跑全套门禁",
+    "js_api 契约逐字节冻结、config.json 零污染",
+    "data-h-events 与全局符号逐批递减，终态归零"
+  ],
+  "completionCriteria": {
+    "frontendSrcRemoved": true,
+    "manifestScriptsEmpty": true,
+    "dataHEventsZero": true,
+    "globalSymbolsZero": true,
+    "dependencyRatchetZero": true,
+    "archContractPass": true,
+    "runtimeVerifyPass": true,
+    "fullPytestGreen": true
+  },
+  "executionLog": [
+    {
+      "phase": "B0-skeleton",
+      "status": "done",
+      "note": "10 个区域真实结构由 R67 generated 投影进规范 layout/，剥离 85 处事件桥，300 个 id 零丢失；生产链未切换。",
+      "verifiedBy": "arch-contract.mjs（B0 三项断言）+ L2 smoke 6/6"
+    },
+    {
+      "phase": "C-step1-golden",
+      "status": "done",
+      "note": "legacy 95 项调用序列冻结为 golden 快照，sha256 见 docs/golden-manifest.json；Python 实现未删除。",
+      "verifiedBy": "tests/test_contract_golden.py（静态冻结校验）+ tools/contract_golden_replay.py 独立子进程重放 + arch-contract.mjs"
+    },
+    {
+      "phase": "C-step2-node-gate",
+      "status": "done",
+      "note": "server/test/contract-golden.mjs 运行时重放 get_api_info：Node 的 version 与 51 个公开方法与 frozen golden 逐项一致（含顺序），165 个注册方法零幽灵。逐输出重放 95 项（步骤 2b）未完成。",
+      "verifiedBy": "node server/test/contract-golden.mjs + tests/test_r68_arch_contract.py"
+    },
+    {
+      "phase": "C-step3-anchor",
+      "status": "done",
+      "note": "tools/contract_diff.py 的 collect/FROZEN 增加 golden_sha256，生成 contract-baseline-r68.json，零漂移 PASS。",
+      "verifiedBy": "contract_diff.py --compare r68 + tests/test_contract_diff.py 11 passed"
+    },
+    {
+      "phase": "C-step4-first-batch",
+      "status": "in-progress",
+      "note": "机器盘点 74 个耦合 pytest 文件（domains 65 / contract 4 / application 2 / tools_schema 1 / other 1 / 第一批 1），生成 docs/backend-test-disposition.json；第一批 test_v19_paths.py 的前三个纪律钉由 server/test/config-discipline.mjs 等价覆盖，第四个 Harbor.spec 钉随步骤 5 退役。按 R65 未物理删测试。剩余 73 条需逐域复核。",
+      "verifiedBy": "arch-contract.mjs 43/43 + server 八套 + tests/test_r68_arch_contract.py"
+    },
+    {
+      "phase": "C-step4-second-batch",
+      "status": "in-progress",
+      "note": "全量跑 server/test/*.mjs 25 个脚本：24 个可跑门禁全 PASS，auth-migrate.mjs 为历史迁移脚本（非门禁，依赖已移除具名导出，登记为边界）。建立 docs/domain-equivalence-map.json：9 个 backend.domains 子域 → Node 服务 + 测试门，48 个引用全部存在；server/test/domain-equivalence.mjs 静态校验。台账升级 v2，74/74 条全部定位到具体 Node 等价门。equivalenceStatus=mapped-not-behavior-verified，reviewRequired 仍需逐条销项。",
+      "verifiedBy": "arch-contract.mjs 47/47 + server/test/domain-equivalence.mjs + tests/test_r68_arch_contract.py 28 passed"
+    },
+    {
+      "phase": "C-step4-third-batch",
+      "status": "gaps-found",
+      "note": "逐条复核 memory + observability 的 3 个 pytest 文件 / 24 个行为钉，对照 three Node 门实际检查项（31/12/23）。结论 covered 1 / partial 6 / gap 10 / python-implementation-detail 3 / frontend-contract 4，明确不可进入步骤 5。台账 v3：有缺口不销 reviewRequired，4 个前端契约钉改由 arch-contract.mjs + check_contract.py 承担。优先补测：记忆门控敏感字段、trace span/read、群上下文交接、open_url token 透传。",
+      "verifiedBy": "docs/behavior-review-batch1.json + arch-contract.mjs 51/51（含有缺口不得销项断言）+ tests/test_r68_arch_contract.py 29 passed"
+    },
+    {
+      "phase": "C-step4-fourth-batch",
+      "status": "gap-found-and-reported",
+      "note": "确认 pybridge.js 是 R55 的 Node 原生 I/O + libsql 实现（非 Python 进程桥），memoryWrite 已含 SENSITIVE 门控。新增 server/test/memory-gate.mjs（5 检查）销掉 test_remember_gate_rejects_sensitive。实测发现 DEF-01：去重查 fact_records 却写 profile_kv，重复写入仍返回 upsert，test_legacy_multi_note_no_supersede 由 partial 改判 gap。按 QA 口径 FAIL 即停、回传完整复现包、未改引擎代码，待用户授权修复。净 blockingGaps 仍 10，步骤 5 阻断。",
+      "verifiedBy": "server/test/memory-gate.mjs + docs/behavior-review-batch1.json v2 + arch-contract.mjs 54/54 + tests/test_r68_arch_contract.py 30 passed"
+    },
+    {
+      "phase": "C-step4-fifth-batch",
+      "status": "done",
+      "note": "用户「授权」修复 DEF-01。仅改 server/src/services/pybridge.js::memoryWrite：保留 fact_records 去重，补查 profile_kv 的 (user_id, value)，命中返回 noop/duplicate；写入参数复用 stored。memory-gate.mjs 去重硬断言恢复并通过，server 26/26 全 PASS 无回归。test_legacy_multi_note_no_supersede 销为 covered-by-node-gate。累计销 2 项，blockingGaps 10 -> 9，openImplementationDefects 0。复核证据 v3、台账 v3 重算，门禁改判「修复有授权与复验依据」。",
+      "verifiedBy": "arch-contract.mjs 54/54 + server 26/26 + memory-gate.mjs 硬断言 + 定向 pytest 30 passed"
+    },
+    {
+      "phase": "C-step4-sixth-batch",
+      "status": "done",
+      "note": "逐条重读剩余 9 个 gap 的断言原文，纠正按 import 归类偏差：2 个 Python agent_memory 内部 SQL/哈希链语义（python-implementation-detail）、4 个前端源码静态钉（frontend-contract，新增 5 条 frontendLiteralGates 字面量门由 arch-contract 校验）、2 个前端 VM 行为钉（deferred-to-react-migration，待 B4 组件测试）。真缺口收敛到 3：memory_context_build NOT_MIGRATED、trace span 接线、trace 保留期清理。blockingGaps 9 -> 3、累计销 8 项。复核证据 v4、台账 v3 重算。",
+      "verifiedBy": "arch-contract.mjs 56/56（含字面量门 5 条全成立）+ tests/test_r68_arch_contract.py 31 passed"
+    },
+    {
+      "phase": "C-step4-seventh-batch",
+      "status": "defects-reported",
+      "note": "新增 server/test/memory-injection.mjs（3 检查）：buildSystemPrompt 的 memoryTail 注入长期记忆段、entries 视图带 source/pinned、memoryEntryPin 可置位；extras_block 钉由 gap 降 partial（标题/字母序/pin 置前未复刻）。经核实 DEF-02（Node 无 gen_ai.span 写入与 agent.run/tool.open_url 接线）与 DEF-03（无 RETENTION_DAYS=14 清理）为真实实现缺口，按 QA 口径回传、未改引擎代码，待授权。blockingGaps 3 -> 2、累计销 9 项。另修正 gen_test_disposition.py：gap 归零但仍有 partial/deferred 时不得判 equivalent，新增 pendingVerdicts。",
+      "verifiedBy": "arch-contract.mjs 58/58 + server 27/27 + memory-injection.mjs + tests/test_r68_arch_contract.py 32 passed"
+    }
+  ],
+  "batches": [
+    { "id": "B0", "domains": ["shell"], "moduleCount": 13, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "10 区域外壳由 layout/ 接管，导航/弹窗/市场外壳行为等价" },
+    { "id": "B1", "domains": ["chat"], "moduleCount": 5, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "L3 端到端发消息 + 流式渲染 + 发送按钮态" },
+    { "id": "B2", "domains": ["sessions"], "moduleCount": 6, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "会话切换 / 并行 run 隔离 / 项目空间" },
+    { "id": "B3", "domains": ["agent"], "moduleCount": 18, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "60-agent 回归全绿：工具循环 / 熔断 / 恢复横幅 / 预算" },
+    { "id": "B4", "domains": ["group"], "moduleCount": 4, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "名册接力 / 群文件 / 实时气泡 / 暂停保留正文" },
+    { "id": "B5", "domains": ["settings"], "moduleCount": 11, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "端点 / 护栏 / 工作目录配置持久化" },
+    { "id": "B6", "domains": ["expert", "generative", "planning"], "moduleCount": 24, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "专家一步生效 / 生成式 UI / 计划续跑" },
+    { "id": "B7", "domains": ["analytics", "search", "integrations", "workspace", "providers"], "moduleCount": 14, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "面板回归 / 本地模型流 / MCP 接入" },
+    { "id": "B8", "domains": ["core", "components"], "moduleCount": 11, "status": "pending",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "共享层下沉完成，全量契约零漂移" },
+    { "id": "B9", "domains": ["collaboration"], "moduleCount": 11, "status": "frozen-pending-product-decision",
+      "oldPins": [], "newPins": [], "domWritePoints": 0,
+      "acceptance": "先过产品决策（decisions-r67.md §1.3），再按整批姿势处理" }
+  ]
+}

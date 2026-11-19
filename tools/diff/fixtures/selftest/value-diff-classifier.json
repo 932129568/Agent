@@ -1,0 +1,29 @@
+{
+  "id": "value-diff-classifier",
+  "family": "selftest",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "harness 自检：strict 模式下确定性键集差异 → suspect + diffPath 定位（不在 defaultFamilies，仅 npm run diff -- selftest 显式运行）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "guard_check",
+      "args": ["take_screenshot", "{}"],
+      "note": "刻意的值差异：Python confirm 带 label 键，Node confirm 带 tier 键 → diffPath 应指向键集差异"
+    },
+    {
+      "id": "c02",
+      "method": "begin_task",
+      "args": [],
+      "note": "对照项：双侧应 match（裸 'ok'）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}

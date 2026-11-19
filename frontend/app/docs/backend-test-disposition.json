@@ -1,0 +1,2025 @@
+{
+  "version": 5,
+  "policy": "C 路径步骤 4：逐域处置 import backend 的 pytest 文件。机器初分 + 域等价门定位 + 逐批行为复核；「定位到门」不等于「行为已验证」，有 blockingGaps 或 pending 的条目不得销 reviewRequired；blockingGaps 只统计已复核范围，扩大范围可能重新暴露缺口；物理删除测试统一在步骤 5 与删 Python 实现同一次提交。",
+  "behaviorReview2": "frontend/app/docs/behavior-review-batch2.json",
+  "behaviorReview3": "frontend/app/docs/behavior-review-batch3.json",
+  "assertionClassification": "deliverables/dev-plan/remaining-pins-classification-r69.json",
+  "extendedReview": {
+    "batch2Files": 4,
+    "batch2Pins": 23,
+    "batch2Gaps": 0,
+    "batch2Partial": 8,
+    "batch3Files": 3,
+    "batch3Pins": 34,
+    "batch3Gaps": 0,
+    "filesReviewedTotal": 10,
+    "filesRemaining": 64
+  },
+  "totalTestFiles": 154,
+  "coupledFiles": 74,
+  "byCategory": {
+    "application": 2,
+    "contract": 4,
+    "domains": 65,
+    "first-batch": 1,
+    "other": 1,
+    "tools_schema": 1
+  },
+  "firstBatch": [
+    "test_v19_paths.py"
+  ],
+  "domainEquivalenceMap": "frontend/app/docs/domain-equivalence-map.json",
+  "behaviorReview": "frontend/app/docs/behavior-review-batch1.json",
+  "behaviorReviewedFiles": 3,
+  "behaviorReviewedPins": 24,
+  "blockingGaps": 0,
+  "filesWithNodeGates": 74,
+  "preExistingRunnableGates": 24,
+  "strategies": {
+    "domains": "needs-node-equivalent",
+    "application": "needs-node-equivalent",
+    "tools_schema": "replaced-by-node-schema",
+    "contract": "replaced-by-golden",
+    "other": "needs-review",
+    "first-batch": "replaced-by-node-gate"
+  },
+  "notExecuted": [
+    "未删除任何 pytest 文件（留步骤 5 同批）",
+    "未删除任何 Python 实现",
+    "未修改 tests/conftest.py"
+  ],
+  "files": [
+    {
+      "file": "tests/test_agent_guard_chain.py",
+      "modules": [
+        "api",
+        "domains.integrations",
+        "domains.security.guard_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 110,
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/commands.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_api_contract.py",
+      "modules": [
+        ""
+      ],
+      "category": "contract",
+      "strategy": "replaced-by-golden",
+      "rationale": "契约/发布纪律类；golden 冻结快照 + Node 公开契约面等价门承担，逐条复核后退役",
+      "reviewRequired": true,
+      "lineCount": 289,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_builtin_experts_import.py",
+      "modules": [
+        "",
+        "bootstrap",
+        "domains.expert.builtin_importer",
+        "domains.expert.service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 180,
+      "domains": [
+        "expert"
+      ],
+      "nodeGates": [
+        "server/test/experts.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 2,
+      "batch2Pins": 6,
+      "batch2VerdictSummary": {
+        "partial": 2,
+        "covered-by-node-gate": 2,
+        "python-implementation-detail": 1,
+        "frontend-contract": 1
+      },
+      "batch2Gaps": 0,
+      "reviewConclusion": "gaps-found"
+    },
+    {
+      "file": "tests/test_collaboration_config.py",
+      "modules": [
+        "domains.providers.hybrid_router"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 142,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_connect_merge.py",
+      "modules": [
+        "domains.providers"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 915,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_expert_package_api.py",
+      "modules": [
+        "api"
+      ],
+      "category": "contract",
+      "strategy": "replaced-by-golden",
+      "rationale": "契约/发布纪律类；golden 冻结快照 + Node 公开契约面等价门承担，逐条复核后退役",
+      "reviewRequired": true,
+      "lineCount": 48,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_expert_package_security.py",
+      "modules": [
+        "domains.expert",
+        "domains.expert.service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 154,
+      "domains": [
+        "expert"
+      ],
+      "nodeGates": [
+        "server/test/experts.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 2,
+      "batch2Pins": 8,
+      "batch2VerdictSummary": {
+        "covered-by-node-gate": 5,
+        "partial": 3
+      },
+      "batch2Gaps": 0,
+      "reviewConclusion": "gaps-found"
+    },
+    {
+      "file": "tests/test_expert_package_service.py",
+      "modules": [
+        "domains.expert.service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 242,
+      "domains": [
+        "expert"
+      ],
+      "nodeGates": [
+        "server/test/experts.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 2,
+      "batch2Pins": 7,
+      "batch2VerdictSummary": {
+        "partial": 3,
+        "covered-by-node-gate": 4
+      },
+      "batch2Gaps": 0,
+      "reviewConclusion": "gaps-found"
+    },
+    {
+      "file": "tests/test_freetoken_preset.py",
+      "modules": [
+        "domains.providers",
+        "domains.providers.local_model_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 124,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_glm_1211_rescue.py",
+      "modules": [
+        "domains.providers.local_model_service",
+        "domains.providers.provider_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 124,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_group_files.py",
+      "modules": [
+        "api",
+        "domains.workspace.group_files_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 229,
+      "domains": [
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_harbor_fix.py",
+      "modules": [
+        "api"
+      ],
+      "category": "contract",
+      "strategy": "replaced-by-golden",
+      "rationale": "契约/发布纪律类；golden 冻结快照 + Node 公开契约面等价门承担，逐条复核后退役",
+      "reviewRequired": true,
+      "lineCount": 621,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_history_dir_purge.py",
+      "modules": [
+        "",
+        "api",
+        "domains.planning"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 260,
+      "domains": [
+        "planning"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_local_proxy.py",
+      "modules": [
+        "",
+        "api",
+        "domains.providers",
+        "domains.providers.local_proxy"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 324,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_mcp_floor_rules.py",
+      "modules": [
+        "api",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_service",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 203,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_memory_db.py",
+      "modules": [
+        "",
+        "api",
+        "bootstrap.container",
+        "domains.memory.db_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 253,
+      "domains": [
+        "memory"
+      ],
+      "nodeGates": [
+        "server/test/state-services.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "behaviorReviewed": true,
+      "reviewedPins": 12,
+      "verdictSummary": {
+        "python-implementation-detail": 5,
+        "covered-by-node-gate": 6,
+        "covered-by-contract-golden": 1
+      },
+      "blockingGaps": 0,
+      "reviewConclusion": "equivalent",
+      "pendingVerdicts": 0
+    },
+    {
+      "file": "tests/test_memory_panel.py",
+      "modules": [
+        "",
+        "api",
+        "domains.security.guard_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 99,
+      "domains": [
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/commands.mjs",
+        "server/test/guard.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_model_prefs.py",
+      "modules": [
+        "api",
+        "domains.settings.config_service",
+        "domains.settings.model_prefs_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 103,
+      "domains": [
+        "settings"
+      ],
+      "nodeGates": [
+        "server/test/config-discipline.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/state-services.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 3,
+      "batch3Pins": 10,
+      "batch3VerdictSummary": {
+        "covered-by-node-gate": 10
+      },
+      "batch3Gaps": 0,
+      "reviewConclusion": "equivalent"
+    },
+    {
+      "file": "tests/test_modern_backend_architecture.py",
+      "modules": [
+        "api",
+        "application.operation",
+        "application.session",
+        "bootstrap.container"
+      ],
+      "category": "application",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.application 编排层；先补 Node 等价用例，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 186,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_modern_build.py",
+      "modules": [
+        "services.config_service"
+      ],
+      "category": "other",
+      "strategy": "needs-review",
+      "rationale": "bootstrap / errors / fio / logging_setup 等杂项；需逐文件判定归属",
+      "reviewRequired": true,
+      "lineCount": 225,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_modern_scheduler.py",
+      "modules": [
+        "api",
+        "application.registry",
+        "application.scheduler",
+        "application.task",
+        "errors"
+      ],
+      "category": "application",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.application 编排层；先补 Node 等价用例，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 229,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_native_ui.py",
+      "modules": [
+        "application.native_ui",
+        "domains.integrations.browser.driver",
+        "domains.integrations.browser.session_win"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 208,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_plan_service.py",
+      "modules": [
+        "domains.planning.plan_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 357,
+      "domains": [
+        "planning"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_prompts_w0.py",
+      "modules": [
+        "api",
+        "domains.providers"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 128,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_qa_builtin_body_not_duplicated.py",
+      "modules": [
+        "domains.expert.builtin_importer",
+        "domains.expert.service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 41,
+      "domains": [
+        "expert"
+      ],
+      "nodeGates": [
+        "server/test/experts.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 2,
+      "batch2Pins": 2,
+      "batch2VerdictSummary": {
+        "python-implementation-detail": 2
+      },
+      "batch2Gaps": 0,
+      "reviewConclusion": "gaps-found"
+    },
+    {
+      "file": "tests/test_r40_k10.py",
+      "modules": [
+        "api",
+        "domains.workspace"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 70,
+      "domains": [
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r41_registry_pipe.py",
+      "modules": [
+        "application.registry",
+        "application.task",
+        "domains.workspace"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 87,
+      "domains": [
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r42_notes.py",
+      "modules": [
+        "",
+        "api",
+        "tools_schema"
+      ],
+      "category": "tools_schema",
+      "strategy": "replaced-by-node-schema",
+      "rationale": "工具 schema 钉；Node 侧 contract-signatures / contract-golden 已覆盖签名与公开面",
+      "reviewRequired": true,
+      "lineCount": 67,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r43_snapshot.py",
+      "modules": [
+        "domains.integrations.browser.session_base",
+        "domains.integrations.browser.session_headless",
+        "domains.integrations.browser.session_win",
+        "domains.integrations.browser.snapshot",
+        "domains.security.guard_service",
+        "tools_schema"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 73,
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/commands.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r44_injection.py",
+      "modules": [
+        "domains.providers.provenance"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 46,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r44_mcp_fold.py",
+      "modules": [
+        "api",
+        "domains.integrations.mcp.mcp_service",
+        "tools_schema"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 96,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r46_final.py",
+      "modules": [
+        "",
+        "api",
+        "domains.observability.trace_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 109,
+      "domains": [
+        "observability"
+      ],
+      "nodeGates": [
+        "server/test/parallel.mjs",
+        "server/test/system-misc.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "behaviorReviewed": true,
+      "reviewedPins": 4,
+      "verdictSummary": {
+        "deferred-to-react-migration": 2,
+        "covered-by-node-gate": 2
+      },
+      "blockingGaps": 0,
+      "reviewConclusion": "gaps-found",
+      "pendingVerdicts": 2
+    },
+    {
+      "file": "tests/test_r48_scanfix.py",
+      "modules": [
+        "",
+        "domains.observability.trace_service",
+        "tools_schema"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 82,
+      "domains": [
+        "observability"
+      ],
+      "nodeGates": [
+        "server/test/parallel.mjs",
+        "server/test/system-misc.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "behaviorReviewed": true,
+      "reviewedPins": 8,
+      "verdictSummary": {
+        "frontend-contract": 6,
+        "covered-by-node-gate": 2
+      },
+      "blockingGaps": 0,
+      "reviewConclusion": "equivalent",
+      "pendingVerdicts": 0,
+      "frontendGates": [
+        "frontend/app/tests/arch-contract.mjs",
+        "deliverables/design/check_contract.py"
+      ]
+    },
+    {
+      "file": "tests/test_r49_scanfix.py",
+      "modules": [
+        "",
+        "api",
+        "domains.planning",
+        "domains.planning.plan_service",
+        "domains.providers.provenance"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 161,
+      "domains": [
+        "planning",
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r56_concurrency.py",
+      "modules": [
+        "application.session",
+        "domains.integrations.browser.driver",
+        "domains.integrations.browser.session_win",
+        "domains.integrations.mcp.mcp_service",
+        "domains.security.guard_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 438,
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/commands.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r57_conflicts.py",
+      "modules": [
+        "domains.providers.hybrid_router",
+        "domains.security.guard_service",
+        "domains.settings.model_prefs_service",
+        "domains.workspace.cmd_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 359,
+      "domains": [
+        "providers",
+        "security",
+        "settings",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/config-discipline.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/state-services.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_r59_deps.py",
+      "modules": [
+        "domains.settings.memory_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 157,
+      "domains": [
+        "settings"
+      ],
+      "nodeGates": [
+        "server/test/config-discipline.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/state-services.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 3,
+      "batch3Pins": 9,
+      "batch3VerdictSummary": {
+        "covered-by-node-gate": 4,
+        "frontend-contract": 3,
+        "python-implementation-detail": 1,
+        "partial": 1
+      },
+      "batch3Gaps": 0,
+      "reviewConclusion": "equivalent"
+    },
+    {
+      "file": "tests/test_release_discipline.py",
+      "modules": [
+        "api",
+        "domains.integrations.update_service",
+        "domains.settings.config_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 158,
+      "domains": [
+        "integrations",
+        "settings"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/config-discipline.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/state-services.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "reviewBatch": 3,
+      "batch3Pins": 15,
+      "batch3VerdictSummary": {
+        "python-implementation-detail": 8,
+        "covered-by-contract-golden": 6,
+        "covered-by-node-gate": 1
+      },
+      "batch3Gaps": 0,
+      "reviewConclusion": "equivalent"
+    },
+    {
+      "file": "tests/test_review_batch2.py",
+      "modules": [
+        "api",
+        "domains.integrations.browser",
+        "domains.integrations.browser.service",
+        "domains.integrations.mcp",
+        "domains.planning.checkpoint_service",
+        "domains.security",
+        "domains.security.audit_chain",
+        "domains.security.guard_service",
+        "domains.workspace"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 476,
+      "domains": [
+        "integrations",
+        "planning",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_review_fixes.py",
+      "modules": [
+        "",
+        "domains.integrations.mcp.mcp_client",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_service",
+        "domains.integrations.mcp.mcp_transport_http",
+        "domains.integrations.mcp.mcp_transport_stdio",
+        "domains.integrations.update_service",
+        "domains.security.guard_service",
+        "domains.workspace.clipboard_service",
+        "domains.workspace.cmd_service",
+        "domains.workspace.file_service",
+        "domains.workspace.process_service",
+        "domains.workspace.toolcache_service",
+        "errors",
+        "fio",
+        "logging_setup"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 1695,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_round6_adversarial.py",
+      "modules": [
+        "api",
+        "domains.planning"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 1063,
+      "domains": [
+        "planning"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_sandbox.py",
+      "modules": [
+        "domains.workspace",
+        "domains.workspace.cmd_service",
+        "domains.workspace.sandbox_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 339,
+      "domains": [
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_security_fixes.py",
+      "modules": [
+        "",
+        "api"
+      ],
+      "category": "contract",
+      "strategy": "replaced-by-golden",
+      "rationale": "契约/发布纪律类；golden 冻结快照 + Node 公开契约面等价门承担，逐条复核后退役",
+      "reviewRequired": true,
+      "lineCount": 261,
+      "domains": [],
+      "nodeGates": [
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/config-discipline.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_t9_sandbox_smoke.py",
+      "modules": [
+        "",
+        "api",
+        "domains.workspace"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 307,
+      "domains": [
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_tool_validator.py",
+      "modules": [
+        "domains.security.tool_validator"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 209,
+      "domains": [
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/commands.mjs",
+        "server/test/guard.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v12_features.py",
+      "modules": [
+        "api",
+        "domains.integrations.update_service",
+        "domains.providers.provider_service",
+        "domains.security.guard_service",
+        "domains.workspace.cmd_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 358,
+      "domains": [
+        "integrations",
+        "providers",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v13_mcp.py",
+      "modules": [
+        "",
+        "domains.integrations.mcp",
+        "domains.integrations.mcp.mcp_client",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_service",
+        "domains.integrations.mcp.mcp_transport_http",
+        "domains.integrations.mcp.mcp_transport_stdio",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 1172,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v13_qa.py",
+      "modules": [
+        "",
+        "api",
+        "application.native_ui",
+        "application.registry",
+        "application.scheduler",
+        "bootstrap.container",
+        "domains.integrations.mcp",
+        "domains.integrations.mcp.mcp_client",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_service",
+        "domains.integrations.mcp.mcp_transport_stdio",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 1277,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v14_experience.py",
+      "modules": [
+        "",
+        "domains.integrations.mcp",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 662,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v15_known_bugs.py",
+      "modules": [
+        "domains.workspace",
+        "domains.workspace.cmd_service",
+        "domains.workspace.process_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 248,
+      "domains": [
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v15_reserved.py",
+      "modules": [
+        "api",
+        "domains.integrations",
+        "domains.integrations.mcp",
+        "domains.providers"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 591,
+      "domains": [
+        "integrations",
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v15_wire.py",
+      "modules": [
+        "domains.integrations",
+        "domains.integrations.mcp.mcp_client",
+        "domains.integrations.mcp.mcp_pool",
+        "domains.integrations.mcp.mcp_transport_http",
+        "domains.integrations.webdav_service",
+        "domains.providers.local_model_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 504,
+      "domains": [
+        "integrations",
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v16_batch1.py",
+      "modules": [
+        "",
+        "domains.integrations",
+        "domains.integrations.mcp",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_pool",
+        "domains.integrations.mcp.mcp_service",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 670,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v16_batch2.py",
+      "modules": [
+        "",
+        "domains.integrations.mcp",
+        "domains.integrations.mcp.mcp_client",
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_service",
+        "domains.security.guard_service",
+        "domains.workspace",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 633,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v16_github_catalog.py",
+      "modules": [
+        "",
+        "domains.providers"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 242,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v16_leftover.py",
+      "modules": [
+        "domains.providers"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 215,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v18_search_adapters.py",
+      "modules": [
+        "domains.integrations.browser"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 386,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v18_search_service.py",
+      "modules": [
+        "",
+        "api",
+        "application.native_ui",
+        "domains.integrations.browser",
+        "domains.integrations.browser.service",
+        "domains.integrations.browser.session_base",
+        "domains.integrations.browser.session_win",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 1063,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v18_software_hybrid.py",
+      "modules": [
+        "",
+        "api",
+        "domains.integrations",
+        "domains.integrations.software_service",
+        "domains.providers",
+        "domains.providers.hybrid_router",
+        "domains.security",
+        "domains.security.guard_service",
+        "domains.workspace",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 1439,
+      "domains": [
+        "integrations",
+        "providers",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v18_tools_wiring.py",
+      "modules": [
+        "",
+        "api",
+        "domains.integrations"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 467,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_browser.py",
+      "modules": [
+        "",
+        "api",
+        "domains.integrations.browser",
+        "domains.integrations.browser.platform",
+        "domains.integrations.browser.platform.mac",
+        "domains.integrations.browser.service",
+        "domains.integrations.browser.session_base",
+        "domains.integrations.mcp",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 773,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_checkpoint.py",
+      "modules": [
+        "",
+        "api",
+        "domains.planning.checkpoint_service",
+        "domains.planning.plan_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 213,
+      "domains": [
+        "planning"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_driver.py",
+      "modules": [
+        "api",
+        "application.native_ui",
+        "domains.integrations.browser",
+        "domains.integrations.browser.driver",
+        "domains.integrations.browser.session_base",
+        "domains.integrations.browser.session_win",
+        "domains.security.guard_service",
+        "tools_schema"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 982,
+      "domains": [
+        "integrations",
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/commands.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_gate.py",
+      "modules": [
+        "",
+        "api",
+        "domains.planning.plan_service",
+        "domains.security.audit_chain",
+        "domains.security.guard_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 312,
+      "domains": [
+        "planning",
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/guard.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_mac.py",
+      "modules": [
+        "api",
+        "domains.integrations.browser",
+        "domains.integrations.browser.driver",
+        "domains.integrations.browser.platform",
+        "domains.integrations.browser.platform.mac",
+        "domains.integrations.browser.platform.win",
+        "domains.integrations.browser.session_base",
+        "domains.integrations.browser.session_mac",
+        "domains.integrations.browser.session_win"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 439,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_mcp_reverify.py",
+      "modules": [
+        "domains.integrations.mcp.mcp_config_service",
+        "domains.integrations.mcp.mcp_service",
+        "domains.security.guard_service",
+        "domains.workspace.toolcache_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 448,
+      "domains": [
+        "integrations",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_paths.py",
+      "modules": [
+        ""
+      ],
+      "category": "first-batch",
+      "strategy": "replaced-by-golden",
+      "rationale": "契约/发布纪律类；golden 冻结快照 + Node 公开契约面等价门承担，逐条复核后退役",
+      "reviewRequired": false,
+      "lineCount": 70,
+      "domains": [],
+      "nodeGates": [
+        "server/test/config-discipline.mjs",
+        "server/test/contract-coverage.mjs",
+        "server/test/contract-golden.mjs",
+        "server/test/contract-signatures.mjs"
+      ],
+      "nodeCoverageLocated": true,
+      "nodeGate": "server/test/config-discipline.mjs",
+      "oldPins": [
+        "test_new_path_constants（6 个独立配置常量落 CONFIG_DIR）",
+        "test_constants_not_polluting_config_path（config.json 路径零改动、常量互异）",
+        "test_ensure_dirs_creates_platform_dir（ensure_dirs 幂等建目录）",
+        "test_spec_datas_has_prompts（Harbor.spec 声明 prompts / hiddenimports）"
+      ],
+      "newPins": [
+        "server/test/config-discipline.mjs::CONFIG_PATH 指向 config.json 且 CONFIG_DIR 隔离",
+        "server/test/config-discipline.mjs::运行态一律独立文件（不写 config.json）",
+        "server/test/config-discipline.mjs::独立配置族文件名互异且不与 config.json 重合",
+        "server/test/config-discipline.mjs::Node 侧 CONFIG_DIR 可用 HARBOR_CONFIG_DIR 隔离（等价 ensure_dirs 前置）"
+      ],
+      "reason": "前三项为跨语言通用的配置纪律，Node 侧可等价钉住；第四项钉的是 pywebview 打包 spec，删除 Python 实现后该文件本身退役，不再需要独立断言。",
+      "status": "equivalent-gate-landed"
+    },
+    {
+      "file": "tests/test_v19_prompts.py",
+      "modules": [
+        "domains.providers"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 108,
+      "domains": [
+        "providers"
+      ],
+      "nodeGates": [
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_reader.py",
+      "modules": [
+        "",
+        "api",
+        "domains.providers.hybrid_router",
+        "domains.providers.provenance",
+        "domains.providers.search_reader",
+        "domains.settings.config_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 289,
+      "domains": [
+        "providers",
+        "settings"
+      ],
+      "nodeGates": [
+        "server/test/config-discipline.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/state-services.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_search_upgrade.py",
+      "modules": [
+        "domains.integrations.browser.adapters",
+        "domains.integrations.browser.service",
+        "domains.integrations.software_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 237,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_v19_wiring.py",
+      "modules": [
+        "api",
+        "domains.integrations.browser.adapters",
+        "domains.integrations.browser.service",
+        "domains.integrations.software_service",
+        "domains.providers.search_reader",
+        "domains.security.guard_service",
+        "domains.workspace.cmd_service",
+        "domains.workspace.sandbox_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 208,
+      "domains": [
+        "integrations",
+        "providers",
+        "security",
+        "workspace"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/checkpoint-git.mjs",
+        "server/test/commands.mjs",
+        "server/test/files.mjs",
+        "server/test/group-files.mjs",
+        "server/test/guard.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_w11_memory_f1_reflect.py",
+      "modules": [
+        "",
+        "api",
+        "domains.security.tool_validator",
+        "domains.settings.memory_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 248,
+      "domains": [
+        "security",
+        "settings"
+      ],
+      "nodeGates": [
+        "server/test/commands.mjs",
+        "server/test/config-discipline.mjs",
+        "server/test/contract-signatures.mjs",
+        "server/test/guard.mjs",
+        "server/test/state-services.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_w1_trace_w2_readiness.py",
+      "modules": [
+        "api",
+        "domains.providers",
+        "domains.providers.local_model_service",
+        "domains.security.guard_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 99,
+      "domains": [
+        "providers",
+        "security"
+      ],
+      "nodeGates": [
+        "server/test/commands.mjs",
+        "server/test/guard.mjs",
+        "server/test/local-proxy.mjs",
+        "server/test/provider-http.mjs"
+      ],
+      "nodeCoverageLocated": true
+    },
+    {
+      "file": "tests/test_w6p1_parallel_gate.py",
+      "modules": [
+        "application.registry",
+        "application.scheduler",
+        "application.task",
+        "domains.integrations.mcp.mcp_client",
+        "domains.integrations.mcp.mcp_transport_http",
+        "domains.integrations.webdav_service"
+      ],
+      "category": "domains",
+      "strategy": "needs-node-equivalent",
+      "rationale": "依赖 backend.domains 纯逻辑（guard/memory/workspace/...）；先在 Node 侧补等价单测，再随实现删除",
+      "reviewRequired": true,
+      "lineCount": 138,
+      "domains": [
+        "integrations"
+      ],
+      "nodeGates": [
+        "server/test/browser.mjs",
+        "server/test/mcp.mjs",
+        "server/test/provider-http.mjs",
+        "server/test/r55-pybridge.mjs",
+        "server/test/webdav.mjs"
+      ],
+      "nodeCoverageLocated": true
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Harbor 本地模型 - Bing</title>
+    <link>https://www.bing.com/search?q=Harbor+%E6%9C%AC%E5%9C%B0%E6%A8%A1%E5%9E%8B&amp;format=rss</link>
+    <description>Search results for Harbor 本地模型</description>
+    <item>
+      <title>Harbor 本地模型部署指南</title>
+      <link>https://harbor.example.com/docs/local-model</link>
+      <description>Harbor 本地模型（dual-LLM-lite）部署与配置完整指南，覆盖 Ollama 与本地代理端点。</description>
+      <pubDate>Tue, 20 Oct 2026 10:00:00 +0800</pubDate>
+    </item>
+    <item>
+      <title>本地模型选型：Ollama vs LM Studio</title>
+      <link>https://blog.example.org/ollama-vs-lmstudio</link>
+      <description>两类主流本地推理后端对比：启动方式、API 兼容性与 Harbor 接入建议。</description>
+      <pubDate>Sat, 18 Oct 2026 09:30:00 +0800</pubDate>
+    </item>
+    <item>
+      <title>Harbor GitHub 仓库</title>
+      <link>https://github.com/example/harbor</link>
+      <description>Harbor 开源仓库：本地模型读取器、混合路由与计划执行源码。</description>
+      <dc:date>2026-10-15</dc:date>
+    </item>
+    <item>
+      <title>零依赖单文件桌面应用实践</title>
+      <link>https://weekly.example.net/zero-dep-desktop</link>
+      <description>PyInstaller + pywebview 打包本地 AI 应用的工程经验汇总。</description>
+      <pubDate>Wed, 14 Oct 2026 08:00:00 +0800</pubDate>
+    </item>
+  </channel>
+</rss>

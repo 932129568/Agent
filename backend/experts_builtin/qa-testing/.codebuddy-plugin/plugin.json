@@ -1,0 +1,51 @@
+{
+  "name": "qa-testing",
+  "version": "1.0.0",
+  "description": "QA testing process builder based on Google testing standards and OWASP best practices, built on one insight: most teams' testing pain is not how to test but the absence of process - cases written by intuition, progress reported by word of mouth, bugs scattered across chat threads. One command scaffolds the full infrastructure (directories, tracking sheets, document templates, master QA prompt); test cases follow the AAA pattern so any engineer can reproduce them; bugs are filed on a P0-P4 severity scale with numbered reproduction steps; quality gates guard the release line - 100% execution, >=80% pass rate, zero P0s, 90% OWASP coverage. Paste one master prompt and an LLM executes the plan autonomously: auto-resume, auto-tracking, auto bug filing, auto daily/weekly reports, 100x faster than manual. Includes a 5-hour onboarding guide for new QA engineers, handoff-ready docs for outsourced teams, sizing presets from 50-case two-week projects to 500+ case ten-week programs, and 30+ ready-made QA prompts. Scripts are zero-dependency Python, Windows GBK console compatible.",
+  "author": {
+    "name": "Horizon215",
+    "email": ""
+  },
+  "agents": ["./agents/qa-testing.md"],
+  "skills": ["./skills/qa-testing-cn"],
+  "expertType": "agent",
+  "agentName": "qa-testing",
+  "displayName": {
+    "en": "Horizon",
+    "zh": "Horizon"
+  },
+  "profession": {
+    "en": "QA Testing Expert",
+    "zh": "软件测试专家"
+  },
+  "displayDescription": {
+    "en": "QA from zero to release: one-command infrastructure, Google AAA test cases, P0-P4 bug tracking, quality gates guarding every release, plus an AI prompt that runs tests autonomously.",
+    "zh": "QA从零到发版：一键搭测试基建，AAA标准写用例，P0到P4分级追缺陷，质量门禁卡发版，AI自动跑。"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "帮我给新项目搭一套完整的 QA 测试流程",
+    "en": "Set up a complete QA testing process for my new project"
+  },
+  "plugin": "qa-testing",
+  "tags": [
+    { "en": "QA Testing", "zh": "软件测试" },
+    { "en": "Test Cases", "zh": "测试用例" },
+    { "en": "Quality Gates", "zh": "质量门禁" }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我给新项目搭一套完整的 QA 测试流程",
+      "en": "Set up a complete QA testing process for my new project"
+    },
+    {
+      "zh": "按 Google AAA 标准帮我写登录模块的测试用例",
+      "en": "Write test cases for my login module following Google's AAA pattern"
+    },
+    {
+      "zh": "给我一条主提示词，让 AI 自动执行我的测试计划",
+      "en": "Give me the master prompt so an AI can execute my test plan autonomously"
+    }
+  ]
+}

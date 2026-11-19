@@ -1,0 +1,31 @@
+{
+  "id": "mcp-config",
+  "family": "mcp",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "MCP 族：空起步/停用保存（免连接测试）/清单/详情/工具定档/护栏预检/调用拒绝/资源错误路径/Claude 导入/删除/关停（mcp_servers.json 独立文件）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "mcp_list_servers", "args": [], "note": "空起步清单" },
+    { "id": "c02", "method": "mcp_save_server", "args": ["diff-srv", "{\"command\": \"node\", \"args\": [\"--version\"], \"enabled\": false}"], "note": "停用保存（不触发连接测试）" },
+    { "id": "c03", "method": "mcp_list_servers", "args": [], "note": "保存后清单" },
+    { "id": "c04", "method": "mcp_get_server_detail", "args": ["diff-srv"], "note": "服务器详情" },
+    { "id": "c05", "method": "mcp_set_tool_tier", "args": ["diff-srv", "some-tool", "confirm"], "note": "工具定档" },
+    { "id": "c06", "method": "mcp_check_tool", "args": ["diff-srv", "some-tool", "{}"], "note": "护栏预检（未连接态）" },
+    { "id": "c07", "method": "mcp_call_tool", "args": ["diff-srv", "some-tool", "{}", "deny"], "note": "调用（用户拒绝/未连接错误路径）" },
+    { "id": "c08", "method": "mcp_list_resources", "args": ["diff-srv"], "note": "资源清单（未连接错误路径）" },
+    { "id": "c09", "method": "mcp_read_resource", "args": ["diff-srv", "res://x"], "note": "读资源（未连接错误路径）" },
+    { "id": "c10", "method": "mcp_save_subscriptions", "args": ["diff-srv", "[\"res://x\"]"], "note": "保存资源订阅" },
+    { "id": "c11", "method": "mcp_import_claude", "args": ["{\"mcpServers\": {\"claude-x\": {\"command\": \"node\"}}}"], "note": "Claude 配置导入" },
+    { "id": "c12", "method": "mcp_test_server", "args": ["no-such-srv"], "note": "测试不存在服务器错误" },
+    { "id": "c13", "method": "mcp_delete_server", "args": ["diff-srv"], "note": "删除服务器" },
+    { "id": "c14", "method": "mcp_shutdown", "args": [], "note": "关停全部传输" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["mcp_servers.json"]
+  }
+}

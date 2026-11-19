@@ -1,0 +1,266 @@
+{
+  "version": 4,
+  "batch": "behavior-review-batch2 + expert-security-gate + authorized-fix + final-closure",
+  "scope": "expert 子域：4 个 pytest 文件 / 23 个行为钉",
+  "policy": "逐条对照 Python 断言原文与 server/test/experts.mjs 的 12 项实际检查。定位到门 ≠ 行为等价；有缺口一律登记，不销 reviewRequired。",
+  "nodeGateInspected": {
+    "gate": "server/test/experts.mjs",
+    "checks": 12,
+    "results": [
+      "目录导入生成内容寻址快照",
+      "列表检索返回版本与启停状态",
+      "内置包导入 8 个（source=builtin）",
+      "内置 team 包带 AGENT_LIMIT_INTERSECTED 警告",
+      "读取快照元数据与 agents",
+      "启用并激活指定快照",
+      "只读资源返回文本与 provenance",
+      "资源目录穿越被拒绝",
+      "快照内容篡改被 hash 校验拒绝",
+      "偏好只允许收紧限额",
+      "未知偏好字段返回结构化错误",
+      "删除注册项但保留内容快照"
+    ]
+  },
+  "verdicts": {
+    "partial": "Node 门覆盖同名能力，但缺关键子行为",
+    "gap": "Node 门无对应断言，需补等价测试后才可退役",
+    "python-implementation-detail": "钉的是 Python 打包/导入器内部，删实现后自然消失",
+    "frontend-contract": "前端专家中心行为钉，需前端组件/契约门承担",
+    "covered-by-node-gate": "已补 server/test/expert-security.mjs 等价断言，拒绝行为验证通过（附错误码形状差异）"
+  },
+  "files": [
+    {
+      "file": "tests/test_builtin_experts_import.py",
+      "domain": "expert",
+      "pins": [
+        [
+          "test_all_eight_builtin_packages_import_idempotently_and_read_text",
+          "partial",
+          "experts.mjs:#3 内置 8 包 + #7 只读资源；幂等性与 read_text 精确比对未钉"
+        ],
+        [
+          "test_builtin_enable_disable_and_delete_restart_recovery",
+          "partial",
+          "experts.mjs:#6 启用 + #12 删除；重启恢复未覆盖"
+        ],
+        [
+          "test_builtin_conversion_rules_and_asset_filtering",
+          "covered-by-node-gate",
+          "expert-final-gaps.mjs：plugin 剥离/team settings/displayName/browser-use frontmatter 归一/资产过滤 13 断言"
+        ],
+        [
+          "test_builtin_import_has_zero_process_network_and_user_import_stays_strict",
+          "covered-by-node-gate",
+          "expert-final-gaps.mjs：METADATA_FIELD_UNKNOWN 字段白名单 + 8/8 内置导入 + 间谍归零"
+        ],
+        [
+          "test_frozen_builtin_path_and_spec_datas",
+          "python-implementation-detail",
+          "断言 backend/experts_builtin 路径与 Harbor.spec datas，属 pywebview 打包链"
+        ],
+        [
+          "test_expert_center_shows_builtin_source_and_ordinary_chat_has_no_expert_calls",
+          "frontend-contract",
+          "前端专家中心显示与普通会话零专家调用，属前端行为钉"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_expert_package_security.py",
+      "domain": "expert",
+      "pins": [
+        [
+          "test_escape_and_secret_files_rejected_before_registry",
+          "covered-by-node-gate",
+          "expert-security.mjs：secret-file 与 agents 路径越界均被拒绝；Node 统一返回 EXPERT_IMPORT_INVALID，Python 返回 PATH_ESCAPE，语义等价但码不同"
+        ],
+        [
+          "test_symlink_and_hardlink_rejected",
+          "partial",
+          "expert-security.mjs：硬链接已验证拒绝；符号链接在 Windows 因 EPERM 无法创建，如实 SKIP（源码 scan() 有 lstat 检查但未实测）"
+        ],
+        [
+          "test_casefold_collision_rejected_on_case_sensitive_fs",
+          "covered-by-node-gate",
+          "授权修复：scan() 增加 NFC/case-fold 冲突检测，CASEFOLD_COLLISION；用 Unicode NFC/NFD 文件名在 NTFS 上实测拒绝"
+        ],
+        [
+          "test_reparse_attribute_rejected_on_windows",
+          "covered-by-node-gate",
+          "expert-final-gaps.mjs：isReparsePoint 真实 junction + FILE_ATTRIBUTE_REPARSE_POINT 打桩 → REPARSE_NOT_ALLOWED"
+        ],
+        [
+          "test_snapshot_replacement_and_link_recheck_on_every_read",
+          "partial",
+          "experts.mjs:#9 hash 校验；每次读取重检链接未覆盖"
+        ],
+        [
+          "test_size_file_count_and_metadata_limits_stop_early",
+          "covered-by-node-gate",
+          "授权修复：FILE_TOO_LARGE 与 METADATA_TOO_LARGE 均返回 Python 同款细粒度码"
+        ],
+        [
+          "test_scripts_network_process_and_dynamic_import_spies_stay_zero",
+          "covered-by-node-gate",
+          "expert-final-gaps.mjs：源码断言无 import()/require/eval/进程网络模块 + 运行时间谍归零 + payload 未执行"
+        ],
+        [
+          "test_resource_whitelist_and_unclosed_frontmatter",
+          "partial",
+          "授权修复：UNCLOSED_BLOCK 已实现并验证；资源白名单细则仍未覆盖"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_expert_package_service.py",
+      "domain": "expert",
+      "pins": [
+        [
+          "test_import_list_get_read_enable_preferences_delete_preserves_source",
+          "partial",
+          "experts.mjs:#1/#2/#5/#6/#10/#12 覆盖多步；source 保留语义未明确断言"
+        ],
+        [
+          "test_three_metadata_paths_and_identical_warning",
+          "covered-by-node-gate",
+          "授权修复：三处 metadata 全检查，冲突→METADATA_CONFLICT，相同→MULTIPLE_METADATA_IDENTICAL 警告"
+        ],
+        [
+          "test_metadata_conflict_and_duplicate_keys_are_precise",
+          "covered-by-node-gate",
+          "授权修复：METADATA_CONFLICT + details 含 field 级冲突明细"
+        ],
+        [
+          "test_frontmatter_supported_scalars_and_invalid_nested",
+          "covered-by-node-gate",
+          "expert-final-gaps.mjs：validateFrontmatter 标量/一层 map/深层缩进 INVALID_INDENT"
+        ],
+        [
+          "test_team_references_and_settings_are_validated",
+          "partial",
+          "experts.mjs:#4 限额警告 + #10 偏好收紧；team 引用细节未覆盖"
+        ],
+        [
+          "test_registry_corruption_unknown_schema_and_write_rollback",
+          "covered-by-node-gate",
+          "expert-final-gaps.mjs：损坏备份 .bad-* + REGISTRY_CORRUPT_RECOVERED、未知 schema 只读、写故障回滚"
+        ],
+        [
+          "test_same_digest_idempotent_and_new_snapshot_inactive",
+          "partial",
+          "experts.mjs:#1 内容寻址 + #12 保留内容快照；幂等 id 精确相等未钉"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_qa_builtin_body_not_duplicated.py",
+      "domain": "expert",
+      "pins": [
+        [
+          "test_normalize_markdown_body_appears_exactly_once",
+          "python-implementation-detail",
+          "Python 导入器 normalize_markdown_body 内部函数"
+        ],
+        [
+          "test_builtin_imported_agent_body_matches_source_exactly",
+          "python-implementation-detail",
+          "Python 内置导入器正文逐字比对，属实现内部"
+        ]
+      ]
+    }
+  ],
+  "summary": {
+    "totalPins": 23,
+    "partial": 8,
+    "gap": 0,
+    "pythonImplementationDetail": 3,
+    "frontendContract": 1,
+    "blockingGaps": 0,
+    "coveredByNodeGate": 11
+  },
+  "conclusion": "用户「全部一次性搞完」批量授权后，6 个 gap 全部由 expert-final-gaps.mjs（13 断言）销为 covered，blockingGaps 6 -> 0；8 项 partial 保留为「已实现但存在表示差异/未逐条对齐」。3 项表示差异如实登记，仍非逐字节等价。步骤 5 仍阻断（batch4 人工复核 + 删除授权）。",
+  "notExecuted": [
+    "未删除任何 pytest 文件",
+    "未删除任何 Python 实现",
+    "引擎改动仅限本次授权的 server/src/services/experts.js；group-files.mjs 为测试稳定性修复"
+  ],
+  "nodeGateAdditions": {
+    "gate": "server/test/expert-security.mjs",
+    "authorizedBy": "用户「授权」（2026-11-11）",
+    "enforced": [
+      "hardlink",
+      "secret-file",
+      "file-too-large",
+      "agents-path-escape",
+      "missing-metadata"
+    ],
+    "newlyEnforced": [
+      "metadata-conflict",
+      "casefold-collision",
+      "unclosed-frontmatter",
+      "metadata-too-large"
+    ],
+    "skipped": [
+      "symlink: Windows EPERM（如实记录，未伪造通过）"
+    ],
+    "fineGrainedCodes": [
+      "LINK_NOT_ALLOWED",
+      "HARDLINK_NOT_ALLOWED",
+      "SECRET_FILE_NOT_ALLOWED",
+      "FILE_TOO_LARGE",
+      "TOO_MANY_FILES",
+      "PACKAGE_TOO_LARGE",
+      "DEPTH_TOO_LARGE",
+      "PATH_ESCAPE",
+      "CASEFOLD_COLLISION",
+      "METADATA_NOT_FOUND",
+      "METADATA_TOO_LARGE",
+      "METADATA_CONFLICT",
+      "UNCLOSED_BLOCK",
+      "NOT_REGULAR_FILE",
+      "INVALID_METADATA_JSON"
+    ],
+    "implementationGaps": [],
+    "protocolCaveat": "Node 拒绝现返回 Python 同款细粒度码；仍非逐字节等价（message 文案、details 结构、部分边界码有差异）"
+  },
+  "defectsFixed": [
+    {
+      "id": "EXPERT-01",
+      "fix": "三处 metadata 全检查：冲突→METADATA_CONFLICT，相同→MULTIPLE_METADATA_IDENTICAL 警告",
+      "status": "fixed-verified"
+    },
+    {
+      "id": "EXPERT-02",
+      "fix": "scan() 按 NFC + case-fold 检测路径冲突 → CASEFOLD_COLLISION",
+      "status": "fixed-verified"
+    },
+    {
+      "id": "EXPERT-03",
+      "fix": "agentMaxTurns 对以 --- 开头但无闭合分隔符抛 UNCLOSED_BLOCK",
+      "status": "fixed-verified"
+    },
+    {
+      "id": "EXPERT-04",
+      "fix": "plugin.json > 64 KiB → METADATA_TOO_LARGE",
+      "status": "fixed-verified"
+    },
+    {
+      "id": "EXPERT-05",
+      "fix": "新增 ExpertError 携带 code/extra，expertImportDirectory catch 返回细粒度码；未知异常仍兜底 EXPERT_IMPORT_INVALID",
+      "status": "fixed-verified"
+    },
+    {
+      "id": "EXPERT-06..11",
+      "fix": "批量实现 reparse/间谍/注册表恢复/frontmatter/转换规则/严格导入",
+      "authorizedBy": "用户「全部一次性搞完」授权（2026-11-11）",
+      "status": "fixed-verified",
+      "verifiedBy": "server/test/expert-final-gaps.mjs 13 断言"
+    }
+  ],
+  "openImplementationGaps": [],
+  "remainingRepresentationDifferences": [
+    "Node expertGet().scripts 恒为 []、.py 脚本被资产过滤丢弃（Python 收集元数据）；安全语义等价但表示不同",
+    "frontmatter 校验为受限子集，非 frontmatter.py 全量逐字节移植",
+    "registry_warning 在恢复发生的那次读取上报，不跨调用驻留"
+  ]
+}

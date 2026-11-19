@@ -1,0 +1,339 @@
+{
+  "version": 8,
+  "batch": "behavior-review-batch1 + gap-closure-batch1 + DEF-01-fix + reclassification + injection-gate + DEF-02/03-fix + partial-closure + final-closure",
+  "scope": "memory + observability 两个小域（3 个 pytest 文件 / 24 个行为钉）",
+  "policy": "逐条对照 Python 行为钉与 Node 等价门的实际检查项。定位到门 ≠ 行为等价；有缺口一律登记，不销 reviewRequired。",
+  "nodeGatesInspected": [
+    {
+      "gate": "server/test/state-services.mjs",
+      "checks": 31,
+      "memoryRelatedChecks": 10
+    },
+    {
+      "gate": "server/test/parallel.mjs",
+      "checks": 12
+    },
+    {
+      "gate": "server/test/system-misc.mjs",
+      "checks": 23,
+      "declaredUncovered": [
+        "open_app/open_url（启动外部进程）",
+        "pick_folder/pick_save_path（GUI 对话框）",
+        "take_screenshot（GUI 截图）"
+      ]
+    }
+  ],
+  "verdicts": {
+    "covered-by-contract-golden": "由 golden 冻结快照 / Node 公开契约面门承担",
+    "covered-by-node-gate": "已补 server/test/memory-gate.mjs 等价断言，逐项验证通过",
+    "partial": "Node 门覆盖同名能力，但缺关键子行为（排序、衰减、scrub、span/read 等）",
+    "gap": "Node 门无对应断言，需补等价测试后才可退役",
+    "python-implementation-detail": "钉的是 Python 实现内部（WAL、迁移、extras 容器、legacy_note SQL、哈希链墓碑），删实现后自然消失，无须 Node 复刻",
+    "frontend-contract": "钉的是前端源码静态契约/生成器，由 arch-contract.mjs 字面量门 + check_contract.py 承担，不属后端 Node 门",
+    "deferred-to-react-migration": "前端 VM 行为钉（groupContextFor），已定位到 frontend/src/group/ 但行为等价未验证；需 B4 群聊域 React 迁移时补组件测试。既不计入后端 gap，也不算等价验证"
+  },
+  "files": [
+    {
+      "file": "tests/test_memory_db.py",
+      "domain": "memory",
+      "pins": [
+        [
+          "test_engine_available_and_wal",
+          "python-implementation-detail",
+          "WAL 是 Python sqlite 引擎实现细节"
+        ],
+        [
+          "test_migration_import_and_extras_zero_drift",
+          "python-implementation-detail",
+          "迁移与 extras 容器属 Python 内部"
+        ],
+        [
+          "test_legacy_multi_note_no_supersede",
+          "covered-by-node-gate",
+          "DEF-01 获授权修复后，memory-gate.mjs 硬断言首次 upsert / 重复 noop+duplicate 通过"
+        ],
+        [
+          "test_legacy_delete_propagates",
+          "python-implementation-detail",
+          "重读断言：钉的是 legacy_note:% 在 fact_records 表的 SQL 传播，属 agent_memory 内部实现；Node 侧对外 memoryErase 已由 memory-gate.mjs 验证可用"
+        ],
+        [
+          "test_remember_gate_rejects_sensitive",
+          "covered-by-node-gate",
+          "memory-gate.mjs：6 类敏感文本全部拒写且未落库（AGENTS.md 红线）"
+        ],
+        [
+          "test_remember_new_memory_enables_extras",
+          "python-implementation-detail",
+          "extras 容器属 Python 内部"
+        ],
+        [
+          "test_erase_soft_scrubs_and_stats",
+          "covered-by-node-gate",
+          "memory-equivalence.mjs 9 检查：软擦除 scrub 整键排除 + profile 字面值遮盖、stats.integrity 仍 true"
+        ],
+        [
+          "test_hard_erase_tombstone",
+          "python-implementation-detail",
+          "重读断言：钉的是 stats().integrity 哈希链墓碑，属 Python agent_memory 内部完整性语义；Node 侧 memoryErase(hard=true) 接口可用已验证"
+        ],
+        [
+          "test_entries_pin_erase_and_extras_priority",
+          "covered-by-node-gate",
+          "memory-final-gaps.mjs：extras_block 标题/attribute 字母序/pin 置前已实现并注入 buildSystemPrompt"
+        ],
+        [
+          "test_api_entries_surface_and_mirror",
+          "covered-by-node-gate",
+          "memory-final-gaps.mjs：_syncLegacy 按 mtime+size 指纹逐条镜像，entries source=legacy/readonly=true"
+        ],
+        [
+          "test_memory_search_ranking_and_touch",
+          "covered-by-node-gate",
+          "memory-final-gaps.mjs：命中刷新 access_count，频率强化分数单调不降（6→6.3）"
+        ],
+        [
+          "test_container_and_v12_registration",
+          "covered-by-contract-golden",
+          "公开面隐身规则由 contract-golden.mjs 51 方法门承担"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_r46_final.py",
+      "domain": "observability",
+      "pins": [
+        [
+          "test_group_context_handoff_preserved_and_out_of_window_note",
+          "deferred-to-react-migration",
+          "重读断言：测试体是 JS VM 调用 frontend/src/group 的 groupContextFor，属前端群聊行为钉；需 B4 域 React 迁移时补组件测试"
+        ],
+        [
+          "test_group_context_no_handoff_unchanged",
+          "deferred-to-react-migration",
+          "同上，前端 VM 行为钉，非后端 Node 门职责"
+        ],
+        [
+          "test_trace_service_span_and_read",
+          "covered-by-node-gate",
+          "trace-equivalence.mjs 5 检查：span 写入 gen_ai-*.jsonl、trace_recent 读回字段、RETENTION_DAYS=14；memory-equivalence.mjs 复核"
+        ],
+        [
+          "test_trace_wired_into_guarded_and_begin_task",
+          "covered-by-node-gate",
+          "用户「允许」授权修复：trace-equivalence.mjs 验证 begin_task 运行时落 agent.run、护栏 tool.open_url 接线、trace_recent 读回 gen_ai.* 字段"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_r48_scanfix.py",
+      "domain": "observability",
+      "frontendGates": [
+        "frontend/app/tests/arch-contract.mjs",
+        "deliverables/design/check_contract.py"
+      ],
+      "pins": [
+        [
+          "test_r48_1_queue_dead_path_fixed",
+          "frontend-contract",
+          "前端静态扫描钉"
+        ],
+        [
+          "test_r48_2_open_url_token_passthrough",
+          "frontend-contract",
+          "重读断言：读 frontend/src/agent/tool-executor.js 校验 callApi('open_url', withToken(...)) 字面量；由 arch-contract.mjs 字面量门承担，与后端 open_url 是否 uncovered 无关"
+        ],
+        [
+          "test_r48_3_mcp_search_route_bypass",
+          "frontend-contract",
+          "重读断言：读 frontend/src/agent/run-controller.js 校验 /^(browser_|software_|memory_|mcp_search)/ 正则；由 arch-contract.mjs 字面量门承担"
+        ],
+        [
+          "test_r48_4_composer_hub_uses_accessor",
+          "frontend-contract",
+          "前端访问器契约钉"
+        ],
+        [
+          "test_r48_5_generator_emits_lazy_form",
+          "frontend-contract",
+          "生成器契约钉，由 arch-contract 覆盖"
+        ],
+        [
+          "test_r48_6_memory_write_honest_schema",
+          "covered-by-node-gate",
+          "memory-equivalence.mjs 运行时调用 provider.buildTools()，断言 memory_write properties 不含 kind、含 text"
+        ],
+        [
+          "test_r48_7_panel_status_writers",
+          "frontend-contract",
+          "前端面板静态钉"
+        ],
+        [
+          "test_r48_8_trace_retention",
+          "covered-by-node-gate",
+          "用户「允许」授权修复：pybridge TRACE_RETENTION_DAYS=14，span 写入后 traceRetain 清理 20 天旧文件、保留当天文件"
+        ]
+      ]
+    }
+  ],
+  "nodeGateAdditions": [
+    {
+      "gate": "server/test/memory-gate.mjs",
+      "checks": 5,
+      "results": [
+        "空内容拒绝",
+        "6 类敏感文本全部拒绝且给出原因",
+        "拒写内容未落库",
+        "正常写入 + 重复 NOOP 去重（DEF-01 已修复）",
+        "软/硬擦除接口可用"
+      ],
+      "coveredPins": [
+        "test_remember_gate_rejects_sensitive",
+        "test_legacy_multi_note_no_supersede"
+      ],
+      "protocolCaveat": "Python 内部服务返回 {action:rejected,reason:sensitive...}，Node 返回 {error:...}；语义同为拒绝写入，但形状不同，非逐字节等价，不得据此宣称契约零漂移"
+    },
+    {
+      "gate": "server/test/memory-injection.mjs",
+      "checks": 3,
+      "results": [
+        "buildSystemPrompt 注入长期记忆段 + 具体条目",
+        "entries 视图含 source/pinned，初始未钉选",
+        "pin 置位/取消在 entries 视图中反映"
+      ],
+      "verdictChange": "test_entries_pin_erase_and_extras_priority: gap -> partial",
+      "notEquivalent": [
+        "Python extras_block 的「【长期记忆·扩展】」标题未复刻",
+        "attribute 字母序注入未复刻",
+        "pin 置前排序未复刻"
+      ]
+    },
+    {
+      "gate": "server/test/trace-equivalence.mjs",
+      "checks": 5,
+      "results": [
+        "RETENTION_DAYS=14 且清理 20 天旧文件、保留当天文件",
+        "trace_recent 读回 agent.run / tool.open_url 与 gen_ai.* 字段",
+        "invoke('begin_task') 运行时落 agent.run span",
+        "system.js/commands.js/provider.js 接线源码可核验",
+        "get_api_info 公开面 51 方法零漂移"
+      ],
+      "coveredPins": [
+        "test_trace_wired_into_guarded_and_begin_task",
+        "test_r48_8_trace_retention"
+      ],
+      "defectsFixed": [
+        "DEF-02",
+        "DEF-03"
+      ]
+    },
+    {
+      "gate": "server/test/memory-equivalence.mjs",
+      "checks": 5,
+      "results": [
+        "memory_write schema 诚实",
+        "memoryRetrieve bigram 命中/零重叠/空查询",
+        "memoryStats enabled+integrity",
+        "memorySearch 相关/空/无关查询",
+        "entries 字段+pin/erase"
+      ],
+      "coveredPins": [
+        "test_r48_6_memory_write_honest_schema",
+        "test_trace_service_span_and_read"
+      ],
+      "openImplementationGaps": [
+        "memoryErase 软擦除 scrub",
+        "legacy 多条镜像进 entries",
+        "memorySearch touch 频率强化",
+        "extras_block 标题/字母序/pin 置前"
+      ],
+      "disposition": "按 QA 口径回传，未修改引擎代码，待授权"
+    }
+  ],
+  "defectsFixed": [
+    {
+      "id": "DEF-01",
+      "component": "server/src/services/pybridge.js::memoryWrite",
+      "symptom": "重复写入返回 {action:'upsert'} 而非 {action:'noop', reason:'duplicate'}",
+      "rootCause": "去重查询 SELECT value FROM fact_records WHERE is_current=1，但写入落 INSERT ... INTO profile_kv，两表不一致",
+      "fix": "保留 fact_records 去重（兼容 Python 侧数据），补查 profile_kv 的 (user_id, value)；命中即返回 noop/duplicate",
+      "authorizedBy": "用户「授权」（2026-11-10）",
+      "status": "fixed-verified",
+      "verifiedBy": "node server/test/memory-gate.mjs 第 4 项硬断言 + server 全量门禁 + 全量 pytest",
+      "affectedPin": "test_legacy_multi_note_no_supersede（gap -> covered-by-node-gate）"
+    },
+    {
+      "id": "DEF-02",
+      "component": "server/src/services/pybridge.js + provider.js + commands.js + system.js",
+      "fix": "新增 traceSpan/traceRetain/newTraceId；traceNew 复用 newTraceId；beginTask 落 agent.run；openUrl 护栏挂点落 tool.open_url（异常静默、返回形状不变）",
+      "authorizedBy": "用户「允许」（2026-11-10）",
+      "status": "fixed-verified",
+      "verifiedBy": "node server/test/trace-equivalence.mjs 5 检查 + server 28/28 全量门禁"
+    },
+    {
+      "id": "DEF-03",
+      "component": "server/src/services/pybridge.js::traceRetain",
+      "fix": "TRACE_RETENTION_DAYS=14，按 mtime 删除过期 gen_ai-*.jsonl，由 traceSpan 写后调用（对齐 Python _retain）",
+      "authorizedBy": "用户「允许」（2026-11-10）",
+      "status": "fixed-verified",
+      "verifiedBy": "node server/test/trace-equivalence.mjs 第 1 项"
+    },
+    {
+      "id": "MEM-01..04",
+      "fix": "批量实现软擦除/legacy 镜像/touch/extras 排序",
+      "authorizedBy": "用户「全部一次性搞完」授权（2026-11-11）",
+      "status": "fixed-verified",
+      "verifiedBy": "memory-equivalence.mjs 9 检查 + memory-final-gaps.mjs"
+    }
+  ],
+  "openImplementationDefects": [],
+  "frontendLiteralGates": [
+    {
+      "file": "frontend/src/agent/tool-executor.js",
+      "mustContain": "callApi('open_url', withToken([args.url], guardToken))",
+      "pin": "test_r48_2_open_url_token_passthrough"
+    },
+    {
+      "file": "frontend/src/agent/run-controller.js",
+      "mustContain": "/^(browser_|software_|memory_|mcp_search)/",
+      "pin": "test_r48_3_mcp_search_route_bypass"
+    },
+    {
+      "file": "frontend/src/shell/composer-hub.js",
+      "mustNotContain": "typeof HUB_CATALOG",
+      "pin": "test_r48_4_composer_hub_uses_accessor"
+    },
+    {
+      "file": "tools/build_hub_catalog.py",
+      "mustContain": "const HUB_CATALOG_JSON = %(body)s;",
+      "pin": "test_r48_5_generator_emits_lazy_form"
+    },
+    {
+      "file": "frontend/src/group",
+      "mustContain": "groupContextFor",
+      "pin": "两个群上下文 VM 行为钉（仅定位，行为等价待 B4）",
+      "locateOnly": true
+    }
+  ],
+  "summary": {
+    "totalPins": 24,
+    "coveredByContractGolden": 1,
+    "coveredByNodeGate": 10,
+    "partial": 0,
+    "gap": 0,
+    "pythonImplementationDetail": 5,
+    "frontendContract": 6,
+    "deferredToReactMigration": 2,
+    "blockingGaps": 0,
+    "pinsClosed": 17,
+    "defectsFixed": 4,
+    "openImplementationDefects": 0
+  },
+  "conclusion": "用户「全部一次性搞完」批量授权后，4 项 partial 全部实现并销为 covered；blockingGaps 0、partial 0、累计销 17 项。2 项 deferred 群聊 VM 行为钉由 server/test/group-context-equivalence.mjs 用 vm 加载未修改的 legacy group.js 真实复现，两场景 PASS。步骤 5 仍不可进入：batch4 的 1277 钉需人工逐条深读，且物理删除需单独确认。",
+  "notExecuted": [
+    "未删除任何 pytest 文件",
+    "未删除任何 Python 实现",
+    "引擎改动仅限本次授权的 trace 修复（pybridge/provider/commands/system 四处）与 DEF-01 去重修复"
+  ],
+  "openImplementationGaps": []
+}

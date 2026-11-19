@@ -1,0 +1,23 @@
+# R70 / I05：CI 门禁最小 Python 依赖（独立文件，不污染 config.json）。
+#
+# 核实范围 = .github/workflows/harbor-ci.yml 中 gate 与 normalized-gates 两个
+# job 实际执行的 Python 门禁脚本（逐文件 AST 扫描 import 语句，见台账）：
+#   deliverables/design/check_contract.py       -> 仅标准库
+#   tools/round_runner.py                       -> 仅标准库（--full 拉起 pytest）
+#   tools/check_release.py                      -> 仅标准库（I07 起不再 import backend）
+#   tools/run_normalized_gates.py               -> 仅标准库
+#   tools/gate_coverage.py                      -> 仅标准库
+#   tools/contract_diff.py                      -> 标准库 + 本地模块 check_contract/function_graph
+#   tools/contract_golden_replay.py             -> 仅标准库
+#   tools/scc_ratchet.py                        -> 标准库 + 本地模块 function_graph
+#   tools/type_annotation_audit.py              -> 仅标准库
+#   tools/arch_assessment.py                    -> 标准库 + 本地模块 function_graph
+#   tests/conftest.py（round_runner --full 会话）-> pytest + 本地模块 state_reset
+# 结论：唯一第三方包为 pytest。PyYAML / psutil 均为 try/except 可选降级，非必需。
+#
+# 退役说明：requirements-win.txt 是 PyInstaller 冻结构建链依赖
+# （pywebview / pythonnet / PyInstaller / Pillow / orjson 等）；CI 门禁不启动
+# Electron / pywebview，无需安装。该文件按「不删除既有资产」铁律保留全部原有
+# 条目，仅追加顶部退役标注。本文件与 job 内 `python -m pip install pytest`
+# 幂等，二者并存以显式声明 CI 门禁依赖全集。
+pytest

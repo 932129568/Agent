@@ -1,0 +1,237 @@
+{
+  "version": 2,
+  "batch": "behavior-review-batch3 + final-closure",
+  "scope": "settings 子域契约/静态子集：3 个 pytest 文件 / 34 个行为钉",
+  "policy": "按断言对象逐条归类；静态发布线与 Python 工具脚本随实现退役；有实测缺口一律登记，不销 reviewRequired。",
+  "nodeGate": {
+    "gate": "server/test/settings-equivalence.mjs",
+    "checks": 8,
+    "results": [
+      "缺省值",
+      "save/get 往返",
+      "JSON 字符串",
+      "thinking 白名单",
+      "ctx_k 边界与钳制",
+      "损坏文件回退默认",
+      "config.json 零污染",
+      "公开面 51 方法 + 隐身"
+    ],
+    "openImplementationGaps": [
+      "损坏 model_prefs.json 未生成 .bad 备份"
+    ]
+  },
+  "verdicts": {
+    "covered-by-node-gate": "settings-equivalence / config-discipline / gen_allowlist 等门已验证",
+    "covered-by-contract-golden": "由 golden 冻结快照与 Node 公开契约面门承担",
+    "python-implementation-detail": "钉的是 Python 发布线/工具脚本/import 图，删实现后自然消失",
+    "frontend-contract": "前端源码静态钉，由 arch-contract 字面量门与 check_contract.py 承担",
+    "partial": "Node 有等价能力但缺关键子行为或不是同一扫描器",
+    "gap": "Node 门无对应断言，需补等价测试后才可退役"
+  },
+  "files": [
+    {
+      "file": "tests/test_model_prefs.py",
+      "domain": "settings",
+      "pins": [
+        [
+          "test_default_when_absent",
+          "covered-by-node-gate",
+          "settings-equivalence #1 缺省 thinking=auto/ctx_k=0"
+        ],
+        [
+          "test_save_roundtrip",
+          "covered-by-node-gate",
+          "settings-equivalence #2 save/get 往返"
+        ],
+        [
+          "test_save_accepts_json_string",
+          "covered-by-node-gate",
+          "settings-equivalence #3 接受 JSON 字符串"
+        ],
+        [
+          "test_thinking_whitelist",
+          "covered-by-node-gate",
+          "settings-equivalence #4 白名单拒绝且现值不变"
+        ],
+        [
+          "test_ctx_k_bounds",
+          "covered-by-node-gate",
+          "settings-equivalence #5 负数拒绝、2048 收敛"
+        ],
+        [
+          "test_ctx_k_clamps_to_frontend_supported_values",
+          "covered-by-node-gate",
+          "settings-equivalence #5 200→128 / 100→32 / 2048→1024"
+        ],
+        [
+          "test_corrupt_file_bad_backup",
+          "covered-by-node-gate",
+          "settings-equivalence.mjs：损坏 model_prefs.json 生成 .bad 备份且回退默认"
+        ],
+        [
+          "test_config_json_untouched",
+          "covered-by-node-gate",
+          "settings-equivalence #7 config.json 零污染 + 独立 model_prefs.json"
+        ],
+        [
+          "test_registered_stealth_and_callable",
+          "covered-by-node-gate",
+          "settings-equivalence #8 _V12_EXTRA 隐身、51 方法公开面"
+        ],
+        [
+          "test_api_roundtrip",
+          "covered-by-node-gate",
+          "settings-equivalence #2+#8 API 往返与隐身"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_release_discipline.py",
+      "domain": "settings",
+      "pins": [
+        [
+          "test_version_file_semver",
+          "python-implementation-detail",
+          "VERSION 文件由用户管理的发布线（main.py fallback）"
+        ],
+        [
+          "test_version_is_19",
+          "python-implementation-detail",
+          "VERSION 文件内容属发布线，非 js_api 契约"
+        ],
+        [
+          "test_fallback_matches_file",
+          "python-implementation-detail",
+          "main.py 的 fallback 常量，删实现后自然退役"
+        ],
+        [
+          "test_app_version_runtime",
+          "python-implementation-detail",
+          "Python APP_VERSION 运行时常量"
+        ],
+        [
+          "test_api_version_redline",
+          "covered-by-contract-golden",
+          "API_VERSION=v1.0.0 由 contract-golden 冻结；settings-equivalence #8 复核"
+        ],
+        [
+          "test_vt_tuple",
+          "python-implementation-detail",
+          "tools/check_release.py 内部 _vt 函数"
+        ],
+        [
+          "test_dev_mode_passes",
+          "python-implementation-detail",
+          "check_release.py 自身 CLI 行为"
+        ],
+        [
+          "test_wrong_expect_fails",
+          "python-implementation-detail",
+          "check_release.py 自身 CLI 行为"
+        ],
+        [
+          "test_tag_now_mode_strict",
+          "python-implementation-detail",
+          "check_release.py 自身 CLI 行为"
+        ],
+        [
+          "test_config_json_no_version_key",
+          "covered-by-node-gate",
+          "config-discipline.mjs + settings-equivalence #7"
+        ],
+        [
+          "test_all_registered_stealth",
+          "covered-by-contract-golden",
+          "_V12_EXTRA 隐身由 contract-golden 51 方法门承担"
+        ],
+        [
+          "test_placeholders_not_in_contract",
+          "covered-by-contract-golden",
+          "占位方法不进公开面，contract-golden 承担"
+        ],
+        [
+          "test_placeholder_shape",
+          "covered-by-contract-golden",
+          "非 NOT_IMPLEMENTED 占位，Node 公开面等价门承担"
+        ],
+        [
+          "test_browser_six_promoted_m3",
+          "covered-by-contract-golden",
+          "六原语转正且非占位，contract-golden 承担"
+        ],
+        [
+          "test_checkpoint_three_not_placeholdered",
+          "covered-by-contract-golden",
+          "checkpoint 三方法非占位，contract-golden 承担"
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_r59_deps.py",
+      "domain": "settings",
+      "pins": [
+        [
+          "test_ratchet_check_passes",
+          "covered-by-node-gate",
+          "tools/gen_allowlist.mjs --check 已纳入统一门禁入口"
+        ],
+        [
+          "test_allowlist_registered_and_monotone",
+          "covered-by-node-gate",
+          "棘轮 157 只减不增，gen_allowlist + arch-contract 校验"
+        ],
+        [
+          "test_ui_seam_is_star_topology",
+          "frontend-contract",
+          "断言 frontend/src 源码含 registerUISeam/uiSeamCall 字面量"
+        ],
+        [
+          "test_layer_modules_downstreamed",
+          "frontend-contract",
+          "断言 providerPriceFor/estTokensCalibrate 分层，前端静态钉"
+        ],
+        [
+          "test_python_import_graph_acyclic",
+          "python-implementation-detail",
+          "Python 模块 import 图扫描，删实现后自然退役"
+        ],
+        [
+          "test_node_import_graph_acyclic",
+          "partial",
+          "arch-contract 有单向依赖断言，但非同一扫描器、未逐项对齐"
+        ],
+        [
+          "test_guard_loadcfg_cache_and_invalidate",
+          "covered-by-node-gate",
+          "memory-final-gaps.mjs：连续命中一致、save 后失效、外部改档失效"
+        ],
+        [
+          "test_memory_list_cache",
+          "covered-by-node-gate",
+          "memory-final-gaps.mjs：mtime+size 缓存、外部写入与 saveAll 写后失效"
+        ],
+        [
+          "test_mcp_data_uses_cache",
+          "frontend-contract",
+          "断言 frontend/src 源码含 _mcpCache 字面量"
+        ]
+      ]
+    }
+  ],
+  "summary": {
+    "totalPins": 34,
+    "coveredByNodeGate": 15,
+    "coveredByContractGolden": 6,
+    "pythonImplementationDetail": 9,
+    "frontendContract": 3,
+    "partial": 1,
+    "gap": 0,
+    "blockingGaps": 0
+  },
+  "conclusion": "用户「全部一次性搞完」批量授权后，3 个 gap 全部实现并销为 covered，blockingGaps 3 -> 0；1 项 partial（Node import 无环非同一扫描器）保留。步骤 5 仍阻断：batch4 的 1277 钉需人工逐条深读，物理删除需单独确认。",
+  "notExecuted": [
+    "未删除任何 pytest 文件",
+    "未删除任何 Python 实现",
+    "未修改任何 Node 服务实现（本批为只读复核 + 验证门）"
+  ]
+}

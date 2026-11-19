@@ -1,0 +1,520 @@
+{
+  "version": 2,
+  "generatedBy": "tools/post_deletion_audit.py",
+  "policy": "只读体检；命中需人工核实，配置类残留属真问题，历史文档属陈述",
+  "deletedFilesTracked": 186,
+  "deadReferences": {
+    "total": 51,
+    "byKind": {
+      "exact-deleted-path": 51
+    },
+    "items": [
+      {
+        "file": "server/src/paths.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/paths.py",
+        "line": 2
+      },
+      {
+        "file": "server/src/registry.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 4
+      },
+      {
+        "file": "server/src/services/expert-builtin.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/expert/builtin_importer.py",
+        "line": 2
+      },
+      {
+        "file": "server/src/services/experts.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/expert/validator.py",
+        "line": 33
+      },
+      {
+        "file": "server/src/services/guard.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/security/guard_service.py",
+        "line": 2
+      },
+      {
+        "file": "server/src/services/pybridge.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 583
+      },
+      {
+        "file": "server/src/services/pybridge.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/memory/db_service.py",
+        "line": 110
+      },
+      {
+        "file": "server/src/services/pybridge.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/observability/trace_service.py",
+        "line": 254
+      },
+      {
+        "file": "server/test/config-discipline.mjs",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_v19_paths.py",
+        "line": 4
+      },
+      {
+        "file": "server/test/contract-coverage.mjs",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 2
+      },
+      {
+        "file": "server/test/contract-golden.mjs",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 66
+      },
+      {
+        "file": "server/test/expert-security.mjs",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/expert/validator.py",
+        "line": 5
+      },
+      {
+        "file": "server/test/group-context-equivalence.mjs",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_connect_merge.py",
+        "line": 11
+      },
+      {
+        "file": "server/test/group-context-equivalence.mjs",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_r46_final.py",
+        "line": 8
+      },
+      {
+        "file": "server/test/memory-final-gaps.mjs",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_r59_deps.py",
+        "line": 33
+      },
+      {
+        "file": "server/test/method-surface.mjs",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 5
+      },
+      {
+        "file": "server/test/optional-params-consistency.mjs",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 5
+      },
+      {
+        "file": "frontend/src/agent/budget.js",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_v13_qa.py",
+        "line": 14
+      },
+      {
+        "file": "frontend/app/src/services/bridge.js",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 38
+      },
+      {
+        "file": "frontend/app/tests/arch-contract.mjs",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 254
+      },
+      {
+        "file": "frontend/app/tests/arch-contract.mjs",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_api_contract.py",
+        "line": 264
+      },
+      {
+        "file": "frontend/app/docs/golden-manifest.json",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 36
+      },
+      {
+        "file": "frontend/app/docs/golden-manifest.json",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_api_contract.py",
+        "line": 9
+      },
+      {
+        "file": "frontend/app/docs/PYTHON-CONTRACT-EXIT-PLAN.md",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 24
+      },
+      {
+        "file": "frontend/app/docs/PYTHON-CONTRACT-EXIT-PLAN.md",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_api_contract.py",
+        "line": 12
+      },
+      {
+        "file": "tools/check_static_paths.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 8
+      },
+      {
+        "file": "tools/check_static_paths.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/settings/config_service.py",
+        "line": 26
+      },
+      {
+        "file": "tools/check_static_paths.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_modern_backend_architecture.py",
+        "line": 70
+      },
+      {
+        "file": "tools/check_static_paths.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_modern_build.py",
+        "line": 69
+      },
+      {
+        "file": "tools/check_static_paths.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_v19_browser.py",
+        "line": 79
+      },
+      {
+        "file": "tools/contract_diff.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 12
+      },
+      {
+        "file": "tools/dep_graph.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_r59_deps.py",
+        "line": 2
+      },
+      {
+        "file": "tools/diag/state_probe.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 24
+      },
+      {
+        "file": "tools/diff/extract_rpc_defaults.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 2
+      },
+      {
+        "file": "tools/diff/fakes.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/paths.py",
+        "line": 92
+      },
+      {
+        "file": "tools/gen_allowlist.mjs",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_r59_deps.py",
+        "line": 42
+      },
+      {
+        "file": "tools/gen_api_reference.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 62
+      },
+      {
+        "file": "tools/gen_api_reference.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_api_contract.py",
+        "line": 66
+      },
+      {
+        "file": "tools/post_deletion_audit.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 134
+      },
+      {
+        "file": "tools/review_all_remaining.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_agent_guard_chain.py",
+        "line": 63
+      },
+      {
+        "file": "tools/review_all_remaining.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_collaboration_config.py",
+        "line": 61
+      },
+      {
+        "file": "tools/review_all_remaining.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_expert_package_security.py",
+        "line": 65
+      },
+      {
+        "file": "tools/review_all_remaining.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_group_files.py",
+        "line": 59
+      },
+      {
+        "file": "tests/conftest.py",
+        "kind": "exact-deleted-path",
+        "target": "backend/api.py",
+        "line": 306
+      },
+      {
+        "file": "tests/helpers/legacy_vm.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_connect_merge.py",
+        "line": 11
+      },
+      {
+        "file": "tests/helpers/legacy_vm.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_v16_batch1.py",
+        "line": 12
+      },
+      {
+        "file": "tests/test_r68_arch_contract.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_api_contract.py",
+        "line": 172
+      },
+      {
+        "file": "tests/test_r68_arch_contract.py",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_v19_paths.py",
+        "line": 234
+      },
+      {
+        "file": "KNOWN_ISSUES.md",
+        "kind": "exact-deleted-path",
+        "target": "backend/domains/integrations/mcp/mcp_service.py",
+        "line": 162
+      },
+      {
+        "file": "KNOWN_ISSUES.md",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_round6_adversarial.py",
+        "line": 146
+      },
+      {
+        "file": "KNOWN_ISSUES.md",
+        "kind": "exact-deleted-path",
+        "target": "tests/test_sandbox.py",
+        "line": 112
+      }
+    ]
+  },
+  "contractSurface": {
+    "public": 51,
+    "hidden": 117,
+    "registered": 168,
+    "missing": [],
+    "ghosts": [],
+    "publicDrift": [],
+    "apiVersion": "v1.0.0"
+  },
+  "serverGates": {
+    "count": 41,
+    "missing": []
+  },
+  "retiredStubs": [
+    {
+      "file": "main.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": false,
+      "usesDirectoryGuard": false,
+      "backendImport": false,
+      "hasBackendLiteral": false,
+      "guardType": "pure-stub",
+      "guardOk": true
+    },
+    {
+      "file": "main_v1.0.0_legacy.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": false,
+      "usesDirectoryGuard": false,
+      "backendImport": false,
+      "hasBackendLiteral": false,
+      "guardType": "pure-stub",
+      "guardOk": true
+    },
+    {
+      "file": "tools/gen_api_reference.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": true,
+      "usesDirectoryGuard": false,
+      "backendImport": true,
+      "hasBackendLiteral": true,
+      "guardType": "file-guard",
+      "guardOk": true
+    },
+    {
+      "file": "tools/perf_benchmark.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": false,
+      "usesDirectoryGuard": false,
+      "backendImport": true,
+      "hasBackendLiteral": true,
+      "guardType": "import-guard",
+      "guardOk": true
+    },
+    {
+      "file": "tools/perf_w6p1.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": true,
+      "usesDirectoryGuard": false,
+      "backendImport": true,
+      "hasBackendLiteral": true,
+      "guardType": "file-guard",
+      "guardOk": true
+    },
+    {
+      "file": "tools/diag/state_probe.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": true,
+      "usesDirectoryGuard": false,
+      "backendImport": false,
+      "hasBackendLiteral": false,
+      "guardType": "file-guard",
+      "guardOk": true
+    },
+    {
+      "file": "tools/diff/python_driver.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": true,
+      "usesDirectoryGuard": false,
+      "backendImport": true,
+      "hasBackendLiteral": true,
+      "guardType": "file-guard",
+      "guardOk": true
+    },
+    {
+      "file": "tools/diff/extract_rpc_defaults.py",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": true,
+      "usesDirectoryGuard": false,
+      "backendImport": false,
+      "hasBackendLiteral": false,
+      "guardType": "file-guard",
+      "guardOk": true
+    },
+    {
+      "file": "tools/verify-dpapi-interop.mjs",
+      "exists": true,
+      "hasRetireNotice": true,
+      "guardChecksApiFile": true,
+      "usesDirectoryGuard": false,
+      "backendImport": true,
+      "hasBackendLiteral": true,
+      "guardType": "file-guard",
+      "guardOk": true
+    }
+  ],
+  "staleDocs": [
+    {
+      "file": "AGENTS.md",
+      "phrase": "活跃入口仍以pywebview为运行链",
+      "match": "pywebview",
+      "line": 32,
+      "source": "active-entry"
+    },
+    {
+      "file": "README.md",
+      "phrase": "活跃入口仍以pywebview为运行链",
+      "match": "pywebview",
+      "line": 10,
+      "source": "active-entry"
+    },
+    {
+      "file": "frontend/app/docs/PYTHON-CONTRACT-EXIT-PLAN.md",
+      "phrase": "步骤5未执行",
+      "match": "步骤 5 仍被阻断",
+      "line": 81,
+      "source": "active-entry"
+    },
+    {
+      "file": "frontend/app/docs/PYTHON-CONTRACT-EXIT-PLAN.md",
+      "phrase": "活跃入口仍引用已删契约层模块",
+      "match": "import backend",
+      "line": 22,
+      "source": "active-entry"
+    },
+    {
+      "file": "frontend/app/docs/PYTHON-CONTRACT-EXIT-PLAN.md",
+      "phrase": "活跃入口仍以pywebview为运行链",
+      "match": "pywebview",
+      "line": 56,
+      "source": "active-entry"
+    },
+    {
+      "file": "frontend/app/docs/PYTHON-CONTRACT-EXIT-PLAN.md",
+      "phrase": "删除前原文角标待补",
+      "match": "未物理删测试",
+      "line": 57,
+      "source": "active-entry"
+    },
+    {
+      "file": "开发说明.txt",
+      "phrase": "活跃入口仍以pywebview为运行链",
+      "match": "Python 3.10+",
+      "line": 11,
+      "source": "active-entry"
+    }
+  ],
+  "verdict": {
+    "realDefectsFound": 0,
+    "realDefect": "本次扫描未检出运行时配置类真问题（历史目录守卫缺陷已修复）",
+    "fixedFiles": [
+      "main.py",
+      "main_v1.0.0_legacy.py",
+      "tools/diag/state_probe.py",
+      "tools/diff/extract_rpc_defaults.py",
+      "tools/diff/python_driver.py",
+      "tools/gen_api_reference.py",
+      "tools/perf_benchmark.py",
+      "tools/perf_w6p1.py",
+      "tools/verify-dpapi-interop.mjs"
+    ],
+    "fixedBy": "守卫判据统一改为 backend/api.py 文件存在性（或导入是否成功）",
+    "falsePositives": [
+      "backend/prompts 与 backend/experts_builtin 是存活资产（112 文件），electron-builder.yml 白名单与 Harbor.spec datas 仍需要",
+      "源码注释里以 Python 源文件名作对照说明（设计溯源），非运行时依赖",
+      ".ai-memory/ 与 .mimosa/ 是历史会话记录"
+    ],
+    "annotated": [
+      "Harbor.spec",
+      "Harbor-mac.spec"
+    ],
+    "annotatedReason": "PyInstaller spec 的 hiddenimports 指向已删 backend.domains；pywebview 链已废弃，加退役标注避免误执行（不改功能）",
+    "dynamic": true,
+    "basis": {
+      "deadReferencesTotal": 51,
+      "blockingKind": "backend-in-runtime-config",
+      "blockingDefects": 0,
+      "staleDocs": 7,
+      "staleDocsNonBlocking": true,
+      "retiredStubsChecked": 9
+    }
+  }
+}

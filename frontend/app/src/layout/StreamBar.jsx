@@ -1,0 +1,9 @@
+/* B0 真实结构迁移：由 frontend/app/tools/gen-layout.mjs 从
+ * frontend/react/src/generated/StreamBar.jsx 投影，已剥离 0 处事件桥。
+ * AUTO-GENERATED — 请勿手改；改 R67 源后重跑本脚本。
+ * 规范：React 唯一 DOM 所有者、零业务状态、零后端调用、零原生 DOM API。 */
+export default function StreamBar() {
+  return (
+    <div data-area="stream-bar" className="stream-bar" id="streamBar" />
+  )
+}

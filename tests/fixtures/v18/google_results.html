@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--
+  v1.8.0 B1 fixture：仿真 Google 结果页（tests/fixtures/v18/google_results.html）
+  覆盖点（fixture 即契约，随契约变更单更新）：
+  - div.g 结果容器 ×5（驱动 search_adapters._parse_google 条数断言）；
+  - div.yuRUbf a h3 标题链接（title 提取源）；
+  - div.VwiC3b 摘要（snippet 提取源，须剔除 g-date 文本）；
+  - 第 2 条带 <span class="g-date">2026-09-30</span>（date 有形态 +
+    snippet 不含日期文本断言）。
+  注：Google 结果页强依赖 JS 渲染，urllib 兜底可能只得空壳（契约 §5.1③
+  降级链明示）；本 fixture 只驱动纯函数解析，不涉真网。
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>python tutorial - Google Search</title>
+</head>
+<body>
+<div id="search">
+  <div class="g">
+    <div class="yuRUbf"><a href="https://www.python.org/about/"><h3>Welcome to Python.org</h3></a></div>
+    <div class="VwiC3b">Python is a programming language that lets you work quickly and integrate systems more effectively.</div>
+  </div>
+  <div class="g">
+    <div class="yuRUbf"><a href="https://en.wikipedia.org/wiki/Python_(programming_language)"><h3>Python (programming language) - Wikipedia</h3></a></div>
+    <div class="VwiC3b"><span class="g-date">2026-09-30</span>Python is a high-level, general-purpose programming language. Its design philosophy emphasizes code readability with the use of significant indentation.</div>
+  </div>
+  <div class="g">
+    <div class="yuRUbf"><a href="https://docs.python.org/3/tutorial/index.html"><h3>The Python Tutorial — Python 3 documentation</h3></a></div>
+    <div class="VwiC3b">This tutorial introduces the reader informally to the basic concepts and features of the Python language and system.</div>
+  </div>
+  <div class="g">
+    <div class="yuRUbf"><a href="https://realpython.com/"><h3>Python Tutorials – Real Python</h3></a></div>
+    <div class="VwiC3b">At Real Python you can learn all things Python from the ground up, with everything from basic syntax to advanced topics.</div>
+  </div>
+  <div class="g">
+    <div class="yuRUbf"><a href="https://www.learnpython.org/"><h3>Learn Python - Free Interactive Python Tutorial</h3></a></div>
+    <div class="VwiC3b">Free interactive Python tutorial for people who want to learn Python, fast, with exercises in the browser.</div>
+  </div>
+</div>
+</body>
+</html>

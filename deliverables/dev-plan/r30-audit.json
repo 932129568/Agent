@@ -1,0 +1,29 @@
+{
+  "pass": true,
+  "issues": [],
+  "notes": [
+    "symbols: 零漂移",
+    "ui: 零漂移",
+    "api_version: 零漂移",
+    "api_py_sha256: 零漂移",
+    "html: 零漂移",
+    "module_count: 零漂移",
+    "style_count: 零漂移",
+    "源码行多重集: 6be964cfb5e1 -> df64a933bbc2（升级预期）",
+    "函数定义体变化 4 项（白名单 4 项）: accumulateUsage, calcUsage, updateLiveTokenStat, updateTokenStat",
+    "白名单外变化: 0 项",
+    "函数定义体总数: 1154 -> 1154"
+  ],
+  "changed_defs": [
+    "accumulateUsage",
+    "calcUsage",
+    "updateLiveTokenStat",
+    "updateTokenStat"
+  ],
+  "allowed_defs": [
+    "accumulateUsage",
+    "calcUsage",
+    "updateLiveTokenStat",
+    "updateTokenStat"
+  ]
+}

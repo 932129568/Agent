@@ -1,0 +1,80 @@
+%% Harbor v1.3 MCP · 类图（提取自 architecture-and-tasks-v1.3-mcp-2026-10-15.md §3.2）
+classDiagram
+    class Api {
+        -McpService _mcp
+        +build_tools(role: str, include_mcp: bool) str
+        +mcp_list_servers() str
+        +mcp_save_server(name: str, config_json: str) str
+        +mcp_delete_server(name: str) str
+        +mcp_test_server(name: str) str
+        +mcp_get_server_detail(name: str) str
+        +mcp_set_tool_tier(server: str, tool: str, tier: str) str
+        +mcp_check_tool(server: str, tool: str, arguments_json: str) str
+        +mcp_call_tool(server: str, tool: str, arguments_json: str, decision: str) str
+        +mcp_import_claude(config_json: str) str
+        +mcp_shutdown() str
+    }
+    class McpService {
+        -McpConfigService _cfg
+        -GuardService _guard
+        -ToolcacheService _toolcache
+        -dict _rt
+        +tool_schemas() list
+        +test_server(name) dict
+        +get_server_detail(name) dict
+        +resolve_tier(server, tool) tuple
+        +check_tool(server, tool, arguments) dict
+        +call_tool(server, tool, arguments, decision) dict
+        +shutdown() dict
+        -_get_or_spawn(name) McpClient
+        -_render_result(server, tool, result, ms) dict
+        +derive_tier(annotations)$ str
+        +function_name(server, tool)$ str
+    }
+    class McpConfigService {
+        -str _path
+        +list_servers() list
+        +get_server(name) dict
+        +save_server(name, cfg, activate) dict
+        +delete_server(name) dict
+        +set_tool_tier(server, tool, tier) dict
+        +import_claude(config_json) dict
+        +precheck_command(command)$ str
+    }
+    class McpDpapi {
+        +is_available()$ bool
+        +encrypt_value(plain)$ str
+        +decrypt_value(marker)$ str
+        +encrypt_mapping(m)$ dict
+        +decrypt_mapping(m)$ tuple
+    }
+    class McpClient {
+        -_transport
+        +connect() dict
+        +list_tools() list
+        +call_tool(name, arguments, timeout) dict
+        +ping() dict
+        +cancel(request_id) None
+        +close() None
+    }
+    class StdioTransport {
+        +start(command, args, env) bool
+        +send(obj) None
+        +recv(timeout) dict
+        +is_alive() bool
+        +close() None
+    }
+    class HttpTransport {
+        +post(obj, timeout) dict
+        +close() None
+    }
+    class GuardService
+    class ToolcacheService
+    Api --> McpService : 持有
+    McpService --> McpConfigService
+    McpService --> McpClient : 按需创建
+    McpService --> GuardService : audit()
+    McpService --> ToolcacheService : 超长落盘
+    McpConfigService --> McpDpapi : 字段级加解密
+    McpClient --> StdioTransport
+    McpClient --> HttpTransport

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<!-- v1.9.0 M2.9 双通道一致性 fixture（与 bing_rss.xml 同查询「Harbor 本地模型」
+     人工对齐）：断言 RSS/HTML 两通道 parse 输出的 {title,url,domain} 集合一致
+     （position/snippet 允许差异——RSS snippet 天然更短，属预期）。
+     不动 tests/fixtures/v18/bing_results.html（v1.8.0 B1 既有契约）。 -->
+<head><meta charset="utf-8"><title>Harbor 本地模型 - Bing</title></head>
+<body>
+<ol id="b_results">
+  <li class="b_algo">
+    <h2><a href="https://harbor.example.com/docs/local-model">Harbor 本地模型部署指南</a></h2>
+    <div class="b_caption">
+      <div class="b_attribution"><cite>https://harbor.example.com/docs/local-model</cite></div>
+      <p>Harbor 本地模型（dual-LLM-lite）部署与配置完整指南，覆盖 Ollama 与本地代理端点，含降级链说明。</p>
+    </div>
+  </li>
+  <li class="b_algo">
+    <h2><a href="https://blog.example.org/ollama-vs-lmstudio">本地模型选型：Ollama vs LM Studio</a></h2>
+    <div class="b_caption">
+      <div class="b_attribution"><cite>https://blog.example.org/ollama-vs-lmstudio</cite></div>
+      <p>两类主流本地推理后端对比：启动方式、API 兼容性与 Harbor 接入建议。</p>
+    </div>
+  </li>
+  <li class="b_algo">
+    <h2><a href="https://github.com/example/harbor">Harbor GitHub 仓库</a></h2>
+    <div class="b_caption">
+      <div class="b_attribution"><cite>https://github.com/example/harbor</cite></div>
+      <p>Harbor 开源仓库：本地模型读取器、混合路由与计划执行源码。</p>
+    </div>
+  </li>
+  <li class="b_algo">
+    <h2><a href="https://weekly.example.net/zero-dep-desktop">零依赖单文件桌面应用实践</a></h2>
+    <div class="b_caption">
+      <div class="b_attribution"><cite>https://weekly.example.net/zero-dep-desktop</cite></div>
+      <p>PyInstaller + pywebview 打包本地 AI 应用的工程经验汇总。</p>
+    </div>
+  </li>
+</ol>
+</body>
+</html>

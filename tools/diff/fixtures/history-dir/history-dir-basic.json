@@ -1,0 +1,72 @@
+{
+  "id": "history-dir-basic",
+  "family": "history-dir",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "历史目录族：默认读→切换（已存在目录）→回读→保存会话→迁移切换→恢复默认→拒绝不存在目录",
+  "setup": {
+    "workspaceFiles": [],
+    "dirs": ["hist", "hist2", "hist3"],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "history_dir_get",
+      "args": [],
+      "note": "默认态：dir='' + default_dir + sessions_file 落默认目录"
+    },
+    {
+      "id": "c02",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/hist"],
+      "note": "切换到已存在目录（realpath 归一）"
+    },
+    {
+      "id": "c03",
+      "method": "history_dir_get",
+      "args": [],
+      "note": "回读：sessions_file 落新目录"
+    },
+    {
+      "id": "c04",
+      "method": "save_sessions",
+      "args": ["[{\"id\":\"h1\",\"title\":\"历史会话\",\"messages\":[]}]"],
+      "note": "写入一条会话（迁移源数据）"
+    },
+    {
+      "id": "c05",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/hist2", true],
+      "note": "migrate=true 搬迁：Python 复制 sessions.json；Node DB→DB 复制 + sessions.json 物化导出——migrated:true 双侧一致，migrated_from 披露旧介质路径（.json vs .db → ID-103 新口径登记）"
+    },
+    {
+      "id": "c06",
+      "method": "history_dir_set",
+      "args": [""],
+      "note": "空串恢复默认"
+    },
+    {
+      "id": "c07",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/no-such-dir"],
+      "note": "不存在目录拒绝（错误文案比对）"
+    },
+    {
+      "id": "c08",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/hist2", true],
+      "note": "目标已存在（c05 已搬入）→ 跳过不覆盖：migrated:false 双侧一致（Python dst 存在跳过 / Node targetDb 存在跳过）"
+    },
+    {
+      "id": "c09",
+      "method": "history_dir_set",
+      "args": ["{ROOT}/hist3", false],
+      "note": "migrate=false 空库切换：不复制（migrated:false），切换后写入跟随新目录"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["history.json"]
+  }
+}

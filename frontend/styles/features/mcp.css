@@ -1,0 +1,30 @@
+/* W4B MCP servers, resources, logs and human takeover. */
+.mcp-tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border)}
+.mcp-tab{min-height:44px;padding:0 12px;border-radius:10px 10px 0 0}
+.mcp-tab.on{border-bottom:1px solid transparent;box-shadow:inset 0 -2px 0 var(--primary)}
+.mcp-list,.mcp-tool-list,.mcp-res-list{display:flex;flex-direction:column;gap:8px;min-width:0}
+.mcp-row,.mcp-tool-row,.mcp-res-row{display:flex;align-items:center;gap:12px;min-width:0;
+  padding:10px 12px;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
+.mcp-main,.mcp-res-main{min-width:0;flex:1}
+.mcp-name,.mcp-tool-name,.mcp-res-name{font-weight:500;line-height:1.5;overflow-wrap:anywhere}
+.mcp-desc,.mcp-tool-desc,.mcp-res-meta{margin-top:3px;color:var(--text-2);font-size:var(--fs-caption);
+  line-height:1.55;overflow-wrap:anywhere;word-break:break-word}
+.mcp-tool-row select,.mcp-res-row select{max-width:180px;flex:0 0 auto}
+.mcp-instructions,.mcp-log,.mcp-res-out{margin:10px 0;padding:10px 12px;border-radius:var(--radius-sm);
+  background:var(--surface-2);white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+.mcp-res-out{max-height:260px;overflow:auto;font-family:var(--font-mono);font-size:12px;line-height:1.6}
+.mcp-status,.mcp-light{flex:0 0 auto}
+.mcp-row .modal-btn,.mcp-res-row .modal-btn{flex:0 0 auto}
+.sp-root{max-width:min(520px,94vw);border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--card-bg);box-shadow:var(--shadow-lg)}
+.sp-header,.sp-titlebar{min-height:48px;border-bottom:1px solid var(--border)}
+.sp-body,.sp-content{min-width:0;overflow-wrap:anywhere}
+.sp-captcha,.sp-takeover{padding:12px;border-radius:var(--radius-sm);background:var(--surface-2)}
+.sp-item-title{line-height:1.5;overflow-wrap:anywhere}
+.sp-error{color:var(--err)}
+@media (max-width:600px){
+  .mcp-tabs{position:sticky;top:0;z-index:2;background:var(--card-bg)}
+  .mcp-tab{flex:1}
+  .mcp-tool-row,.mcp-res-row,.mcp-row{align-items:stretch;flex-direction:column;gap:8px}
+  .mcp-tool-row select,.mcp-res-row select,.mcp-row .modal-btn,.mcp-res-row .modal-btn{width:100%;max-width:none}
+}

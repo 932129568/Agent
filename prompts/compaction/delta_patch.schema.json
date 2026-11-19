@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "properties": {
+    "mutated_state": {
+      "type": "object",
+      "description": "发生状态变更的实体映射表，键为实体唯一 ID，值为变更字段字典",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "tool_execution_index": {
+      "type": "array",
+      "description": "本批次淘汰窗口内执行的关键工具调用索引",
+      "items": {
+        "type": "object",
+        "properties": {
+          "call_id": { "type": "string" },
+          "tool": { "type": "string" },
+          "status": { "type": "string", "enum": ["success", "blocked", "failed"] },
+          "artifact_uri": { "type": ["string", "null"] },
+          "summary": { "type": "string" }
+        },
+        "required": ["call_id", "tool", "status", "summary"],
+        "additionalProperties": false
+      }
+    },
+    "confirmed_decisions": {
+      "type": "array",
+      "description": "本批次内已确认的关键业务决策、批准事项或明确排除方案",
+      "items": { "type": "string" }
+    },
+    "active_constraints": {
+      "type": "object",
+      "description": "新增、更新或置为 null 移除的会话级硬性业务约束",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "mutated_state",
+    "tool_execution_index",
+    "confirmed_decisions",
+    "active_constraints"
+  ],
+  "additionalProperties": false
+}

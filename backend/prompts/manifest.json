@@ -1,0 +1,35 @@
+{
+  "schema": "harbor-prompts/1",
+  "prompts": {
+    "compact": {
+      "file": "compact.md",
+      "version": "1.1.0",
+      "sha256": "69c7a71b39b17dcc7f05c249e6ea72c7a69b7d9ec0f86eb1dff96e8ce5eedc38",
+      "bytes": 417
+    },
+    "efficiency": {
+      "file": "efficiency.md",
+      "version": "1.1.0",
+      "sha256": "1466312eb12e7cb4f198486be74c5010c6de67c0630dcbcce1de5b6074e40a1a",
+      "bytes": 1790
+    },
+    "system-base": {
+      "file": "system-base.md",
+      "version": "1.1.0",
+      "sha256": "296490fc06addd541a9ae9330722fa211b4f2fa2235b72f7fdb9c33840874670",
+      "bytes": 426
+    },
+    "system-ws-off": {
+      "file": "system-ws-off.md",
+      "version": "1.1.0",
+      "sha256": "3be284e907eb1ccf579dd3ba8840858ebb336bc379e29d55d410f38b69e60d7b",
+      "bytes": 644
+    },
+    "reader-extract": {
+      "file": "reader-extract.md",
+      "version": "1.0.0",
+      "sha256": "b575c692b949474933b0435827dab57b8f40625a362ef993e09b8016d9f061bb",
+      "bytes": 882
+    }
+  }
+}

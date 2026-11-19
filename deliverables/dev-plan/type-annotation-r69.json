@@ -1,0 +1,185 @@
+{
+  "version": 2,
+  "metric": "JSDoc 类型契约覆盖率（非静态类型检查）",
+  "staticTypeCheck": {
+    "status": "blocked-by-environment",
+    "reason": "typescript / tsc 未安装且无外网；@types/node 已在位",
+    "unblockCommand": "npm i -D typescript  （需有外网环境）",
+    "nextPhase": "安装后新增 jsconfig.json 开启 allowJs + checkJs，以本试点为首个 noEmit 检查目标"
+  },
+  "algorithm": "I24: DOC_RE 紧邻块 + 标签值非空 + {type} 括号配对",
+  "scope": [
+    "server/src/paths.js",
+    "server/src/config.js",
+    "server/src/logger.js",
+    "server/src/runtime.js"
+  ],
+  "baseline": {
+    "exportedSymbols": 18,
+    "annotatedSymbols": 18,
+    "coverage": 100.0
+  },
+  "current": {
+    "exportedSymbols": 18,
+    "annotatedSymbols": 18,
+    "coverage": 100.0
+  },
+  "perFile": {
+    "server/src/paths.js": {
+      "symbols": 8,
+      "annotated": 8,
+      "missing": [],
+      "details": [
+        {
+          "name": "CONFIG_DIR",
+          "kind": "const",
+          "annotated": true,
+          "line": 16,
+          "reason": ""
+        },
+        {
+          "name": "CONFIG_PATH",
+          "kind": "const",
+          "annotated": true,
+          "line": 19,
+          "reason": ""
+        },
+        {
+          "name": "RUNTIME_PATH",
+          "kind": "const",
+          "annotated": true,
+          "line": 22,
+          "reason": ""
+        },
+        {
+          "name": "ensureDir",
+          "kind": "function",
+          "annotated": true,
+          "line": 29,
+          "reason": ""
+        },
+        {
+          "name": "readTextIfExists",
+          "kind": "function",
+          "annotated": true,
+          "line": 39,
+          "reason": ""
+        },
+        {
+          "name": "readJsonWarnings",
+          "kind": "const",
+          "annotated": true,
+          "line": 54,
+          "reason": ""
+        },
+        {
+          "name": "readJsonIfExists",
+          "kind": "function",
+          "annotated": true,
+          "line": 87,
+          "reason": ""
+        },
+        {
+          "name": "atomicWriteJson",
+          "kind": "function",
+          "annotated": true,
+          "line": 108,
+          "reason": ""
+        }
+      ]
+    },
+    "server/src/config.js": {
+      "symbols": 2,
+      "annotated": 2,
+      "missing": [],
+      "details": [
+        {
+          "name": "config",
+          "kind": "const",
+          "annotated": true,
+          "line": 31,
+          "reason": ""
+        },
+        {
+          "name": "isLoopback",
+          "kind": "const",
+          "annotated": true,
+          "line": 44,
+          "reason": ""
+        }
+      ]
+    },
+    "server/src/logger.js": {
+      "symbols": 2,
+      "annotated": 2,
+      "missing": [],
+      "details": [
+        {
+          "name": "logger",
+          "kind": "const",
+          "annotated": true,
+          "line": 32,
+          "reason": ""
+        },
+        {
+          "name": "childLogger",
+          "kind": "const",
+          "annotated": true,
+          "line": 43,
+          "reason": ""
+        }
+      ]
+    },
+    "server/src/runtime.js": {
+      "symbols": 6,
+      "annotated": 6,
+      "missing": [],
+      "details": [
+        {
+          "name": "runtime",
+          "kind": "const",
+          "annotated": true,
+          "line": 17,
+          "reason": ""
+        },
+        {
+          "name": "setCurrentSid",
+          "kind": "function",
+          "annotated": true,
+          "line": 30,
+          "reason": ""
+        },
+        {
+          "name": "setCwd",
+          "kind": "function",
+          "annotated": true,
+          "line": 40,
+          "reason": ""
+        },
+        {
+          "name": "setSessionCwd",
+          "kind": "function",
+          "annotated": true,
+          "line": 61,
+          "reason": ""
+        },
+        {
+          "name": "setSessionWs",
+          "kind": "function",
+          "annotated": true,
+          "line": 73,
+          "reason": ""
+        },
+        {
+          "name": "effectiveRoot",
+          "kind": "function",
+          "annotated": true,
+          "line": 83,
+          "reason": ""
+        }
+      ]
+    }
+  },
+  "regressions": [],
+  "status": "PASS"
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- v1.9.0 M7.5 · entitlements 决策（记录于案）：
+     App Sandbox 不开——Harbor 需全盘文件（用户自选工作区任意目录）与
+     任意本地端点（Ollama/LMStudio/本地代理 127.0.0.1 任意端口），沙箱
+     化等于功能性自残；hardened runtime 由 codesign --options runtime 开
+     （签名前提），不加 JIT/库验证豁免（Python 解释器经 PyInstaller 内嵌，
+     无第三方 dylib 加载面）。 -->
+<plist version="1.0">
+<dict/>
+</plist>

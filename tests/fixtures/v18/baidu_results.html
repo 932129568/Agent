@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+  v1.8.0 B1 fixture：仿真百度结果页（tests/fixtures/v18/baidu_results.html）
+  覆盖点（fixture 即契约，随契约变更单更新）：
+  - div.result.c-container 结果容器 ×5（驱动 search_adapters._parse_baidu 条数断言）；
+  - h3.t a 标题链接（title 提取源）+ div.c-abstract 摘要（snippet 提取源）；
+  - span.c-showurl 展示 URL（url 提取源，缺失时回退 link href——本 fixture 全带）；
+  - 第 2 条带 <span class="c-date">2026-10-02</span>（date 有形态）。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>python 教程_百度搜索</title>
+</head>
+<body>
+<div id="results" class="result">
+  <div class="result result-op c-container" id="1" srcid="1">
+    <h3 class="t"><a href="http://www.baidu.com/link?url=aBcD0001" target="_blank">Python 基础教程 - 编程学习网</a></h3>
+    <div class="c-abstract">Python 基础语法、数据类型与流程控制的中文教程，配有在线练习与章节测验。</div>
+    <div class="c-line-default c-line-clamp1"><span class="c-showurl">https://code.example.com/python-basic</span></div>
+  </div>
+  <div class="result result-op c-container" id="2" srcid="2">
+    <h3 class="t"><a href="http://www.baidu.com/link?url=aBcD0002" target="_blank">Python 办公自动化实战</a></h3>
+    <div class="c-abstract">使用 Python 处理 Excel、Word 与 PDF 的实战技巧，适合办公室职员快速入门。</div>
+    <span class="c-date">2026-10-02</span>
+    <div class="c-line-default c-line-clamp1"><span class="c-showurl">https://office.example.cn/auto</span></div>
+  </div>
+  <div class="result result-op c-container" id="3" srcid="3">
+    <h3 class="t"><a href="http://www.baidu.com/link?url=aBcD0003" target="_blank">Python 视频教程 - 零基础入门</a></h3>
+    <div class="c-abstract">零基础 Python 视频课程，共 42 讲，涵盖环境搭建到项目实战全过程。</div>
+    <div class="c-line-default c-line-clamp1"><span class="c-showurl">https://video.example.com/python</span></div>
+  </div>
+  <div class="result result-op c-container" id="4" srcid="4">
+    <h3 class="t"><a href="http://www.baidu.com/link?url=aBcD0004" target="_blank">Python 安装配置指南（Windows）</a></h3>
+    <div class="c-abstract">Windows 平台 Python 安装、环境变量配置与 pip 源切换的详细图文指南。</div>
+    <div class="c-line-default c-line-clamp1"><span class="c-showurl">https://setup.example.org/win</span></div>
+  </div>
+  <div class="result result-op c-container" id="5" srcid="5">
+    <h3 class="t"><a href="http://www.baidu.com/link?url=aBcD0005" target="_blank">Python 面试题精选 100 道</a></h3>
+    <div class="c-abstract">精选 Python 面试高频题，覆盖语法细节、并发模型与工程实践考点。</div>
+    <div class="c-line-default c-line-clamp1"><span class="c-showurl">https://interview.example.net/py100</span></div>
+  </div>
+</div>
+</body>
+</html>

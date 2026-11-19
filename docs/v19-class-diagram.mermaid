@@ -1,0 +1,131 @@
+# Harbor v1.9.0 M1+M2 · 类图（自 v19-m1m2-design.md §A3.1 提取）
+
+classDiagram
+    class BrowserErrorCode {
+        <<enumeration>>
+        BAD_PARAMS
+        NAV_BLOCKED
+        SSRF_BLOCKED
+        TIMEOUT
+        SESSION_CLOSED
+        SESSION_BUSY
+        PRIMITIVE_UNSUPPORTED
+        UNSUPPORTED_PLATFORM
+        EXTRACT_EMPTY
+        INTERNAL
+    }
+    class SessionState {
+        <<enumeration>>
+        idle
+        ready
+        busy
+        closed
+    }
+    class BrowserSession {
+        <<abstract>>
+        +state SessionState
+        +platform str
+        +navigate(url, wait_selector, timeout) dict
+        +extract(selector, mode) dict
+        +click(target) dict
+        +fill(selector, text) dict
+        +screenshot(full_page) dict
+        +close() dict
+        #_guard_state(next SessionState) void
+    }
+    class WinSession {
+        +_channel SearchBrowser
+        +navigate(url, wait_selector, timeout) dict
+        +extract(selector, mode) dict
+        +close() dict
+    }
+    class HeadlessSession {
+        +_html str
+        +_url str
+        +navigate(url, wait_selector, timeout) dict
+        +extract(selector, mode) dict
+        +close() dict
+    }
+    class SearchBrowser {
+        +open_url(url) dict
+        +set_window(win) void
+        +focus_window() bool
+        +shutdown() void
+    }
+    BrowserSession <|-- WinSession
+    BrowserSession <|-- HeadlessSession
+    WinSession *-- SearchBrowser
+
+    class PlatformServices {
+        <<abstract>>
+        +name str
+        +secrets() Secrets
+        +sandbox() Sandbox
+        +screen() Screen
+        +trash() Trash
+        +paths() Paths
+        +process() Process
+        +notify() Notify
+    }
+    class WinPlatformServices
+    class Secrets { <<interface>> +set(svc,acct,secret) dict +get(svc,acct) dict +delete(svc,acct) dict }
+    class Sandbox { <<interface>> +available() bool +limits_for(cls) dict +run(args,...) dict }
+    class Screen { <<interface>> +capture(l,t,w,h) dict }
+    class Trash { <<interface>> +trash(path) dict }
+    class Paths { <<interface>> +config_dir() str +data_dir() str +profiles_dir() str }
+    class Process { <<interface>> +list(kw) list +kill(pid,name) dict +resolve_name(pid) str }
+    class Notify { <<interface>> +notify(title,msg) dict }
+    PlatformServices <|-- WinPlatformServices
+    PlatformServices --> Secrets
+    PlatformServices --> Sandbox
+    PlatformServices --> Screen
+    PlatformServices --> Trash
+    PlatformServices --> Paths
+    PlatformServices --> Process
+    PlatformServices --> Notify
+
+    class SearchReader {
+        +read(page_text, source_url) dict
+        +stats() dict
+        -_call_local(messages) dict
+        -_parse_json_strict(text) dict
+    }
+    class Provenance {
+        <<module>>
+        +wrap_untrusted(text, url, channel, fetched_at) str
+        +tag_payload(payload, url, channel, fetched_at) dict
+    }
+    class AuditChain {
+        +append(entry) dict
+        +verify(entries) dict
+        +head_info() dict
+    }
+    class CheckpointService {
+        +create(task_id, files, ws_dir, label, mode) dict
+        +rollback(task_id, ws_dir, confirmed) dict
+        +list_items() dict
+        +list_files(task_id) dict
+    }
+    class WorkspaceSnapshot {
+        <<module>>
+        +walk(ws, max_files, max_bytes) list
+        +diff(before, after) dict
+    }
+    class GuardService {
+        +approval_budget(limit) dict
+        +enforce_exec_ex(op, detail, token) tuple
+        +budget_exceeded_payload(op, detail) dict
+        +audit(op, detail, action, decision, identity, plan, evidence, result) str
+    }
+    class HybridRouter {
+        +route_reader(local_available, budget_s) dict
+    }
+    class SearchService {
+        +browser_search(params) dict
+        +browser_open(params) dict
+    }
+    GuardService --> AuditChain
+    SearchService --> SearchReader
+    SearchService --> Provenance
+    CheckpointService --> WorkspaceSnapshot
+    HybridRouter ..> SearchReader : 路由决策

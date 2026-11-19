@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "policy": "C 路径步骤 4 第二批：把 9 个 backend.domains 子域映射到 Node 服务实现与已存在的 server 测试门。定位到等价门 ≠ 行为已逐条验证；每条仍需按 R65 逐项复核后才可退役。",
+  "serverGateCount": 24,
+  "nonGateScripts": [
+    {
+      "file": "server/test/auth-migrate.mjs",
+      "kind": "historical-one-shot-migration",
+      "reason": "一次性 better-auth 迁移脚本，import { auth } from '../src/auth.js'；该模块现导出 ensureAuth/authEnabled/authSqlitePath，具名 auth 已不存在。非断言式门禁，按『不越界修引擎代码』登记为已知边界，不计入 24 套。",
+      "evidence": "单独复跑 rc=1 SyntaxError: does not provide an export named 'auth'"
+    }
+  ],
+  "defaultGates": [
+    "server/test/contract-coverage.mjs",
+    "server/test/contract-golden.mjs",
+    "server/test/contract-signatures.mjs",
+    "server/test/config-discipline.mjs"
+  ],
+  "domains": [
+    {
+      "name": "integrations",
+      "pythonModuleCount": 4,
+      "nodeServices": ["server/src/services/mcp.js", "server/src/services/webdav.js", "server/src/services/software.js", "server/src/services/browser.js", "server/src/services/provider.js"],
+      "nodeGates": ["server/test/mcp.mjs", "server/test/webdav.mjs", "server/test/browser.mjs", "server/test/r55-pybridge.mjs", "server/test/provider-http.mjs"]
+    },
+    {
+      "name": "workspace",
+      "pythonModuleCount": 11,
+      "nodeServices": ["server/src/services/workspace.js", "server/src/services/files.js", "server/src/services/worklog.js"],
+      "nodeGates": ["server/test/files.mjs", "server/test/group-files.mjs", "server/test/checkpoint-git.mjs"]
+    },
+    {
+      "name": "security",
+      "pythonModuleCount": 4,
+      "nodeServices": ["server/src/services/guard.js", "server/src/services/jail.js", "server/src/services/commands.js"],
+      "nodeGates": ["server/test/guard.mjs", "server/test/commands.mjs"]
+    },
+    {
+      "name": "providers",
+      "pythonModuleCount": 8,
+      "nodeServices": ["server/src/services/provider.js", "server/src/services/local-proxy.js"],
+      "nodeGates": ["server/test/provider-http.mjs", "server/test/local-proxy.mjs"]
+    },
+    {
+      "name": "planning",
+      "pythonModuleCount": 4,
+      "nodeServices": ["server/src/services/plans.js"],
+      "nodeGates": ["server/test/checkpoint-git.mjs"]
+    },
+    {
+      "name": "expert",
+      "pythonModuleCount": 8,
+      "nodeServices": ["server/src/services/experts.js", "server/src/services/expert-builtin.js"],
+      "nodeGates": ["server/test/experts.mjs"]
+    },
+    {
+      "name": "settings",
+      "pythonModuleCount": 4,
+      "nodeServices": ["server/src/services/config.js", "server/src/services/jsonstore.js", "server/src/services/config-specs.js", "server/src/services/sessions.js"],
+      "nodeGates": ["server/test/state-services.mjs", "server/test/config-discipline.mjs", "server/test/contract-signatures.mjs"]
+    },
+    {
+      "name": "observability",
+      "pythonModuleCount": 2,
+      "nodeServices": ["server/src/services/misc.js", "server/src/services/system.js", "server/src/services/memory.js"],
+      "nodeGates": ["server/test/system-misc.mjs", "server/test/parallel.mjs"]
+    },
+    {
+      "name": "memory",
+      "pythonModuleCount": 2,
+      "nodeServices": ["server/src/services/memory.js"],
+      "nodeGates": ["server/test/state-services.mjs"]
+    }
+  ],
+  "equivalenceStatus": "mapped-not-behavior-verified",
+  "nextAction": "逐域运行 nodeGates 并对照 Python 侧行为钉，逐条写明旧钉→新钉；全部完成后才允许步骤 5 与删实现同批退役测试"
+}

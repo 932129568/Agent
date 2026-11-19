@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  v1.8.0 B2 fixture：文章页（tests/fixtures/v18/article_page.html）
+  覆盖点（fixture 即契约，随契约变更单更新）：
+  - 密度提取路径（extract_main_content 默认 readability）：主正文 ≥800 字，
+    关键句「文本密度衡量的是单位标签所承载的文本量」必须在场；
+  - 垃圾噪声不在场断言：导航（首页/技术专栏/友情链接…）、侧栏（热门推荐）、
+    广告位、页脚（版权所有 © 2026 示例站点）文本不得进入正文；
+  - 结构：header/nav + aside.sidebar（widget 垃圾）+ main.content >
+    article.post > div.article-body > p ×7（主正文容器即密度冠军块）。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>文本密度：正文提取的可靠信号 - 示例技术站</title>
+  <style>body{margin:0;color:#222}.sidebar{float:right;width:280px}</style>
+</head>
+<body>
+<header id="site-header">
+  <div class="logo"><a href="/">示例技术站</a></div>
+  <nav class="main-nav">
+    <ul>
+      <li><a href="/">首页</a></li>
+      <li><a href="/tech">技术专栏</a></li>
+      <li><a href="/news">产品动态</a></li>
+      <li><a href="/about">关于我们</a></li>
+      <li><a href="/join">加入我们</a></li>
+      <li><a href="/contact">联系方式</a></li>
+      <li><a href="/help">帮助中心</a></li>
+      <li><a href="/links">友情链接</a></li>
+    </ul>
+  </nav>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="widget">
+      <h4>热门推荐</h4>
+      <ul>
+        <li><a href="/a1">Python 入门指南</a></li>
+        <li><a href="/a2">FastAPI 实战</a></li>
+        <li><a href="/a3">Docker 速查</a></li>
+        <li><a href="/a4">正则表达式手册</a></li>
+        <li><a href="/a5">SQL 练习 50 题</a></li>
+        <li><a href="/a6">设计模式图解</a></li>
+      </ul>
+    </div>
+    <div class="widget ad-widget">
+      <p>广告位招租：广告合作请联系 biz@example.com</p>
+    </div>
+  </aside>
+  <main class="content">
+    <article class="post">
+      <h1>文本密度：正文提取的可靠信号</h1>
+      <div class="article-body">
+        <p>在信息检索与阅读模式的产品里，自动提取网页正文是一项基础能力。传统做法依赖针对每个站点定制解析规则，一旦目标站点改版，规则便会失效，维护成本极高。密度法则换个思路：不关心站点结构，只关心文本在标签之间的分布，从而把跨站点的抽取问题转化成一次统一的统计决策，阅读模式的体验也由此从勉强可用变成真正好用。</p>
+        <p>文本密度衡量的是单位标签所承载的文本量。导航与侧栏中的链接文本短小而密集，正文段落则长而完整，二者在密度上呈现出稳定的差异，这正是密度算法的立足点，也是它能够跨站点通用、无需为每个站点单独配置规则的原因。</p>
+        <p>实现上，我们先移除脚本、样式与iframe等噪声节点，再对div、article等块级候选统计文本长度与后代标签数，密度最高者即被认定为主正文容器，随后把其中所有的段落按文档序拼接成正文文本，整个过程不依赖任何站点特定的先验知识，统计只涉及元素计数与字符串长度，单次提取耗时在毫秒量级。</p>
+        <p>密度法并非万能。对于图片为主的画廊页或纯列表页，正文特征并不明显，此时可以用选择器覆盖策略作为补充，由调用方显式指定正文容器，两条路径互为备份，也可以在置信度不足时由人工介入兜底，保证提取结果始终可用。</p>
+        <p>截断与全文引用是另一条工程纪律。过长的正文需要按上限截断，同时记录完整长度与引用标识，便于后续按段续读，避免一次性把过长文本全部塞进模型上下文，也方便用户在搜索面板中随时打开原文核对细节。</p>
+        <p>单元测试以fixture为契约。每个引擎的结果页与文章页都落盘为静态文件，测试直接读盘解析，断言条数、字段结构与关键句是否在场，保证提取器的行为可回归、可审查，任何选择器的改版都会在第一时间被测试发现。</p>
+        <p>综上，文本密度加选择器覆盖的组合，在零第三方依赖的约束下，为浏览器搜索的正文提取提供了可靠的基础，也为后续的深度阅读、摘要生成与相关性校验留出了清晰的接口边界，后续批次只需在既有接口上追加缓存与校验，不必推翻提取层，让迭代可以沿着同一条基线持续积累。</p>
+      </div>
+    </article>
+  </main>
+</div>
+<footer id="site-footer">
+  <div class="footer-links">
+    <a href="/about">关于我们</a> · <a href="/privacy">隐私政策</a> ·
+    <a href="/terms">服务条款</a> · <a href="/contact">联系我们</a>
+  </div>
+  <p class="copyright">版权所有 © 2026 示例站点</p>
+</footer>
+</body>
+</html>

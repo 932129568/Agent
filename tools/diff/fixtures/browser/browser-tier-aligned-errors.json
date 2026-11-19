@@ -1,0 +1,66 @@
+{
+  "id": "browser-tier-aligned-errors",
+  "family": "browser",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "浏览器族错误路径（护栏对齐后可比）：经 guard_save_config 把浏览器/web_search 档位对齐为 off 后，比对协议/SSRF/会话缺失的真实语义错误形状",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": [
+      {
+        "id": "b01",
+        "method": "guard_save_config",
+        "args": ["{\"tiers\": {\"browser_navigate\": \"off\", \"browser_extract\": \"off\", \"browser_click\": \"off\", \"browser_fill\": \"off\", \"browser_screenshot\": \"off\", \"browser_close\": \"off\", \"web_search\": \"off\"}}"],
+        "note": "对齐浏览器族档位为 off（消除护栏层先决拒绝，暴露语义层差异）"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "browser_navigate",
+      "args": ["ftp://example.com"],
+      "note": "协议拦截：两侧均 NAV_BLOCKED（message/hint 文案比对）"
+    },
+    {
+      "id": "c02",
+      "method": "browser_navigate",
+      "args": ["http://192.168.1.1/"],
+      "note": "内网保留段：两侧均 SSRF_BLOCKED（文案与 fail-closed 口径）"
+    },
+    {
+      "id": "c03",
+      "method": "browser_navigate",
+      "args": ["http://127.0.0.1:9/"],
+      "note": "环回段：Python SSRF_BLOCKED vs Node 私网判定（无 loopback 例外）"
+    },
+    {
+      "id": "c04",
+      "method": "browser_extract",
+      "args": ["main", "markdown"],
+      "note": "无会话提取：BAD_PARAMS vs SESSION_CLOSED（错误码 taxonomy 差异）"
+    },
+    {
+      "id": "c05",
+      "method": "browser_close",
+      "args": ["no-such-session"],
+      "note": "关闭不存在会话：closed 列表 vs 计数"
+    },
+    {
+      "id": "c06",
+      "method": "browser_sessions",
+      "args": [],
+      "note": "会话池投影：Python 含 ok 键，Node 不含"
+    },
+    {
+      "id": "c07",
+      "method": "browser_set_mode",
+      "args": ["hidden"],
+      "note": "无会话切模式：Python BAD_PARAMS vs Node 幂等成功"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}

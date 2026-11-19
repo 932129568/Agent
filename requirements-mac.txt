@@ -1,0 +1,6 @@
+# Harbor macOS 构建依赖（tools/build_mac.sh 前置；arm64 Python 3.11+）
+# 复核修正：build_mac.sh 声明本文件但仓库缺失，mac 构建链不可复现
+pywebview[cocoa]>=5.4
+pyinstaller>=6.0
+Pillow>=10.0
+send2trash>=1.8

@@ -1,0 +1,128 @@
+{
+  "version": 2,
+  "generatedBy": "tools/run_normalized_gates.py",
+  "policy": "本地与 CI 共用同一入口；optional 门 SKIP 与原生退出崩溃均必须如实记录，不伪造通过、也不静默吞掉",
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "skipped": 0,
+    "failed": [],
+    "serverGates": 39,
+    "excludedFromServerGates": [
+      "auth-migrate.mjs",
+      "node-sqlite-probe.mjs"
+    ],
+    "nativeExitWarnings": 0
+  },
+  "results": [
+    {
+      "id": "gate-coverage",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "canonical 门禁清单覆盖率（非代码覆盖率）",
+      "tail": "[gate-coverage] PASS 17/17 (100.0%) missing=[] structuralErrors=0\n  代码覆盖率: blocked-by-environment（如实登记，未伪造）"
+    },
+    {
+      "id": "post-deletion-audit",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "删除后残留体检（运行时配置类真问题判红，文档漂移登记不阻塞）",
+      "tail": "{'exact-deleted-path': 51})\n  契约面: public=51 hidden=117 registered=168 missing=0 ghosts=0\n  server 门 41, 退役 stub 9, 陈旧文档 7\n  verdict: realDefectsFound=0 (运行时配置类), fixedFiles=9, dynamic=True\n  freshness meta: 2026-11-19T10:28:33.520601+00:00"
+    },
+    {
+      "id": "arch-contract",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "架构断言（数量以该门产物 checks 数为准，不硬编码）",
+      "tail": "≤ 10min\nPASS 退役脚本守卫不得再用目录存在性判据                      删除只删 .py，backend/ 目录仍在；verdict 由本次扫描动态生成\nPASS PyInstaller spec 已标注退役                 hiddenimports 指向已删模块\nPASS Agent 浏览器闭环内核与验收门在架                    观察/决策/动作/再观察\n\n[arch-contract] 82/82 通过"
+    },
+    {
+      "id": "frontend-l1",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "前端 L1 单元",
+      "tail": "0.1408\n  type: 'test'\n  ...\n# Subtest: R71 状态机：计量与语义判定不得混淆\nok 18 - R71 状态机：计量与语义判定不得混淆\n  ---\n  duration_ms: 0.1468\n  type: 'test'\n  ...\n1..18\n# tests 18\n# suites 0\n# pass 18\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 162.7968"
+    },
+    {
+      "id": "frontend-l2",
+      "required": false,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "真实浏览器挂载（无浏览器环境时 SKIP，如实标注）",
+      "tail": "tore 派生                        在途任务 0 · 待接管 0\nPASS 零业务全局符号                              []\nPASS 无未捕获页面异常                             []\n\n[app-smoke] 6/6 通过\n[app-smoke] 启动尝试 1 失败：browserType.launchPersistentContext: Timeout 20000ms exceeded."
+    },
+    {
+      "id": "golden-replay",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "95 项 legacy 契约快照独立进程重放",
+      "tail": "[golden] 重放改快照比对：Python 契约层（backend/ + legacy.Api）已退役，不再 spawn 独立 Python backend 子进程\n[golden] 9 项交叉校验通过（冻结快照 + 冻结产物 + manifest）\n[golden] PASS 95 项调用序列与冻结快照一致（重放改快照比对，非运行时重放）"
+    },
+    {
+      "id": "contract-diff",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "r99 锚点零漂移（锚点链最新项）",
+      "tail": "零漂移 PASS**\n\n## 说明项\n- 模块数 117 -> 117（允许）\n- 样式数 14 -> 14（应不变）\n\n## 漂移项\n- 无\n\nC:\\Users\\陈\\Desktop\\GLM-Chat-v1.0.0-完整开发包\\tools\\contract_diff.py:14: SyntaxWarning: invalid escape sequence '\\d'\n  ^contract_baseline_r(\\d+)$ 正则倒序自动发现的最新基线，r68 兜底）同时冻结了"
+    },
+    {
+      "id": "allowlist-ratchet",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "依赖棘轮 157",
+      "tail": "[deps-ratchet] 通过：前向隐藏边 157 条（冻结 157 条）"
+    },
+    {
+      "id": "scc-ratchet",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "SCC 单调下降",
+      "tail": "[scc-ratchet] PASS cycles=17(+0) cyclicSymbols=104(+0) largest=34"
+    },
+    {
+      "id": "type-annotation",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "JSDoc 类型契约覆盖率（非静态类型检查）",
+      "tail": "[type-annotation] PASS 18/18 (100.0%) missing=[]\n  静态类型检查: blocked-by-environment（如实登记，未冒充）"
+    },
+    {
+      "id": "arch-assessment",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "架构度量可复跑",
+      "tail": "[arch-assessment] C:\\Users\\陈\\Desktop\\GLM-Chat-v1.0.0-完整开发包\\deliverables\\dev-plan\\architecture-metrics-r69.json\n  layers=9 sourceLines=46735 sccCycles=17 cyclicSymbols=104 handWrittenTs=0"
+    },
+    {
+      "id": "ui-contract",
+      "required": true,
+      "status": "PASS",
+      "returncode": 0,
+      "note": "UI 五大契约",
+      "tail": "ght.min.js\n    OK   libs/marked.min.js\n    OK   libs/purify.min.js\n    OK   libs/ui-schema.bundle.js\n[构建产物] harbor.html 存在 (3631263 字节)\n\n========================================================\n结果: PASS — 五大契约全部保住（manifest: 117 JS / 14 CSS）"
+    },
+    {
+      "id": "server-gates",
+      "required": true,
+      "status": "PASS",
+      "total": 39,
+      "failed": [],
+      "excluded": [
+        "auth-migrate.mjs",
+        "node-sqlite-probe.mjs"
+      ],
+      "nativeExitWarnings": [],
+      "note": "排除 NON_GATE_SCRIPTS（历史迁移脚本 / 探针，非门禁）"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "sessions-validation",
+  "family": "sessions",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "会话族边界：非法 JSON / 非数组 / 非对象条目 / id 类型保真（拒绝路径与存储往返）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "save_sessions",
+      "args": ["{not-json"],
+      "note": "非法 JSON 必须显式拒绝"
+    },
+    {
+      "id": "c02",
+      "method": "save_sessions",
+      "args": ["{\"a\":1}"],
+      "note": "非数组必须拒绝"
+    },
+    {
+      "id": "c03",
+      "method": "save_sessions",
+      "args": ["[1,2]"],
+      "note": "数组但条目非对象：Python 原文保底写入 vs Node zod 拒绝（存储实现分叉面）"
+    },
+    {
+      "id": "c04",
+      "method": "get_sessions",
+      "args": [],
+      "note": "回读 c03 结果"
+    },
+    {
+      "id": "c05",
+      "method": "save_sessions",
+      "args": ["[{\"id\": 3, \"title\": \"数字 id\"}]"],
+      "note": "数字 id 合法保存"
+    },
+    {
+      "id": "c06",
+      "method": "get_sessions",
+      "args": [],
+      "note": "id 类型保真：Python 保持数字 3，Node transform String 化（已知风险点）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

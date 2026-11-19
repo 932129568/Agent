@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "policy": "SCC 单调下降：sccCycles / cyclicSymbols 只允许减少或持平",
+  "baseline": {
+    "sccCycles": 17,
+    "cyclicSymbols": 104,
+    "largestScc": 34,
+    "topSccSizes": [
+      34,
+      26,
+      5,
+      5,
+      5,
+      3
+    ],
+    "modules": 117,
+    "symbols": 1317,
+    "edges": 3197
+  },
+  "current": {
+    "sccCycles": 17,
+    "cyclicSymbols": 104,
+    "largestScc": 34,
+    "topSccSizes": [
+      34,
+      26,
+      5,
+      5,
+      5,
+      3
+    ],
+    "modules": 117,
+    "symbols": 1317,
+    "edges": 3198
+  },
+  "delta": {
+    "sccCycles": 0,
+    "cyclicSymbols": 0,
+    "largestScc": 0
+  },
+  "regressions": [],
+  "status": "PASS"
+}

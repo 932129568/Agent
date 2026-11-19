@@ -1,0 +1,115 @@
+%% Harbor v1.3 MCP · 关键流程时序图（提取自 architecture-and-tasks-v1.3-mcp-2026-10-15.md §4）
+
+%% ===== 4.1 服务器启用流程（R2/R5/R6，含环境预检测与测试连接）=====
+sequenceDiagram
+    participant U as 用户
+    participant P as 29-mcp.js 面板
+    participant A as Api 门面
+    participant C as McpConfigService
+    participant S as McpService
+    participant K as McpClient
+    participant M as MCP 服务器
+    U->>P: 填写 command/args/env 或 url/headers，打开启用开关
+    P->>A: mcp_save_server(name, {…, enabled:true})
+    A->>C: save_server(name, cfg, activate=true)
+    C->>C: 结构校验（stdio 需 command / http 需 url / tierOverrides 合法）
+    C->>C: encrypt_mapping(env/headers) → DPAPI 字段级加密
+    C->>C: precheck_command(command) → expandvars + shutil.which
+    alt 命令缺失（如缺 npx）
+        C-->>A: {error: 未找到命令 npx，请先安装 Node…（附指引）}
+        A-->>P: err(人话)
+        P-->>U: 红状态灯 + toast + 开关回弹（不落盘 enabled）
+    else which 通过
+        C->>S: test_server(name)
+        S->>K: connect()
+        K->>M: initialize(protocolVersion=2025-06-18, capabilities={}, clientInfo)
+        M-->>K: result(protocolVersion, serverInfo, instructions?, capabilities)
+        K->>K: 校验 protocolVersion == 2025-06-18（否则 McpVersionError）
+        K->>M: notifications/initialized
+        K->>M: tools/list（跟随 nextCursor 分页取全量）
+        M-->>K: tools[]（含 annotations）
+        K-->>S: server_info + tools
+        S->>S: derive_tier(annotations) 逐工具推导默认档位
+        S->>S: 缓存 tools/status=ok/instructions
+        S-->>C: {ok, server_info, tools:[{name, tier, tier_source}]}
+        C->>C: 落盘 mcp_servers.json（enabled=true）
+        C-->>A: {ok, name, tools:[…]}
+        A-->>P: ok(…)
+        P-->>U: 绿状态灯 + 工具数 + 每工具默认档位展示
+    end
+
+%% ===== 4.2 MCP 工具调用护栏流程（R3，含后端二次 enforce 与 R4 熔断接入）=====
+sequenceDiagram
+    participant L as LLM
+    participant G as 60-agent-loop.js
+    participant X as 62-mcp-exec.js
+    participant A as Api 门面
+    participant S as McpService
+    participant M as MCP 服务器
+    L->>G: tool_calls: mcp__srv__tool(arguments)
+    G->>X: executeToolRaw 头部 → mcpGuardCheck(name, args)
+    X->>X: mcpParseName；mcpTrusted 命中 server__tool ?
+    alt 未信任
+        X->>A: mcp_check_tool(server, tool, args)
+        A->>S: check_tool(server, tool, args)
+        S->>S: resolve_tier（tierOverrides > 注解推导 > 兜底）
+        S->>S: guard.audit(op=mcp_call, action=check)
+        S-->>A: {action, tier, tier_source}
+        A-->>X: verdict
+        alt action=block（服务器未启用/不存在）
+            X-->>G: {info: 原因, skipped:true}（不执行）
+        else action=allow（tier=off）
+            X-->>G: {blocked:null, decision:'allow'}
+        else action=confirm
+            X->>X: uiConfirm(服务器/工具/参数全文/档位来源 + 本会话不再提示)
+            alt 用户拒绝
+                X->>A: mcp_call_tool(server, tool, args, 'deny')
+                A->>S: audit(action=decision, decision=deny)
+                A-->>X: {error: 用户拒绝…请调整方案，不要原样重试}
+                X-->>G: 结果回传 Agent
+            else 用户同意（勾选信任则 mcpTrusted.add）
+                X-->>G: {blocked:null, decision:'allow'|'session-trust'}
+            end
+        end
+    else 已信任
+        X-->>G: {blocked:null, decision:'session-trust'}
+    end
+    G->>X: mcpExecTool(name, args, decision)
+    X->>A: mcp_call_tool(server, tool, args, decision)
+    A->>S: call_tool(…)
+    S->>S: 二次 enforce（§3.5 矩阵）
+    alt enforce 失败（如绕过前端 decision 缺失）
+        S-->>A: {error: 该工具需要确认…请通过界面确认后重试}
+    else 通过
+        S->>S: _get_or_spawn（按需拉起；崩溃标记+重拉一次；idle 检查）
+        S->>M: tools/call(name, arguments)（60s 超时 + notifications/cancelled）
+        M-->>S: result{content[], structuredContent?, isError?}
+        S->>S: _render_result（文本拼接/序列化/isError/超长 cache_tool_output）
+        S->>S: audit(action=decision, decision, ms)
+        S-->>A: {ok, output} 或 {error}
+    end
+    A-->>X: 工具结果
+    X-->>G: 回传 Agent
+    G->>G: registerToolSig(sig 含 mcp__全名) ×3 ？/ registerProgress 15 步？
+    alt 熔断触发
+        G->>G: showPausePanel(loop) 高亮序列 + toast
+    end
+
+%% ===== 4.3 版本不匹配错误流（R1）=====
+sequenceDiagram
+    participant P as 29-mcp.js 面板
+    participant A as Api 门面
+    participant S as McpService
+    participant K as McpClient
+    participant M as MCP 服务器（旧版）
+    P->>A: mcp_test_server(name)（或启用开关）
+    A->>S: test_server(name)
+    S->>K: connect()
+    K->>M: initialize(protocolVersion="2025-06-18")
+    M-->>K: result(protocolVersion="2024-11-05")
+    K->>K: 版本协商：客户端不支持服务器响应版本 → 规范 SHOULD 断开
+    K->>K: close transport（stdio：关 stdin→等→TERM→KILL）
+    K-->>S: raise McpVersionError(server_version, supported=data.supported)
+    S-->>A: {error: 该 MCP 服务器支持协议版本 2024-11-05，Harbor 支持 2025-06-18。请升级该服务器，或在设置中暂时禁用它。, supported:[…]}
+    A-->>P: err(人话 + supported 列表)
+    P-->>P: 红状态灯 + toast；enabled 不落盘

@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "generatedBy": "tools/review_all_remaining.py",
+  "batches": [
+    {
+      "batch": "behavior-review-batch1.json",
+      "version": 8,
+      "blockingGaps": 0,
+      "gaps": [],
+      "partials": [],
+      "openImplementationGaps": []
+    },
+    {
+      "batch": "behavior-review-batch2.json",
+      "version": 4,
+      "blockingGaps": 0,
+      "gaps": [],
+      "partials": [
+        [
+          "tests/test_builtin_experts_import.py",
+          "test_all_eight_builtin_packages_import_idempotently_and_read_text"
+        ],
+        [
+          "tests/test_builtin_experts_import.py",
+          "test_builtin_enable_disable_and_delete_restart_recovery"
+        ],
+        [
+          "tests/test_expert_package_security.py",
+          "test_symlink_and_hardlink_rejected"
+        ],
+        [
+          "tests/test_expert_package_security.py",
+          "test_snapshot_replacement_and_link_recheck_on_every_read"
+        ],
+        [
+          "tests/test_expert_package_security.py",
+          "test_resource_whitelist_and_unclosed_frontmatter"
+        ],
+        [
+          "tests/test_expert_package_service.py",
+          "test_import_list_get_read_enable_preferences_delete_preserves_source"
+        ],
+        [
+          "tests/test_expert_package_service.py",
+          "test_team_references_and_settings_are_validated"
+        ],
+        [
+          "tests/test_expert_package_service.py",
+          "test_same_digest_idempotent_and_new_snapshot_inactive"
+        ]
+      ],
+      "openImplementationGaps": []
+    },
+    {
+      "batch": "behavior-review-batch3.json",
+      "version": 2,
+      "blockingGaps": 0,
+      "gaps": [],
+      "partials": [
+        [
+          "tests/test_r59_deps.py",
+          "test_node_import_graph_acyclic"
+        ]
+      ],
+      "openImplementationGaps": []
+    }
+  ],
+  "batch4": {
+    "files": 64,
+    "pins": 1400,
+    "needsHumanReview": 1277
+  },
+  "totalOpenGaps": 0,
+  "step5Blocked": true,
+  "step5Blockers": [
+    "batch4 中 1277 个钉需人工逐条深读",
+    "三份已复核证据中仍有 0 个 gap",
+    "物理删除 Python 实现与耦合 pytest 需用户单独明确授权"
+  ]
+}

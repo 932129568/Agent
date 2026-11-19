@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "policy": "R69 P0-③ 第一阶段基线：JSDoc 类型契约覆盖率只增不减；试点范围扩大时基线同步抬升。R70 / I23：SCOPE 由 1 文件扩到 4 文件，exportedSymbols 只增不减（7→18）。覆盖率不等于静态类型检查。",
+  "scope": [
+    "server/src/paths.js",
+    "server/src/config.js",
+    "server/src/logger.js",
+    "server/src/runtime.js"
+  ],
+  "baseline": {
+    "exportedSymbols": 18,
+    "annotatedSymbols": 18,
+    "coverage": 100.0
+  },
+  "note": "18 个导出符号 = paths.js 8（4 常量 @type 含 I19 readJsonWarnings + 4 函数 @param+@returns）、config.js 2、logger.js 2、runtime.js 6。I24 用 DOC_RE 紧邻块 + 标签值非空 + {type} 括号配对校验；覆盖率不等于静态类型检查。"
+}

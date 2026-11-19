@@ -1,0 +1,5 @@
+Harbor UiSchema adapter
+Source map: frontend/vendor/ui-schema-entry.js -> libs/ui-schema.bundle.js
+Runtime: zod@4.6.7 (MIT, zero external dependencies).
+Build-only: esbuild@0.28.2 (MIT). esbuild and platform packages are not bundled.
+No CDN, framework, renderer, or runtime network dependency.

@@ -1,0 +1,23 @@
+{
+  "id": "shape-divergent-classifier",
+  "family": "selftest",
+  "priority": "P0",
+  "mode": "shape",
+  "description": "harness 自检：shape 模式下真实形状差异（JSON 对象 vs 裸字符串）→ suspect + diffPath 定位类型差异",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "set_current_sid",
+      "args": ["s_shape"],
+      "note": "刻意的形状差异：Python {ok:true} 对象 vs Node 裸字符串 → shapeTree 类型差异应判 suspect"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}

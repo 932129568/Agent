@@ -1,0 +1,89 @@
+{
+  "id": "default-context-equivalence",
+  "family": "selftest",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "P0-3 默认上下文等价金丝雀：无头序列混合 set_current_sid/get_effective_ws/guard trust/dedup——legacy 单会话语义原样（sid 路由改造后旧行为零漂移的探测器。跨 sid dedup 对照属并行增强面，由 parallel.mjs 承载不在此列）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "set_current_sid",
+      "args": ["dce-A"],
+      "note": "设置默认上下文 A（裸 '{\"ok\":true}'）"
+    },
+    {
+      "id": "c02",
+      "method": "get_effective_ws",
+      "args": [],
+      "note": "无头自省返回全局 sid A（{sid:'dce-A',ws,source:'global',exists}——header 缺省即 legacy 路径）"
+    },
+    {
+      "id": "c03",
+      "method": "guard_session_trust",
+      "args": ["clipboard_read"],
+      "note": "A 信任 clipboard_read（{ok:true}——登记语义；差分环境 ARMED=false 不涉执行点档位）"
+    },
+    {
+      "id": "c04",
+      "method": "set_clipboard",
+      "args": ["dce-clip"],
+      "note": "写入确定性剪贴板内容（{ok,len:9,verified:true}——避免 OS 剪贴板环境态差异）"
+    },
+    {
+      "id": "c05",
+      "method": "set_current_sid",
+      "args": ["dce-B"],
+      "note": "切换默认上下文 B——legacy clear-on-switch 清 A 信任（武装语义由 parallel.mjs 承载）"
+    },
+    {
+      "id": "c06",
+      "method": "get_effective_ws",
+      "args": [],
+      "note": "无头自省返回全局 sid B"
+    },
+    {
+      "id": "c07",
+      "method": "set_current_sid",
+      "args": ["dce-A"],
+      "note": "切回 A"
+    },
+    {
+      "id": "c08",
+      "method": "get_clipboard",
+      "args": [],
+      "note": "回读确定性内容（{ok,text:'dce-clip',len:9}——unarmed 环境恒放行，内容形状稳定）"
+    },
+    {
+      "id": "c09",
+      "method": "run_command",
+      "args": ["echo dce-dedup", 30],
+      "note": "A 去重窗口记录一条（run_command off 档放行，exit_code:0）"
+    },
+    {
+      "id": "c10",
+      "method": "run_command",
+      "args": ["echo dce-dedup", 30],
+      "note": "A 重复命令被拒（{info:'与上一条命令完全相同…',skipped:true}——lastKey 变体）"
+    },
+    {
+      "id": "c11",
+      "method": "set_current_sid",
+      "args": ["dce-B"],
+      "note": "切到 B"
+    },
+    {
+      "id": "c12",
+      "method": "get_effective_ws",
+      "args": [],
+      "note": "无头自省返回全局 sid B（全局 activeSid 切换语义原样）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}

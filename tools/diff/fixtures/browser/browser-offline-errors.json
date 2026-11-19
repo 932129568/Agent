@@ -1,0 +1,101 @@
+{
+  "id": "browser-offline-errors",
+  "family": "browser",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "浏览器族离线确定错误路径（护栏缺省态）：六原语/会话池/接管/搜索的错误分支——Node 侧 session 缺省档先于语义层拒（护栏挂点差异面）",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "browser_navigate",
+      "args": ["ftp://example.com"],
+      "note": "非 http(s) 协议拒绝（Python NAV_BLOCKED vs Node 护栏 confirm 先拒）"
+    },
+    {
+      "id": "c02",
+      "method": "browser_navigate",
+      "args": ["http://127.0.0.1:9/"],
+      "note": "环回地址拒绝（默认不设 HARBOR_BROWSER_ALLOW_LOOPBACK）"
+    },
+    {
+      "id": "c03",
+      "method": "browser_navigate",
+      "args": ["http://192.168.1.1/"],
+      "note": "内网保留地址拒绝"
+    },
+    {
+      "id": "c04",
+      "method": "browser_sessions",
+      "args": [],
+      "note": "空会话池投影"
+    },
+    {
+      "id": "c05",
+      "method": "browser_set_mode",
+      "args": ["visible"],
+      "note": "无会话时切模式"
+    },
+    {
+      "id": "c06",
+      "method": "browser_set_mode",
+      "args": ["bogus"],
+      "note": "非法 mode"
+    },
+    {
+      "id": "c07",
+      "method": "browser_extract",
+      "args": ["main", "markdown"],
+      "note": "无活动会话提取"
+    },
+    {
+      "id": "c08",
+      "method": "browser_click",
+      "args": ["btn"],
+      "note": "无活动会话点击"
+    },
+    {
+      "id": "c09",
+      "method": "browser_fill",
+      "args": ["input", "文本"],
+      "note": "无活动会话填充"
+    },
+    {
+      "id": "c10",
+      "method": "browser_screenshot",
+      "args": [],
+      "note": "无活动会话截图"
+    },
+    {
+      "id": "c11",
+      "method": "browser_close",
+      "args": ["no-such-session"],
+      "note": "关闭不存在会话"
+    },
+    {
+      "id": "c12",
+      "method": "browser_search",
+      "args": ["{\"query\": \"\"}"],
+      "note": "空 query 参数校验"
+    },
+    {
+      "id": "c13",
+      "method": "browser_takeover",
+      "args": ["tk_missing", "continue"],
+      "note": "接管任务不存在"
+    },
+    {
+      "id": "c14",
+      "method": "browser_takeover",
+      "args": ["tk_missing", "bogus-action"],
+      "note": "非法 action"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": false,
+    "probeConfigFiles": []
+  }
+}

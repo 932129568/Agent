@@ -1,0 +1,90 @@
+# 构建产物（源码构建生成）
+node_modules/
+build/
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# 运行数据（用户本机 ~/.glm-chat/，绝不入库）
+.glm-chat/
+*.log
+logs/
+audit_log.jsonl
+
+# 测试残留
+.realtest_*
+.realtest_shots/
+
+# IDE / 系统
+.workbuddy/
+.workbuddy-ai/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# 旧版构建产物（legacy 源码保留供契约测试，其 html 产物不入库）
+glm-chat.v1.0.0.html
+
+# 敏感配置（双保险：即使误放也不上传）
+mcp_servers.json
+webdav.json
+config.json
+*.dpapi
+push_exe_tmp.py
+
+# 发行分发走 GitHub Release assets，git 不跟踪 exe（2026-10-21 用户要求）
+dist/*.exe
+build/
+
+# P0-4 T04：Electron 打包产物输出（electron-builder NSIS，dist/ 恒冻结）
+dist-electron/
+# R89 终局：分卷输出目录（「只增不删」不覆盖旧安装包 → 每轮换目录名），同样不入库
+dist-electron-*/
+
+# 测试/QA 临时产物（2026-10-30 快照决策：outputs/ 下新增文件不入库；历史已跟踪文件不受影响）
+outputs/
+
+# 历史波次备份目录（git 自身即版本控制，备份冗余不入库）
+deliverables/wave-backups/
+
+# AI 工具本机状态目录
+.ai-memory/
+.mimosa/
+
+# ============================================================
+# R100 仓库收敛（2026-11-19）：开发过程资料/QA 证据/历史文档不入库
+# 本地磁盘全部保留（只增不删），只是不纳入版本控制
+# ============================================================
+
+# 设计过程稿与预览（保留被判据依赖的 check_contract.py 与 css-lint.mjs）
+deliverables/design/**
+!deliverables/design/check_contract.py
+!deliverables/design/liquid-glass/
+deliverables/design/liquid-glass/**
+!deliverables/design/liquid-glass/scripts/
+!deliverables/design/liquid-glass/scripts/**
+
+# QA 截图与探针（每轮 40MB+，靠 git 之外的备份）
+qa/
+
+# 一次性调试脚本与调研产物
+outputs/
+attachments/
+
+# 早期产品/评审/度量文档（R12-R44 时代）
+deliverables/code-review/
+deliverables/product-strategy/
+deliverables/gstack/
+deliverables/metrics/
+deliverables/scripts/
+deliverables/reference/
+deliverables/security/
+
+# Python 退役链残留
+main.py
+main_v1.0.0_legacy.py
+开发说明.txt
+
+# 源码导出包（生成物，每次重新打包）
+deliverables/source-export/

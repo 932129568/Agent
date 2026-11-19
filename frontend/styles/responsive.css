@@ -1,0 +1,765 @@
+/* W4B responsive layout only; component states remain shared. */
+@media (max-width:1024px){
+  .set-window{width:calc(100% - 24px)}
+  .chart-duo{grid-template-columns:minmax(0,1fr)}
+  .set-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:768px){
+  .set-window{width:calc(100% - 16px);height:calc(100% - 16px);max-height:none}
+  .set-win-body{flex-direction:column;min-height:0}
+  .set-nav{display:flex;flex:0 0 auto;width:100%;max-width:none;overflow-x:auto;overflow-y:hidden;
+    border-right:0;border-bottom:1px solid var(--border);padding:6px 8px;gap:4px}
+  .set-nav-group{display:none}
+  .set-nav-btn{flex:0 0 auto;white-space:nowrap}
+  .set-content{flex:1;min-height:0;padding:16px 16px 24px;overflow:auto}
+  .set-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+  .provider-row{min-width:0;flex-wrap:wrap}
+  .provider-row input,.provider-row select,.provider-row button{max-width:100%}
+  .header-title{max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .panel-scroll,.panel-head,.panel{min-width:0}
+  .session-item{min-width:0}
+  .session-title,.session-preview{overflow-wrap:anywhere}
+}
+@media (max-width:480px){
+  .set-content{padding:12px 10px 20px}
+  .set-block,.g-card,.chart-card,.ws-card,.plan-card{padding:12px}
+  .provider-row{align-items:stretch;flex-direction:column}
+  .provider-row input,.provider-row select,.provider-row button,
+  .provider-row .cm-pick,.provider-row .cm-preset-slot{width:100%!important;max-width:none!important}
+  .cm-row,.cm-price,.ws-btn-row{align-items:stretch;flex-direction:column}
+  .cm-row>* ,.cm-price>*{width:100%!important;max-width:none!important}
+  .field-row{align-items:stretch;flex-direction:column;gap:8px}
+  .field-row>div,.field-row select{width:100%}
+  .session-item{align-items:flex-start}
+  .session-acts{display:flex;opacity:1}
+  .stat-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chart-card-head{align-items:flex-start;flex-direction:column}
+  .seg{max-width:100%;overflow-x:auto}
+}
+@media (max-height:640px){
+  .set-window{height:calc(100% - 12px);max-height:calc(100vh - 12px)}
+  .set-content,.modal-body,.panel-scroll{overflow:auto;overscroll-behavior:contain}
+  .modal-card{max-height:calc(100vh - 16px)}
+  .toast-stack{max-height:78vh}
+}
+
+/* ============================================================================
+   R69 视觉与动效优化层 · Industrial / utilitarian「精密仪表」
+   ----------------------------------------------------------------------------
+   方向：等宽数字 + 发丝边框 + 单一锐利强调色 + 一次编排好的面板入场序列。
+   记忆点：面板激活时标题底部一条发丝扫描线，内容块按 60ms 错峰揭示。
+   约束：本文件是 manifest 末位覆盖层；只用既有 id/class/伪元素，零 DOM 变更；
+        不新增 CSS 文件（contract_diff 冻结 style_count=14）；不改既有变量值。
+   动效：只动 transform / opacity；全部包在 prefers-reduced-motion: no-preference
+        内，并由 body.fx-off / body.reduced-motion 与 base.css 全局兜底关闭。
+   ============================================================================ */
+:root{
+  /* 展示/数据字：复用本机等宽栈，零外部字体请求 */
+  --polish-mono:"Cascadia Code",Consolas,"SFMono-Regular",monospace;
+  --polish-grid:rgba(29,29,31,.022);
+  --polish-hairline:rgba(29,29,31,.10);
+  --polish-scan:rgba(37,99,235,.52);
+  --polish-tint:rgba(37,99,235,.030);
+  --polish-shadow-1:0 2px 8px rgba(29,29,31,.05);
+  --polish-shadow-2:0 8px 28px rgba(29,29,31,.10);
+  --polish-shadow-3:0 24px 64px rgba(29,29,31,.16);
+  /* 编排时序：5 组 × 60ms 错峰 */
+  --polish-s1:0ms;--polish-s2:60ms;--polish-s3:120ms;
+  --polish-s4:180ms;--polish-s5:240ms;
+  --polish-dur-reveal:280ms;--polish-dur-hover:170ms;--polish-dur-scene:640ms;
+  --polish-ease:cubic-bezier(.16,1,.3,1);
+}
+body.dark{
+  --polish-grid:rgba(245,245,247,.038);
+  --polish-hairline:rgba(245,245,247,.10);
+  --polish-scan:rgba(96,165,250,.50);
+  --polish-tint:rgba(96,165,250,.055);
+  --polish-shadow-1:0 2px 8px rgba(0,0,0,.22);
+  --polish-shadow-2:0 8px 28px rgba(0,0,0,.30);
+  --polish-shadow-3:0 24px 64px rgba(0,0,0,.40);
+}
+
+/* ---- 1. 氛围层：32px 发丝网格 + 边缘渐隐，只在宽屏启用（避免小屏噪点） ---- */
+@media (min-width:1025px){
+  /* 浅色：只用一层极淡顶部渐隐，避免网格被不透明卡片遮断形成矩形边界 */
+  .main{
+    background-color:var(--main-bg);
+    background-image:radial-gradient(64rem 32rem at 18% -12%,var(--polish-tint),transparent 70%);
+  }
+  /* 深色：仪表盘发丝网格，卡片为半透明底时不会形成硬边界 */
+  body.dark .main{
+    background-image:
+      radial-gradient(64rem 32rem at 18% -12%,var(--polish-tint),transparent 70%),
+      linear-gradient(var(--polish-grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--polish-grid) 1px,transparent 1px);
+    background-size:auto,32px 32px,32px 32px;
+    background-position:0 0,-1px -1px,-1px -1px;
+  }
+}
+
+/* ---- 2. 通用精度排印：数字与时间戳统一等宽 + 表格数字对齐 ---- */
+:is(.stat-value,.chart-value,.plan-eta,.ckpt-count,.msg-time,.usage-info,
+    .session-time,.audit-ts,.token-stat,.costEstimate,.bg-task-count){
+  font-family:var(--polish-mono);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.01em;
+}
+:is(.panel-title,.set-title,.set-win-t,.brand-name){
+  text-wrap:balance;
+}
+
+/* ---- 3. 状态覆盖：悬停 / 按下 / 焦点 / 加载 / 空态（零布局位移） ---- */
+@media (prefers-reduced-motion:no-preference){
+  :is(.set-nav-btn,.rail-btn,.tool-btn,.ui-action-btn,.expert-btn,.wsq-chip,.model-chip){
+    transition:transform var(--polish-dur-hover) var(--polish-ease),
+               letter-spacing var(--polish-dur-hover) var(--polish-ease),
+               box-shadow var(--polish-dur-hover) var(--polish-ease),
+               border-color var(--polish-dur-hover) var(--polish-ease);
+  }
+  .set-nav-btn:hover{letter-spacing:.04em;transform:translateX(2px)}
+  .rail-btn:hover svg{transform:scale(1.08)}
+  :is(.wsq-chip,.model-chip):hover{transform:translateY(-2px);box-shadow:var(--polish-shadow-1)}
+  :is(.send-btn,.btn-primary,.expert-btn-primary):active{transform:scale(.96)}
+  :is(.loading,[aria-busy="true"]){
+    animation:polishBusy 1.4s var(--polish-ease) infinite;
+  }
+  @keyframes polishBusy{0%,100%{opacity:1}50%{opacity:.55}}
+}
+:is(.mm-empty,.sidebar-empty,.empty-state,.mm-error){
+  border:1px dashed var(--polish-hairline);
+  border-radius:var(--radius-sm);
+}
+:focus-visible{outline-offset:var(--focus-ring-offset)}
+
+/* ---- 4. 编排式面板入场：标题 → 内容块 5 组错峰，只动 transform/opacity ---- */
+@media (prefers-reduced-motion:no-preference){
+  .panel.on > .panel-head{position:relative;animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s1) both}
+  .panel.on > .panel-scroll > *:nth-child(1){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s1) both}
+  .panel.on > .panel-scroll > *:nth-child(2){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s2) both}
+  .panel.on > .panel-scroll > *:nth-child(3){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s3) both}
+  .panel.on > .panel-scroll > *:nth-child(4){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s4) both}
+  .panel.on > .panel-scroll > *:nth-child(n+5){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s5) both}
+  @keyframes polishReveal{
+    from{opacity:0;transform:translateY(8px)}
+    to{opacity:1;transform:none}
+  }
+  /* 记忆点：标题下发丝扫描线，一次场景过渡，不占布局 */
+  .panel.on > .panel-head::after{
+    content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+    pointer-events:none;
+    background:linear-gradient(90deg,transparent,var(--polish-scan) 45%,transparent);
+    transform:scaleX(0);transform-origin:left center;
+    animation:polishScan var(--polish-dur-scene) var(--polish-ease) var(--polish-s2) both;
+  }
+  @keyframes polishScan{
+    from{transform:scaleX(0);opacity:0}
+    35%{opacity:1}
+    to{transform:scaleX(1);opacity:0}
+  }
+}
+
+/* ---- 5. 各功能页针对性优化（沿用既有类名，未命中则安全忽略） ---- */
+/* 5a 会话：消息与代码块 */
+:is(.msg-text,.message-text,.markdown-body) code{font-family:var(--polish-mono);font-variant-numeric:tabular-nums}
+.code-copy{font-family:var(--polish-mono);letter-spacing:.02em}
+.code-lang{font-family:var(--polish-mono);text-transform:uppercase;letter-spacing:.08em;font-size:var(--fs-micro)}
+@media (prefers-reduced-motion:no-preference){
+  .code-copy:hover{letter-spacing:.09em;transition:letter-spacing var(--polish-dur-hover) var(--polish-ease)}
+}
+/* 5b 计划 / 检查点：卡片边框擦除与数值对齐 */
+:is(.plan-card,.ckpt-row,.g-card,.chart-card,.ws-card){
+  border-color:var(--polish-hairline);
+  box-shadow:var(--polish-shadow-1);
+}
+@media (prefers-reduced-motion:no-preference){
+  :is(.plan-card,.ckpt-row,.g-card,.chart-card,.ws-card){
+    transition:box-shadow var(--polish-dur-hover) var(--polish-ease),
+               transform var(--polish-dur-hover) var(--polish-ease);
+  }
+  :is(.plan-card,.ckpt-row,.g-card,.chart-card,.ws-card):hover{
+    box-shadow:var(--polish-shadow-2);transform:translateY(-1px);
+  }
+}
+/* 5c 生成式图表：条形按 X 轴展开 */
+@media (prefers-reduced-motion:no-preference){
+  .ui-bar-rect{transform-origin:left center;animation:polishBar 420ms var(--polish-ease) both}
+  @keyframes polishBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+}
+/* 5d MCP / 专家 / 记忆 / 协作：状态与列表行 */
+:is(.mcp-status,.expert-center-status,.collaboration-status,.mm-ts){
+  font-family:var(--polish-mono);font-variant-numeric:tabular-nums;
+  letter-spacing:.02em;
+}
+:is(.mcp-row,.mm-row,.expert-chip-name,.collaboration-ref-list > *){
+  border-bottom:1px solid var(--polish-hairline);
+}
+@media (prefers-reduced-motion:no-preference){
+  .mcp-status[data-state="running"],.mcp-status[data-state="connecting"]{
+    animation:polishBusy 1.4s var(--polish-ease) infinite;
+  }
+}
+/* 5e 浮层：模态与设置窗的精密阴影 + 层级 */
+:is(.modal-card,.set-window,.ctx-menu){
+  box-shadow:var(--polish-shadow-3);
+  border:1px solid var(--polish-hairline);
+}
+.modal-title,.set-win-t{letter-spacing:-.01em}
+
+/* ---- 6. 响应式意图：窄屏关闭氛围与编排，保留可读与触摸目标 ---- */
+@media (max-width:768px){
+  .main{background-image:none}
+  .panel.on > .panel-head::after{display:none}
+  :is(.set-nav-btn,.rail-btn,.tool-btn,.ui-action-btn,.expert-btn){
+    min-height:44px;min-width:44px;
+  }
+}
+@media (max-width:480px){
+  .panel.on > .panel-scroll > *{animation:none!important;opacity:1!important;transform:none!important}
+  :is(.plan-card,.ckpt-row,.g-card,.chart-card,.ws-card){box-shadow:none}
+}
+
+/* ---- 7. 降级：与 base.css 的全局开关保持双重一致 ---- */
+body.fx-off *,body.fx-off *::after,
+body.reduced-motion *,body.reduced-motion *::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){
+  .panel.on > .panel-head,.panel.on > .panel-scroll > *{animation:none!important}
+  .panel.on > .panel-head::after{display:none}
+  .ui-bar-rect{transform:none!important}
+}
+
+
+/* LIGHTWELL R90｜光井皮肤层（附加、默认关闭）。取值源 liquid-glass/styles/tokens.css。
+   ① 每条规则选择器必带 html[data-skin="lightwell"] —— 特异性 (0/1/1) 高于 :root (0/1/0)，
+      才压过岛层后注入 head 的 tokens 副本；本文件在 <style> 里更早，靠顺序必输。
+   ② 同屏恰好 4 个 backdrop-filter 宿主且不嵌套：header.header / #mainStage /
+      #observerWindow / #glass-ribbon，.main 只做布局绝不可加 blur。
+   ③ 默认态（无 data-skin）本区块零命中，W4A 基线 100% 不变。
+   ④ 注释不得写出会被子串计数的样式/属性字面量（dom_ids、焦点环均按全仓子串统计）。 */
+
+/* 0. 默认态兜底隐藏（壳层本身在默认态不会创建这些节点，此处为防御性收口） */
+html:not([data-skin="lightwell"]) #lw-ambient-wallpaper,
+html:not([data-skin="lightwell"]) #observerWindow,
+html:not([data-skin="lightwell"]) #glass-ribbon,
+html:not([data-skin="lightwell"]) #lw-svg-defs {
+  display: none !important;
+}
+
+/* 1. 明档令牌（Light · 主按钮 #141413 on #D97757 = 5.90:1，白字仅 3.12 禁用）
+   R97 增量：--glass-rim 由「单条对称顶部高光」升级为四边不对称菲涅尔 ——
+   顶边最亮（暖白 .92，宽度 1.5px）、左边次之（.52）、右边更弱（.28）、下沿一条冷蓝
+   折射（.26）。真实玻璃的反射在迎光边最强、背光边近乎为零，单像素对称高光正是
+   「像塑料不像玻璃」的主因。只改取值，不新增规则、不新增宿主。
+   --glass-blur / --glass-saturate 本轮刻意不动：qa/r92/liquid-switch-probe.mjs 的 L9
+   把「?liquid=0 逃生门」的计算值逐字符钉成 blur(14px) saturate(1.18)，改这两个值
+   会让该探针 10 项里红 1 项；提升饱和度的收益不抵「已发版产品红一项判据」的代价，
+   取舍见 R97 落地报告「未覆盖项」。 */
+html[data-skin="lightwell"]{
+  color-scheme:light;
+  --bg:#F0EEE6;--main-bg:transparent;--main-veil:transparent;
+  --sidebar-bg:rgba(234,231,221,.78);
+  --header-bg:rgba(250,249,245,.76);
+  --card-bg:#FAF9F5;--surface:#FAF9F5;--surface-2:#E8E6DC;--surface-3:#DFDDD1;
+  --border:#D1CFC5;--border-strong:#8A867C;
+  --text:#141413;--text-2:#5E5D59;--text-3:#67655E;--muted:#5E5D59;
+  --accent:#A84424;--primary:#D97757;--primary-hover:#C4613C;--primary-soft:#F5E3DB;
+  --primary-rgb:217,119,87;
+  --on-accent:#141413;
+  --ok:#2F6F4E;--warn:#9A5B13;--err:#B4382A;
+  --ok-bg:#E3EFE8;--warn-bg:#F6EAD8;--err-bg:#F7E2DF;
+  --success:#2F6F4E;--success-soft:#E3EFE8;
+  --warning:#9A5B13;--warning-soft:#F6EAD8;
+  --danger:#B4382A;--danger-soft:#F7E2DF;
+  --user-bubble:#E8E6DC;--user-bubble-text:#141413;--ai-bubble:transparent;
+  --hover:#E9E6DD;--active:#E2DED2;--chip-bg:#E8E6DC;
+  --glass-bg:rgba(250,249,245,.72);
+  --glass-bg-2:rgba(255,255,255,.82);
+  --glass-bg-elevated:rgba(255,255,255,.82);
+  --glass-border:rgba(255,255,255,.68);
+  --glass-rim:inset 0 1.5px 0 rgba(255,255,255,.92),inset 1px 0 0 rgba(255,255,255,.52),inset 0 -1px 0 rgba(150,198,255,.26),inset -1px 0 0 rgba(255,255,255,.28);
+  --glass-shadow:0 10px 30px rgba(20,20,19,.07),0 1px 3px rgba(20,20,19,.05);
+  --glass-blur:14px;--glass-saturate:1.18;
+  --shadow-sm:0 1px 1px rgba(20,20,19,.06),0 3px 8px rgba(20,20,19,.075);
+  --shadow-md:1px 3px 8px rgba(20,20,19,.075),2px 12px 28px rgba(20,20,19,.10);
+  --shadow-lg:2px 6px 18px rgba(20,20,19,.10),4px 24px 56px rgba(20,20,19,.15);
+  --edge-hi:inset 0 1px 0 rgba(255,255,255,.50);--glow-inset:none;
+  --radius-xs:8px;--radius-sm:10px;--radius-md:12px;--radius-lg:16px;--radius-xl:16px;
+  --font-sans:Calibri,"DengXian","Noto Sans SC","Microsoft YaHei UI",sans-serif;
+  --font-display:Calibri,"DengXian","Noto Sans SC",sans-serif;
+  --font-mono:"Cascadia Code",Consolas,"JetBrains Mono",monospace;
+  --brand-gradient:none;--brand-glow:none;--glow:none;--glow-strong:none;
+  --glow-color:rgba(217,119,87,.18);--glow-focus:0 0 0 3px rgba(217,119,87,.28);
+  --focus-ring:#D97757;
+  --chart-1:#D97757;--chart-2:#A84424;--chart-3:#9A5B13;--chart-4:#5E5D59;
+  --chart-grid:rgba(20,20,19,.10);--chart-axis:#5E5D59;
+  --chart-area-from:rgba(217,119,87,.18);--chart-area-to:rgba(217,119,87,0);
+  --w4-bg:#F0EEE6;--w4-sidebar:#EAE7DD;--w4-surface:#FAF9F5;
+  --w4-text:#141413;--w4-user:#E8E6DC;
+}
+
+/* 2. 暗档令牌（四阶海拔 #141413 → #1C1B19 → #242320 → #2E2C28；强调 #E88B6B）
+   R97：--glass-rim 同结构的不对称菲涅尔，alpha 整体压到 .22 / .13 / .10 / .07 区间 ——
+   暗底上高光过亮会变成一圈发光描边（比没有更假），只保留「顶边可辨、下沿透一点冷光」。 */
+html[data-skin="lightwell"] body.dark{
+  color-scheme:dark;
+  --bg:#141413;--main-bg:transparent;--main-veil:transparent;
+  --sidebar-bg:rgba(28,27,25,.82);
+  --header-bg:rgba(36,35,32,.80);
+  --card-bg:#242320;--surface:#242320;--surface-2:#2E2C28;--surface-3:#383631;
+  --border:rgba(245,244,237,.12);--border-strong:rgba(245,244,237,.26);
+  --text:#F5F4ED;--text-2:#B8B5AA;--text-3:#A09D92;--muted:#B8B5AA;
+  --accent:#E88B6B;--primary:#D97757;--primary-hover:#E38667;
+  --primary-soft:rgba(217,119,87,.18);--primary-rgb:217,119,87;
+  --on-accent:#141413;
+  --ok:#5FB384;--warn:#E0A458;--err:#E66D5E;
+  --ok-bg:rgba(95,179,132,.16);--warn-bg:rgba(224,164,88,.16);--err-bg:rgba(230,109,94,.16);
+  --success:#5FB384;--success-soft:rgba(95,179,132,.16);
+  --warning:#E0A458;--warning-soft:rgba(224,164,88,.16);
+  --danger:#E66D5E;--danger-soft:rgba(230,109,94,.16);
+  --user-bubble:#2E2C28;--user-bubble-text:#F5F4ED;--ai-bubble:transparent;
+  --hover:#26251F;--active:#34322C;--chip-bg:#26251F;
+  --glass-bg:rgba(36,35,32,.74);
+  --glass-bg-2:rgba(46,44,40,.84);
+  --glass-bg-elevated:rgba(46,44,40,.84);
+  --glass-border:rgba(245,244,237,.13);
+  --glass-rim:inset 0 1.5px 0 rgba(255,255,255,.22),inset 1px 0 0 rgba(255,255,255,.13),inset 0 -1px 0 rgba(150,198,255,.10),inset -1px 0 0 rgba(255,255,255,.07);
+  --glass-shadow:0 14px 36px rgba(0,0,0,.42),0 1px 2px rgba(0,0,0,.28);
+  --glass-blur:10px;--glass-saturate:1.12;
+  --glow-color:rgba(217,119,87,.20);--glow-focus:0 0 0 3px rgba(217,119,87,.32);
+  --focus-ring:#E08A6B;
+  --chart-1:#D97757;--chart-2:#E88B6B;--chart-3:#E0A458;--chart-4:#969388;
+  --chart-grid:rgba(245,244,237,.12);--chart-axis:#969388;
+  --chart-area-from:rgba(217,119,87,.20);--chart-area-to:rgba(217,119,87,0);
+  --w4-bg:#141413;--w4-sidebar:#1C1B19;--w4-surface:#242320;
+  --w4-text:#F5F4ED;--w4-user:#2E2C28;
+}
+
+/* 2b. 暗档页面底色 */
+/* 暗档令牌在 body.dark 而底色在 html ⇒ html 读不到 --bg，暗档需单独给 html 一条暗底。
+   标志位用属性不用 :has（:has 每次重算都回溯祖先），由壳层 bindDarkWatch 镜像。 */
+html[data-skin="lightwell"][data-lw-dark="1"]{
+  background-color:#141413;color-scheme:dark;
+}
+
+/* 3. 光学壁纸基底：为 4 个宿主提供真实可模糊的内容 */
+/* 底色上移到 html、body 透明，壁纸层（z-index:-1）才不会被 body 背景遮住。 */
+html[data-skin="lightwell"]{
+  background-color:var(--bg);
+}
+html[data-skin="lightwell"] body{
+  background-color:transparent;color:var(--text);font-family:var(--font-sans);
+}
+/* 内容层逐容器抬到壁纸之上。真实 DOM 是 body > .rail + .sidebar + .main，
+   不存在 .app 包裹层（对它写规则只会空转，玻璃层会与内容一起消失）。 */
+html[data-skin="lightwell"] .rail,
+html[data-skin="lightwell"] .sidebar,
+html[data-skin="lightwell"] .main{
+  position:relative;z-index:1;
+}
+html[data-skin="lightwell"] #lw-ambient-wallpaper{
+  position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-color:#F0EEE6;
+  background-image:
+    radial-gradient(ellipse 68% 54% at 16% 18%,rgba(217,119,87,.24) 0%,rgba(217,119,87,0) 68%),
+    radial-gradient(ellipse 56% 48% at 84% 22%,rgba(226,178,128,.26) 0%,rgba(226,178,128,0) 65%),
+    radial-gradient(ellipse 64% 52% at 52% 88%,rgba(196,164,132,.22) 0%,rgba(196,164,132,0) 70%);
+  transition:opacity .25s ease;
+}
+html[data-skin="lightwell"] body.dark #lw-ambient-wallpaper{
+  background-color:#141413;
+  background-image:
+    radial-gradient(ellipse 65% 52% at 18% 16%,rgba(217,119,87,.18) 0%,rgba(217,119,87,0) 68%),
+    radial-gradient(ellipse 54% 46% at 82% 24%,rgba(168,92,58,.15) 0%,rgba(168,92,58,0) 65%),
+    radial-gradient(ellipse 60% 50% at 50% 90%,rgba(92,82,70,.16) 0%,rgba(92,82,70,0) 70%);
+}
+
+/* 3b. R97 增量｜真实桌面壁纸真正上屏（门控：<html data-wp> === ready）。
+   病因：R80/W2 已经把真实壁纸读出来并落成渲染侧的四个自定义属性（url / size / x / y）
+   与 <html data-wp>，但全仓没有任何一处消费它们 ⇒ 壁纸到不了屏幕，用户只看到第 3 段
+   那三条固定渐变，「透不到桌面」。本段只做消费，一条既有规则都不改：第 3 段原样保留，
+   data-wp 缺失或为 none 时本段零命中，外观逐字节不变（回退路径）。
+   层次：壁纸作第一层（最上），三条渐变原样抄在后面当兜底底色。url 那一层的取值可能是
+   none，作为多层背景里的一层是合法的，不会让整条声明失效（已实测，见落地报告）。
+   位置：x / y 是主进程给的负偏移（preload 已按 devicePixelRatio 折成 CSS px），只作用于
+   壁纸那一层；漏掉它们拖窗时壁纸不会跟着桌面走。
+   重复：Windows 的平铺档（--wp-size: auto）需要 repeat 才铺满，故第一层用 repeat；
+   三层渐变本来按宿主盒尺寸绘制，repeat 与 no-repeat 视觉等价，一律显式 no-repeat。
+   暗档：第 3 段暗档规则特异性（1/2/2）高于本条（1/2/1），故暗档单列一条 body.dark 版本
+   （1/3/2）而不是靠顺序抢。
+   可读性衰减（R97-2）：两档都用同一个手段 —— 压整层 opacity，让壁纸叠在主题底色上变薄。
+   取值是 24×24 分块（真实壁纸 432 格）算 WCAG 对比度扫出来的「保住透色的最不糊点」：
+   · 暗档 .65：次级 #B8B5AA 最差 4.54，0/432 格 <4.5；抬到 .66 就在纯白底面破 1 格 ⇒ .65 是天花板。
+   · 明档 .62：次级（R99 起为 #67655E）壁纸最差 4.07。⚠ 该值是**按 R97 记录的 3.61 反解**出来的，
+     不是实测：L_bg_worst = 3.61×(0.152761+0.05)−0.05 = 0.681967，
+     CR = (0.681967+0.05)/(0.129991+0.05) = 4.0667。仅用于说明量级与差距，勿当实测基线引用。
+   ⚠ 壁纸最差值一律不可迁移：上面「暗档 4.54」与「明档 3.61」都是 R97 当期壁纸上的测量，且原记录的
+     α-sweep（α=1 时 3.00；α=.50/3.82、.30/4.19、.20/4.38、.14/4.50）同样只对那张壁纸成立。
+     R99 复测时本机壁纸是满量程高对比照片，「最差 24×24 块」这个指标已退化——总有块的像素亮度
+     ≈文字色，任何文字色的 CR 都→1，故该方法只能读**分位**、不能读最差块；本串数值不可迁移。
+   · 明档压不进 4.5 是调色板属性、不是本条的问题。平底色上按标准 WCAG 公式复核（R99 校正）：
+     次级 #67655E on #F0EEE6 = 5.0218（余量 .52）；旧值 #6F6D66 是 4.4578。
+     ⚠ R97 记录的「4.78:1（余量 .28）」与标准公式不符（两个数都对不上），R99 复核更正为上述值。
+     而暗档 #B8B5AA 在 #141413 上是 8.9782（R97 记 9.03，同属旧错；余量 4.48）—— 余量差近 9 倍，
+     任何有用量级的 opacity 都填不平。要严格达标只有两条路：把明档次级压到 L≤0.1127（例 #5B5B5B，
+     L=0.1046；注意 --text-2 #5E5D59 的 L 已是 0.1093，故任何达标值都必然落在它的 ±3% 亮度内，
+     三级坍成两级），或者把壁纸 opacity 由 .62 大幅下调（同一反解链算得量级 0.4x，等于放弃「透色上屏」），
+     两者都是设计取舍、需设计签字。故取 .62：它是「透色可用」与「可读性」之间唯一可交付点
+     （最暗处次级对比度相对 R97 同基线属劣化，且仅限这一个 token）。
+   【R99 补充】R99 已把 --text-3 提一档（亮 #6F6D66→#67655E：4.4578→5.0218，**首次进 AA 线**；
+     暗 #969388→#A09D92：5.9917→6.7877，本已在线上、本次只加余量），壁纸最差相应由 3.61 升至 4.07，
+     **仍差 0.43**。两条达标路径都是设计取舍：R99 选择「前者（继续压暗到与 --text-2 并档）不取、
+     后者（动壁纸 opacity）不动」，保持「透色可用 + 次级偏弱」的现状。要让壁纸下也达标，
+     需另起一轮改 opacity 或调色板。
+   【被否决的方案，记录备查】曾试过 background-blend-mode:lighten（壁纸逐通道与底色取 max），
+     它能让次级对比度「不低于基线」由构造成立（实测 Δ=0.00）——但那正是恒真式：它成立的代价
+     是把被测量的对象（壁纸）抹成纸色。深色桌面壁纸（如深绿海面）在 lighten 下几乎不可见，
+     等于「透色」功能没做，R98 评审据此否决。浅色壁纸可用、深色壁纸不可用，不可接受。
+     最直接的判据是平铺档目视对比（T1，样本=64×64 深色四象限砖块 + 中央深点、--wp-size:auto）：
+     本方案（.62）整面等距平铺、四种颜色与中央深点**全部清晰可辨**（压薄但保留辨识）；
+     同一张图在 lighten 下被整片抬成纸色、**图案直接消失**。这条比任何对比度数字都硬，
+     因为它是「功能还在不在」的问题，不是「差几个百分点」的问题。
+   两档都不改调色板、不改 --glass-bg、不改 blur/saturate。
+   不随 fx-off 归零：壁纸属于「桌面透色」而非「特效消耗」—— 第 9 段 fx-off 只停 blur 与
+   过渡（壁纸渐隐），既有渐变在 fx-off 下照常显示，本条与之一致，语义不变。 */
+html[data-skin="lightwell"][data-wp="ready"] #lw-ambient-wallpaper{
+  background-image:var(--wp-url,none),
+    radial-gradient(ellipse 68% 54% at 16% 18%,rgba(217,119,87,.24) 0%,rgba(217,119,87,0) 68%),
+    radial-gradient(ellipse 56% 48% at 84% 22%,rgba(226,178,128,.26) 0%,rgba(226,178,128,0) 65%),
+    radial-gradient(ellipse 64% 52% at 52% 88%,rgba(196,164,132,.22) 0%,rgba(196,164,132,0) 70%);
+  background-size:var(--wp-size,cover),auto,auto,auto;
+  background-position:var(--wp-x,0px) var(--wp-y,0px),16% 18%,84% 22%,52% 88%;
+  background-repeat:repeat,no-repeat,no-repeat,no-repeat;
+  opacity:.62;
+}
+html[data-skin="lightwell"][data-wp="ready"] body.dark #lw-ambient-wallpaper{
+  background-image:var(--wp-url,none),
+    radial-gradient(ellipse 65% 52% at 18% 16%,rgba(217,119,87,.18) 0%,rgba(217,119,87,0) 68%),
+    radial-gradient(ellipse 54% 46% at 82% 24%,rgba(168,92,58,.15) 0%,rgba(168,92,58,0) 65%),
+    radial-gradient(ellipse 60% 50% at 50% 90%,rgba(92,82,70,.16) 0%,rgba(92,82,70,0) 70%);
+  background-size:var(--wp-size,cover),auto,auto,auto;
+  background-position:var(--wp-x,0px) var(--wp-y,0px),18% 16%,82% 24%,50% 90%;
+  background-repeat:repeat,no-repeat,no-repeat,no-repeat;
+  /* 显式归位，防御性保留：明档本轮已不用 lighten，但两条规则的选择器是同前缀同目标，
+     明档（1/2/1）任何新增的混合模式都会在这里被继承 —— 暗档要的是均匀衰减，混进 lighten
+     会把暗底提亮、浅字对比度当场崩掉（R97 实测过）。写在暗档把它钉死，成本一行。 */
+  background-blend-mode:normal,normal,normal,normal;
+  opacity:.65;
+}
+
+/* 4. 严格四宿主毛玻璃（互不嵌套；.main 只做布局，不加 blur） */
+html[data-skin="lightwell"] header.header,
+html[data-skin="lightwell"] #mainStage,
+html[data-skin="lightwell"] #observerWindow,
+html[data-skin="lightwell"] #glass-ribbon{
+  background:var(--glass-bg);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--glass-shadow),var(--glass-rim);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/* 宿主内部一律不再叠加 backdrop-filter（嵌套模糊既掉帧又违背 4 宿主契约） */
+html[data-skin="lightwell"] #mainStage *,
+html[data-skin="lightwell"] #observerWindow *,
+html[data-skin="lightwell"] #glass-ribbon *,
+html[data-skin="lightwell"] header.header *{
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+
+/* 5. 三栏编排：header 浮岛 / mainStage 主台 / 右侧检查器 / 底部光带 */
+html[data-skin="lightwell"] .main{
+  background:transparent;
+  /* 只留底部光带高度；右侧让位交给 #mainStage，否则顶栏会被一起挤窄。 */
+  padding:0 0 44px;
+}
+/* 光带 fixed 全宽，rail/sidebar 不留底距就压住栏底 .side-note 与 #tokenStat（只能比矩形才看得出）。 */
+html[data-skin="lightwell"] .rail,
+html[data-skin="lightwell"] .sidebar{
+  padding-bottom:44px;
+}
+html[data-skin="lightwell"] header.header{
+  margin:8px 8px 0;
+  border-radius:var(--radius-lg);
+  height:52px;
+  border-bottom:1px solid var(--glass-border);
+}
+html[data-skin="lightwell"] #mainStage{
+  margin:8px 8px 4px;
+  border-radius:var(--radius-lg);
+  /* 不加 overflow:hidden：会裁掉 composer 浮层菜单与下拉。圆角溢出由子级 inherit 收口。 */
+}
+html[data-skin="lightwell"] #mainStage > .panel{
+  border-radius:inherit;
+}
+
+html[data-skin="lightwell"] body.lw-observer-open #mainStage{
+  margin-right:360px;   /* 340 观察窗 + 12 右侧间距 + 8 自身外边距 */
+}
+html[data-skin="lightwell"] body.lw-observer-open header.header{
+  /* 顶栏横贯整幅不缩进：观察窗从 y=60 起，与顶栏不重叠，模型名/设置不被挤压。 */
+  margin-right:8px;
+}
+
+html[data-skin="lightwell"] #observerWindow{
+  position:fixed;top:60px;right:12px;bottom:48px;width:340px;
+  z-index:28;border-radius:var(--radius-lg);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:transform .22s ease,opacity .22s ease;
+}
+html[data-skin="lightwell"] #observerWindow.lw-collapsed{
+  transform:translateX(calc(100% + 16px));opacity:0;pointer-events:none;
+}
+html[data-skin="lightwell"] #observerWindow .lw-obs-head{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:10px 12px;border-bottom:1px solid var(--border);
+  background:var(--glass-bg-elevated);
+}
+html[data-skin="lightwell"] #observerWindow .lw-obs-title{
+  font-weight:600;font-size:12.5px;letter-spacing:-.1px;
+}
+html[data-skin="lightwell"] #observerWindow .lw-proto-bar{
+  display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;
+  border-bottom:1px solid var(--border);background:var(--surface-2);
+}
+html[data-skin="lightwell"] #observerWindow .lw-proto-chip{
+  font-size:11px;line-height:1.2;padding:4px 8px;border-radius:var(--radius-xs);
+  border:1px solid var(--border);background:var(--card-bg);color:var(--text-2);cursor:pointer;
+  font-family:var(--font-sans);
+}
+html[data-skin="lightwell"] #observerWindow .lw-proto-chip:hover{
+  border-color:var(--primary);color:var(--accent);
+}
+html[data-skin="lightwell"] #observerWindow .lw-proto-chip.active{
+  background:var(--primary);color:var(--on-accent);
+  border-color:var(--primary-hover);font-weight:600;
+}
+html[data-skin="lightwell"] #observerWindow .lw-obs-body{
+  flex:1;overflow-y:auto;padding:12px;font-size:12.5px;line-height:1.5;
+}
+
+/* 6. 观察窗内容卡片 */
+html[data-skin="lightwell"] .lw-proto-card{
+  background:var(--card-bg);border:1px solid var(--border);
+  border-radius:var(--radius-md);padding:10px 12px;margin-bottom:10px;
+}
+html[data-skin="lightwell"] .lw-proto-card-title{
+  font-weight:600;margin-bottom:6px;color:var(--text);
+}
+html[data-skin="lightwell"] .lw-proto-note{color:var(--text-2);margin-bottom:6px;}
+html[data-skin="lightwell"] .lw-proto-empty{color:var(--text-3);}
+html[data-skin="lightwell"] .lw-proto-row{
+  display:flex;justify-content:space-between;padding:4px 0;
+  border-bottom:1px dashed var(--border);
+}
+html[data-skin="lightwell"] .lw-proto-method{font-family:var(--font-mono);color:var(--accent);}
+html[data-skin="lightwell"] .lw-proto-meta{color:var(--text-2);}
+
+/* 7. 底部成本光带 */
+html[data-skin="lightwell"] #glass-ribbon{
+  position:fixed;left:12px;right:12px;bottom:8px;height:32px;z-index:30;
+  border-radius:var(--radius-md);padding:0 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  font-size:11.5px;color:var(--text-2);
+}
+html[data-skin="lightwell"] #glass-ribbon .lw-rib-group{
+  display:flex;align-items:center;gap:8px;min-width:0;
+}
+html[data-skin="lightwell"] #glass-ribbon .lw-rib-pill{
+  display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  font-family:var(--font-mono);font-size:11px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+html[data-skin="lightwell"] #glass-ribbon .lw-rib-btn{
+  padding:2px 8px;border-radius:var(--radius-xs);border:1px solid var(--border);
+  background:var(--card-bg);color:var(--text);cursor:pointer;font-size:11px;
+  font-family:var(--font-sans);flex-shrink:0;
+}
+html[data-skin="lightwell"] #glass-ribbon .lw-rib-btn:hover{
+  border-color:var(--primary);color:var(--accent);
+}
+
+/* 8. 零钴蓝覆盖：把存量硬编码冷色/字面量蓝收敛到暖色令牌 */
+html[data-skin="lightwell"] ::selection{
+  background:rgba(217,119,87,.28);color:var(--text);
+}
+/* 焦点环走单一事实源 --focus-ring，不得用 --primary 作描边：既有判据钉住以 --primary
+   作焦点环描边只有 2 处（cn-flash），新增第三处即红；本注释也不得写出完整描边字面量。 */
+html[data-skin="lightwell"] :focus-visible{
+  outline:2px solid var(--focus-ring);outline-offset:2px;
+}
+html[data-skin="lightwell"] .new-chat-btn,
+html[data-skin="lightwell"] #sendBtn,
+html[data-skin="lightwell"] button.primary,
+html[data-skin="lightwell"] .btn-primary{
+  background:var(--primary);border-color:var(--primary-hover);
+  color:var(--on-accent);font-weight:600;
+}
+html[data-skin="lightwell"] .new-chat-btn:hover,
+html[data-skin="lightwell"] #sendBtn:hover,
+html[data-skin="lightwell"] button.primary:hover,
+html[data-skin="lightwell"] .btn-primary:hover{
+  background:var(--primary-hover);color:var(--on-accent);
+}
+html[data-skin="lightwell"] .badge,
+html[data-skin="lightwell"] .status-pill,
+html[data-skin="lightwell"] .header-badge,
+html[data-skin="lightwell"] .hs-chip{
+  background:var(--surface-2);border-color:var(--border);color:var(--text-2);
+}
+html[data-skin="lightwell"] .badge.active,
+html[data-skin="lightwell"] .tab.active,
+html[data-skin="lightwell"] .nav-item.active,
+html[data-skin="lightwell"] .rail-btn.on{
+  background:var(--primary-soft);border-color:var(--primary);color:var(--accent);
+}
+html[data-skin="lightwell"] .stream-bar,
+html[data-skin="lightwell"] .progress-fill{
+  background:linear-gradient(90deg,var(--primary),var(--accent));
+}
+/* 成员头像色环：默认 hsl hue=210 蓝，JS 又按成员 id 散列出全色谱。不动 JS，
+   只在皮肤层把 hue 压进 18–62 暖带（成员间仍可区分，不再出青蓝紫）。 */
+html[data-skin="lightwell"] .gwb-ava{
+  color:hsl(calc(18 + var(--hue,210) * .12) 42% 28%);
+  background:linear-gradient(145deg,
+    hsl(calc(18 + var(--hue,210) * .12) 55% 93%),
+    hsl(calc(18 + var(--hue,210) * .12) 42% 86%));
+  border-color:hsl(calc(18 + var(--hue,210) * .12) 34% 76%);
+  box-shadow:0 1px 3px hsl(calc(18 + var(--hue,210) * .12) 30% 60% / .20);
+}
+html[data-skin="lightwell"] ::-webkit-scrollbar{width:10px;height:10px;}
+html[data-skin="lightwell"] ::-webkit-scrollbar-thumb{background:#C9C5B7;border-radius:999px;}
+html[data-skin="lightwell"] ::-webkit-scrollbar-thumb:hover{background:#B3AE9E;}
+html[data-skin="lightwell"] body.dark ::-webkit-scrollbar-thumb{background:#48453E;}
+html[data-skin="lightwell"] body.dark ::-webkit-scrollbar-thumb:hover{background:#57534A;}
+
+/* 9. 特效关闭：模糊/过渡/壁纸渐隐全部停用（正文优先于演出） */
+html[data-skin="lightwell"] body.fx-off header.header,
+html[data-skin="lightwell"] body.fx-off #mainStage,
+html[data-skin="lightwell"] body.fx-off #observerWindow,
+html[data-skin="lightwell"] body.fx-off #glass-ribbon{
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  background:var(--card-bg);
+}
+html[data-skin="lightwell"] body.fx-off #observerWindow,
+html[data-skin="lightwell"] body.fx-off #lw-ambient-wallpaper{
+  transition:none;
+}
+
+/* 10. 窄屏收口：观察窗由「占位第三栏」降级为「覆盖式浮层」 */
+/* 窄屏若仍缩进 360px，主台会跌破 480px，气泡与 composer 双双变形 ⇒ 只撤 margin
+   （不隐藏节点，手动点开仍是浮层），并由壳层跨阈值自动收起（阈值 1080px 必须同值）。 */
+@media (max-width:1080px){
+  html[data-skin="lightwell"] body.lw-observer-open #mainStage{
+    margin-right:8px;
+  }
+  html[data-skin="lightwell"] #observerWindow{
+    width:min(340px,calc(100vw - 24px));
+    /* 浮层态需要一圈实边，否则与主台玻璃叠加后边界不可辨 */
+    box-shadow:var(--glass-shadow),var(--glass-rim),0 0 0 1px var(--border-strong);
+  }
+  /* 光带内容在窄屏必须可压缩：否则长文本把三个按钮挤出可视区 */
+  html[data-skin="lightwell"] #glass-ribbon .lw-rib-group{flex:1 1 auto;min-width:0;}
+  html[data-skin="lightwell"] #glass-ribbon .lw-rib-pill{flex:0 1 auto;min-width:0;}
+  /* 窄屏优先保留「最后调用 + 三个按钮」，SKIN 铭牌信息量最低，最先让位 */
+  html[data-skin="lightwell"] #glass-ribbon .lw-rib-pill:first-child{
+    display:none;
+  }
+}
+@media (max-width:768px){
+  html[data-skin="lightwell"] #observerWindow{
+    width:calc(100vw - 24px);top:56px;
+  }
+  html[data-skin="lightwell"] header.header{
+    height:auto;min-height:48px;
+  }
+  html[data-skin="lightwell"] .main{
+    padding-bottom:40px;
+  }
+  /* 窄屏光带 28+8=36px，40 足够；三栏必须同值。 */
+  html[data-skin="lightwell"] .rail,
+  html[data-skin="lightwell"] .sidebar{
+    padding-bottom:40px;
+  }
+  html[data-skin="lightwell"] #glass-ribbon{
+    left:8px;right:8px;bottom:8px;height:28px;padding:0 8px;gap:8px;
+    font-size:11px;
+  }
+}
+
+/* 9. toast 让位（R91）：#toastBox 的 z-index 高于光带，会整个盖住光带右侧按钮 */
+html[data-skin="lightwell"] #toastBox{bottom:52px}
+
+/* 10. 九视图事实分层（R92）：每条事实标注来源（live / const / empty），三类形态必须
+ *     在视觉上可区分 —— 契约常量带小标，无数据源是灰底空态，真读数右侧对齐。 */
+html[data-skin="lightwell"] .lw-proto-fact{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;
+  justify-content:space-between;padding:4px 0;
+  border-bottom:1px dashed var(--border);font-size:12px;line-height:1.5;
+}
+html[data-skin="lightwell"] .lw-fact-k{color:var(--text-2);flex:0 0 auto;}
+html[data-skin="lightwell"] .lw-fact-v{color:var(--text);text-align:right;min-width:0;word-break:break-word;}
+html[data-skin="lightwell"] .lw-fact-v code{font-family:var(--font-mono);font-size:11px;color:var(--accent);}
+/* hint 是上一行的注释，不是一条独立事实行。R95 修：原先 flex:1 1 100% + 左对齐，
+ * 在窄观察窗里会被看成「左边有字、右边没值」的坏行（R92-4 验收截图 06 抓到）。
+ * 现在右对齐 + 降一档字号 + 前置「· 」+ 降透明度 + 单行省略，一眼是脚注。
+ * 注意：不加 background / border，避免再次像一张卡片或一行数据。 */
+html[data-skin="lightwell"] .lw-fact-hint{
+  flex:1 1 100%;margin-top:1px;text-align:right;
+  color:var(--text-3);font-size:9.5px;line-height:1.35;opacity:.72;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+html[data-skin="lightwell"] .lw-fact-hint::before{content:'· ';}
+html[data-skin="lightwell"] .lw-fact-tag{
+  flex:0 0 auto;margin-left:auto;padding:0 5px;border-radius:999px;
+  border:1px solid var(--border);color:var(--text-3);font-size:10px;
+}
+html[data-skin="lightwell"] .lw-proto-empty{
+  display:block;padding:6px 8px;margin:4px 0;border-radius:var(--radius-sm);
+  background:var(--chip-bg);font-size:11.5px;text-align:left;
+}
+
+/* 11. 液态折射（R92-3）：**默认开**，脚本初始化时把 html[data-lw-liquid="1"] 打上；
+ *     ?liquid=0 时脚本撤掉该属性，四宿主退回第 4 段的纯 blur/saturate。
+ *     为什么默认开：qa/r92/optics-probe.mjs 按"先写阈值再测"的规则（avg ≥ 50fps 且
+ *     p95 ≤ 25ms 且长帧(>50ms)=0）在最终产物 headful 主测里两视口三选全中
+ *     （1440×900 165fps / 6.2ms / 0 帧；800×900 165fps / 6.2ms / 0 帧），且
+ *     A/A' 空对照（qa/r92/optics-null-control.mjs，18 格交错）把折射与基线放在同一
+ *     噪声带里；人为 blur 40px 的仪器自检掉到 157.2fps ⇒ 测量有分辨力。
+ *     代价机器相关且随条件变：静态页 800 视口我测 0.8fps、QA 另一台机 5.6fps；
+ *     动态底噪（每帧重绘）本轮复跑 6.7fps —— 都远优于阈值，引用写
+ *     「0.8–6.7fps（机器与条件相关）」，不要写成单点。
+ *     fx-off 下必须同时归零（特效开关的语义是"全停"，不是"停一半"）。
+ *     实现要点：整条滤镜栈收进自定义属性 --lw-glass-stack，宿主块只写 var()。
+ *     这样 `lightwell-skin-gate` 的「恰好 1 条 blur 规则块」判据仍只命中第 4 段
+ *     那唯一一条四宿主规则 —— 否决"再叠一个模糊容器"的写法，避免嵌套掉帧。 */
+html[data-skin="lightwell"][data-lw-liquid="1"]{
+  --lw-glass-stack:blur(var(--glass-blur)) saturate(var(--glass-saturate)) url(#lw-liquid-refract);
+}
+html[data-skin="lightwell"][data-lw-liquid="1"] header.header,
+html[data-skin="lightwell"][data-lw-liquid="1"] #mainStage,
+html[data-skin="lightwell"][data-lw-liquid="1"] #observerWindow,
+html[data-skin="lightwell"][data-lw-liquid="1"] #glass-ribbon{
+  -webkit-backdrop-filter:var(--lw-glass-stack);
+  backdrop-filter:var(--lw-glass-stack);
+}
+html[data-skin="lightwell"][data-lw-liquid="1"] body.fx-off header.header,
+html[data-skin="lightwell"][data-lw-liquid="1"] body.fx-off #mainStage,
+html[data-skin="lightwell"][data-lw-liquid="1"] body.fx-off #observerWindow,
+html[data-skin="lightwell"][data-lw-liquid="1"] body.fx-off #glass-ribbon{
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+
+/* ===== 全屏覆盖层实底（R96 · P0「详情页整页文字重叠」）=====
+   本皮肤把 --main-bg / --main-veil 置为 transparent —— 三栏主台（.main / .panel-head /
+   .input-area 等）要靠它透出玻璃壁纸，**令牌本身不能动**。但 #groupDetail（.gd-page，
+   position:fixed;inset:0;z-index:3200）是「全屏独立页面」，拿同一个令牌当底色就一起变透明：
+   详情页一打开，底下的聊天正文整页透出，读起来就是「整页文字重叠 / 页面变透明」。
+   故只给这一层自己的实底（明档 #F0EEE6 / 暗档 #141413，都取自 --bg），令牌一条不改。
+   两条约束写进注释以免后人改坏：
+     ① 本文件自 LIGHTWELL R90 标记起整段由 css-lint 的 lintLightwellSkinSpecificity
+        逐选择器校验，**每个选择器都必须带 [data-skin="lightwell"] 前缀**，否则
+        css-lint 与 lightwell-skin-gate 会同时判红；
+     ② 只修光井档：classic 档 --bg 与 --main-bg 同值（实测 #F5F5F7）本来就不透明。
+        将来新增皮肤若也把 --main-bg 置透明，必须在对应段补同名规则
+       （qa/r96/gd-transparency-probe.mjs 的 T2 会当场抓住）。*/
+html[data-skin="lightwell"] .gd-page{background:var(--bg)}

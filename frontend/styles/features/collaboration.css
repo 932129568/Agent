@@ -1,0 +1,21 @@
+/* W5E4 quiet collaboration controls; same W4 neutral/cobalt system as Expert. */
+.collaboration-block[hidden],.collaboration-actions [hidden]{display:none!important}
+.collaboration-block{min-width:0;border-top:1px solid var(--border);padding-top:16px;margin-top:16px}
+.collaboration-block .check-row input{width:44px;height:44px;min-width:44px;min-height:44px}
+.collaboration-config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin:12px 0}
+.collaboration-config-grid label{display:grid;gap:4px;min-width:0;color:var(--text-2);font-size:12px}
+.collaboration-config-grid input,.collaboration-config-grid select{width:100%;min-width:0;min-height:44px;padding:0 10px;
+  border:1px solid var(--border);border-radius:8px;background:var(--card-bg);color:var(--text);font:inherit}
+.collaboration-endpoint-summary,.collaboration-preview{max-width:100%;margin:10px 0;padding:12px;overflow:auto;white-space:pre-wrap;
+  overflow-wrap:anywhere;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text-2);font:12px/1.6 var(--font-mono)}
+.collaboration-preview:empty{display:none}.collaboration-preview{max-height:180px}
+.collaboration-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.collaboration-actions .modal-btn{min-width:44px;min-height:44px;white-space:nowrap}
+.collaboration-status{margin:8px 0 0;color:var(--text-2);font-size:12px}.collaboration-status[data-kind="error"]{color:var(--err)}
+.collaboration-ref-list{display:grid;gap:8px;min-width:0}.collaboration-ref-row{padding:10px 12px;white-space:pre-wrap;
+  overflow-wrap:anywhere;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font:12px/1.55 var(--font-mono)}
+.collaboration-usage{color:var(--text-2);font-size:12px;font-variant-numeric:tabular-nums}
+body.fx-off .collaboration-block *,body.fx-off .collaboration-ref-list *{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){.collaboration-block *,.collaboration-ref-list *{animation:none!important;transition:none!important}}
+@media (max-width:767px){.collaboration-config-grid{grid-template-columns:minmax(0,1fr)}.collaboration-actions{align-items:stretch}.collaboration-actions .modal-btn{flex:1}}
+@media (max-height:600px){.collaboration-preview{max-height:120px}}

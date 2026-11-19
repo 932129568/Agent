@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harbor v1.9.0「全域版」总集成方案</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--ink:#1a2332;--sub:#5b6779;--line:#e4e8ee;--acc:#2f6bff;--ok:#0e9f6e;--warn:#d97706;--p0:#dc2626;--mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;padding:32px 20px}
+.wrap{max-width:980px;margin:0 auto}
+h1{font-size:26px;margin-bottom:6px}
+.meta{color:var(--sub);font-size:13px;margin-bottom:24px}
+h2{font-size:19px;margin:34px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+h3{font-size:16px;margin:22px 0 10px;color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0}
+th{background:#eef2f8;text-align:left;padding:8px 10px;border:1px solid var(--line);font-weight:600}
+td{padding:7px 10px;border:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#fafbfd}
+code{font-family:var(--mono);font-size:12.5px;background:#eef1f6;padding:1px 5px;border-radius:4px}
+pre{background:#0f172a;color:#e2e8f0;padding:14px 16px;border-radius:8px;font-family:var(--mono);font-size:12.5px;line-height:1.6;overflow-x:auto;margin:10px 0}
+.tag{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;font-weight:600}
+.t-ok{background:#dcfae7;color:#067647}.t-no{background:#fee4e2;color:#b42318}.t-p0{background:#fee4e2;color:#b42318}.t-p1{background:#fef0c7;color:#b54708}
+.tldr{background:linear-gradient(135deg,#eef4ff,#f6f9ff);border:1px solid #c9dbff;border-radius:10px;padding:18px 20px;margin:16px 0}
+.tldr ul{margin:8px 0 0 18px}.tldr li{margin:5px 0}
+ul{margin:8px 0 8px 20px}li{margin:4px 0}
+.small{font-size:12.5px;color:var(--sub)}
+.warn{background:#fffaeb;border:1px solid #fedf89;border-radius:8px;padding:12px 16px;font-size:13px;margin:14px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center}
+.kpi b{display:block;font-size:22px;color:var(--acc)}
+.kpi span{font-size:12px;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Harbor v1.9.0「全域版」总集成方案</h1>
+<div class="meta">三报告合并终版 · 2026-10-21 · A 实现方案 + B 全网调研修订（R26-R45）+ C 双平台浏览器与 macOS 方案 · 状态：v1.0 待审定</div>
+
+<div class="tldr">
+<b>一句话</b>：把 A/B/C 三份方案合并为<b>单一版本 v1.9.0「全域版」</b>——① 补完 v1.8 路线图最后遗留（dual-LLM-lite 本地读取器等）与调研修订未落地项（R26/R27/R37/R39）；② 浏览器从「Windows 搜索专用」升级为 <b>Win/macOS 双端通用 AI 驱动浏览器</b>（六原语）；③ 完成 Harbor <b>整版 macOS 移植</b>（平台服务/UI/安装器/打包公证）。一个版本交付，不拆分。
+<ul>
+<li><b>当前基线（实测）</b>：VERSION=1.7.0；远端 v1.8.0 tag 已发但 tag 内 VERSION 滞后（纪律问题已列修复项）；1082 passed/0 failed；契约 PASS</li>
+<li><b>总量</b>：100 个工作包 / 9 里程碑 / 约 64 人日（62-70）；单人约 13 周 / 2 人约 7-8 周</li>
+<li><b>去重账</b>：A 已交付约 47 人日不重排；dual-LLM-lite 双出处只计一次；搜索面板/guard/缓存共用只计增量</li>
+</ul>
+</div>
+
+<div class="grid2">
+<div class="kpi"><b>100</b><span>工作包</span></div>
+<div class="kpi"><b>9</b><span>里程碑</span></div>
+<div class="kpi"><b>~64</b><span>人日（62-70）</span></div>
+<div class="kpi"><b>1082+150</b><span>测试目标</span></div>
+</div>
+
+<h2>1. 三份输入的合并口径与去重账</h2>
+<table>
+<tr><th>输入</th><th>原始估算</th><th>调整</th><th>入本方案</th></tr>
+<tr><td>A《v1.8.0 单版本全量实现方案》</td><td>54.5 人日</td><td>已交付约 47（代码库实测确认）</td><td>遗留 ~7.5</td></tr>
+<tr><td>B《六大方向全网调研·第二批》</td><td>+4.5 人日</td><td>R29/R30/R33-R35 随 A 交付；R36 主体随 W10 交付</td><td>未落地 ~2.5</td></tr>
+<tr><td>C《双平台浏览器+macOS 方案》</td><td>58-66 人日</td><td>与 A/B 双出处去重 -4</td><td>~54-62</td></tr>
+<tr><td><b>合计</b></td><td>—</td><td>—</td><td><b>~64 人日（62-70）</b></td></tr>
+</table>
+
+<h3>已交付（不重排，仅作依赖前提）</h3>
+<div class="card small">
+搜索四件套 + browser_search/open/takeover/cache_stats js_api · software_service · hybrid_router · validation_service + F1 reflect_loop · memory_service · plan_service + 计划卡 UI · guard 五层判定链 + 授权条 · prompts 两表模式 · estTokens 校准 · trace_id · readiness 8 项+面板 · MCP TOFU+健康度 · 导出修复 · 历史自选目录+真删 · R23 剪贴板实测（Win11 无效，§17 已修订）· R20 DeepSeek 校准 · R21 判重复建设
+</div>
+
+<h3>未交付（本方案范围，14 项）</h3>
+<table>
+<tr><th>#</th><th>项</th><th>落点</th></tr>
+<tr><td>1</td><td><b>dual-LLM-lite 本地读取器</b>（最大遗留）</td><td>M2.1/2.2</td></tr>
+<tr><td>2</td><td>计划审查主关卡+审批预算+计划卡 UX</td><td>M2.3-2.5</td></tr>
+<tr><td>3</td><td>审计五维+哈希链</td><td>M2.6</td></tr>
+<tr><td>4</td><td>checkpoint_service 六军规+UI</td><td>M2.7/2.8</td></tr>
+<tr><td>5</td><td>Bing RSS 优先</td><td>M2.9</td></tr>
+<tr><td>6</td><td>MCP 定期重验+楼层规则扩全字段</td><td>M2.10</td></tr>
+<tr><td>7</td><td>缓存分级 TTL / stderr 清洗核对</td><td>M2.11</td></tr>
+<tr><td>8</td><td>Windows 浏览器交互原语（click/fill/screenshot/close）</td><td>M3</td></tr>
+<tr><td>9</td><td>macOS WKWebView 后端</td><td>M4</td></tr>
+<tr><td>10</td><td>6 个浏览器驱动 js_api+guard+schema+AGENTS.md</td><td>M5</td></tr>
+<tr><td>11</td><td>macOS 平台服务七接口</td><td>M6.1-6.9</td></tr>
+<tr><td>12</td><td>macOS UI 适配+DMG 安装器+权限引导</td><td>M6.10-6.14</td></tr>
+<tr><td>13</td><td>macOS 打包签名公证分发</td><td>M7</td></tr>
+<tr><td>14</td><td>双端性能/安全/测试/真机/发布</td><td>M8/M9</td></tr>
+</table>
+
+<h2>2. 版本范围与目标</h2>
+<div class="card">
+<b>版本号</b>：VERSION 1.7.0 → <b>1.9.0</b>（v1.8.0 tag 已在远端发放）。<b>版本纪律修复</b>：VERSION bump 进发布 checklist——v1.8.0 tag 曾带 VERSION=1.7.0 出货（M1.10）。
+</div>
+<table>
+<tr><th>棒</th><th>内容</th><th>人日</th></tr>
+<tr><td>补完</td><td>dual-LLM-lite+provenance / 计划审查关卡+审批预算 / 审计五维哈希链 / 检查点六军规 / Bing RSS / MCP 收尾</td><td>8.5</td></tr>
+<tr><td>双端浏览器</td><td>平台抽象 / Win 完整化（六原语）/ macOS WKWebView 后端 / AI 驱动工具面</td><td>25</td></tr>
+<tr><td>macOS 整版</td><td>平台服务七接口 / UI 适配 / DMG 安装器 / 打包签名公证分发</td><td>32.5</td></tr>
+<tr><td>质量</td><td>双端性能基准 / 安全加固 / 测试矩阵 / 双真机验证 / 发布</td><td>15.5</td></tr>
+</table>
+<div class="card small">
+<b>目标（可证伪）</b>：① 双端通用 AI 驱动浏览器（注入 fixture 零触发）② 确认弹窗/任务 -60% ③ 自检覆盖率 100% ④ macOS DMG 可分发全功能冒烟 ⑤ 1082 既有零回归 + 新增约 150 全绿，契约/UI 契约零漂移
+</div>
+
+<h2>3. 里程碑与 100 批次（9 里程碑）</h2>
+
+<h3>M1 · 地基与平台抽象（12 包 · P0）</h3>
+<table>
+<tr><th>#</th><th>任务</th><th>交付物</th></tr>
+<tr><td>1.1</td><td>browser/ 包 + 平台探测（win/mac/headless）</td><td>包骨架</td></tr>
+<tr><td>1.2</td><td>session_base：六原语签名+状态机+错误 taxonomy</td><td>基类</td></tr>
+<tr><td>1.3</td><td>platform/ 包：PlatformServices 七接口抽象</td><td>抽象</td></tr>
+<tr><td>1.4</td><td>Windows 平台服务实现（DPAPI/JobObject/ImageGrab/send2trash/tasklist/toast）</td><td>win impl</td></tr>
+<tr><td>1.5</td><td>搜索四件套迁入 browser/</td><td>迁移</td></tr>
+<tr><td>1.6</td><td>迁移回归：既有 browser_* 测试全绿</td><td>测试</td></tr>
+<tr><td>1.7</td><td>api.py import 更新 + 契约差分</td><td>接线</td></tr>
+<tr><td>1.8</td><td>prompts/ 扩展 browser-* 四个 + manifest bump + 逐字一致断言</td><td>提示词</td></tr>
+<tr><td>1.9</td><td>_V12_EXTRA 批量占位（新 js_api 名先登记）</td><td>契约</td></tr>
+<tr><td>1.10</td><td><b>版本纪律修复</b>：tag 前断言 VERSION==目标版本</td><td>流程</td></tr>
+<tr><td>1.11</td><td>headless 后端骨架（urllib+adapter）</td><td>后端</td></tr>
+<tr><td>1.12</td><td>M1 出口：全量测试+契约差分+构建幂等</td><td>门禁</td></tr>
+</table>
+
+<h3>M2 · Agent 遗留与调研修订落地（12 包 · P0）</h3>
+<table>
+<tr><th>#</th><th>任务</th><th>交付物</th></tr>
+<tr><td>2.1</td><td><b>dual-LLM-lite 本地读取器</b>（schema 约束 JSON、无指令权、禁祈使句）</td><td>AI 核心</td></tr>
+<tr><td>2.2</td><td>provenance 包裹（来源 URL + UNTRUSTED DATA）接入三类输出</td><td>安全</td></tr>
+<tr><td>2.3</td><td>R26 计划审查主关卡（Intent Preview：步骤+时间估计+风险+边界声明）</td><td>关卡</td></tr>
+<tr><td>2.4</td><td>R27 审批预算（超限升级任务授权；高风险禁快捷确认）</td><td>关卡</td></tr>
+<tr><td>2.5</td><td>R41 计划卡 UX 升级（&lt;30s 可扫/累计上下文/渐进委托）</td><td>UI</td></tr>
+<tr><td>2.6</td><td>R37 审计五维+哈希链（双身份/意图/计划/执行证据/结果）</td><td>审计</td></tr>
+<tr><td>2.7</td><td>R39 checkpoint_service 六军规（差异恢复/绝不删未备份/影子仓库/shell 快照/清单确认/恢复校验）</td><td>服务</td></tr>
+<tr><td>2.8</td><td>检查点 UI 入口（回滚链接+清单确认）</td><td>UI</td></tr>
+<tr><td>2.9</td><td>R28 Bing RSS 优先（4KB 主路径+HTML 兜底+双通道 fixture）</td><td>适配器</td></tr>
+<tr><td>2.10</td><td>R36 收尾：MCP 定期重验+楼层规则扩 schema 全字段</td><td>安全</td></tr>
+<tr><td>2.11</td><td>R30/R32 核对：缓存分级 TTL + stderr ANSI/bidi/零宽清洗</td><td>核对</td></tr>
+<tr><td>2.12</td><td>M2 出口：读取器零工具权 fixture + 哈希链验证 + 全量门禁</td><td>门禁</td></tr>
+</table>
+
+<h3>M3 · Windows 浏览器完整化（10 包 · P0）</h3>
+<table>
+<tr><th>#</th><th>任务</th><th>#</th><th>任务</th></tr>
+<tr><td>3.1</td><td>通用导航（任意 URL）</td><td>3.6</td><td>下载拦截+外链策略</td></tr>
+<tr><td>3.2</td><td>click/fill 原语+前后态截图</td><td>3.7</td><td>会话池（预热/回收/上限 3）</td></tr>
+<tr><td>3.3</td><td>screenshot 原语</td><td>3.8</td><td>可见/隐藏驱动模式切换</td></tr>
+<tr><td>3.4</td><td>close 原语+生命周期接入</td><td>3.9</td><td>注入 fixture+视口外拒点+敏感字段</td></tr>
+<tr><td>3.5</td><td>js_api 提取桥（回调+<b>加锁</b>）</td><td>3.10</td><td>M3 出口：六原语全链路+搜索回归</td></tr>
+</table>
+
+<h3>M4 · macOS 浏览器后端（12 包 · P0）</h3>
+<table>
+<tr><th>#</th><th>任务</th><th>#</th><th>任务</th></tr>
+<tr><td>4.1</td><td>PyObjC 环境隔离（extras）</td><td>4.7</td><td>takeSnapshot 截图（point 坐标系）</td></tr>
+<tr><td>4.2</td><td>NSWindow+WKWebView 创建</td><td>4.8</td><td>click/fill 原语</td></tr>
+<tr><td>4.3</td><td>独立 data store+jsBridge</td><td>4.9</td><td>下载/外链策略对齐 Win</td></tr>
+<tr><td>4.4</td><td>load_url+导航委托</td><td>4.10</td><td>会话池对齐</td></tr>
+<tr><td>4.5</td><td>等待原语（语义一致）</td><td>4.11</td><td>headless 完整化+无显示降级</td></tr>
+<tr><td>4.6</td><td>js_api 提取桥（主线程派发）</td><td>4.12</td><td>M4 出口：<b>三后端一致性 fixture</b></td></tr>
+</table>
+
+<h3>M5 · AI 驱动工具面（双端同一套，10 包 · P0）</h3>
+<table>
+<tr><th>#</th><th>任务</th><th>#</th><th>任务</th></tr>
+<tr><td>5.1</td><td>6 个 js_api+_V12_EXTRA 转正</td><td>5.6</td><td>等待三保险（选择器/DOM 稳定/硬超时）</td></tr>
+<tr><td>5.2</td><td>guard 矩阵接线（click/fill=always）</td><td>5.7</td><td>反爬检测+人工接管（双端）</td></tr>
+<tr><td>5.3</td><td>工具 schema strict</td><td>5.8</td><td>缓存分级 TTL+URL 归一+版本入键</td></tr>
+<tr><td>5.4</td><td>服务端双门校验+isError+重试 1</td><td>5.9</td><td>AGENTS.md+工具描述三段式 lint</td></tr>
+<tr><td>5.5</td><td>dual-LLM-lite 接入浏览器提取</td><td>5.10</td><td>M5 出口：双端注入 fixture+门禁</td></tr>
+</table>
+
+<h3>M6 · macOS 平台服务+UI+安装器（14 包 · P0）</h3>
+<table>
+<tr><th>#</th><th>任务</th><th>#</th><th>任务</th></tr>
+<tr><td>6.1</td><td>Keychain 服务（ctypes C API，绕开已坏 CLI）</td><td>6.8</td><td>进程服务+通知（NSUserNotification）</td></tr>
+<tr><td>6.2</td><td>Secrets 切换（DPAPI↔Keychain）</td><td>6.9</td><td>M6a 出口：七接口双端一致性</td></tr>
+<tr><td>6.3</td><td>Keychain 边界测试（SSH -25308 引导）</td><td>6.10</td><td>平台探测 js_api+前端分支基建</td></tr>
+<tr><td>6.4</td><td>sandbox-exec SBPL 生成器+网络三档</td><td>6.11</td><td>菜单栏+窗口行为（Cmd+Q/关窗不退出）</td></tr>
+<tr><td>6.5</td><td>沙箱自检+子进程树继承验证</td><td>6.12</td><td>快捷键双映射+控件风格+SF 字体</td></tr>
+<tr><td>6.6</td><td>截屏（CGDisplay+TCC 引导）</td><td>6.13</td><td>DMG 安装器+首次运行权限引导</td></tr>
+<tr><td>6.7</td><td>废纸篓+路径层（~/Library/App Support）</td><td>6.14</td><td>M6b 出口：UI 契约差分+安装冒烟</td></tr>
+</table>
+
+<h3>M7 · macOS 打包分发（10 包 · P1）</h3>
+<div class="card small">
+7.1 build spec（--windowed+BUNDLE+Info.plist）· 7.2 icns 图标 · 7.3 PyInstaller arm64 构建 · 7.4 codesign 由内而外 · 7.5 entitlements 决策（不开 App Sandbox）· 7.6 notarytool 公证流水线 · 7.7 DMG 制作 · 7.8 未签名降级路径 · 7.9 版本注入断言 · 7.10 M7 出口：spctl+挂载安装冒烟
+</div>
+
+<h3>M8 · 性能与安全（双端，10 包 · P0）</h3>
+<div class="card small">
+8.1 会话池预热+冷启量化 · 8.2 内存基线 &lt;150MB · 8.3 提取带宽+多会话上限 · 8.4 Retina 截图坐标 · 8.5 <b>R45 基准报告</b>（内存/中文检索 ≥90%/首问 &lt;3min）· 8.6 SBPL 最小权限评审 · 8.7 注入防御复核+click/fill 审计 · 8.8 cookie 隔离+逃逸测试集+Keychain ACL · 8.9 威胁模型（TCC/AppleEvent/LaunchAgent+MXC 演进）· 8.10 M8 出口
+</div>
+
+<h3>M9 · 测试矩阵/真机/发布（10 包 · P0/P1）</h3>
+<div class="card small">
+9.1 session_mac Mock PyObjC 单测 · 9.2 新 js_api 契约差分 · 9.3 headless CI nightly · 9.4 Keychain/Seatbelt 真机 · 9.5 MacBook 冒烟+权限流+Gatekeeper · 9.6 性能对标+回退验证 · 9.7 Windows 真机回归 · 9.8 七门全量+基准链 · 9.9 双平台发布文档 · 9.10 M9 出口：发布评审+归档（Setup exe/.app/.dmg/校验和）
+</div>
+
+<h2>4. 关键流程（合并后）</h2>
+<h3>Plan-Act 主循环（v1.8 在位 + M2 升级）</h3>
+<pre>用户发送
+ → hybrid.classify → understand（本地 5s；超时→云端→透传）
+ → plan_service.propose → <b>计划卡先行（Intent Preview：步骤+时间估计+风险+边界声明）</b>
+ → 用户批准 / 编辑后批准 / 拒绝
+     └─ L2 授权中+全 low 风险 → 自动批准
+     └─ <b>审批预算超限 → 升级任务授权邀请，不继续弹窗</b>
+ → Act：五层判定链；browser_* click/fill=always（前后态截图审计）
+     └─ validation 失败 → reformulate ≤2 → blocked
+ → Reflect：本地 3s → verdict+confidence；&lt;0.7 → 云端复核
+ → Deliver：摘要+回滚链接+trace_id 落审计五维链</pre>
+<h3>browser_extract（dual-LLM-lite，双端同一管线）</h3>
+<pre>agent → browser_extract
+ → 后端选择（Win WebView2 / macOS WKWebView / headless 兜底）
+ → 等待三保险（选择器 ≤8s / DOM 稳定三连稳 / 硬超时+输出校验）
+ → 页面 JS 采集 → window.pywebview.api.on_extract(json) 回调（加锁转主队列）
+ → <b>dual-LLM-lite 读取器（本地，schema 约束，无指令权）</b>→ 结构化 JSON
+ → provenance 包裹（来源 URL + UNTRUSTED DATA）→ 主模型上下文
+ → 缓存写入（分级 TTL+适配器版本入键）+ 审计
+ → 降级：窗口超时 → headless；验证码 → 面板人工接管</pre>
+
+<h2>5. 顺序与依赖</h2>
+<div class="card small">
+<b>关键路径</b>：M1 抽象 → M2 dual-LLM-lite/关卡 → M3 Win 完整化 → M4 Mac 后端 → M5 工具面 → M6 平台服务+UI → M7 打包 → M9 发布。<br>
+<b>可并行</b>：M3 ∥ M4（双人，共用 session_base 契约）；M6.1-6.9 ∥ M6.10-6.14；M8 随 M3-M7 滚动；M2 在 M1 后全面开工。<br>
+<b>纪律</b>：每里程碑 pytest+契约差分+check_contract+build×2；未测代码不跨里程碑；macOS 专属包在 Windows 机以 Mock/headless 验证，真机项集中 M9。
+</div>
+
+<h2>6. 兼容性与验证</h2>
+<div class="card small">
+<b>兼容八面</b>：build_tools 默认路径逐字节不变（约 14 新 js_api 全 _V12_EXTRA 隐身）· config.json 零触碰（新配置独立文件）· guard/mcp/sessions 三文件纯增键 · UI 契约 40 id 零漂移 · 四件套等价迁移 · Windows ~/.glm-chat 路径红线不动（macOS 用 ~/Library/Application Support）· 提示词输出逐字一致 · 安装器双轨（Setup exe 不变 + DMG 新增）· VERSION 1.7.0→1.9.0 且 tag 前断言。
+</div>
+<table>
+<tr><th>门</th><th>通过标准</th></tr>
+<tr><td>G1 全量测试</td><td>1082 既有 + 新增约 150 全绿</td></tr>
+<tr><td>G2 契约差分</td><td>build_tools 默认路径 + get_api_info + config.json 零漂移</td></tr>
+<tr><td>G3 UI 契约</td><td>check_contract PASS（只增不改）</td></tr>
+<tr><td>G4 构建幂等</td><td>build.js ×2 md5 一致</td></tr>
+<tr><td>G5 安装器 e2e</td><td>Setup exe 静默装/卸 + DMG 挂载安装 exit 0 清理干净</td></tr>
+<tr><td>G6 注入 fixture</td><td>毒网页+毒 MCP+Deadbugz 时序，双端零触发且被 surface</td></tr>
+<tr><td>G7 三端一致性</td><td>同 HTML → Win/Mac/headless 同结构化输出</td></tr>
+<tr><td>G8 真机冒烟</td><td>Win 六原语 / Mac 全链路+权限+Gatekeeper / 计划回滚 / 记忆跨会话</td></tr>
+<tr><td>G9 基准链</td><td>token -15% / 确认 -60% / 内存 &lt;150MB / 中文检索 ≥90% / 首问 &lt;3min</td></tr>
+</table>
+
+<h2>7. 风险与止损</h2>
+<table>
+<tr><th>风险</th><th>等级</th><th>止损规则</th></tr>
+<tr><td>PyObjC 曲线+WKWebView 调试超预估</td><td><span class="tag t-p0">高</span></td><td>M4 含 3 人日学习曲线；Mock 层先行；真机项集中 M9</td></tr>
+<tr><td>公证卡住（账号/税务）</td><td><span class="tag t-p1">中</span></td><td>提前注册；未签名降级路径；DMG 可先行分发</td></tr>
+<tr><td>Keychain SSH 拒写（-25308）</td><td><span class="tag t-p1">中</span></td><td>引导桌面会话首次写入；错误码人话</td></tr>
+<tr><td>双平台行为分歧</td><td><span class="tag t-p1">中</span></td><td>三端一致性 fixture；抽象层单一定义</td></tr>
+<tr><td>Win 完整化回归破坏搜索</td><td><span class="tag t-p1">中</span></td><td>M3.10+M9.7 双重回归</td></tr>
+<tr><td>单版本 ~64 人日质量稀释</td><td><span class="tag t-p0">高</span></td><td>九里程碑门禁；P2 可砍（DMG 美化/Retina 细化）；契约红线碰即停</td></tr>
+<tr><td>macOS 真机不可用</td><td><span class="tag t-p0">高</span></td><td>Mock+headless 保开发；M6 前确认真机窗口</td></tr>
+</table>
+
+<div class="warn">⚠️ <b>假设</b>：工作量按已交付基线（1082 测试网）估算，64 人日含单测不含审查；macOS 真机（Intel+Apple Silicon 为佳）M6 前可用；Apple Developer 账号（$99/年）项目方提供、M7 前到位；dual-LLM-lite 的「本地」含 Ollama 与本地代理端点；「AI 直接驱动」不含自主多步网页任务规划（另立项）。本方案由三份既有报告合并编制，技术主张可回溯至原报告证据链；Apple 平台政策以官方最新文档为准。</div>
+
+</div>
+</body>
+</html>

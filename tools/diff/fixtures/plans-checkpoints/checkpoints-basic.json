@@ -1,0 +1,69 @@
+{
+  "id": "checkpoints-basic",
+  "family": "plans-checkpoints",
+  "priority": "P0",
+  "mode": "strict",
+  "description": "检查点族（非 git 快照路径）：创建→清单→确认闸→修改→回滚→验证→全部清单（.rollback-bak 安全语义）",
+  "setup": {
+    "workspaceFiles": [
+      { "path": "a.txt", "content": "原始内容A\n", "encoding": "utf-8" },
+      { "path": "b.txt", "content": "原始内容B\n", "encoding": "utf-8" }
+    ],
+    "dirs": [],
+    "callsBefore": []
+  },
+  "calls": [
+    {
+      "id": "c01",
+      "method": "checkpoint_create",
+      "args": ["ck1", ["a.txt", "b.txt"], "{WS}"],
+      "note": "快照两个文件（非 git 工作区 → snapshot 模式）"
+    },
+    {
+      "id": "c02",
+      "method": "checkpoint_list",
+      "args": ["ck1"],
+      "note": "按任务读清单（ws_dir/created_at/label）"
+    },
+    {
+      "id": "c03",
+      "method": "checkpoint_rollback",
+      "args": ["ck1", "{WS}", false],
+      "note": "confirm=false 必须拒（CONFIRM_REQUIRED 结构化错误）"
+    },
+    {
+      "id": "c04",
+      "method": "write_file",
+      "args": ["a.txt", "被修改后的内容\n"],
+      "note": "修改 a.txt（制造回滚差异；write_file 响应同样比对）"
+    },
+    {
+      "id": "c05",
+      "method": "checkpoint_rollback",
+      "args": ["ck1", "{WS}", true],
+      "note": "确认回滚：先备份 .rollback-bak 再恢复 + sha256 校验（workspace 快照验证副作用）"
+    },
+    {
+      "id": "c06",
+      "method": "checkpoint_list",
+      "args": [],
+      "note": "无参=全部任务摘要（items/keep/size_mb）"
+    },
+    {
+      "id": "c07",
+      "method": "checkpoint_rollback",
+      "args": ["no-such-ck", "{WS}", true],
+      "note": "未找到检查点的错误形状"
+    },
+    {
+      "id": "c08",
+      "method": "checkpoint_create",
+      "args": ["bad id!", "[]", "{WS}"],
+      "note": "非法 task_id（防路径逃逸）"
+    }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": []
+  }
+}

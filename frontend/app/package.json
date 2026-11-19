@@ -1,0 +1,20 @@
+{
+  "name": "harbor-app",
+  "private": true,
+  "version": "1.9.0",
+  "type": "module",
+  "description": "Harbor 规范化 React 前端工程骨架（R68 规范草案，待评审）",
+  "scripts": {
+    "scaffold": "node tools/gen-layout.mjs",
+    "build": "node build.mjs",
+    "arch": "node tests/arch-contract.mjs",
+    "test:unit": "node --test tests/unit.test.mjs src/features/_template/Feature.test.mjs",
+    "test:smoke": "node tests/smoke-render.mjs",
+    "verify": "node tools/gen-layout.mjs && node build.mjs && node tests/arch-contract.mjs && node --test tests/unit.test.mjs src/features/_template/Feature.test.mjs && node tests/smoke-render.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "comment": "复用 frontend/react/node_modules，无新依赖、无外网安装"
+}

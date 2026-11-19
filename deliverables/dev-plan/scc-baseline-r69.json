@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "policy": "R69 冻结：B0–B9 每批迁移时符号级循环依赖只减不增。由 tools/scc_ratchet.py 与 CI 强制执行。",
+  "measuredBy": "tools/function_graph.py::collect()['scc_cycles']",
+  "baseline": {
+    "sccCycles": 17,
+    "cyclicSymbols": 104,
+    "largestScc": 34,
+    "topSccSizes": [34, 26, 5, 5, 5, 3],
+    "modules": 117,
+    "symbols": 1317,
+    "edges": 3197
+  },
+  "note": "17 SCC 是模块级符号循环依赖，与 R65「window.* 业务全局符号归零」是不同口径，不矛盾。"
+}

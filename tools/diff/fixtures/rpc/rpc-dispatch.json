@@ -1,0 +1,26 @@
+{
+  "id": "rpc-dispatch",
+  "family": "rpc",
+  "priority": "P1",
+  "mode": "strict",
+  "description": "rpc 通用分发族：合法方法 kwargs 透传/未知方法/私有方法拒绝/位置参数展开 + get_config/save_config 往返",
+  "setup": {
+    "workspaceFiles": [],
+    "callsBefore": []
+  },
+  "calls": [
+    { "id": "c01", "method": "get_config", "args": [], "note": "配置空起步 {}" },
+    { "id": "c02", "method": "rpc", "args": ["save_config", "{\"model\": \"rpc-model\"}"], "note": "rpc kwargs 透传 save_config" },
+    { "id": "c03", "method": "get_config", "args": [], "note": "回读 rpc 写入" },
+    { "id": "c04", "method": "rpc", "args": ["no_such_method", "{}"], "note": "未知方法 → {error: 未知方法}" },
+    { "id": "c05", "method": "rpc", "args": ["_private_method", "{}"], "note": "私有方法拒绝（白名单外）" },
+    { "id": "c06", "method": "rpc", "args": ["save_sessions", "[{\"id\": \"r1\", \"title\": \"rpc 会话\"}]"], "note": "rpc 位置参数展开（数组 payload）" },
+    { "id": "c07", "method": "get_sessions", "args": [], "note": "回读 rpc 保存的会话" },
+    { "id": "c08", "method": "save_config", "args": ["{\"rpc_direct\": true}"], "note": "save_config 直接调用（rpc 间接不计入覆盖口径）" },
+    { "id": "c09", "method": "get_config", "args": [], "note": "回读直接保存" }
+  ],
+  "sideEffects": {
+    "snapshotWorkspace": true,
+    "probeConfigFiles": ["config.json"]
+  }
+}

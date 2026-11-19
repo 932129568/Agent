@@ -1,0 +1,1625 @@
+/* B0 真实结构迁移：由 frontend/app/tools/gen-layout.mjs 从
+ * frontend/react/src/generated/MainShell.jsx 投影，已剥离 68 处事件桥。
+ * AUTO-GENERATED — 请勿手改；改 R67 源后重跑本脚本。
+ * 规范：React 唯一 DOM 所有者、零业务状态、零后端调用、零原生 DOM API。 */
+export default function MainShell() {
+  return (
+    <div data-area="main-shell" className="main">
+      <header className="header">
+        <div className="header-left">
+          <button className="icon-btn" id="sidebarToggleBtn" title="折叠/展开侧栏" aria-label="折叠/展开侧栏" aria-expanded="true">
+            <svg className="ui-icon ui-icon-20" aria-hidden="true">
+              <use href="#i-menu" />
+            </svg>
+          </button>
+          <div className="header-title" id="headerTitle">
+            glm-4.5-flash
+          </div>
+          {/* 页头标题展示当前模型；状态区仅保留缓存与沙箱，避免重复模型信息。
+           Round 8：删静态装饰徽标「多模态 Agent」（无用定义的 UI 版）。 */}
+          <div className="header-status" id="headerStatusZone" />
+        </div>
+        <div className="header-right">
+          <button className="icon-btn" id="shortcutsBtn" title="快捷键与命令（?）">
+            <svg className="ui-icon ui-icon-20" aria-hidden="true">
+              <use href="#i-help" />
+            </svg>
+          </button>
+          <button className="icon-btn" id="searchPanelBtn" title="浏览器搜索（Agent 受控检索）">
+            <svg className="ui-icon ui-icon-20" aria-hidden="true">
+              <use href="#i-search" />
+            </svg>
+          </button>
+          <button className="pill-btn">
+            <svg className="ui-icon ui-icon-20" aria-hidden="true">
+              <use href="#i-settings" />
+            </svg>
+            设置
+          </button>
+        </div>
+      </header>
+      <div className="panels">
+        {/* 面板 1 · 对话（默认）：设置浮层 + 消息流 + 输入区 */}
+        <section className="panel on" id="panelChat">
+          <div className="settings-panel" id="settingsPanel">
+            {/* v4 设置窗口化：遮罩 + 居中窗口 + 左分组导航/右内容单列（WorkBuddy 设置同款布局；
+             开=遮罩淡入+窗口弹簧落入，Esc/点遮罩/× 关闭） */}
+            <div className="set-window">
+              <div className="set-win-head">
+                <span className="set-win-t">
+                  设置
+                </span>
+                <span className="set-win-sub">
+                  Harbor 首选项 · 改动即生效
+                </span>
+                <button className="set-win-close" title="关闭设置（Esc）" aria-label="关闭设置">
+                  <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                    <use href="#i-close" />
+                  </svg>
+                </button>
+              </div>
+              <div className="set-win-body">
+                {/* 修复 UX-4（v1.4）：设置锚点导航（左竖排分组；按钮与 set-block 一一对应，滚动高亮） */}
+                <nav className="set-nav" id="setNav" aria-label="设置分区导航" />
+                <div className="set-content" id="setContent">
+                  <div className="set-grid">
+                    {/* v4「连接与模型」完全单端点（设计书 v4/connect-merge-design.md）：
+               原「连接与模型」「模型服务商（OpenAI 兼容端点）」「本地模型（v1.5）」三块合并为一块。
+               预设下拉 = 唯一端点开关（GLM 官方只是 name='glm' 的预设，不再有独立模式）；
+               单一 Base URL / Key / 模型流；GLM 专属（推理力度）与本地专属（工具调用 / 窗口覆盖）
+               控件进「高级 ▾」折叠并按预设条件显隐（36-connect.js connectUpdateAdvanced）。
+               契约钉住 id：apiKey / modelSelect / reasoningEffort 三者全部保留。 */}
+                    <div className="set-block cm-block" id="cmBlock" data-group="模型与端点">
+                      <div className="cm-head">
+                        <div className="set-title">
+                          连接与模型
+                        </div>
+                        <div className="cm-sub">
+                          一个 Key，连所有端点：选预设 → 填 Key → 识别模型，即填即用
+                        </div>
+                      </div>
+                      <div className="cm-flow" id="cmFlow">
+                        <label htmlFor="providerPreset">
+                          预设
+                        </label>
+                        <div className="cm-preset-slot">
+                          <select id="providerPreset" defaultValue="glm">
+                            <option value="glm">
+                              智谱 GLM
+                            </option>
+                            <option value="deepseek">
+                              DeepSeek
+                            </option>
+                            <option value="moonshot">
+                              Moonshot
+                            </option>
+                            <option value="qwen">
+                              通义千问
+                            </option>
+                            <option value="nemotron">
+                              Nemotron 3 Ultra 550B
+                            </option>
+                            <option value="github-models">
+                              GitHub Models（免费层）
+                            </option>
+                            <option value="ollama">
+                              Ollama
+                            </option>
+                            <option value="lmstudio">
+                              LM Studio
+                            </option>
+                            <option value="vllm">
+                              vLLM
+                            </option>
+                            <option value="llamacpp">
+                              llama.cpp
+                            </option>
+                            <option value="localai">
+                              LocalAI
+                            </option>
+                            <option value="freetoken">
+                              FreeToken Desktop
+                            </option>
+                            <option value="custom">
+                              自定义
+                            </option>
+                          </select>
+                        </div>
+                        <label htmlFor="providerBase">
+                          Base URL
+                        </label>
+                        <input type="text" id="providerBase" placeholder="https://open.bigmodel.cn/api/paas/v4" autoComplete="off" spellCheck="false" />
+                        <div id="cmKeyRow">
+                          <label htmlFor="apiKey" id="cmKeyLabel">
+                            API Key（仅保存在本机）
+                          </label>
+                          <input type="password" id="apiKey" placeholder="粘贴你的智谱 API Key" />
+                          {/* 实现 v1.6 T1：GitHub PAT 获取指引（仅 GitHub Models 预设显示） */}
+                          <div className="set-hint" id="cmKeyHelp" style={{display: "none", margin: "4px 0 0"}}>
+                            
+                  在 
+                            <a href="https://github.com/settings/tokens" target="_blank">
+                              GitHub 设置 → 开发者设置 → Tokens
+                            </a>
+                            
+                  创建 PAT（classic 或 fine-grained 勾选 
+                            <code>
+                              models:read
+                            </code>
+                             scope）后粘贴即可。
+                
+                          </div>
+                        </div>
+                        <div className="local-badge cm-chip" id="cmNoKey" style={{display: "none"}}>
+                          ℹ 本地服务器通常无需 Key（免 Key · 零费用）
+                        </div>
+                        {/* 实现 v1.6 T1：免费层常驻声明（用户裁决①：个人自用算支持范围，明示限制） */}
+                        <div className="local-badge cm-chip" id="cmFreeTier" style={{display: "none"}}>
+                          免费层仅限个人非商业使用，禁止生产使用；高频使用请切换 DeepSeek/GLM 付费层
+                        </div>
+                        <label htmlFor="modelSelect">
+                          模型
+                        </label>
+                        <div className="cm-row">
+                          <div className="cm-pick" id="cmPick">
+                            <select id="modelSelect" defaultValue="auto">
+                              <option value="auto">
+                                智能档（按任务自动调节，最省）
+                              </option>
+                              <option value="glm-4.5-flash">
+                                glm-4.5-flash（免费 · 日常够用）
+                              </option>
+                              <option value="glm-4-flash">
+                                glm-4-flash（免费 · 更省）
+                              </option>
+                              <option value="glm-4.5">
+                                glm-4.5（需余额/额度 · 更强推理）
+                              </option>
+                            </select>
+                            <div className="cm-manual" id="cmManual">
+                              <input type="text" id="cmManualInput" placeholder="输入模型名，如 deepseek-v4.1" autoComplete="off" spellCheck="false" />
+                              <button type="button" className="cm-back" id="cmManualBack" title="切回下拉选择" aria-label="切回下拉选择">
+                                <svg className="ui-icon ui-icon-16" aria-hidden="true">
+                                  <use href="#i-chevron" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                          <span className="local-badge" id="cmCtxBadge" style={{display: "none"}}>
+                            元数据待获取
+                          </span>
+                          <button type="button" className="modal-btn cm-identify" id="cmIdentifyBtn">
+                            ↻ 识别模型
+                          </button>
+                        </div>
+                        {/* 本地系预设：并行端口探测结果（local_probe） */}
+                        <div className="local-probe-result" id="localProbeResult" />
+                        <div className="cm-row">
+                          <button type="button" className="modal-btn primary" id="providerTestBtn">
+                            测试连接
+                          </button>
+                          <span className="cm-status" id="providerTestStatus" />
+                        </div>
+                      </div>
+                      {/* v1.8.0：保存并测试（保存=写入 config 并供对话使用；测试=顺手跑通连接） */}
+                      <div className="cm-save-row">
+                        <button type="button" className="cm-save-btn" id="cmSaveBtn">
+                          保存并测试连接
+                        </button>
+                        <span className="cm-hint">
+                          保存后对话立即使用该模型
+                        </span>
+                      </div>
+                      {/* 高级 ▾：原 GLM 专属 / 云端自定义专属 / 本地专属控件，按预设条件显隐 */}
+                      <details className="cm-details" id="cmAdv">
+                        <summary>
+                          <span className="caret">
+                            ▶
+                          </span>
+                          高级
+                        </summary>
+                        <div className="cm-details-body">
+                          <div id="advReasoning">
+                            <label htmlFor="reasoningEffort">
+                              推理力度
+                            </label>
+                            <div style={{width: "220px", maxWidth: "100%"}}>
+                              <select id="reasoningEffort" defaultValue="auto">
+                                <option value="auto">
+                                  auto（智能档联动，推荐）
+                                </option>
+                                <option value="off">
+                                  off（关闭思考 · 最省输出）
+                                </option>
+                                <option value="low">
+                                  low（快速省钱）
+                                </option>
+                                <option value="medium">
+                                  medium
+                                </option>
+                                <option value="high">
+                                  high
+                                </option>
+                                <option value="max">
+                                  max（最深思考，最贵）
+                                </option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="adv-off" id="advReasoningOff">
+                            推理力度 — 仅智谱 GLM 预设可用
+                          </div>
+                          <div id="advBilling">
+                            <label>
+                              计费三价（¥ / 百万 tokens，留 0 不计费）
+                            </label>
+                            <div className="cm-price">
+                              <input type="number" id="providerPriceIn" step="0.1" min="0" title="输入价 ¥/百万 tokens" placeholder="输入价" />
+                              <input type="number" id="providerPriceOut" step="0.1" min="0" title="输出价 ¥/百万 tokens" placeholder="输出价" />
+                              <input type="number" id="providerPriceCache" step="0.1" min="0" title="缓存命中价 ¥/百万 tokens" placeholder="缓存价" />
+                            </div>
+                          </div>
+                          <div className="adv-off" id="advBillingOff">
+                            计费三价 — 仅第三方服务商预设可用（GLM 按内置价格表，本地零费用）
+                          </div>
+                          <div id="advLocal">
+                            <label htmlFor="localToolCapable">
+                              工具调用
+                            </label>
+                            <div style={{width: "220px", maxWidth: "100%"}}>
+                              <select id="localToolCapable" defaultValue="auto">
+                                <option value="auto">
+                                  自动识别
+                                </option>
+                                <option value="on">
+                                  开
+                                </option>
+                                <option value="off">
+                                  关
+                                </option>
+                              </select>
+                            </div>
+                            <label htmlFor="localCtxWindow" style={{marginTop: "10px"}}>
+                              上下文窗口覆盖（tokens，0 = 按模型元数据自动）
+                            </label>
+                            <input type="number" id="localCtxWindow" min="0" max="2000000" step="1024" placeholder="0 = 自动" />
+                          </div>
+                          <div className="adv-off" id="advLocalOff">
+                            工具调用与上下文覆盖 — 仅本地服务器预设可用
+                          </div>
+                        </div>
+                      </details>
+                      <div className="set-hint cm-bottom-hint">
+                        
+              预设切换后立即生效；GLM 专属能力（智能档 / 推理力度 / 联网搜索）仅智谱预设可用；
+                        <br />
+                        
+              本地预设零费用，上下文按模型窗口自适应压缩；识别失败自动切手动输入，不影响保存与发送。
+                        <br />
+                        
+              在 
+                        <a href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys" target="_blank">
+                          智谱开放平台
+                        </a>
+                         创建 Key 后粘贴即可。
+            
+                      </div>
+                    </div>
+                    <div className="set-block" data-group="对话与生成">
+                      <div className="set-title">
+                        省 Token 策略
+                      </div>
+                      <label>
+                        截图质量
+                      </label>
+                      <select id="shotQuality" defaultValue="low">
+                        <option value="low">
+                          省流（512px · 默认）
+                        </option>
+                        <option value="std">
+                          标准（640px）
+                        </option>
+                        <option value="full">
+                          完整（768px · 细节多）
+                        </option>
+                      </select>
+                      <div className="field">
+                        <label>
+                          历史压缩档位
+                        </label>
+                        <select id="saverLevel" defaultValue="std">
+                          <option value="aggressive">
+                            激进（4.5 万 tokens 即压缩）
+                          </option>
+                          <option value="std">
+                            标准（9 万 tokens）
+                          </option>
+                          <option value="relaxed">
+                            宽松（14 万 tokens）
+                          </option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="sessionBudget">
+                          单会话预算（¥，0 = 不提醒）
+                        </label>
+                        <input type="number" id="sessionBudget" defaultValue="5" min="0" step="0.1" />
+                      </div>
+                      <div className="set-hint">
+                        
+              智能档会自动为轻任务关闭思考（思考 token 按输出计价，最贵）；
+                        <br />
+                        
+              截图会先裁掉纯色边缘再压缩；缓存命中率低时状态栏会提示。
+            
+                      </div>
+                    </div>
+                    <div className="set-block" data-group="对话与生成">
+                      <div className="set-title">
+                        生成参数
+                      </div>
+                      <label htmlFor="maxTokens">
+                        最大输出 tokens
+                      </label>
+                      <input type="number" id="maxTokens" defaultValue="16384" min="256" max="128000" step="256" />
+                      <div className="field">
+                        <label htmlFor="temperature">
+                          Temperature: 
+                          <b id="tempVal">
+                            1.0
+                          </b>
+                        </label>
+                        <input type="range" id="temperature" min="0" max="2" step="0.1" defaultValue="1" />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="topP">
+                          Top P: 
+                          <b id="topPVal">
+                            0.95
+                          </b>
+                        </label>
+                        <input type="range" id="topP" min="0" max="1" step="0.05" defaultValue="0.95" />
+                      </div>
+                    </div>
+                    <div className="set-block" data-group="对话与生成">
+                      <div className="set-title">
+                        角色与联网
+                      </div>
+                      <label htmlFor="systemPrompt">
+                        系统设定（角色 Prompt，长指令写在这里更省）
+                      </label>
+                      <textarea id="systemPrompt" rows="3" placeholder="例如: 你是一名专业的软件开发工程师，认真负责，不随口胡说。" />
+                      <label className="check-row" style={{marginTop: "12px"}}>
+                        <input type="checkbox" id="enableSearch" />
+                         联网搜索
+            
+                      </label>
+                      <div id="searchEngineWrap" style={{display: "none", alignItems: "center", gap: "8px"}}>
+                        <span style={{fontSize: "12px", color: "var(--text-2)", flexShrink: "0"}}>
+                          搜索引擎
+                        </span>
+                        <div style={{width: "170px"}}>
+                          <select id="searchEngine" defaultValue="search_pro">
+                            <option value="search_std">
+                              基础版
+                            </option>
+                            <option value="search_pro">
+                              Pro 版
+                            </option>
+                            <option value="search_pro_quark">
+                              夸克
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="set-hint">
+                        
+              系统设定在缓存前缀内，后续轮按约 0.3 折计费。Key 与端点统一在「连接与模型」配置。
+            
+                      </div>
+                    </div>
+                    {/* WebDAV 数据主权：支持导出、恢复与冲突策略。 */}
+                    <div className="set-block" data-group="数据与历史">
+                      <div className="set-title">
+                        数据同步 · WebDAV
+                      </div>
+                      <div className="set-hint" style={{margin: "2px 0 8px"}}>
+                        
+              支持将配置、会话与审计日志导出到 WebDAV（https），也可从备份恢复。
+                        <br />
+                        
+              本地、云端与备份冲突可选择每次询问、本地优先、云端优先或两边保留。
+            
+                      </div>
+                      <div className="provider-row">
+                        <input type="text" id="webdavUrl" placeholder="https://dav.example.com" style={{flex: "1", minWidth: "160px"}} />
+                        <input type="text" id="webdavUser" placeholder="账号" style={{width: "110px"}} />
+                        <input type="password" id="webdavPass" placeholder="密码" style={{width: "110px"}} />
+                      </div>
+                      <div className="provider-row">
+                        <input type="text" id="webdavPath" placeholder="/glm-chat-backup" style={{flex: "1", minWidth: "120px"}} />
+                        <div style={{width: "170px"}}>
+                          <select id="webdavConflict" defaultValue="ask">
+                            <option value="ask">
+                              冲突：每次询问
+                            </option>
+                            <option value="local_wins">
+                              冲突：本地优先
+                            </option>
+                            <option value="remote_wins">
+                              冲突：云端优先
+                            </option>
+                            <option value="keep_both">
+                              冲突：两边保留
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="provider-row">
+                        <button className="modal-btn primary" id="webdavSaveBtn">
+                          保存配置
+                        </button>
+                        <button className="modal-btn" id="webdavTestBtn">
+                          测试连接
+                        </button>
+                        <button className="modal-btn" id="webdavExportBtn">
+                          导出备份
+                        </button>
+                        <button className="modal-btn" id="webdavRestoreBtn">
+                          从备份恢复
+                        </button>
+                        <span id="webdavStatus" style={{fontSize: "12px", color: "var(--text-2)"}} />
+                      </div>
+                    </div>
+                    <div className="set-block" data-group="系统">
+                      <div className="set-title">
+                        软件更新
+                      </div>
+                      <label htmlFor="updateManifestUrl">
+                        更新清单地址（留空使用默认源）
+                      </label>
+                      <div className="provider-row">
+                        <input type="text" id="updateManifestUrl" placeholder="https://…/update-manifest.json" />
+                        <button className="modal-btn primary">
+                          检查更新
+                        </button>
+                      </div>
+                      <div className="set-hint">
+                        
+              有新版本时右上角会出现更新提示；下载经 SHA256 校验，失败不影响当前版本，重启时自动替换并备份旧版。
+                        <br />
+                        
+              未配置更新源时，检查更新将不可用；有新版本时右上角会出现提示。
+            
+                      </div>
+                    </div>
+                    <div className="set-block" data-group="系统">
+                      <div className="set-title">
+                        外观与特效
+                      </div>
+                      <label className="check-row" htmlFor="fxToggle" style={{marginBottom: "4px"}}>
+                        <input type="checkbox" id="fxToggle" />
+                         特效全开（极光背景 / 发光 / 数字滚动）
+            
+                      </label>
+                      <div className="set-hint" style={{marginTop: "6px"}}>
+                        
+              关闭后保留玻璃质感与必要的状态反馈，动效改为瞬时呈现；
+                        <br />
+                        
+              系统开启「减弱动态效果」时，所有装饰动效自动停用。
+            
+                      </div>
+                    </div>
+                    {/* 实现 v1.6 T13：免打扰（DND）设置项（独立开关，localStorage 持久，不污染 config.json） */}
+                    <div className="set-block" id="dndBlock" data-group="系统">
+                      <div className="set-title">
+                        免打扰（DND）
+                      </div>
+                      <label className="check-row" htmlFor="dndEnabled" style={{marginBottom: "4px"}}>
+                        <input type="checkbox" id="dndEnabled" />
+                         窗口失焦时免打扰
+            
+                      </label>
+                      <div className="set-hint" style={{marginTop: "6px"}}>
+                        
+              开启后，窗口失焦或最小化时抑制非关键提示（成功 / 信息类）；警告与错误仍会弹出。
+                        <br />
+                        
+              被抑制的提示进入左侧导航「🔔 通知」中心（带红点数）；窗口重新聚焦时红点自动清零。
+            
+                      </div>
+                    </div>
+                    <div className="set-block" data-group="工具与软件">
+                      <div className="set-title">
+                        MCP 服务器
+                      </div>
+                      <div className="set-hint" style={{margin: "2px 0 8px"}}>
+                        
+              接入 Model Context Protocol 工具生态：stdio 本地服务器 / Streamable HTTP 远程服务器。
+                        <br />
+                        
+              新服务器默认停用（opt-in）；启用前会测试连接；调用按档位确认，全程留审计。配置存于
+              
+                        <code>
+                          ~/.glm-chat/mcp_servers.json
+                        </code>
+                        （Claude 兼容结构），密钥字段经 DPAPI 加密。
+            
+                      </div>
+                      <div className="provider-row">
+                        <button className="modal-btn primary" id="mcpAddBtn">
+                          <svg className="ui-icon">
+                            <use href="#i-plus" />
+                          </svg>
+                          添加服务器
+                        </button>
+                        <button className="modal-btn" id="mcpImportBtn">
+                          导入 Claude 配置
+                        </button>
+                        <button className="modal-btn" id="mcpRefreshBtn">
+                          ↻ 刷新
+                        </button>
+                      </div>
+                      <div className="mcp-list" id="mcpServerList" />
+                    </div>
+                    {/* 实现 v1.6 T6：命令沙箱设置面板 + 状态灯（纯新增区块；新 id 全部唯一，
+               接线既有 js_api sandbox_get_config/sandbox_save_config/sandbox_status） */}
+                    <div className="set-block" id="sandboxBlock" data-group="系统">
+                      <div className="set-title">
+                        命令沙箱
+                      </div>
+                      <div className="set-hint" style={{margin: "2px 0 8px"}}>
+                        
+              Windows Job Object 进程隔离：每次命令一个独立 Job，收编整棵进程树，句柄关闭即清剿（防孤儿）。
+                        <br />
+                        
+              诚实边界：
+                        <b>
+                          网络不隔离、文件系统仅应用层校验
+                        </b>
+                        ——沙箱不是绝对安全，敏感操作仍会先确认。
+            
+                      </div>
+                      <label className="check-row" htmlFor="sandboxEnabled" style={{marginBottom: "10px"}}>
+                        <input type="checkbox" id="sandboxEnabled" />
+                         启用命令沙箱（关闭后全部命令直接执行）
+            
+                      </label>
+                      <div className="provider-row" style={{alignItems: "center", gap: "8px"}}>
+                        <span className="sb-light" id="sandboxStatusLight" />
+                        <span id="sandboxStatusText" style={{fontSize: "12px", color: "var(--text-2)"}}>
+                          读取状态中…
+                        </span>
+                        <button type="button" className="modal-btn" id="sandboxRefreshBtn">
+                          ↻ 刷新状态
+                        </button>
+                      </div>
+                      <div className="set-hint" id="sandboxUnavailable" style={{display: "none", color: "var(--warn)"}}>
+                        
+              当前系统不支持 Job Object（非 Windows 或句柄创建失败）：沙箱不可用，命令将直接执行。
+            
+                      </div>
+                      <div className="set-hint" id="sandboxStats" style={{margin: "2px 0 10px"}} />
+                      <label>
+                        命令类别档位
+                      </label>
+                      <div className="provider-row">
+                        <span style={{width: "150px", fontSize: "12px", color: "var(--text-2)", flexShrink: "0"}}>
+                          run_command
+                        </span>
+                        <div style={{width: "170px"}}>
+                          <select id="sandboxProfilerun_command" defaultValue="standard">
+                            <option value="off">
+                              off（不沙箱）
+                            </option>
+                            <option value="standard">
+                              standard（1024MB · 16 进程）
+                            </option>
+                            <option value="strict">
+                              strict（512MB · 8 进程）
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="provider-row">
+                        <span style={{width: "150px", fontSize: "12px", color: "var(--text-2)", flexShrink: "0"}}>
+                          run_powershell
+                        </span>
+                        <div style={{width: "170px"}}>
+                          <select id="sandboxProfilerun_powershell" defaultValue="standard">
+                            <option value="off">
+                              off（不沙箱）
+                            </option>
+                            <option value="standard">
+                              standard（1024MB · 16 进程）
+                            </option>
+                            <option value="strict">
+                              strict（512MB · 8 进程）
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="provider-row">
+                        <span style={{width: "150px", fontSize: "12px", color: "var(--text-2)", flexShrink: "0"}}>
+                          run_admin_command
+                        </span>
+                        <div style={{width: "170px"}}>
+                          <select id="sandboxProfilerun_admin_command" defaultValue="off">
+                            <option value="off">
+                              off（恒不沙箱：提权子进程无法收编）
+                            </option>
+                            <option value="standard">
+                              standard（1024MB · 16 进程）
+                            </option>
+                            <option value="strict">
+                              strict（512MB · 8 进程）
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <label style={{marginTop: "12px"}}>
+                        standard 档限制
+                      </label>
+                      <div className="provider-row">
+                        <input type="number" id="sandboxLimitstandardMemory" min="64" max="100000" step="64" title="内存上限（MB）" style={{width: "110px"}} />
+                        <input type="number" id="sandboxLimitstandardProcesses" min="1" max="100" title="活跃进程数上限" style={{width: "110px"}} />
+                        <input type="number" id="sandboxLimitstandardCpu" min="1" max="100000" title="CPU 时间上限（秒）" style={{width: "110px"}} />
+                        <div style={{width: "130px"}}>
+                          <select id="sandboxLimitstandardUi" title="UI 限制级别" defaultValue="basic">
+                            <option value="none">
+                              UI：不限制
+                            </option>
+                            <option value="basic">
+                              UI：basic（桌面/关机）
+                            </option>
+                            <option value="strict">
+                              UI：strict（+全局原子/句柄）
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <label style={{marginTop: "10px"}}>
+                        strict 档限制
+                      </label>
+                      <div className="provider-row">
+                        <input type="number" id="sandboxLimitstrictMemory" min="64" max="100000" step="64" title="内存上限（MB）" style={{width: "110px"}} />
+                        <input type="number" id="sandboxLimitstrictProcesses" min="1" max="100" title="活跃进程数上限" style={{width: "110px"}} />
+                        <input type="number" id="sandboxLimitstrictCpu" min="1" max="100000" title="CPU 时间上限（秒）" style={{width: "110px"}} />
+                        <div style={{width: "130px"}}>
+                          <select id="sandboxLimitstrictUi" title="UI 限制级别" defaultValue="strict">
+                            <option value="none">
+                              UI：不限制
+                            </option>
+                            <option value="basic">
+                              UI：basic（桌面/关机）
+                            </option>
+                            <option value="strict">
+                              UI：strict（+全局原子/句柄）
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="set-hint" style={{marginTop: "6px"}}>
+                        
+              输入顺序：内存（MB）/ 进程数 / CPU 秒；strict 的 UI=strict 可能破坏部分运行时，按需开启。
+            
+                      </div>
+                      <div className="provider-row" style={{marginTop: "10px"}}>
+                        <button type="button" className="modal-btn primary" id="sandboxSaveBtn">
+                          保存档位
+                        </button>
+                        <button type="button" className="modal-btn" id="sandboxResetBtn">
+                          重置默认
+                        </button>
+                      </div>
+                    </div>
+                    <section className="set-block collaboration-block" id="collaborationBlock" aria-labelledby="collaborationTitle" hidden={true}>
+                      <div className="set-title" id="collaborationTitle">
+                        双模型协同（默认关闭）
+                      </div>
+                      <div className="set-hint">
+                         planner/reviewer/finalizer 使用云端，worker/reviser 使用本地；保存配置不会调用模型。
+                      </div>
+                      <label className="check-row" htmlFor="collaborationEnabled">
+                        <input type="checkbox" id="collaborationEnabled" />
+                         启用双模型协同
+                      </label>
+                      <div className="collaboration-config-grid">
+                        <label htmlFor="collaborationCloudBudget">
+                          云端 token 上限
+                          <input id="collaborationCloudBudget" type="number" min="6000" max="30000" step="1000" defaultValue="30000" />
+                        </label>
+                        <label htmlFor="collaborationTotalBudget">
+                          总 token 上限
+                          <input id="collaborationTotalBudget" type="number" min="10000" max="120000" step="1000" defaultValue="120000" />
+                        </label>
+                        <label htmlFor="collaborationCostBudget">
+                          云端费用上限（¥）
+                          <input id="collaborationCostBudget" type="number" min="0.01" max="1000" step="0.01" defaultValue="2" />
+                        </label>
+                        <label htmlFor="collaborationDeadline">
+                          截止时间（秒）
+                          <input id="collaborationDeadline" type="number" min="60" max="1800" step="60" defaultValue="1800" />
+                        </label>
+                        <label htmlFor="collaborationReviewRounds">
+                          复审轮次
+                          <input id="collaborationReviewRounds" type="number" min="0" max="2" step="1" defaultValue="2" />
+                        </label>
+                        <label htmlFor="collaborationUploadScope">
+                          上传范围
+                          <select id="collaborationUploadScope">
+                            <option value="task_summary_only">
+                              任务摘要
+                            </option>
+                            <option value="selected_results_only">
+                              仅选定结果
+                            </option>
+                            <option value="local_only">
+                              仅本地
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                      <pre className="collaboration-endpoint-summary" id="collaborationEndpointSummary">
+                        尚未读取 EndpointRef
+                      </pre>
+                      <div className="collaboration-actions">
+                        <button type="button" className="modal-btn" id="collaborationSaveBtn">
+                          保存协同配置
+                        </button>
+                        <button type="button" className="modal-btn" id="collaborationPreviewBtn">
+                          隐私预览
+                        </button>
+                        <button type="button" className="modal-btn primary" id="collaborationRunBtn">
+                          运行协同
+                        </button>
+                        <button type="button" className="modal-btn" id="collaborationStopBtn" hidden={true}>
+                          停止
+                        </button>
+                        <button type="button" className="modal-btn" id="collaborationRecoverBtn" hidden={true}>
+                          恢复
+                        </button>
+                      </div>
+                      <p className="collaboration-status" id="collaborationStatus" aria-live="polite">
+                        协同已关闭，保持原混合路由。
+                      </p>
+                      <pre className="collaboration-preview" id="collaborationPreview" aria-label="实际上传预览" />
+                    </section>
+                  </div>
+                  {/* /set-grid */}
+                </div>
+                {/* /set-content */}
+              </div>
+              {/* /set-win-body */}
+            </div>
+            {/* /set-window */}
+          </div>
+          {/* /settings-panel */}
+          <section className="new-chat-screen" id="newChatScreen" hidden={true} aria-labelledby="newChatTitle">
+            <div className="new-chat-inner">
+              <header className="new-chat-head">
+                <p className="new-chat-eyebrow">
+                  Harbor 工作台
+                </p>
+                <h1 id="newChatTitle">
+                  开始新对话
+                </h1>
+                <p>
+                  新建一个任务，或进入项目空间继续已有工作。
+                </p>
+              </header>
+              <div className="new-chat-actions">
+                <button type="button" className="new-chat-action" id="newChatNewTaskBtn">
+                  <span className="new-chat-action-icon" aria-hidden="true">
+                    <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                      <use href="#i-plus" />
+                    </svg>
+                  </span>
+                  <span className="new-chat-action-copy">
+                    <strong>
+                      新建任务
+                    </strong>
+                    <small>
+                      从一个独立任务开始，不绑定项目文件夹。
+                    </small>
+                  </span>
+                </button>
+                <button type="button" className="new-chat-action" id="newChatNewProjectBtn">
+                  <span className="new-chat-action-icon" aria-hidden="true">
+                    <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                      <use href="#i-folder-plus" />
+                    </svg>
+                  </span>
+                  <span className="new-chat-action-copy">
+                    <strong>
+                      新建项目
+                    </strong>
+                    <small>
+                      为项目绑定专属文件夹，后续对话复用同一空间。
+                    </small>
+                  </span>
+                </button>
+              </div>
+              <section className="new-chat-history" aria-labelledby="newChatHistoryTitle" hidden={true}>
+                <div className="new-chat-history-head">
+                  <h2 id="newChatHistoryTitle">
+                    历史与空间
+                  </h2>
+                  <span>
+                    任务与项目对话
+                  </span>
+                </div>
+                <div className="new-chat-history-list" id="newChatHistory" hidden={true} />
+              </section>
+            </div>
+          </section>
+          <div className="chat-container" id="chatContainer">
+            <div className="empty-state" id="emptyState">
+              <div className="empty-icon">
+                <span className="glyph">
+                  ✦
+                </span>
+              </div>
+              <h2>
+                开始和 Harbor 聊天
+              </h2>
+              <p>
+                支持文字、图片、视频、文本文件 · 历史记录自动保存
+              </p>
+              {/* 实现 v1.6 T11：未配 Key 时的三步空态引导（纯新增；按钮跳导航对应位） */}
+              <div className="empty-guide" id="emptyGuide">
+                <div className="eg-step">
+                  <b>
+                    1
+                  </b>
+                  选来源
+                  <button type="button" className="modal-btn">
+                    去选择
+                    <svg className="ui-icon ui-icon-16">
+                      <use href="#i-arrow" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="eg-step">
+                  <b>
+                    2
+                  </b>
+                  填 Key
+                  <button type="button" className="modal-btn">
+                    去填写
+                    <svg className="ui-icon ui-icon-16">
+                      <use href="#i-arrow" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="eg-step">
+                  <b>
+                    3
+                  </b>
+                  发问
+                  <button type="button" className="modal-btn" disabled={true}>
+                    在下方输入框
+                  </button>
+                </div>
+              </div>
+              {/* 群聊协作（Beta, 2026-11-04）：多模型成员分工接力 */}
+              <button type="button" className="group-beta-entry" title="配置多个大模型成员分工协作，靠交接文档接力完成任务">
+                
+            👥 群聊协作 · 多模型接力 
+                <span className="gb-beta">
+                  Beta
+                </span>
+              </button>
+            </div>
+          </div>
+          <div className="expert-run-area" id="expertRunArea" hidden={true}>
+            <section className="expert-timeline" id="expertRunTimeline" aria-live="polite" hidden={true} />
+            <div className="expert-run-actions">
+              <button type="button" className="expert-btn" id="expertRunSelectedBtn" hidden={true}>
+                运行所选专家
+              </button>
+              <button type="button" className="expert-btn" id="expertStopBtn" hidden={true}>
+                停止
+              </button>
+              <button type="button" className="expert-btn" id="expertRecoverBtn" hidden={true}>
+                恢复
+              </button>
+            </div>
+          </div>
+          <div className="input-area" id="chatInputArea" hidden={true}>
+            <div className="input-inner" data-ui="composer-workbench">
+              <div className="attach-preview" id="attachPreview" />
+              {/* v4 工作区快捷条：文件夹设置从设置/工作区面板搬到对话框旁，免每对话进设置修改 */}
+              <div className="ws-quick" id="wsQuick" hidden={true}>
+                <button type="button" className="wsq-main" id="wsqMain" title="工作区文件夹（点开即切）">
+                  <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                    <use href="#i-folder" />
+                  </svg>
+                  <span className="wsq-name" id="wsqName">
+                    未启用工作区
+                  </span>
+                  <svg className="ui-icon ui-icon-16 wsq-caret" aria-hidden="true">
+                    <use href="#i-chevron" />
+                  </svg>
+                </button>
+                <button type="button" className="wsq-chip" id="wsqToolChip" title="前往工作区调整工具权限">
+                  完整
+                </button>
+                <label className="wsq-ind" id="wsqIndWrap" style={{display: "none"}} title="本会话独立绑定不同目录" hidden={true}>
+                  <input type="checkbox" id="wsqInd" hidden={true} />
+                  本会话独立
+            
+                </label>
+                <div className="wsq-menu" id="wsqMenu">
+                  <div className="wsq-menu-head">
+                    工作区文件夹
+                  </div>
+                  <div className="wsq-list" id="wsqList" />
+                  <div className="wsq-menu-row">
+                    <button type="button" className="ws-btn">
+                      📁 浏览…
+                    </button>
+                    <button type="button" className="ws-btn" id="wsqUnbind" style={{display: "none"}}>
+                      ↩ 跟随全局
+                    </button>
+                    <button type="button" className="ws-btn" id="wsqEnable">
+                      启用工作区
+                    </button>
+                  </div>
+                  <div className="eff-row wsq-eff">
+                    <span className="eff-tag" id="wsqEffTag">
+                      未启用
+                    </span>
+                    <span id="wsqEffPath" />
+                  </div>
+                </div>
+              </div>
+              <div className="access-strip">
+                <button type="button" className="access-toggle" id="accessToggle" aria-pressed="false">
+                  <span className="access-toggle-track" aria-hidden="true">
+                    <span className="access-toggle-knob" />
+                  </span>
+                  <span className="access-toggle-label">
+                    允许完全访问
+                  </span>
+                </button>
+                <span className="access-hint">
+                  允许创建文件夹、写入文件和执行命令；仍受命令沙箱与安全护栏限制。
+                </span>
+              </div>
+              <div className="input-row">
+                {/* R32 契约兼容面：旧 4 个分类上传按钮 / 4 个 input / 文字「专家」按钮原样保留
+                 （DOM id 与 onclick 属冻结契约），视觉上收敛为下方单个「+」按钮。
+                 统一入口 unifiedFileInput 覆盖更多格式，按类型自动分派到既有处理链。 */}
+                <span className="legacy-attach" hidden={true}>
+                  <button className="tool-btn" title="添加图片">
+                    <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                      <use href="#i-image" />
+                    </svg>
+                  </button>
+                  <button className="tool-btn" title="添加视频">
+                    <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                      <use href="#i-video" />
+                    </svg>
+                  </button>
+                  <button className="tool-btn" title="添加文本文件">
+                    <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                      <use href="#i-file" />
+                    </svg>
+                  </button>
+                  <button className="tool-btn" title="上传压缩包 (zip)">
+                    <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                      <use href="#i-zip" />
+                    </svg>
+                  </button>
+                  <input type="file" id="imgInput" accept="image/*" multiple={true} hidden={true} />
+                  <input type="file" id="vidInput" accept="video/*" hidden={true} />
+                  <input type="file" id="fileInput" multiple={true} hidden={true} />
+                  <input type="file" id="zipInput" accept=".zip" multiple={true} hidden={true} />
+                  <button className="tool-btn expert-inline-btn" id="expertPickerBtn" type="button" title="选择专家，下一次发送时自动加载" aria-label="选择专家">
+                    专家
+                  </button>
+                </span>
+                <button className="tool-btn composer-plus" id="composerPlusBtn" type="button" hidden={true} title="添加文件 / 专家 / 技能 / 连接器" aria-label="更多" aria-expanded="false">
+                  <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                    <use href="#i-plus" />
+                  </svg>
+                </button>
+                {/* R33：不设 accept —— 支持所有文件上传（图片/视频/文本/压缩包照常解析，
+                 其余格式作为文件附件携带元信息，不再拦截） */}
+                <input type="file" id="unifiedFileInput" multiple={true} hidden={true} />
+                <textarea id="userInput" rows="1" placeholder="给 Harbor 发消息…（输入 /plan 可先出计划）" aria-label="消息输入" />
+                <div className="expert-selection-chip" id="expertSelectionChip" aria-live="polite" hidden={true} />
+                <button className="send-btn" id="sendBtn" aria-label="发送消息">
+                  <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                    <use href="#i-send" />
+                  </svg>
+                </button>
+              </div>
+              <div className="hub-chip" id="hubChip" aria-live="polite" hidden={true} />
+              {/* R32：WorkBuddy 同款「+」菜单：添加文件 / 引用对话中的文件 / 模式 / 专家 / 技能 / 连接器 */}
+              <div className="hub-menu" id="hubMenu" hidden={true} role="menu" aria-label="更多操作">
+                <button className="hub-mi" id="hubAddFile" type="button" role="menuitem">
+                  <svg className="ui-icon ui-icon-16" aria-hidden="true">
+                    <use href="#i-plus" />
+                  </svg>
+                  <span className="hub-mi-body">
+                    <b>
+                      上传文件
+                    </b>
+                    <small>
+                      支持全部格式，一次可选多个
+                    </small>
+                  </span>
+                  <span className="hub-mi-arrow">
+                    ›
+                  </span>
+                </button>
+                <button className="hub-mi" id="hubQuoteFile" type="button" role="menuitem">
+                  <span className="hub-mi-glyph">
+                    @
+                  </span>
+                  <span className="hub-mi-body">
+                    <b>
+                      引用对话中的文件
+                    </b>
+                    <small>
+                      在历史消息里检索
+                    </small>
+                  </span>
+                  <span className="hub-mi-arrow">
+                    ›
+                  </span>
+                </button>
+                <div className="hub-sep" />
+                <button className="hub-mi hub-mi-sub" data-hub-sub="mode" type="button" role="menuitem">
+                  <span className="hub-mi-glyph">
+                    ⚡
+                  </span>
+                  <span className="hub-mi-body">
+                    <b>
+                      模式
+                    </b>
+                  </span>
+                  <span className="hub-mi-arrow">
+                    ›
+                  </span>
+                </button>
+                <button className="hub-mi hub-mi-sub" data-hub-sub="expert" type="button" role="menuitem">
+                  <span className="hub-mi-glyph">
+                    🎭
+                  </span>
+                  <span className="hub-mi-body">
+                    <b>
+                      专家
+                    </b>
+                  </span>
+                  <span className="hub-mi-arrow">
+                    ›
+                  </span>
+                </button>
+                <button className="hub-mi hub-mi-sub" data-hub-sub="skill" type="button" role="menuitem">
+                  <span className="hub-mi-glyph">
+                    ✨
+                  </span>
+                  <span className="hub-mi-body">
+                    <b>
+                      技能
+                    </b>
+                  </span>
+                  <span className="hub-mi-arrow">
+                    ›
+                  </span>
+                </button>
+                <button className="hub-mi hub-mi-sub" data-hub-sub="connector" type="button" role="menuitem">
+                  <span className="hub-mi-glyph">
+                    🔗
+                  </span>
+                  <span className="hub-mi-body">
+                    <b>
+                      连接器
+                    </b>
+                  </span>
+                  <span className="hub-mi-arrow">
+                    ›
+                  </span>
+                </button>
+                <div className="hub-subpanel" id="hubSubpanel" hidden={true}>
+                  <div className="hub-sub-head">
+                    <svg className="ui-icon ui-icon-16" aria-hidden="true">
+                      <use href="#i-search" />
+                    </svg>
+                    <input id="hubSearch" type="search" placeholder="搜索专家" aria-label="搜索内置目录" />
+                  </div>
+                  <div className="hub-sub-list" id="hubList" />
+                  <button className="hub-sub-more" id="hubMore" type="button">
+                    召唤更多专家…
+                  </button>
+                </div>
+              </div>
+              {/* R32：「召唤更多」全量目录（市场 448 专家 / 54 专家团 / 292 技能 / 17 连接器） */}
+              <div className="hub-all" id="hubAll" hidden={true}>
+                <div className="hub-all-card" role="dialog" aria-label="内置目录">
+                  <div className="hub-all-head">
+                    <h3 id="hubAllTitle">
+                      WorkBuddy 市场 · 全部目录
+                    </h3>
+                    <button className="hub-all-close" id="hubAllClose" type="button" aria-label="关闭">
+                      ✕
+                    </button>
+                  </div>
+                  <div className="hub-all-tabs" id="hubAllTabs" />
+                  <div className="hub-sub-head hub-all-search">
+                    <svg className="ui-icon ui-icon-16" aria-hidden="true">
+                      <use href="#i-search" />
+                    </svg>
+                    <input id="hubAllSearch" type="search" placeholder="搜索名称 / 描述 / 分区" aria-label="搜索全部目录" />
+                  </div>
+                  <div className="hub-all-list" id="hubAllList" />
+                  <div className="hub-all-foot" id="hubAllFoot" />
+                </div>
+              </div>
+              <div className="hint">
+                <span>
+                  Enter 发送 · Shift+Enter 换行
+                </span>
+                <span id="costEstimate" />
+                <span id="liveTokenStat">
+                  当前对话: 0 tokens
+                </span>
+                {/* 实现 v1.6 T10③：流式期 tokens/s 速度显示（无 usage 按字符估算标「估」） */}
+                <span id="streamSpeed" />
+                <button id="continueNewBtn" title="总结当前对话后开新会话继续">
+                  <svg className="ui-icon ui-icon-16">
+                    <use href="#i-arrow" />
+                  </svg>
+                  新对话继续
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        {/* 面板 2 · 会话（R1：DOM 常驻，仅 class 显隐） */}
+        <section className="panel" id="panelSessions">
+          <div className="panel-head">
+            <div>
+              <h1 className="panel-title">
+                会话
+              </h1>
+              <p className="panel-sub">
+                群聊与单聊可同时进行、互不干扰；点击卡片接着聊
+              </p>
+            </div>
+            <button className="pill-btn" id="sessionsNewChatBtn">
+              <svg className="ui-icon">
+                <use href="#i-plus" />
+              </svg>
+              新建对话
+            </button>
+          </div>
+          {/* R31 历史会话页重构：概览统计 + 类型筛选 + 搜索 + 富信息卡片 */}
+          <div className="sessions-hub">
+            <div className="sh-stats" id="sessionStatsBar" aria-label="会话概览" />
+            <div className="sh-toolbar">
+              <div className="seg sh-filter" id="sessionFilterSeg" role="tablist" aria-label="会话类型筛选">
+                <button type="button" className="seg-btn on" role="tab" aria-selected="true" data-sfilter="all">
+                  全部
+                </button>
+                <button type="button" className="seg-btn" role="tab" aria-selected="false" data-sfilter="chat">
+                  单聊
+                </button>
+                <button type="button" className="seg-btn" role="tab" aria-selected="false" data-sfilter="group">
+                  群聊
+                </button>
+                <button type="button" className="seg-btn" role="tab" aria-selected="false" data-sfilter="running">
+                  进行中
+                </button>
+              </div>
+              <div className="sh-search">
+                <input className="sh-search-input" id="sessionSearchInput" type="search" autoComplete="off" placeholder="搜索标题或消息内容…" aria-label="搜索会话" />
+              </div>
+            </div>
+            <div className="session-list sh-list" id="sessionList" />
+          </div>
+        </section>
+        {/* 面板 3 · 分析：趋势图 + 工具统计（数据全部来自运行时 sessions，R3：#tokenStat 不受影响） */}
+        <section className="panel" id="panelAnalytics">
+          <div className="panel-head">
+            <div>
+              <h1 className="panel-title">
+                分析
+              </h1>
+              <p className="panel-sub">
+                看看 token 花在哪、工具调了多少次
+              </p>
+            </div>
+            <button className="pill-btn">
+              ↻ 刷新数据
+            </button>
+          </div>
+          <div className="panel-scroll">
+            <div className="stat-cards" id="statCards" />
+            <div className="chart-card g-card">
+              <div className="chart-card-head">
+                <div>
+                  <div className="chart-title">
+                    成本 / Token 趋势
+                  </div>
+                  <div className="chart-sub">
+                    按会话聚合 · 数据来自本机会话记录
+                  </div>
+                </div>
+                <div className="seg" id="trendMetricSeg">
+                  <button className="seg-btn on" data-metric="total">
+                    Tokens
+                  </button>
+                  <button className="seg-btn" data-metric="cost">
+                    成本 ¥
+                  </button>
+                  <button className="seg-btn" data-metric="cached">
+                    缓存命中
+                  </button>
+                </div>
+              </div>
+              <div className="chart-wrap" id="chartTrend" style={{height: "var(--chart-h)"}} />
+            </div>
+            <div className="chart-duo">
+              <div className="chart-card g-card">
+                <div className="chart-card-head">
+                  <div>
+                    <div className="chart-title">
+                      工具调用次数
+                    </div>
+                    <div className="chart-sub">
+                      按工具名聚合 · Top 8
+                    </div>
+                  </div>
+                </div>
+                <div className="chart-wrap" id="toolBars" style={{height: "auto"}} />
+              </div>
+              <div className="chart-card g-card">
+                <div className="chart-card-head">
+                  <div>
+                    <div className="chart-title">
+                      成功率与耗时
+                    </div>
+                    <div className="chart-sub">
+                      口径与工具卡片一致：error=失败 · skipped=拦截
+                    </div>
+                  </div>
+                </div>
+                <div className="ring-row" id="toolRing" style={{marginBottom: "10px"}} />
+                <div className="chart-wrap" id="toolMs" style={{height: "auto"}} />
+              </div>
+            </div>
+          </div>
+        </section>
+        {/* 面板 4 · 工作区（原侧栏工作区卡片整体迁入，全部 id 原样保留） */}
+        <section className="panel" id="panelWorkspace">
+          <div className="panel-head">
+            <div>
+              <h1 className="panel-title">
+                工作区
+              </h1>
+              <p className="panel-sub">
+                绑定文件夹，决定 AI 能碰你电脑的哪些地方
+              </p>
+            </div>
+          </div>
+          <div className="panel-scroll" style={{maxWidth: "640px", width: "100%", margin: "0 auto"}}>
+            <div className="ws-section-nav" role="tablist" aria-label="工作区设置分区">
+              <button type="button" className="ws-section-btn on" id="wsSectionMainBtn" role="tab" aria-selected="true" aria-controls="wsSectionMain">
+                工作区与权限
+              </button>
+              <button type="button" className="ws-section-btn" id="wsSectionGuardBtn" role="tab" aria-selected="false" aria-controls="wsSectionGuard">
+                安全护栏
+              </button>
+            </div>
+            <div className="ws-section-panel" id="wsSectionMain" role="tabpanel" aria-labelledby="wsSectionMainBtn">
+              <div className="ws-card" id="wsCard">
+                <label>
+                  <input type="checkbox" id="wsEnabled" />
+                   使用工作区文件夹
+                </label>
+                <div id="wsBody" style={{display: "none"}}>
+                  <label style={{marginTop: "8px", fontWeight: "400", color: "var(--text-2)"}}>
+                    <input type="checkbox" id="wsInd" />
+                     本会话独立
+            
+                  </label>
+                  <div className="ws-sel">
+                    <select id="wsSel" />
+                  </div>
+                  <div className="ws-btn-row">
+                    <button className="ws-btn" type="button">
+                      <svg className="ui-icon ui-icon-20" aria-hidden="true">
+                        <use href="#i-folder" />
+                      </svg>
+                      浏览…
+                    </button>
+                    <button className="ws-btn" type="button" id="wsUnbindBtn" style={{display: "none"}}>
+                      ↩ 跟随全局
+                    </button>
+                  </div>
+                  <div className="eff-row">
+                    <span className="eff-tag" id="wsEffTag">
+                      未启用
+                    </span>
+                    <span id="wsEffPath" />
+                  </div>
+                </div>
+              </div>
+              <div className="field-row" style={{marginTop: "12px"}}>
+                <span>
+                  工具权限
+                </span>
+                <div>
+                  <select id="toolMode" defaultValue="full">
+                    <option value="full">
+                      完整（读+写+命令+截屏）
+                    </option>
+                    <option value="readonly">
+                      只读（看文件/目录，不能改）
+                    </option>
+                    <option value="off">
+                      纯聊天（不碰电脑，最省）
+                    </option>
+                  </select>
+                </div>
+              </div>
+              <div className="eff-row">
+                <span className="eff-tag" id="effTag">
+                  全局
+                </span>
+                <span id="effPath">
+                  ——
+                </span>
+              </div>
+              <div className="set-hint" style={{marginTop: "14px"}}>
+                
+          「本会话独立」可为每个对话绑定不同目录；工具权限改动在下一回合生效。
+                <br />
+                
+          生效路径以 AI 实际读写范围为准，破坏性操作会被防误操作机制拦截。
+        
+              </div>
+            </div>
+            <div className="ws-section-panel" id="wsSectionGuard" role="tabpanel" aria-labelledby="wsSectionGuardBtn" hidden={true}>
+              <div className="ws-card" style={{marginTop: "14px"}}>
+                <label style={{fontWeight: "600"}}>
+                  安全护栏
+                </label>
+                <div className="set-hint" style={{margin: "2px 0 0"}}>
+                  AI 执行以下操作前的确认策略；「仅保护名单」= 命中名单时直接阻断，未命中放行。
+                </div>
+                <div className="guard-grid">
+                  <div>
+                    <label>
+                      删除文件/目录
+                    </label>
+                    <select id="guard_delete_path" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      结束进程
+                    </label>
+                    <select id="guard_kill_process" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      写剪贴板
+                    </label>
+                    <select id="guard_clipboard_write" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      读剪贴板
+                    </label>
+                    <select id="guard_clipboard_read" defaultValue="session">
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      截屏
+                    </label>
+                    <select id="guard_take_screenshot" defaultValue="session">
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  {/* 修复 W32（三轮）：命令三档原缺失——guard_service 的 GUARD_OPS 一直含
+                 run_command/run_powershell/run_admin_command，但 UI 无入口，命令护栏
+                 对终端用户不可达（只能手改 guard.json）。补三个下拉（renderGuardSettings/
+                 saveGuardSettings 已遍历 8 op，无需改 JS） */}
+                  <div>
+                    <label>
+                      执行命令（CMD）
+                    </label>
+                    <select id="guard_run_command" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      PowerShell
+                    </label>
+                    <select id="guard_run_powershell" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      管理员命令（UAC）
+                    </label>
+                    <select id="guard_run_admin_command" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="list">
+                        仅保护名单
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  {/* 修复 H8（四轮）：open_app 护栏档位 UI（后端 W9 已在矩阵，原前端无档位出口只能手改 guard.json） */}
+                  <div>
+                    <label>
+                      打开应用/链接
+                    </label>
+                    <select id="guard_open_app" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                  {/* R41（N11）：open_url 入矩阵后的档位 UI 出口（H8 同款） */}
+                  <div>
+                    <label>
+                      打开网页链接
+                    </label>
+                    <select id="guard_open_url" defaultValue="always">
+                      <option value="always">
+                        每次确认
+                      </option>
+                      <option value="session">
+                        会话内首次确认
+                      </option>
+                      <option value="off">
+                        不拦截
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                <label style={{marginTop: "12px", fontWeight: "400", color: "var(--text-2)"}}>
+                  保护名单 · 路径（每行一条，支持通配，如 C:\Users\*\Documents\**）
+                </label>
+                <textarea className="guard-txt" id="guardProtectPaths" rows="2" placeholder="C:\\Users\\*\\Documents\\**" />
+                <label style={{marginTop: "8px", fontWeight: "400", color: "var(--text-2)"}}>
+                  保护名单 · 进程名（每行一条，如 explorer.exe）
+                </label>
+                <textarea className="guard-txt" id="guardProtectProcs" rows="2" placeholder="notepad.exe" />
+                <div className="provider-row" style={{marginTop: "12px"}}>
+                  <button className="modal-btn primary">
+                    查看审计日志
+                  </button>
+                  <span className="set-hint" style={{margin: "0"}}>
+                    AI 受管控操作的流水（确认/拒绝/阻断）仅存本机
+                  </span>
+                </div>
+                {/* 修复 UX-2（v1.4）：持久信任状态与重置（DOM/CSS 纯新增） */}
+                <div className="provider-row" style={{marginTop: "10px"}}>
+                  <span className="set-hint" id="guardTrustState" style={{margin: "0"}}>
+                    持久信任：读取中…
+                  </span>
+                  <button className="modal-btn">
+                    重置全部信任
+                  </button>
+                </div>
+                <div className="set-hint" style={{marginTop: "4px"}}>
+                  
+            「永久信任」在确认框勾选后生效：重启后该类操作仍不再确认；此处可一键重置。
+          
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "auditTarget": "frontend/react/src",
+  "policy": "现有 React 资产纳入 R68 规范：合规项直接保留；迁移期违规必须逐文件登记理由与退出条件，由 frontend/app/tests/arch-contract.mjs 强制校验，未登记即 FAIL。",
+  "summary": {
+    "totalJsxFiles": 16,
+    "compliant": ["frontend/react/src/SessionHistory.jsx", "frontend/react/src/ParallelRuns.jsx"],
+    "transitionalCount": 14,
+    "exceptionGroups": 5
+  },
+  "kinds": {
+    "DOM_API": "原生 DOM 读写（document.getElementById / innerHTML / appendChild）",
+    "STRING_EVAL": "字符串求值（new Function / eval）",
+    "STRING_EVENT": "data-h-events 字符串事件桥",
+    "GLOBAL_SYMBOL": "全局符号赋值",
+    "MODULE_STATE": "模块级可变状态（未分片单一 store）"
+  },
+  "exceptions": [
+    {
+      "id": "EX-01",
+      "kind": "DOM_API",
+      "paths": [
+        "frontend/react/src/index.jsx",
+        "frontend/react/src/AgentProcessPanel.jsx",
+        "frontend/react/src/generated/MainShell.jsx"
+      ],
+      "reason": "R67 过渡层：React 生成 DOM 后，legacy 约 2000 处写点仍作用于真实 DOM；挂载点定位、独立 root、聚焦与生成结构中的既有 onclick 载体均需原生 DOM API。",
+      "exitCondition": "B0–B9 全部 migrated、legacy 写点归零后，删除 index.jsx 兼容层并把 AgentProcessPanel 迁入 features/，generated/MainShell 由 layout/MainShell.jsx 替换。"
+    },
+    {
+      "id": "EX-02",
+      "kind": "STRING_EVAL",
+      "paths": ["frontend/react/src/index.jsx"],
+      "reason": "86 个模板内联 on* 需属性式桥接（el.onXxx = fn），保留 this / 原生 event / return false / legacy 后续覆盖语义；不可用 React 合成事件替代。",
+      "exitCondition": "全部内联事件改为 React 合成事件、data-h-events 计数归零后删除 bindLegacyEvents。"
+    },
+    {
+      "id": "EX-03",
+      "kind": "STRING_EVENT",
+      "paths": [
+        "frontend/react/src/index.jsx",
+        "frontend/react/src/generated/App.jsx",
+        "frontend/react/src/generated/IconDefs.jsx",
+        "frontend/react/src/generated/AuroraBg.jsx",
+        "frontend/react/src/generated/StreamBar.jsx",
+        "frontend/react/src/generated/Rail.jsx",
+        "frontend/react/src/generated/Sidebar.jsx",
+        "frontend/react/src/generated/SidebarBackdrop.jsx",
+        "frontend/react/src/generated/MainShell.jsx",
+        "frontend/react/src/generated/ProjectModal.jsx",
+        "frontend/react/src/generated/ExpertCenter.jsx",
+        "frontend/react/src/generated/HubMarket.jsx"
+      ],
+      "reason": "R67 HTML→JSX 生成器把 1025 行模板的 86 个内联事件编码进 data-h-events，是迁移期的确定性载体，不是新表面。",
+      "exitCondition": "B0 批次把 10 个区域迁入 layout/ 并改为 onClick，生成器与 generated/ 目录一并删除。"
+    },
+    {
+      "id": "EX-04",
+      "kind": "GLOBAL_SYMBOL",
+      "paths": ["frontend/react/src/index.jsx"],
+      "reason": "window.__HARBOR_REACT_BGTASKS__ 是 legacy navRenderBgTasks 与 React 过程面板之间的让位标记，避免两套渲染器抢 #bgTaskList。",
+      "exitCondition": "navRenderBgTasks 随 shell 域（B0）删除后，该标记与让位分支一并删除。"
+    },
+    {
+      "id": "EX-05",
+      "kind": "MODULE_STATE",
+      "paths": ["frontend/react/src/store.js"],
+      "reason": "R67 侧栏岛的模块级 state 是单岛读投影，尚未按规范分片；行为正确但不符合单一 store 分层。",
+      "exitCondition": "并入 frontend/app/src/state/ 的四分片 store（createStore.js + slices.js），SessionHistory / ParallelRuns 改用 slice hook。"
+    }
+  ],
+  "assets": [
+    { "path": "frontend/react/src/index.jsx", "role": "R67 生产入口 / React 唯一 DOM 生成层", "target": "frontend/app/src/main.jsx", "status": "transitional", "batch": "B0" },
+    { "path": "frontend/react/src/store.js", "role": "侧栏岛读投影状态", "target": "frontend/app/src/state/slices.js", "status": "transitional", "batch": "B2" },
+    { "path": "frontend/react/src/AgentProcessPanel.jsx", "role": "首个 React 状态驱动域（过程可见/失败接管）", "target": "frontend/app/src/features/agent/AgentProcessPanel.jsx", "status": "transitional", "batch": "B3" },
+    { "path": "frontend/react/src/SessionHistory.jsx", "role": "会话历史岛", "target": "frontend/app/src/features/sessions/SessionHistory.jsx", "status": "compliant", "batch": "B2" },
+    { "path": "frontend/react/src/ParallelRuns.jsx", "role": "并行运行岛", "target": "frontend/app/src/features/sessions/ParallelRuns.jsx", "status": "compliant", "batch": "B2" },
+    { "path": "frontend/react/src/generated/App.jsx", "role": "10 区域组合根（机器产物）", "target": "frontend/app/src/app/App.jsx", "status": "transitional", "batch": "B0" },
+    { "path": "frontend/react/src/generated/*.jsx", "role": "10 个区域组件（机器产物）", "target": "frontend/app/src/layout/*.jsx", "status": "transitional", "batch": "B0" },
+    { "path": "frontend/react/src/island.css", "role": "岛层样式", "target": "frontend/app/src/ui/island.css", "status": "transitional", "batch": "B0" },
+    { "path": "frontend/react/build.mjs", "role": "R67 构建器", "target": "frontend/app/build.mjs", "status": "transitional", "batch": "B0" }
+  ],
+  "completionCriteria": {
+    "exceptionCountZero": true,
+    "dataHEventsZero": true,
+    "globalSymbolsZero": true,
+    "generatedDirectoryRemoved": true,
+    "singleShardedStore": true,
+    "archContractPass": true
+  }
+}
