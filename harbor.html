@@ -13624,6 +13624,19 @@ MOTION.onAnimEnd(empty, 'animationend', MOTION.compOut())
 const div = document.createElement('div');
 div.className = 'message ' + role;
 let extraHtml = '';
+let tokenHtml = '';
+if (extra && Array.isArray(extra.tokens) && extra.tokens.length > 0) {
+const _kindZh = { expert: '专家', team: '专家团', skill: '技能', connector: '连接器', file: '文件' };
+tokenHtml = '<div class="msg-tokens">' + extra.tokens.map(tk => {
+const t = tk || {};
+const k = _kindZh[t.kind] || '能力';
+const icon = t.emoji
+? '<span class="msg-tok-ic">' + escapeHtml(String(t.emoji)) + '</span>' : '';
+return '<span class="msg-tok msg-tok-' + escapeHtml(String(t.kind || 'expert')) + '">' +
+icon + '<span class="msg-tok-kind">' + escapeHtml(k) + '</span>' +
+'<span class="msg-tok-lbl">' + escapeHtml(String(t.label || t.id || '')) + '</span></span>';
+}).join('') + '</div>';
+}
 if (extra && extra.images)
 extraHtml = '<div class="msg-images">' + extra.images.map(u => `<img src="${escapeHtml(String(u))}" onclick="viewImage(this.src)">`).join('') + '</div>';
 if (extra && extra.files)
@@ -13638,7 +13651,7 @@ const now = new Date();
 const hm = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
 div.innerHTML = `
     <div class="avatar">${role === 'user' ? '我' : 'AI'}</div>
-    <div class="content ${role === 'error' ? 'error' : ''}">${body}${extraHtml}</div>
+    <div class="content ${role === 'error' ? 'error' : ''}">${tokenHtml}${body}${extraHtml}</div>
     <span class="msg-time">${hm}</span>`;
 container.appendChild(div);
 if (!container.classList.contains('batch')) container.scrollTop = container.scrollHeight;
@@ -23676,7 +23689,9 @@ else if (p.type === 'image_url') text += '\n[图片]';
 else if (p.type === 'video_url') text += '\n[视频]';
 });
 }
-const uEl = addMessage('user', text, {});
+const _uExtra = (m.meta && Array.isArray(m.meta.tokens) && m.meta.tokens.length)
+? { tokens: m.meta.tokens } : {};
+const uEl = addMessage('user', text, _uExtra);
 if (uEl && uEl.dataset) uEl.dataset.midx = i;
 if (text.trim()) addMsgActions(uEl, text.trim(), true);
 if (m.edited && uEl) {
@@ -24579,9 +24594,12 @@ return;
 }
 }
 }
-if (typeof expertNextSelection !== 'undefined' && expertNextSelection) {
+const _curTokens = (typeof composerGetTokens === 'function')
+? composerGetTokens(activeSessionId) : [];
+const _builtinToken = _curTokens.find(t => t && t.source === 'builtin_pkg') || null;
+if (_builtinToken || (typeof expertNextSelection !== 'undefined' && expertNextSelection)) {
 try { ensureSession(); } catch (e) {}
-return runExpertSelection();
+return runExpertSelection({ token: _builtinToken, allTokens: _curTokens });
 }
 const input = document.getElementById('userInput');
 const text = input.value.trim();
@@ -24691,9 +24709,22 @@ const displayText = text +
 const displayExtra = {};
 if (images.length > 0) displayExtra.images = images.map(i => i.dataUrl);
 if (textFiles.length > 0) displayExtra.files = textFiles.map(f => f.name);
+const _sentTokens = (typeof composerConsumeOnceTokens === 'function')
+? composerConsumeOnceTokens(s.id) : [];
+if (_sentTokens.length > 0) displayExtra.tokens = _sentTokens;
+const _sentDirective = (typeof hubBuildTokensDirective === 'function')
+? (hubBuildTokensDirective(_sentTokens) || '')
+: '';
 const uEl = addMessage('user', displayText || '（发送附件）', displayExtra);
 if (text) addMsgActions(uEl, text, true);
+if (_sentTokens.length > 0 || _sentDirective) {
+const _userMsgObj = { role: 'user', content: userContent };
+_userMsgObj.meta = { tokens: _sentTokens, directive: _sentDirective };
+s.messages.push(_userMsgObj);
+s._metaRev = (s._metaRev || 0) + 1;
+} else {
 s.messages.push({ role: 'user', content: userContent });
+}
 if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
 if (uEl && uEl.dataset) uEl.dataset.midx = s.messages.length - 1;
 updateSessionTitle(text || (textFiles[0]?.name || '附件'));
@@ -27680,10 +27711,16 @@ observer: {
 isActive: () => owns() && Date.now() <= runDeadline,
 beforeRound: ({ round }) => {
 if (Date.now() > runDeadline) return { stop: true, status: 'deadline' };
+const _mp = (typeof getModelPrefs === 'function') ? getModelPrefs() : null;
+const _eff = (_mp && _mp.thinking && _mp.thinking !== 'auto') ? _mp.thinking : 'medium';
+const _tempEl = (typeof document !== 'undefined' && document && document.getElementById)
+? document.getElementById('temperature') : null;
+const _temp = (_tempEl && _tempEl.value !== '' && !isNaN(Number(_tempEl.value)))
+? Number(_tempEl.value) : 0.7;
 const body = buildChatRequestBody({
 model: endpoint.model || (typeof providerState !== 'undefined' ? providerState.model : ''),
-['messages']: expertApiMessages(context.messages), temperature: 0, topP: 1,
-maxTokens: 4096, effort: 'off',
+['messages']: expertApiMessages(context.messages), temperature: _temp, topP: 1,
+maxTokens: 4096, effort: _eff,
 glm: typeof isGlmEndpoint === 'function' ? isGlmEndpoint() : false,
 tools: context.tools,
 });
@@ -29334,8 +29371,22 @@ expertNextSelection = { packageId: detail.id, snapshotId: detail.snapshot_id,
 agentId: detail.metadata.agentName || '', skillName: '', resourcePaths: [] };
 expertSelectionSessionId = expertCurrentSessionId();
 expertSelectionLabelText = expertDisplayName(detail.metadata) || detail.metadata.name || detail.id;
+if (typeof composerTokenAdd === 'function') {
+composerTokenAdd(expertSelectionSessionId, {
+source: 'builtin_pkg',
+kind: detail.kind === 'team' ? 'team' : 'expert',
+id: detail.id,
+snapshotId: detail.snapshot_id,
+agentId: detail.metadata.agentName || '',
+label: expertSelectionLabelText,
+emoji: detail.kind === 'team' ? '👥' : '🎓',
+scope: 'once',
+});
+}
 expertRenderSelectionChip();
 closeExpertCenter();
+const _inp = document.getElementById('userInput');
+if (_inp && _inp.focus) _inp.focus();
 return true;
 }
 async function expertToggleEnabled() {
@@ -29363,9 +29414,21 @@ function expertTimelineRefresh(runId) {
 const timeline = new ExpertTimeline(document.getElementById('expertRunTimeline'));
 return timeline.render(expertSession(), runId);
 }
-async function runExpertSelection() {
+async function runExpertSelection(opts) {
+const _opts = opts || {};
 if (expertCenterState.runPromise) return expertCenterState.runPromise;
-if (!expertNextSelection) return { status: 'ordinary' };
+const _token = _opts.token || null;
+if (!expertNextSelection && !_token) return { status: 'ordinary' };
+if (!expertNextSelection && _token) {
+expertNextSelection = {
+packageId: _token.id,
+snapshotId: _token.snapshotId || '',
+agentId: _token.agentId || '',
+skillName: '', resourcePaths: [],
+};
+if (!expertSelectionSessionId) expertSelectionSessionId = expertCurrentSessionId();
+expertSelectionLabelText = _token.label || expertSelectionLabelText;
+}
 if (expertSelectionSessionId !== expertCurrentSessionId()) {
 if (expertSelectionSessionId === '') {
 expertSelectionSessionId = expertCurrentSessionId();
@@ -29464,16 +29527,6 @@ if (expertNextSelection && expertSelectionSessionId !== expertCurrentSessionId()
 }, 0));
 const newSession = document.querySelector('#panelSessions .pill-btn');
 if (newSession) newSession.addEventListener('click', clearExpertSelection);
-on('sendBtn', 'click', event => {
-if (!expertNextSelection) return;
-if (typeof isSessionStreaming === 'function' && isSessionStreaming()) {
-event.preventDefault(); event.stopImmediatePropagation();
-if (typeof toast === 'function') toast('正在生成中，请先停止或等待完成', 'warn');
-return;
-}
-event.preventDefault(); event.stopImmediatePropagation();
-runExpertSelection();
-}, true);
 }
 if (typeof document !== 'undefined' && document.addEventListener) {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', expertCenterInit, { once: true });

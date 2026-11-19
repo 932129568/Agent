@@ -130,10 +130,21 @@ class ExpertRunController {
           isActive: () => owns() && Date.now() <= runDeadline,
           beforeRound: ({ round }) => {
             if (Date.now() > runDeadline) return { stop: true, status: 'deadline' };
+            // v2.1 M1（P06-B）：原硬编码 temperature:0 / effort:'off' 把专家 run 钉死在
+            // 「零温度 + 关闭推理」，与用户当前档位无关——改读用户设置。
+            // 三级守卫：本模块在 tests/test_expert_agent.py 的沙箱里 document 完全不存在
+            // （grep -c "document" = 0），裸访问会 ReferenceError 直接崩，故逐级 typeof。
+            // isNaN 校验不可省：Number('') === 0 会把温度悄悄变回 0（正是本轮要修的病）。
+            const _mp = (typeof getModelPrefs === 'function') ? getModelPrefs() : null;
+            const _eff = (_mp && _mp.thinking && _mp.thinking !== 'auto') ? _mp.thinking : 'medium';
+            const _tempEl = (typeof document !== 'undefined' && document && document.getElementById)
+              ? document.getElementById('temperature') : null;
+            const _temp = (_tempEl && _tempEl.value !== '' && !isNaN(Number(_tempEl.value)))
+              ? Number(_tempEl.value) : 0.7;
             const body = buildChatRequestBody({
               model: endpoint.model || (typeof providerState !== 'undefined' ? providerState.model : ''),
-              ['messages']: expertApiMessages(context.messages), temperature: 0, topP: 1,
-              maxTokens: 4096, effort: 'off',
+              ['messages']: expertApiMessages(context.messages), temperature: _temp, topP: 1,
+              maxTokens: 4096, effort: _eff,
               glm: typeof isGlmEndpoint === 'function' ? isGlmEndpoint() : false,
               tools: context.tools,
             });

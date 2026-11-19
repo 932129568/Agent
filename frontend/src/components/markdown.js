@@ -132,6 +132,23 @@ function addMessage(role, content, extra) {
   const div = document.createElement('div');
   div.className = 'message ' + role;
   let extraHtml = '';
+  // v2.1 M1（P05-A）：随本条用户消息一起发出的专家/技能/连接器/文件胶囊徽章。
+  // 全部外部字段过 escapeHtml（label/id/emoji 可能来自专家包元数据或文件路径，
+  // 属不可信输入）。此处只用 className 拼接，不写 id="…" 字面量——源码会被内联进
+  // harbor.html，而 contract_diff 从产物正则提取 dom_ids，多一个 id 就判漂移。
+  let tokenHtml = '';
+  if (extra && Array.isArray(extra.tokens) && extra.tokens.length > 0) {
+    const _kindZh = { expert: '专家', team: '专家团', skill: '技能', connector: '连接器', file: '文件' };
+    tokenHtml = '<div class="msg-tokens">' + extra.tokens.map(tk => {
+      const t = tk || {};
+      const k = _kindZh[t.kind] || '能力';
+      const icon = t.emoji
+        ? '<span class="msg-tok-ic">' + escapeHtml(String(t.emoji)) + '</span>' : '';
+      return '<span class="msg-tok msg-tok-' + escapeHtml(String(t.kind || 'expert')) + '">' +
+        icon + '<span class="msg-tok-kind">' + escapeHtml(k) + '</span>' +
+        '<span class="msg-tok-lbl">' + escapeHtml(String(t.label || t.id || '')) + '</span></span>';
+    }).join('') + '</div>';
+  }
   if (extra && extra.images)
     // 修复 建议㉜（二轮）：images URL 未转义直拼 innerHTML（上轮点名漏修，
     // 当时仅因 dataURL 巧合无引号而侥幸安全）
@@ -150,7 +167,7 @@ function addMessage(role, content, extra) {
   const hm = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
   div.innerHTML = `
     <div class="avatar">${role === 'user' ? '我' : 'AI'}</div>
-    <div class="content ${role === 'error' ? 'error' : ''}">${body}${extraHtml}</div>
+    <div class="content ${role === 'error' ? 'error' : ''}">${tokenHtml}${body}${extraHtml}</div>
     <span class="msg-time">${hm}</span>`;
   container.appendChild(div);
   // R19 性能（实测 400 条消息 1548ms → 根因=每条一次 scrollTop 写强制回流）：

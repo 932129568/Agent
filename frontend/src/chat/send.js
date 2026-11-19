@@ -84,9 +84,16 @@ async function sendMessage() {
   // 专家选择是一次性消费：回车与发送按钮都在真正普通发送之前走专家 run。
   // R62：先确保会话存在——空会话态（新建对话后）选的专家原先带着 sessionId=''
   // 跑 run（幽灵空 id 会话被 push 进 sessions，且选专家时的会话对不上号）。
-  if (typeof expertNextSelection !== 'undefined' && expertNextSelection) {
+  // v2.1 M1（P04）：统一入口——输入舱内联胶囊里的原生专家包（builtin_pkg）与旧
+  // expertNextSelection 走同一条路：都交给 runExpertSelection，由它在主对话流里
+  // 生成带徽章的用户气泡并清空输入框，不再"隐身"运行。composer* 在部分测试沙箱
+  // 里不存在，全程 typeof 守卫。
+  const _curTokens = (typeof composerGetTokens === 'function')
+    ? composerGetTokens(activeSessionId) : [];
+  const _builtinToken = _curTokens.find(t => t && t.source === 'builtin_pkg') || null;
+  if (_builtinToken || (typeof expertNextSelection !== 'undefined' && expertNextSelection)) {
     try { ensureSession(); } catch (e) {}
-    return runExpertSelection();
+    return runExpertSelection({ token: _builtinToken, allTokens: _curTokens });
   }
   const input = document.getElementById('userInput');
   const text = input.value.trim();
@@ -210,9 +217,27 @@ async function sendMessage() {
   const displayExtra = {};
   if (images.length > 0) displayExtra.images = images.map(i => i.dataUrl);
   if (textFiles.length > 0) displayExtra.files = textFiles.map(f => f.name);
+  // v2.1 M1（P04）：消费本轮一次性胶囊（保留 scope==='session' 常驻胶囊），并把
+  // 本轮指令快照固化进用户消息的 meta——这是「重启后徽章复原」与「并行会话不串台」
+  // 的同一份数据源。composer*/hub* 在部分测试沙箱里不存在，全部 typeof 守卫；
+  // tokens 仅在非空时才挂到 displayExtra/meta，避免给既有断言多出空字段。
+  const _sentTokens = (typeof composerConsumeOnceTokens === 'function')
+    ? composerConsumeOnceTokens(s.id) : [];
+  if (_sentTokens.length > 0) displayExtra.tokens = _sentTokens;
+  const _sentDirective = (typeof hubBuildTokensDirective === 'function')
+    ? (hubBuildTokensDirective(_sentTokens) || '')
+    : '';
   const uEl = addMessage('user', displayText || '（发送附件）', displayExtra);
   if (text) addMsgActions(uEl, text, true);
-  s.messages.push({ role: 'user', content: userContent });
+  if (_sentTokens.length > 0 || _sentDirective) {
+    const _userMsgObj = { role: 'user', content: userContent };
+    _userMsgObj.meta = { tokens: _sentTokens, directive: _sentDirective };
+    s.messages.push(_userMsgObj);
+    // 落盘签名要能看见 meta 变化，否则 sessions/store.js 的「未变更短路」会跳过写盘
+    s._metaRev = (s._metaRev || 0) + 1;
+  } else {
+    s.messages.push({ role: 'user', content: userContent });
+  }
   if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();   // 修复（四轮）：首条消息发出后空态引导立即消失
   // 修复 UX-1/UX-3（v1.4）：live 消息也 stamp 下标（瘦身标记/搜索跳转用）。
   // dataset 防御：非 DOM 元素（测试桩/降级路径）时静默跳过，不抛错中断发送

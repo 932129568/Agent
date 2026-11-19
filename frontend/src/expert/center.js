@@ -185,8 +185,24 @@ function expertSelectForNextRun() {
     agentId: detail.metadata.agentName || '', skillName: '', resourcePaths: [] };
   expertSelectionSessionId = expertCurrentSessionId();
   expertSelectionLabelText = expertDisplayName(detail.metadata) || detail.metadata.name || detail.id;
+  // v2.1 M1（P06-A）：同步注入单轨内联胶囊，紧贴输入框文字同行显示——
+  // 这是「启用专家即入输入框」的唯一实现点（原 expertSelectionChip 保留为空壳兼容）。
+  if (typeof composerTokenAdd === 'function') {
+    composerTokenAdd(expertSelectionSessionId, {
+      source: 'builtin_pkg',
+      kind: detail.kind === 'team' ? 'team' : 'expert',
+      id: detail.id,
+      snapshotId: detail.snapshot_id,
+      agentId: detail.metadata.agentName || '',
+      label: expertSelectionLabelText,
+      emoji: detail.kind === 'team' ? '👥' : '🎓',
+      scope: 'once',
+    });
+  }
   expertRenderSelectionChip();
   closeExpertCenter();
+  const _inp = document.getElementById('userInput');
+  if (_inp && _inp.focus) _inp.focus();
   return true;
 }
 async function expertToggleEnabled() {
@@ -214,9 +230,26 @@ function expertTimelineRefresh(runId) {
   const timeline = new ExpertTimeline(document.getElementById('expertRunTimeline'));
   return timeline.render(expertSession(), runId);
 }
-async function runExpertSelection() {
+async function runExpertSelection(opts) {
+  // v2.1 M1（P06-A）：opts 为可选参，缺省等价旧行为（tests/test_expert_center.py
+  // 三处 await runExpertSelection() 无参调用，断言 status；tests/test_session_project_redesign.py
+  // 直接 stub 本函数）。opts.token 为 send.js 从内联胶囊取出的原生专家包 token，
+  // 与旧 expertNextSelection 二选一均可触发本次 run。
+  const _opts = opts || {};
   if (expertCenterState.runPromise) return expertCenterState.runPromise;
-  if (!expertNextSelection) return { status: 'ordinary' };
+  const _token = _opts.token || null;
+  if (!expertNextSelection && !_token) return { status: 'ordinary' };
+  // 仅有胶囊、无 expertNextSelection 时，用胶囊信息补出等价的选择态
+  if (!expertNextSelection && _token) {
+    expertNextSelection = {
+      packageId: _token.id,
+      snapshotId: _token.snapshotId || '',
+      agentId: _token.agentId || '',
+      skillName: '', resourcePaths: [],
+    };
+    if (!expertSelectionSessionId) expertSelectionSessionId = expertCurrentSessionId();
+    expertSelectionLabelText = _token.label || expertSelectionLabelText;
+  }
   if (expertSelectionSessionId !== expertCurrentSessionId()) {
     // R62：空会话态（''）选的专家跟随 ensureSession 生成的新会话；真实会话
     // 间切换则明确告知（原先静默 return，send 被吞、输入框无任何反馈）
@@ -322,18 +355,13 @@ function expertCenterInit() {
   }, 0));
   const newSession = document.querySelector('#panelSessions .pill-btn');
   if (newSession) newSession.addEventListener('click', clearExpertSelection);
-  on('sendBtn', 'click', event => {
-    if (!expertNextSelection) return;
-    // R50-FE-3 修复：同会话忙守卫——capture 段 stopImmediatePropagation 绕过
-    // send.js 的忙拦截，RunRegistry.start 把在途聊天 run 静默 cancel+abort
-    if (typeof isSessionStreaming === 'function' && isSessionStreaming()) {
-      event.preventDefault(); event.stopImmediatePropagation();
-      if (typeof toast === 'function') toast('正在生成中，请先停止或等待完成', 'warn');
-      return;
-    }
-    event.preventDefault(); event.stopImmediatePropagation();
-    runExpertSelection();
-  }, true);
+  // v2.1 M1（P06-A）：此处原有一段 sendBtn 的 capture 阶段劫持
+  //   on('sendBtn','click', …, true) → runExpertSelection()
+  // 已整段移除。理由：① 它与 send.js 的 L65 `_sendSessionBusy` 忙守卫重复拦截，
+  // 且用 stopImmediatePropagation 绕过 send.js，导致「专家 run 静默 cancel 在途聊天」；
+  // ② 发送入口必须唯一，否则「胶囊随文字发出 / 清空输入 / 用户气泡带徽章」三条
+  // 只会走其中一条分支。现在全部收口到 send.js → runExpertSelection({token,...})。
+  // R50-FE-3 的忙守卫语义仍由 send.js:L65 保底，未丢失。
 }
 if (typeof document !== 'undefined' && document.addEventListener) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', expertCenterInit, { once: true });

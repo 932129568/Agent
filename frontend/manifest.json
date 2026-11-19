@@ -2046,7 +2046,9 @@
         "_unbindOverlayKeyboard",
         "registerUISeam",
         "expertNextSelection",
-        "uiSeamCall"
+        "uiSeamCall",
+        "composerGetTokens",
+        "composerConsumeOnceTokens"
       ]
     },
     {
@@ -2315,7 +2317,8 @@
         "ModelTransport",
         "buildChatRequestBody",
         "expertApiMessages",
-        "TeamOrchestrator"
+        "TeamOrchestrator",
+        "getModelPrefs"
       ]
     },
     {
@@ -2567,7 +2570,8 @@
         "RunRegistry",
         "expertNextSelection",
         "expertSelectionSessionId",
-        "expertSelectionLabelText"
+        "expertSelectionLabelText",
+        "composerTokenAdd"
       ]
     },
     {

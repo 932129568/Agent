@@ -484,7 +484,11 @@ function renderChatHistory(s) {
           else if (p.type === 'video_url') text += '\n[视频]';
         });
       }
-      const uEl = addMessage('user', text, {});
+      // v2.1 M1（P05-B）：重启/切会话复原历史时，把当轮随文字发出的胶囊徽章一并复原，
+      // 保证「重启后徽章 100% 复原」。meta 可能缺失或为空数组，此时传 {} 与原行为一致。
+      const _uExtra = (m.meta && Array.isArray(m.meta.tokens) && m.meta.tokens.length)
+        ? { tokens: m.meta.tokens } : {};
+      const uEl = addMessage('user', text, _uExtra);
       if (uEl && uEl.dataset) uEl.dataset.midx = i;   // 修复 UX-3（v1.4）：消息元素 stamp 源消息下标，供会话搜索跳转定位（dataset 防御）
       if (text.trim()) addMsgActions(uEl, text.trim(), true);
       // R58：编辑重发后的来源标记（数据留痕 m.edited；展示弱化小字）
