@@ -1,6 +1,8 @@
 # 构建产物（源码构建生成）
 node_modules/
 build/
+# M2 真编译产物（.obj/.exe/.cso/.asm）只落本地，不入库
+native/build/
 *.pyc
 __pycache__/
 .pytest_cache/
