@@ -72,6 +72,23 @@ function hubToggleEnabled(kind, id) {
     try {
       const item = hubCatalogById(kind, sid);
       if (item) HUB_STATE.picks[hubCurrentSid()] = { kind: kind, id: sid, item: item };
+      // v2.1 M1 / P07-B：启用即把该条目落成编辑器内联胶囊（一次生效），
+      // 不再要求用户「启用 → 再去菜单点选」。只加胶囊，不回填 input.value，
+      // 不覆写用户正在打的草稿。composerTokenAdd 在 state.js（序 6），
+      // 本文件序 4 早于它 ⇒ 只能 typeof 守卫，禁止写进 requires（B-4）。
+      if (item && typeof composerTokenAdd === 'function') {
+        const tokKind = kind === 'teams' ? 'team'
+          : kind === 'skills' ? 'skill'
+            : kind === 'connectors' ? 'connector' : 'expert';
+        composerTokenAdd(hubCurrentSid(), {
+          source: 'hub_catalog',
+          kind: tokKind,
+          id: sid,
+          label: item.name || item.alias || sid,
+          emoji: item.emoji || '⚡',
+          scope: 'once',
+        });
+      }
     } catch (e) {}
   }
   // 停用后清掉仍引用该条目的会话选择，避免指令继续注入

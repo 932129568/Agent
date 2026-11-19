@@ -3354,6 +3354,35 @@ background:var(--card-bg);color:var(--text-2);font:inherit;font-size:10px;paddin
 @media (max-width:720px){.hm-hot{grid-template-columns:repeat(2,minmax(0,1fr))}.hm-grid{grid-template-columns:1fr}
 .hm-head-right{width:100%;margin-left:0}.hm-search input{width:120px}}
 body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
+.composer-inline-box{display:flex;flex-direction:column;gap:0;min-width:0;width:100%}
+.composer-token-tray{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0}
+.composer-token-tray:empty{display:none}
+.inline-tok{display:inline-flex;align-items:center;gap:4px;max-width:220px;
+padding:2px 4px 2px 7px;border:1px solid var(--border);border-radius:var(--radius-md);
+background:var(--chip-bg);color:var(--text-2);font-size:11px;line-height:1.5;
+transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.inline-tok.is-armed{background:var(--primary-soft);border-color:var(--primary);color:var(--text)}
+.inline-tok.is-pinned{border-style:dashed}
+.inline-tok-body{display:inline-flex;align-items:center;gap:4px;min-width:0;
+padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.inline-tok-ic{font-size:11px;line-height:1}
+.inline-tok-k{color:var(--text-2);opacity:.8;flex:none}
+.inline-tok-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inline-tok-pin{flex:none;padding:0 3px;border-radius:3px;background:var(--primary-soft);
+color:var(--primary);font-size:9px;line-height:1.6}
+.inline-tok-x{flex:none;width:14px;height:14px;padding:0;border:0;border-radius:3px;
+background:transparent;color:var(--text-2);font-size:11px;line-height:14px;
+text-align:center;cursor:pointer}
+.inline-tok-x:hover,.inline-tok-x:focus-visible{background:var(--err-bg);color:var(--text)}
+.msg-tokens{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 4px}
+.msg-tok{display:inline-flex;align-items:center;gap:3px;max-width:200px;padding:1px 6px;
+border:1px solid var(--border);border-radius:var(--radius-md);background:var(--chip-bg);
+color:var(--text-2);font-size:10px;line-height:1.6}
+.msg-tok-ic{font-size:10px;line-height:1}
+.msg-tok-kind{opacity:.8;flex:none}
+.msg-tok-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-tok-file{background:var(--card-bg)}
+@media (max-width:720px){.inline-tok,.msg-tok{max-width:150px}}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -6845,6 +6874,141 @@ const modal = document.getElementById('hubAll');
 if (modal) modal.hidden = true;
 HUB_STATE.allOpen = false;
 }
+function hubEnsureInlineTray() {
+const input = document.getElementById('userInput');
+if (!input || !input.parentNode) return null;
+const parent = input.parentNode;
+let wrap = null;
+if (parent.classList && parent.classList.contains('composer-inline-box')) {
+wrap = parent;
+} else {
+wrap = document.createElement('div');
+wrap.className = 'composer-inline-box';
+parent.insertBefore(wrap, input);
+wrap.appendChild(input);
+}
+let tray = wrap.querySelector('.composer-token-tray');
+if (!tray) {
+tray = document.createElement('div');
+tray.className = 'composer-token-tray';
+tray.setAttribute('aria-live', 'polite');
+wrap.insertBefore(tray, input);
+input.addEventListener('keydown', function (ev) {
+if (ev.key !== 'Backspace') { delete tray.dataset.armedUid; return; }
+if (input.selectionStart !== 0 || input.selectionEnd !== 0) return;
+const list = (typeof composerGetTokens === 'function') ? composerGetTokens() : [];
+if (!list.length) return;
+ev.preventDefault();
+const last = list[list.length - 1];
+if (tray.dataset.armedUid === last.uid) {
+delete tray.dataset.armedUid;
+if (typeof composerTokenRemove === 'function') composerTokenRemove(composerActiveSid(), last.uid);
+hubPaintInlineTray(tray);
+} else {
+tray.dataset.armedUid = last.uid;
+hubPaintInlineTray(tray);
+}
+});
+tray.addEventListener('click', function (ev) {
+const xBtn = ev.target && ev.target.closest ? ev.target.closest('[data-tok-act="remove"]') : null;
+if (xBtn && xBtn.dataset) {
+if (typeof composerTokenRemove === 'function') composerTokenRemove(composerActiveSid(), xBtn.dataset.tokUid);
+return;
+}
+const body = ev.target && ev.target.closest ? ev.target.closest('[data-tok-act="scope"]') : null;
+if (body && body.dataset) {
+const uid = body.dataset.tokUid;
+const list = (typeof composerGetTokens === 'function') ? composerGetTokens() : [];
+const cur = list.find(t => t && t.uid === uid);
+const next = (cur && cur.scope === 'session') ? 'once' : 'session';
+if (typeof composerTokenSetScope === 'function') composerTokenSetScope(composerActiveSid(), uid, next);
+hubPaintInlineTray(tray);
+}
+});
+}
+return tray;
+}
+function hubRenderInlineTray() {
+if (typeof document === 'undefined' || !document.getElementById) return;
+hubPaintInlineTray(hubEnsureInlineTray());
+}
+function hubPaintInlineTray(tray) {
+if (!tray || !tray.dataset) return;
+const list = (typeof composerGetTokens === 'function') ? composerGetTokens() : [];
+const armed = tray.dataset.armedUid || '';
+if (!list.length) { tray.innerHTML = ''; tray.hidden = true; delete tray.dataset.armedUid; return; }
+tray.hidden = false;
+const kindZh = { expert: '专家', team: '专家团', skill: '技能', connector: '连接器', file: '文件' };
+tray.innerHTML = list.map(tk => {
+const t = tk || {};
+const uid = hubEsc(String(t.uid || ''));
+const cls = 'inline-tok inline-tok-' + hubEsc(String(t.kind || 'expert'))
++ (armed && armed === t.uid ? ' is-armed' : '')
++ (t.scope === 'session' ? ' is-pinned' : '');
+return '<span class="' + cls + '" data-tok-uid="' + uid + '">'
++ '<button type="button" class="inline-tok-body" data-tok-act="scope" data-tok-uid="' + uid + '">'
++ (t.emoji ? '<span class="inline-tok-ic">' + hubEsc(String(t.emoji)) + '</span>' : '')
++ '<span class="inline-tok-k">' + hubEsc(kindZh[t.kind] || '能力') + '</span>'
++ '<span class="inline-tok-lbl">' + hubEsc(String(t.label || t.id || '')) + '</span>'
++ (t.scope === 'session' ? '<span class="inline-tok-pin">常驻</span>' : '')
++ '</button>'
++ '<button type="button" class="inline-tok-x" data-tok-act="remove" data-tok-uid="' + uid
++ '" aria-label="移除">×</button></span>';
+}).join('');
+}
+function hubBuildTokensDirective(tokens) {
+const list = Array.isArray(tokens) ? tokens : [];
+const parts = [];
+for (let i = 0; i < list.length; i++) {
+const t = list[i] || {};
+if (t.kind === 'file') parts.push('[文件引用 ' + (t.id || t.label || '') + ']');
+}
+return parts.join('\n');
+}
+function hubOpenFileRefPicker() {
+if (typeof toast !== 'function') return;
+if (typeof document === 'undefined' || !document.createElement) return;
+const sid = (typeof hubCurrentSid === 'function') ? hubCurrentSid() : '';
+const sess = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+? sessions.find(x => x && x.id === sid) : null;
+const items = [];
+if (sess && Array.isArray(sess.attachments)) {
+sess.attachments.forEach(a => { if (a && a.name) items.push({ path: a.name, label: a.name }); });
+}
+if (sess && Array.isArray(sess._readKeys)) {
+sess._readKeys.forEach(p => { if (typeof p === 'string' && p) items.push({ path: p, label: p }); });
+}
+if (!items.length) {
+toast('当前会话还没有可引用的文件：先用「+」添加附件，或让 AI 读取某个文件', 'info');
+return;
+}
+let pop = document.getElementById('hubFileRefPop');
+if (!pop) {
+pop = document.createElement('div');
+pop.className = 'hub-file-ref-pop';
+pop.hidden = false;
+document.body.appendChild(pop);
+pop.addEventListener('click', function (ev) {
+const el = ev.target && ev.target.closest ? ev.target.closest('[data-file-ref]') : null;
+if (!el || !el.dataset) return;
+const path = el.dataset.fileRef || '';
+if (path && typeof composerTokenAdd === 'function') {
+const base = path.split(/[\\/]/).pop() || path;
+composerTokenAdd(composerActiveSid(), {
+source: 'file_ref', kind: 'file', id: path, label: base, emoji: '📄', scope: 'once',
+});
+hubRenderInlineTray();
+}
+pop.hidden = true;
+const inp = document.getElementById('userInput');
+if (inp && inp.focus) inp.focus();
+});
+}
+pop.hidden = false;
+pop.innerHTML = items.slice(0, 20).map(it =>
+'<button type="button" class="hub-file-ref-item" data-file-ref="' + hubEsc(it.path) + '">'
++ '<span class="hub-file-ref-ic">📄</span>' + hubEsc(it.label) + '</button>').join('');
+}
 function hubInitComposer() {
 const btn = document.getElementById('composerPlusBtn');
 const menu = document.getElementById('hubMenu');
@@ -6859,9 +7023,7 @@ hubCloseMenu();
 const quote = document.getElementById('hubQuoteFile');
 if (quote) quote.addEventListener('click', () => {
 hubCloseMenu();
-if (typeof openSessionSearch === 'function') openSessionSearch();
-else if (typeof searchPanelOpen === 'function') searchPanelOpen();
-else if (typeof toast === 'function') toast('会话搜索暂不可用', 'warn');
+hubOpenFileRefPicker();
 });
 document.querySelectorAll('.hub-mi-sub').forEach(el => {
 const kind = el.dataset ? el.dataset.hubSub : '';
@@ -6932,6 +7094,8 @@ if (HUB_STATE.allOpen) hubCloseAll();
 else if (HUB_STATE.open) hubCloseMenu();
 });
 if (typeof hubInitMarket === 'function') hubInitMarket();
+if (typeof setComposerTokensRenderHook === 'function') setComposerTokensRenderHook(hubRenderInlineTray);
+hubRenderInlineTray();
 hubRenderChip();
 }
 
@@ -6994,6 +7158,19 @@ if (nowOn && typeof HUB_STATE !== 'undefined' && HUB_STATE.picks
 try {
 const item = hubCatalogById(kind, sid);
 if (item) HUB_STATE.picks[hubCurrentSid()] = { kind: kind, id: sid, item: item };
+if (item && typeof composerTokenAdd === 'function') {
+const tokKind = kind === 'teams' ? 'team'
+: kind === 'skills' ? 'skill'
+: kind === 'connectors' ? 'connector' : 'expert';
+composerTokenAdd(hubCurrentSid(), {
+source: 'hub_catalog',
+kind: tokKind,
+id: sid,
+label: item.name || item.alias || sid,
+emoji: item.emoji || '⚡',
+scope: 'once',
+});
+}
 } catch (e) {}
 }
 if (!nowOn && typeof HUB_STATE !== 'undefined' && HUB_STATE.picks) {
@@ -19088,6 +19265,7 @@ s.__budgetWarned === true ? 1 : '',
 (s._compactBackup && s._compactBackup.msgs && s._compactBackup.msgs.length) || '',
 (s.uiGenerative && s.uiGenerative.specs && s.uiGenerative.specs.length) || '',
 s._uiSpecRev || '',
+s._metaRev || '',
 ].join('\u0001');
 }
 function _sessionSignatures(list) {
@@ -24713,7 +24891,8 @@ const _sentTokens = (typeof composerConsumeOnceTokens === 'function')
 ? composerConsumeOnceTokens(s.id) : [];
 if (_sentTokens.length > 0) displayExtra.tokens = _sentTokens;
 const _sentDirective = (typeof hubBuildTokensDirective === 'function')
-? (hubBuildTokensDirective(_sentTokens) || '')
+? (hubBuildTokensDirective(_sentTokens)
+|| ((typeof hubDirectiveFor === 'function') ? hubDirectiveFor(s.id) : ''))
 : '';
 const uEl = addMessage('user', displayText || '（发送附件）', displayExtra);
 if (text) addMsgActions(uEl, text, true);

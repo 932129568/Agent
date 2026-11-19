@@ -225,7 +225,8 @@ async function sendMessage() {
     ? composerConsumeOnceTokens(s.id) : [];
   if (_sentTokens.length > 0) displayExtra.tokens = _sentTokens;
   const _sentDirective = (typeof hubBuildTokensDirective === 'function')
-    ? (hubBuildTokensDirective(_sentTokens) || '')
+    ? (hubBuildTokensDirective(_sentTokens)
+      || ((typeof hubDirectiveFor === 'function') ? hubDirectiveFor(s.id) : ''))
     : '';
   const uEl = addMessage('user', displayText || '（发送附件）', displayExtra);
   if (text) addMsgActions(uEl, text, true);

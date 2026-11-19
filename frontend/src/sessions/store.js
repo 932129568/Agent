@@ -245,6 +245,10 @@ function _sessionSaveSignature(s) {
     // 不碰 updatedAt/消息数——不在这里记一笔，那次 saveSessions 会被「未变更短路」
     // 直接跳过，重启后视图与打卡态全丢（真机实证）。
     s._uiSpecRev || '',
+    // v2.1 M1 / P08-A：用户消息 meta.tokens 变更计数（防未变更短路漏写 SQLite）
+    // 与 _uiSpecRev 同型理由：composer 胶囊只改 m.meta.tokens 时 updatedAt 不变，
+    // 签名不变 ⇒ saveSessions 的「未变更短路」会跳过落盘，重启后徽章全丢。
+    s._metaRev || '',
   ].join('\u0001');
 }
 function _sessionSignatures(list) {

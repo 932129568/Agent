@@ -301,19 +301,19 @@
         "file": "KNOWN_ISSUES.md",
         "kind": "exact-deleted-path",
         "target": "backend/domains/integrations/mcp/mcp_service.py",
-        "line": 162
+        "line": 163
       },
       {
         "file": "KNOWN_ISSUES.md",
         "kind": "exact-deleted-path",
         "target": "tests/test_round6_adversarial.py",
-        "line": 146
+        "line": 147
       },
       {
         "file": "KNOWN_ISSUES.md",
         "kind": "exact-deleted-path",
         "target": "tests/test_sandbox.py",
-        "line": 112
+        "line": 113
       }
     ]
   },

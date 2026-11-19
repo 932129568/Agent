@@ -522,3 +522,36 @@ body.fx-off .hub-menu,body.fx-off .hub-subpanel,body.fx-off .hub-all-card{box-sh
 @media (max-width:720px){.hm-hot{grid-template-columns:repeat(2,minmax(0,1fr))}.hm-grid{grid-template-columns:1fr}
   .hm-head-right{width:100%;margin-left:0}.hm-search input{width:120px}}
 body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
+
+/* ===== v2.1 M1 / P08-B：编辑器内联胶囊轨 + 消息徽章 =====
+   底色一律用实色 token（--chip-bg / --card-bg / --primary-soft），
+   禁止用 --main-bg：光井皮肤下它是 transparent，胶囊会变透明字叠字。 */
+.composer-inline-box{display:flex;flex-direction:column;gap:0;min-width:0;width:100%}
+.composer-token-tray{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0}
+.composer-token-tray:empty{display:none}
+.inline-tok{display:inline-flex;align-items:center;gap:4px;max-width:220px;
+  padding:2px 4px 2px 7px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--chip-bg);color:var(--text-2);font-size:11px;line-height:1.5;
+  transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.inline-tok.is-armed{background:var(--primary-soft);border-color:var(--primary);color:var(--text)}
+.inline-tok.is-pinned{border-style:dashed}
+.inline-tok-body{display:inline-flex;align-items:center;gap:4px;min-width:0;
+  padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.inline-tok-ic{font-size:11px;line-height:1}
+.inline-tok-k{color:var(--text-2);opacity:.8;flex:none}
+.inline-tok-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inline-tok-pin{flex:none;padding:0 3px;border-radius:3px;background:var(--primary-soft);
+  color:var(--primary);font-size:9px;line-height:1.6}
+.inline-tok-x{flex:none;width:14px;height:14px;padding:0;border:0;border-radius:3px;
+  background:transparent;color:var(--text-2);font-size:11px;line-height:14px;
+  text-align:center;cursor:pointer}
+.inline-tok-x:hover,.inline-tok-x:focus-visible{background:var(--err-bg);color:var(--text)}
+.msg-tokens{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 4px}
+.msg-tok{display:inline-flex;align-items:center;gap:3px;max-width:200px;padding:1px 6px;
+  border:1px solid var(--border);border-radius:var(--radius-md);background:var(--chip-bg);
+  color:var(--text-2);font-size:10px;line-height:1.6}
+.msg-tok-ic{font-size:10px;line-height:1}
+.msg-tok-kind{opacity:.8;flex:none}
+.msg-tok-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-tok-file{background:var(--card-bg)}
+@media (max-width:720px){.inline-tok,.msg-tok{max-width:150px}}

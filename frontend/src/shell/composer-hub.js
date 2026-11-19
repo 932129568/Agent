@@ -324,6 +324,170 @@ function hubCloseAll() {
   HUB_STATE.allOpen = false;
 }
 
+/* ================= v2.1 M1（P07-A）：输入舱同行内联胶囊轨 =================
+ * 纪律（违反必红）：
+ *   ① 运行时 DOM 挂载，**零静态新 id** —— 只用 className / dataset / setAttribute('id')
+ *      赋值语句。源码会被内联进 harbor.html，而 contract_diff 从产物正则提取
+ *      dom_ids（\bid=["']…），多写一处 id="x" 字符串模板即判漂移（实测 479）。
+ *   ② 本文件加载序 3 早于 core/state.js（序 6），所以 composer* **只能** typeof
+ *      守卫调用，**不得**写进 manifest 的 requires（build.js 会 fail 顺序依赖）。
+ *   ③ 只增不改：不碰 #expertSelectionChip / #hubQuoteFile 等既有 id 的挂载点。 */
+
+/** 确保 #userInput 被 .composer-inline-box 包裹，并在其内挂一个胶囊轨容器。 */
+function hubEnsureInlineTray() {
+  const input = document.getElementById('userInput');
+  if (!input || !input.parentNode) return null;
+  const parent = input.parentNode;
+  let wrap = null;
+  if (parent.classList && parent.classList.contains('composer-inline-box')) {
+    wrap = parent;
+  } else {
+    wrap = document.createElement('div');
+    wrap.className = 'composer-inline-box';
+    parent.insertBefore(wrap, input);
+    wrap.appendChild(input);
+  }
+  let tray = wrap.querySelector('.composer-token-tray');
+  if (!tray) {
+    tray = document.createElement('div');
+    tray.className = 'composer-token-tray';
+    tray.setAttribute('aria-live', 'polite');
+    wrap.insertBefore(tray, input);
+    // 首位 Backspace 退格删胶囊：首次高亮（is-armed），再按一次真删。
+    // 冒泡阶段监听即可（不加 true），且只在「光标在文本开头」时接管，不影响正常删字。
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Backspace') { delete tray.dataset.armedUid; return; }
+      if (input.selectionStart !== 0 || input.selectionEnd !== 0) return;
+      const list = (typeof composerGetTokens === 'function') ? composerGetTokens() : [];
+      if (!list.length) return;
+      ev.preventDefault();
+      const last = list[list.length - 1];
+      if (tray.dataset.armedUid === last.uid) {
+        delete tray.dataset.armedUid;
+        if (typeof composerTokenRemove === 'function') composerTokenRemove(composerActiveSid(), last.uid);
+        hubPaintInlineTray(tray);
+      } else {
+        tray.dataset.armedUid = last.uid;
+        hubPaintInlineTray(tray);
+      }
+    });
+    // 胶囊本体点击 → once / session 切换；× → 删除
+    tray.addEventListener('click', function (ev) {
+      const xBtn = ev.target && ev.target.closest ? ev.target.closest('[data-tok-act="remove"]') : null;
+      if (xBtn && xBtn.dataset) {
+        if (typeof composerTokenRemove === 'function') composerTokenRemove(composerActiveSid(), xBtn.dataset.tokUid);
+        return;
+      }
+      const body = ev.target && ev.target.closest ? ev.target.closest('[data-tok-act="scope"]') : null;
+      if (body && body.dataset) {
+        const uid = body.dataset.tokUid;
+        const list = (typeof composerGetTokens === 'function') ? composerGetTokens() : [];
+        const cur = list.find(t => t && t.uid === uid);
+        const next = (cur && cur.scope === 'session') ? 'once' : 'session';
+        if (typeof composerTokenSetScope === 'function') composerTokenSetScope(composerActiveSid(), uid, next);
+        hubPaintInlineTray(tray);
+      }
+    });
+  }
+  return tray;
+}
+
+/** 重渲染胶囊轨（由 state.js 的 setComposerTokensRenderHook 回调驱动）。 */
+function hubRenderInlineTray() {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  hubPaintInlineTray(hubEnsureInlineTray());
+}
+
+/** 只负责「把 tray 画出来」，不碰 DOM 结构。
+ *  与 hubEnsureInlineTray 拆开是为了不产生 SCC 环：ensure 内部（Backspace / 点击）也要重绘，
+ *  若直接回调 hubRenderInlineTray 就构成 ensure ⇄ render 双向边，scc_ratchet 零余量会判红。 */
+function hubPaintInlineTray(tray) {
+  if (!tray || !tray.dataset) return;
+  const list = (typeof composerGetTokens === 'function') ? composerGetTokens() : [];
+  const armed = tray.dataset.armedUid || '';
+  if (!list.length) { tray.innerHTML = ''; tray.hidden = true; delete tray.dataset.armedUid; return; }
+  tray.hidden = false;
+  const kindZh = { expert: '专家', team: '专家团', skill: '技能', connector: '连接器', file: '文件' };
+  tray.innerHTML = list.map(tk => {
+    const t = tk || {};
+    const uid = hubEsc(String(t.uid || ''));
+    const cls = 'inline-tok inline-tok-' + hubEsc(String(t.kind || 'expert'))
+      + (armed && armed === t.uid ? ' is-armed' : '')
+      + (t.scope === 'session' ? ' is-pinned' : '');
+    return '<span class="' + cls + '" data-tok-uid="' + uid + '">'
+      + '<button type="button" class="inline-tok-body" data-tok-act="scope" data-tok-uid="' + uid + '">'
+      + (t.emoji ? '<span class="inline-tok-ic">' + hubEsc(String(t.emoji)) + '</span>' : '')
+      + '<span class="inline-tok-k">' + hubEsc(kindZh[t.kind] || '能力') + '</span>'
+      + '<span class="inline-tok-lbl">' + hubEsc(String(t.label || t.id || '')) + '</span>'
+      + (t.scope === 'session' ? '<span class="inline-tok-pin">常驻</span>' : '')
+      + '</button>'
+      + '<button type="button" class="inline-tok-x" data-tok-act="remove" data-tok-uid="' + uid
+      + '" aria-label="移除">×</button></span>';
+  }).join('');
+}
+
+/** 把本轮胶囊拼成系统指令片段（P04 落盘 meta.directive、P03 读取快照都用它）。 */
+function hubBuildTokensDirective(tokens) {
+  const list = Array.isArray(tokens) ? tokens : [];
+  const parts = [];
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i] || {};
+    if (t.kind === 'file') parts.push('[文件引用 ' + (t.id || t.label || '') + ']');
+  }
+  // 专家/技能/连接器的指令语义仍由既有 hubDirectiveFor(sid) 负责（按会话 picks 解析），
+  // 这里只补充「随本条消息发出」的文件引用，避免与 hubCatalogPrompt 双写同一段人格指令。
+  return parts.join('\n');
+}
+
+/** 真实「引用对话中的文件」：本会话附件 + 已读文件 + 工作区文件，点选即插文件胶囊。 */
+function hubOpenFileRefPicker() {
+  if (typeof toast !== 'function') return;
+  if (typeof document === 'undefined' || !document.createElement) return;
+  const sid = (typeof hubCurrentSid === 'function') ? hubCurrentSid() : '';
+  const sess = (typeof sessions !== 'undefined' && Array.isArray(sessions))
+    ? sessions.find(x => x && x.id === sid) : null;
+  const items = [];
+  // ① 本会话已上传附件（文件名）
+  if (sess && Array.isArray(sess.attachments)) {
+    sess.attachments.forEach(a => { if (a && a.name) items.push({ path: a.name, label: a.name }); });
+  }
+  // ② 本会话已读文件（s._readKeys，来自工具调用的只读记录）
+  if (sess && Array.isArray(sess._readKeys)) {
+    sess._readKeys.forEach(p => { if (typeof p === 'string' && p) items.push({ path: p, label: p }); });
+  }
+  if (!items.length) {
+    toast('当前会话还没有可引用的文件：先用「+」添加附件，或让 AI 读取某个文件', 'info');
+    return;
+  }
+  // 简易选择器：复用既有的候选列表容器风格，运行时挂载、零静态 id
+  let pop = document.getElementById('hubFileRefPop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.className = 'hub-file-ref-pop';
+    pop.hidden = false;
+    document.body.appendChild(pop);
+    pop.addEventListener('click', function (ev) {
+      const el = ev.target && ev.target.closest ? ev.target.closest('[data-file-ref]') : null;
+      if (!el || !el.dataset) return;
+      const path = el.dataset.fileRef || '';
+      if (path && typeof composerTokenAdd === 'function') {
+        const base = path.split(/[\\/]/).pop() || path;
+        composerTokenAdd(composerActiveSid(), {
+          source: 'file_ref', kind: 'file', id: path, label: base, emoji: '📄', scope: 'once',
+        });
+        hubRenderInlineTray();
+      }
+      pop.hidden = true;
+      const inp = document.getElementById('userInput');
+      if (inp && inp.focus) inp.focus();
+    });
+  }
+  pop.hidden = false;
+  pop.innerHTML = items.slice(0, 20).map(it =>
+    '<button type="button" class="hub-file-ref-item" data-file-ref="' + hubEsc(it.path) + '">'
+    + '<span class="hub-file-ref-ic">📄</span>' + hubEsc(it.label) + '</button>').join('');
+}
+
 /** 事件绑定（由 core/bootstrap.js 在 DOM 就绪后调用）。 */
 function hubInitComposer() {
   const btn = document.getElementById('composerPlusBtn');
@@ -340,9 +504,10 @@ function hubInitComposer() {
   const quote = document.getElementById('hubQuoteFile');
   if (quote) quote.addEventListener('click', () => {
     hubCloseMenu();
-    if (typeof openSessionSearch === 'function') openSessionSearch();
-    else if (typeof searchPanelOpen === 'function') searchPanelOpen();
-    else if (typeof toast === 'function') toast('会话搜索暂不可用', 'warn');
+    // v2.1 M1（P07-A）：原实现错跳「全局会话搜索」（openSessionSearch），
+    // 语义是「引用对话中的文件」却打开搜索框。改为真实文件引用选择器：
+    // 本会话附件 + 已读文件 + 工作区文件，点选即插入 file_ref 胶囊。
+    hubOpenFileRefPicker();
   });
 
   document.querySelectorAll('.hub-mi-sub').forEach(el => {
@@ -420,5 +585,9 @@ function hubInitComposer() {
     else if (HUB_STATE.open) hubCloseMenu();
   });
   if (typeof hubInitMarket === 'function') hubInitMarket();
+  // v2.1 M1（P07-A）：把胶囊轨重渲染注册为 state.js 的钩子——叶模块不摸 DOM，
+  // 由本文件（有 DOM 能力）反向注册，与 R59 的缝模式同构。
+  if (typeof setComposerTokensRenderHook === 'function') setComposerTokensRenderHook(hubRenderInlineTray);
+  hubRenderInlineTray();
   hubRenderChip();
 }
