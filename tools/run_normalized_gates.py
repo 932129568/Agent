@@ -56,9 +56,12 @@ GATES = [
     # updatedAt，双源合并平局取后端导致回退失效/完整版被覆盖）。改 chat/send.js、
     # components/markdown.js、sessions/store.js 共 5 个函数定义体，入库新基线 r99
     # （旧 r68/r89/r98 原样保留，不动），门禁改比最新锚点。html 三类锚点与 r98 逐项相等。
+    # R100：锚点链推进——v2.1 M1 落地 P01–P09 生产补丁 + G01/G02 门禁升级。
+    # 新增 18 个顶层符号、function_defs 1317→1335，故入库新基线 r100 并改比最新锚点；
+    # 旧 r68/r89/r98/r99 原样保留（只增不删）。DOM id 三类锚点与 r99 逐项相等（479/54/124）。
     ('contract-diff', [PY, 'tools/contract_diff.py', '--compare',
-                       'deliverables/dev-plan/contract-baseline-r99.json'], True,
-     'r99 锚点零漂移（锚点链最新项）'),
+                       'deliverables/dev-plan/contract-baseline-r100.json'], True,
+     'r100 锚点零漂移（锚点链最新项）'),
     ('allowlist-ratchet', [NODE, 'tools/gen_allowlist.mjs', '--check'], True,
      '依赖棘轮 157'),
     ('scc-ratchet', [PY, 'tools/scc_ratchet.py'], True,
