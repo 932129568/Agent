@@ -92,14 +92,25 @@ function createAnalyticalSpring(opts) {
   let zeta = Number(o.zeta);
   if (!isFinite(zeta)) zeta = 0.72;
   if (zeta < 0.05) zeta = 0.05;
+  // 上界取 0.989 而非常量区间写的 0.99 —— **不是笔误，勿改回 0.99**：
+  // 契约区间是半开 [0.05, 0.99)，ζ=0.99 时 omegaD = ω√(1-0.9801) ≈ 0.141ω 仍非零，
+  // 但 B = (v0 + ζω·x0) / omegaD 会随 omegaD 缩小被同比放大（ζ→0.99 时已放大约 7 倍）。
+  // 取 0.989 给 omegaD 留一点数值余量，避免「接近临界阻尼」的档位把 B 推成巨值、
+  // 让 pos 在 t≈0 处出现肉眼可见的尖峰。挡住的只是 0.99 这一个退化点，不影响常规档位。
   if (zeta >= 0.99) zeta = 0.989;
   const omegaD = omega * Math.sqrt(1 - zeta * zeta);   // 欠阻尼必有 1-ζ²>0（ζ<0.99）
   const decay = zeta * omega;                          // 衰减指数系数 ζω
   return function evaluate(x0, v0, dtSec) {
-    // 非有限入参一律按「已静止在原点」处理，避免 NaN 顺着渲染链扩散
+    // 非有限入参一律按「已静止在原点」处理，避免 NaN 顺着渲染链扩散。
+    // **这条是刻意加的防御，不是漏写的 bug，勿删**：本函数直接驱动 transform/opacity，
+    // 一旦返回 NaN，浏览器会静默丢弃整条 transform 并让元素停在上一帧（不报错），
+    // 表现为「动画卡死在半路」——现场极难定位到源头是某个 undefined 初值。
+    // 因此宁可降级成「不动」，也不让 NaN 进渲染链。
     const a0 = Number(x0);
     const v = Number(v0);
     const t = Number(dtSec);
+    // t<=0 与 NaN 同归一支：t===0 保留初速（调用方用它取 t=0 时刻状态），
+    // t<0（时间倒流，语义未定义）按 0 速度处理，不做外推。
     if (!isFinite(a0) || !isFinite(v) || !isFinite(t) || t <= 0) {
       const p0 = isFinite(a0) ? a0 : 0;
       const w0 = isFinite(v) ? v : 0;
