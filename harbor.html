@@ -7393,6 +7393,118 @@ function setExpertChipResetHook(fn) { _expertChipResetHook = fn; }
 function clearExpertSelection() {
 expertNextSelection = null; expertSelectionSessionId = ''; expertSelectionLabelText = '';
 try { if (typeof _expertChipResetHook === 'function') _expertChipResetHook(); } catch (e) {}
+composerTokenRemoveBySource(composerActiveSid(), 'builtin_pkg');
+}
+var composerTokensBySid = Object.create(null);
+let _composerTokensRenderHook = null;
+let _composerTokenSeq = 0;
+function setComposerTokensRenderHook(fn) { _composerTokensRenderHook = fn; }
+function _composerNotifyTokens() {
+try { if (typeof _composerTokensRenderHook === 'function') _composerTokensRenderHook(); } catch (e) {}
+}
+function composerActiveSid() {
+return (typeof currentSessionId !== 'undefined' && currentSessionId)
+? String(currentSessionId) : '';
+}
+function composerGetTokens(sid) {
+if (!composerTokensBySid) return [];
+const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+const orphan = composerTokensBySid[''];
+if (key && key !== '' && Array.isArray(orphan) && orphan.length) {
+const base = Array.isArray(composerTokensBySid[key]) ? composerTokensBySid[key] : [];
+const merged = orphan.concat(base);
+let mainIdx = -1;
+for (let i = merged.length - 1; i >= 0; i--) {
+const t = merged[i];
+if (t && (t.kind === 'expert' || t.kind === 'team')) { mainIdx = i; break; }
+}
+const out = [];
+for (let i = 0; i < merged.length; i++) {
+const t = merged[i];
+if (t && (t.kind === 'expert' || t.kind === 'team') && i !== mainIdx) continue;
+out.push(t);
+}
+composerTokensBySid[key] = out;
+delete composerTokensBySid[''];
+}
+return Array.isArray(composerTokensBySid[key]) ? composerTokensBySid[key] : [];
+}
+function composerTokenAdd(sid, token) {
+if (!composerTokensBySid || !token) return null;
+const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+if (!Array.isArray(composerTokensBySid[key])) composerTokensBySid[key] = [];
+const list = composerTokensBySid[key];
+const kind = token.kind || 'expert';
+if (kind === 'expert' || kind === 'team') {
+for (let i = list.length - 1; i >= 0; i--) {
+if (list[i] && (list[i].kind === 'expert' || list[i].kind === 'team')) list.splice(i, 1);
+}
+}
+_composerTokenSeq += 1;
+const item = Object.assign({}, token, {
+uid: token.uid || ('tok_' + Date.now() + '_' + _composerTokenSeq),
+kind: kind,
+label: token.label || token.id || '',
+scope: token.scope === 'session' ? 'session' : 'once',
+});
+list.push(item);
+_composerNotifyTokens();
+return item;
+}
+function composerTokenRemove(sid, uid) {
+if (!composerTokensBySid || !uid) return false;
+const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+const list = composerTokensBySid[key];
+if (!Array.isArray(list)) return false;
+for (let i = 0; i < list.length; i++) {
+if (list[i] && list[i].uid === uid) { list.splice(i, 1); _composerNotifyTokens(); return true; }
+}
+return false;
+}
+function composerTokenRemoveBySource(sid, source) {
+if (!composerTokensBySid || !source) return 0;
+const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+const list = composerTokensBySid[key];
+if (!Array.isArray(list)) return 0;
+let removed = 0;
+for (let i = list.length - 1; i >= 0; i--) {
+if (list[i] && list[i].source === source) { list.splice(i, 1); removed += 1; }
+}
+if (removed) _composerNotifyTokens();
+return removed;
+}
+function composerConsumeOnceTokens(sid) {
+if (!composerTokensBySid) return [];
+const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+const list = composerTokensBySid[key];
+if (!Array.isArray(list) || !list.length) return [];
+const consumed = [];
+const kept = [];
+for (let i = 0; i < list.length; i++) {
+const t = list[i];
+if (t && t.scope === 'session') kept.push(t); else consumed.push(t);
+}
+if (!consumed.length) return [];
+composerTokensBySid[key] = kept;
+_composerNotifyTokens();
+return consumed;
+}
+function composerTokenSetScope(sid, uid, scope) {
+if (!composerTokensBySid || !uid) return false;
+const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+const list = composerTokensBySid[key];
+if (!Array.isArray(list)) return false;
+const next = scope === 'session' ? 'session' : 'once';
+for (let i = 0; i < list.length; i++) {
+const t = list[i];
+if (t && t.uid === uid) {
+if (t.scope === next) return true;
+list[i] = Object.assign({}, t, { scope: next });
+_composerNotifyTokens();
+return true;
+}
+}
+return false;
 }
 
 
@@ -10831,10 +10943,11 @@ function _stripToolTags(msgs) {
 let out = null;
 for (let i = 0; i < msgs.length; i++) {
 const m = msgs[i];
-if (m && m.__tool !== undefined) {
+if (m && (m.__tool !== undefined || m.meta !== undefined)) {
 if (!out) out = msgs.slice();
 const c = Object.assign({}, m);
 delete c.__tool;
+delete c.meta;
 out[i] = c;
 }
 }
@@ -16211,7 +16324,11 @@ for (let i = s.messages.length - 1; i >= Math.max(0, s.messages.length - 40); i-
 }
 {
 const _baseSys = document.getElementById('systemPrompt').value.trim();
-const _hubDirective = (typeof hubDirectiveFor === 'function') ? hubDirectiveFor() : '';
+const _lastUserMsg = (s.messages || []).slice().reverse().find(m => m && m.role === 'user');
+const _snapDir = (_lastUserMsg && _lastUserMsg.meta && _lastUserMsg.meta.directive)
+? _lastUserMsg.meta.directive : '';
+const _hubDirective = _snapDir
+|| ((typeof hubDirectiveFor === 'function') ? hubDirectiveFor(s.id) : '');
 const sysPrompt = _hubDirective
 ? (_baseSys ? _baseSys + '\n\n' + _hubDirective : _hubDirective)
 : _baseSys;

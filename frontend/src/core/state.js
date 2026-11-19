@@ -47,4 +47,134 @@ function setExpertChipResetHook(fn) { _expertChipResetHook = fn; }
 function clearExpertSelection() {
   expertNextSelection = null; expertSelectionSessionId = ''; expertSelectionLabelText = '';
   try { if (typeof _expertChipResetHook === 'function') _expertChipResetHook(); } catch (e) {}
+  // v2.1 M1：清专家选择时同步摘掉输入舱里的原生专家胶囊（否则胶囊与选择态双源不一致）
+  composerTokenRemoveBySource(composerActiveSid(), 'builtin_pkg');
+}
+/* ================= v2.1 M1：单轨输入舱内联胶囊状态（叶模块零 DOM 依赖） =================
+ * 统一承接原生专家包（builtin_pkg）、功能市场目录（hub_catalog）与文件引用（file_ref）。
+ * 按会话 ID 隔离；空会话态 '' 会在首条消息 ensureSession() 后自动迁移至真实 sid。
+ * 叶化纪律：本段不调用任何 hub* 函数、不摸 DOM——渲染侧经 setComposerTokensRenderHook
+ * 注册钩子（与 R59 M2/M7 的缝模式同构）。scc_ratchet 余量为 0，多一个符号级环即红。
+ * 用 var 而非 const：clearExpertSelection（L47）在本段声明之前就已定义，会话切换时
+ * 可能在模块求值尚未走到 L60 就被调用；var 提升为 undefined + 各访问器首行空值守卫，
+ * 杜绝 const 的 TDZ 抛错（实测 const 亦能过全部门禁，此处取更保守的写法）。 */
+var composerTokensBySid = Object.create(null);
+let _composerTokensRenderHook = null;
+let _composerTokenSeq = 0;
+
+function setComposerTokensRenderHook(fn) { _composerTokensRenderHook = fn; }
+function _composerNotifyTokens() {
+  try { if (typeof _composerTokensRenderHook === 'function') _composerTokensRenderHook(); } catch (e) {}
+}
+function composerActiveSid() {
+  // 只用本文件的 currentSessionId，不引用 app-state.js 的 AppState：两者语义等价
+  // （app-state.js L6 的 AppState.currentSessionId 就是本文件 currentSessionId 的
+  // getter 代理），但 state.js 序 6 早于 app-state.js，引用它会新增一条后向隐藏边，
+  // gen_allowlist --check 判「新增未声明前向引用 157→158」而红（实测确认）。
+  return (typeof currentSessionId !== 'undefined' && currentSessionId)
+    ? String(currentSessionId) : '';
+}
+function composerGetTokens(sid) {
+  if (!composerTokensBySid) return [];
+  const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+  const orphan = composerTokensBySid[''];
+  // 空会话态选的胶囊随首条消息 ensureSession() 迁移到真实 sid，否则发送时查不到
+  // （与 hubDirectiveFor 的空键回退同语义；R62 同款问题）。迁移用合并而非覆盖：
+  // 先放 '' 桶（选择更早），再按「主角色唯一」保留后者，杜绝两个 expert 并存。
+  if (key && key !== '' && Array.isArray(orphan) && orphan.length) {
+    const base = Array.isArray(composerTokensBySid[key]) ? composerTokensBySid[key] : [];
+    const merged = orphan.concat(base);
+    let mainIdx = -1;
+    for (let i = merged.length - 1; i >= 0; i--) {
+      const t = merged[i];
+      if (t && (t.kind === 'expert' || t.kind === 'team')) { mainIdx = i; break; }
+    }
+    const out = [];
+    for (let i = 0; i < merged.length; i++) {
+      const t = merged[i];
+      if (t && (t.kind === 'expert' || t.kind === 'team') && i !== mainIdx) continue;
+      out.push(t);
+    }
+    composerTokensBySid[key] = out;
+    delete composerTokensBySid[''];
+  }
+  return Array.isArray(composerTokensBySid[key]) ? composerTokensBySid[key] : [];
+}
+function composerTokenAdd(sid, token) {
+  if (!composerTokensBySid || !token) return null;
+  const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+  if (!Array.isArray(composerTokensBySid[key])) composerTokensBySid[key] = [];
+  const list = composerTokensBySid[key];
+  const kind = token.kind || 'expert';
+  // 主角色唯一：expert/team 新选自动替换旧主角色；skill/connector/file 可叠加
+  if (kind === 'expert' || kind === 'team') {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i] && (list[i].kind === 'expert' || list[i].kind === 'team')) list.splice(i, 1);
+    }
+  }
+  _composerTokenSeq += 1;
+  const item = Object.assign({}, token, {
+    uid: token.uid || ('tok_' + Date.now() + '_' + _composerTokenSeq),
+    kind: kind,
+    label: token.label || token.id || '',
+    scope: token.scope === 'session' ? 'session' : 'once',
+  });
+  list.push(item);
+  _composerNotifyTokens();
+  return item;
+}
+function composerTokenRemove(sid, uid) {
+  if (!composerTokensBySid || !uid) return false;
+  const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+  const list = composerTokensBySid[key];
+  if (!Array.isArray(list)) return false;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].uid === uid) { list.splice(i, 1); _composerNotifyTokens(); return true; }
+  }
+  return false;
+}
+function composerTokenRemoveBySource(sid, source) {
+  if (!composerTokensBySid || !source) return 0;
+  const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+  const list = composerTokensBySid[key];
+  if (!Array.isArray(list)) return 0;
+  let removed = 0;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i] && list[i].source === source) { list.splice(i, 1); removed += 1; }
+  }
+  if (removed) _composerNotifyTokens();
+  return removed;
+}
+function composerConsumeOnceTokens(sid) {
+  if (!composerTokensBySid) return [];
+  const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+  const list = composerTokensBySid[key];
+  if (!Array.isArray(list) || !list.length) return [];
+  const consumed = [];
+  const kept = [];
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    if (t && t.scope === 'session') kept.push(t); else consumed.push(t);
+  }
+  if (!consumed.length) return [];
+  composerTokensBySid[key] = kept;
+  _composerNotifyTokens();
+  return consumed;
+}
+function composerTokenSetScope(sid, uid, scope) {
+  if (!composerTokensBySid || !uid) return false;
+  const key = (sid !== undefined && sid !== null) ? String(sid) : composerActiveSid();
+  const list = composerTokensBySid[key];
+  if (!Array.isArray(list)) return false;
+  const next = scope === 'session' ? 'session' : 'once';
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    if (t && t.uid === uid) {
+      if (t.scope === next) return true;
+      list[i] = Object.assign({}, t, { scope: next });
+      _composerNotifyTokens();
+      return true;
+    }
+  }
+  return false;
 }

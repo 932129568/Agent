@@ -278,7 +278,16 @@ async function runAgentLoop(s, apiKey) {
     // R32：内置目录选中项 → 真实人格/工作流指令，随本次请求的系统提示生效；
     // 不写 config.json、不改 #systemPrompt 的值、不新增 js_api。
     const _baseSys = document.getElementById('systemPrompt').value.trim();
-    const _hubDirective = (typeof hubDirectiveFor === 'function') ? hubDirectiveFor() : '';
+    // v2.1 审计修复（P03）：显式传入 s.id 杜绝并行会话专家串台（原无参调用在多会话
+    // 并行流式时会拿错会话的内置目录指令）；并优先读取本会话最近一条用户消息里
+    // 固化的指令快照，保证「选择时是什么角色」与「这次请求发什么指令」一致。
+    // 注：本段同样依赖上文 document 已就绪（上一行 _baseSys 已取 systemPrompt），
+    //     与 buildChatRequestBody 同理，无需独立 typeof document 守卫。
+    const _lastUserMsg = (s.messages || []).slice().reverse().find(m => m && m.role === 'user');
+    const _snapDir = (_lastUserMsg && _lastUserMsg.meta && _lastUserMsg.meta.directive)
+      ? _lastUserMsg.meta.directive : '';
+    const _hubDirective = _snapDir
+      || ((typeof hubDirectiveFor === 'function') ? hubDirectiveFor(s.id) : '');
     const sysPrompt = _hubDirective
       ? (_baseSys ? _baseSys + '\n\n' + _hubDirective : _hubDirective)
       : _baseSys;

@@ -16,17 +16,19 @@ function shrinkAiCopy(c) {
   return c.slice(0, SHRINK_LEN.aiHead) + '\n…[旧回复已瘦身,原' + c.length + '字]…\n' +
     c.slice(-SHRINK_LEN.aiTail);
 }
-/** 剥离 __tool 内部标记（fe-H3/四轮）：豁免判定完成后调用——该字段是
- * buildMessagesForAPI 为本模块透传的内部元数据，不得进 API 请求体
- * （严格端点会拒未知字段）。仅对带标记的消息做浅拷贝，其余按引用原样返回。 */
+/** 剥离 __tool 与 v2.1 meta 内部标记（fe-H3/四轮 + v2.1 审计）：豁免判定完成后调用——
+ * 这两个字段是 buildMessagesForAPI 为本模块透传的内部元数据，不得进 API 请求体
+ * （严格 OpenAI 兼容端点会拒未知字段，实测直接报 HTTP 400）。
+ * 仅对带标记的消息做浅拷贝，其余按引用原样返回。 */
 function _stripToolTags(msgs) {
   let out = null;
   for (let i = 0; i < msgs.length; i++) {
     const m = msgs[i];
-    if (m && m.__tool !== undefined) {
+    if (m && (m.__tool !== undefined || m.meta !== undefined)) {
       if (!out) out = msgs.slice();
       const c = Object.assign({}, m);
       delete c.__tool;
+      delete c.meta;
       out[i] = c;
     }
   }

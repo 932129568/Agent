@@ -128,7 +128,11 @@ __out.connectorNoDirective = hubCatalogPrompt(hubCatalogById('connectors','githu
 
 def test_system_prompt_injection_is_wired():
     rc = (ROOT / 'frontend' / 'src' / 'agent' / 'run-controller.js').read_text(encoding='utf-8')
-    assert 'hubDirectiveFor()' in rc
+    # v2.1 P03：原断言 'hubDirectiveFor()' 把无参调用钉成了契约，而该调用正是并行会话
+    # 专家串台的真 Bug（与 group.js:1226 的 hubDirectiveFor(s.id) 不一致）。此处改为
+    # 对齐既有正确先例，并加反向断言防止回退成无参形式。
+    assert 'hubDirectiveFor(s.id)' in rc
+    assert 'hubDirectiveFor()' not in rc, '不得回退为无参调用（并行会话会串台）'
     assert 'const sysPrompt = _hubDirective' in rc
     assert "_baseSys + '\\n\\n' + _hubDirective" in rc
     boot = (ROOT / 'frontend' / 'src' / 'core' / 'bootstrap.js').read_text(encoding='utf-8')

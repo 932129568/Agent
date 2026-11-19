@@ -163,7 +163,19 @@
         "pendingShots",
         "providerState",
         "sessions",
-        "uiGenerative"
+        "uiGenerative",
+        "composerTokensBySid",
+        "_composerTokensRenderHook",
+        "_composerTokenSeq",
+        "setComposerTokensRenderHook",
+        "_composerNotifyTokens",
+        "composerActiveSid",
+        "composerGetTokens",
+        "composerTokenAdd",
+        "composerTokenRemove",
+        "composerTokenRemoveBySource",
+        "composerConsumeOnceTokens",
+        "composerTokenSetScope"
       ],
       "requires": []
     },
