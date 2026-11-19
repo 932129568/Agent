@@ -29,7 +29,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "删除后残留体检（运行时配置类真问题判红，文档漂移登记不阻塞）",
-      "tail": "{'exact-deleted-path': 51})\n  契约面: public=51 hidden=117 registered=168 missing=0 ghosts=0\n  server 门 41, 退役 stub 9, 陈旧文档 7\n  verdict: realDefectsFound=0 (运行时配置类), fixedFiles=9, dynamic=True\n  freshness meta: 2026-11-19T14:20:15.292513+00:00"
+      "tail": "{'exact-deleted-path': 51})\n  契约面: public=51 hidden=117 registered=168 missing=0 ghosts=0\n  server 门 41, 退役 stub 9, 陈旧文档 7\n  verdict: realDefectsFound=0 (运行时配置类), fixedFiles=9, dynamic=True\n  freshness meta: 2026-11-19T14:24:07.570559+00:00"
     },
     {
       "id": "arch-contract",
@@ -45,7 +45,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "前端 L1 单元",
-      "tail": " 0.149\n  type: 'test'\n  ...\n# Subtest: R71 状态机：计量与语义判定不得混淆\nok 18 - R71 状态机：计量与语义判定不得混淆\n  ---\n  duration_ms: 0.1549\n  type: 'test'\n  ...\n1..18\n# tests 18\n# suites 0\n# pass 18\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 166.9972"
+      "tail": "0.1435\n  type: 'test'\n  ...\n# Subtest: R71 状态机：计量与语义判定不得混淆\nok 18 - R71 状态机：计量与语义判定不得混淆\n  ---\n  duration_ms: 0.1555\n  type: 'test'\n  ...\n1..18\n# tests 18\n# suites 0\n# pass 18\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 174.6567"
     },
     {
       "id": "frontend-l2",
@@ -53,7 +53,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "真实浏览器挂载（无浏览器环境时 SKIP，如实标注）",
-      "tail": "tore 派生                        在途任务 0 · 待接管 0\nPASS 零业务全局符号                              []\nPASS 无未捕获页面异常                             []\n\n[app-smoke] 6/6 通过\n[app-smoke] 启动尝试 1 失败：browserType.launchPersistentContext: Timeout 20000ms exceeded."
+      "tail": "状态源）                    true\nPASS 渲染 10 个布局区域                          10\nPASS 状态栏由 store 派生                        在途任务 0 · 待接管 0\nPASS 零业务全局符号                              []\nPASS 无未捕获页面异常                             []\n\n[app-smoke] 6/6 通过"
     },
     {
       "id": "golden-replay",
