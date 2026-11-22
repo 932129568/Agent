@@ -283,10 +283,70 @@ function addMsgActions(msgEl, text, onlyCopy) {
       try {
         await callApi('append_memory', [JSON.stringify({ text: text.slice(0, 500) })]);
         flash(b, 'done');
+        // R101 T03：收藏成功后挂「记忆溯源」折叠条（条数 + 来源 + 可展开原文）
+        memTraceAdd(msgEl, text);
       } catch (e) { flash(b, 'fail'); }
     });
   }
   msgEl.appendChild(bar);
+}
+
+/* ================= R101 T03 · 记忆溯源（条数 + 来源标签，可展开） =================
+ * 收藏到记忆原本只有一个一闪而过的 ✓：用户不知道「存了几条」「存在哪儿」，
+ * 也没法回看存了什么。这里在消息下方补一条可展开的折叠行。
+ *
+ * 诚实性边界（写死在代码里，不要改）：本仓库后端 append_memory 只接收
+ * { text }，**没有**来源字段，收藏也不会返回被写入条目的 id/来源。所以这里
+ * 能如实呈现的只有两件事：
+ *   ① 本次收藏在前端计数里累计了几条（同一消息多次收藏 → 同一元素内累加）；
+ *   ② 被收藏文本的正文（前 200 字，textContent 写入）。
+ * 「来源」因此只能在「本会话」与「未标注」之间二选一：能取到非空会话 id 就是
+ * 「本会话」，否则「未标注」。**不得**写「来自全局记忆库」之类后端不存在的来源。
+ */
+function memTraceAdd(msgEl, text) {
+  if (!msgEl || typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+  let tr = null;
+  const kids = msgEl.children || [];
+  for (let i = 0; i < kids.length; i++) {
+    const k = kids[i];
+    if (k && k.classList && typeof k.classList.contains === 'function' && k.classList.contains('mem-trace')) { tr = k; break; }
+  }
+  if (!tr) {
+    tr = document.createElement('div');
+    tr.className = 'mem-trace';
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'mem-trace-head';
+    head.setAttribute('aria-expanded', 'false');
+    const body = document.createElement('div');
+    body.className = 'mem-trace-body';
+    // 用户内容只走 textContent（禁止 innerHTML 拼接）
+    body.textContent = String(text || '').slice(0, 200);
+    head.onclick = () => {
+      let open = false;
+      try { open = tr.classList.toggle('open'); } catch (e) { open = false; }
+      try { head.setAttribute('aria-expanded', open ? 'true' : 'false'); } catch (e) {}
+    };
+    tr.appendChild(head);
+    tr.appendChild(body);
+    try { msgEl.appendChild(tr); } catch (e) { return null; }
+  }
+  const prev = (tr.dataset && tr.dataset.memCount) ? parseInt(tr.dataset.memCount, 10) : 0;
+  const cnt = (Number.isInteger(prev) && prev > 0 ? prev : 0) + 1;
+  try { if (!tr.dataset) tr.dataset = {}; tr.dataset.memCount = String(cnt); } catch (e) {}
+  let sid = '';
+  try {
+    if (typeof currentSessionId !== 'undefined' && currentSessionId != null) sid = String(currentSessionId);
+  } catch (e) { sid = ''; }
+  const srcLabel = sid ? '本会话' : '未标注';
+  const head = (tr.children && tr.children[0]) || null;
+  const body = (tr.children && tr.children[1]) || null;
+  if (head) {
+    head.textContent = '记忆 ' + cnt + ' 条 · 来源：' + srcLabel;
+    head.title = '已写入 ' + cnt + ' 条记忆（来源：' + srcLabel + '）—— 点击展开被收藏的原文';
+  }
+  if (body) body.textContent = String(text || '').slice(0, 200);
+  return tr;
 }
 
 /** 撤回 user 消息：midx 起删到下一个 user/system 前（仅当这些是会话末尾消息），内容回输入框。 */
@@ -355,45 +415,127 @@ function msgEditResend(msgEl, text) {
     if (typeof toast === 'function') toast('该消息无法编辑重发（非自己发送的提问）', 'warn');
     return;
   }
-  const contentEl = msgEl.querySelector('.content') || msgEl;
-  const origHtml = contentEl.innerHTML;
-  contentEl.innerHTML = '';
-  const ta = document.createElement('textarea');
-  ta.className = 'msg-edit-ta';
-  ta.value = String(text || '');
-  ta.style.cssText = 'width:100%;min-height:64px;padding:8px 10px;border:1px solid var(--border);' +
-    'border-radius:var(--radius-sm);background:var(--main-bg);color:var(--text);font-size:13px;resize:vertical;outline:none;';
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px;margin-top:6px;justify-content:flex-end;';
-  const mkBtn = (label, cls, fn) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = cls; b.textContent = label; b.onclick = fn;
-    row.appendChild(b); return b;
-  };
-  mkBtn('取消', 'modal-btn', () => { contentEl.innerHTML = origHtml; });
-  mkBtn('保存并重发', 'modal-btn primary', () => {
-    const next = String(ta.value || '').trim();
-    if (!next) { if (typeof toast === 'function') toast('编辑后的提问为空', 'warn'); return; }
-    const m = s.messages[midx];
-    // 内容替换：数组形态保留非文本部分（图片/附件占位），文本段原地替换
-    if (Array.isArray(m.content)) {
-      const ti = m.content.findIndex(p => p && p.type === 'text');
-      if (ti >= 0) m.content[ti].text = next;
-      else m.content.unshift({ type: 'text', text: next });
-    } else {
-      m.content = next;
-    }
-    m.edited = true;
-    s.messages.splice(midx + 1);   // 截断其后（user 边界=配平安全点）
-    s.updatedAt = Date.now();      // R99 P0：截断改了会话内容，必须推进 updatedAt
-    if (typeof toast === 'function') toast('已更新提问，正在重新生成…', 'ok');
-    _convRerun(s);
-  });
-  contentEl.appendChild(ta);
-  contentEl.appendChild(row);
-  if (typeof updateCostEstimate === 'function') { try { ta.addEventListener('input', updateCostEstimate); } catch (e) {} }
-  ta.focus();
+  const input = (typeof document !== 'undefined' && document.getElementById)
+    ? document.getElementById('userInput') : null;
+  /* R101 T03（用户拍定语义）：分支编辑 = **覆盖删除**。
+   * 点「编辑」不再在气泡里内联改写：气泡是窄列（user 气泡 max-width 76%），
+   * 长提问在里头编辑要横向滚动，体验差。改为把原文放回输入区、把该条标成
+   * 「编辑中」；用户点发送时由 chat/send.js 的发送链从这条**之后整体截断**、
+   * 把本条内容替换成新输入 —— 覆盖删除，不保留分支。
+   *
+   * 为什么中间态走 DOM（class + data-*）而不是模块级变量：编辑态的消费方在
+   * chat/send.js，跨模块共享一个 let 会新增静态引用（SCC 棘轮零余量）；
+   * DOM 是零成本、零依赖的既有通道，还自带「哪一条」的定位信息。
+   *
+   * 降级：拿不到输入区（vm 沙箱 / 极端降级环境）时，回退到 R58 的内联改写
+   * 编辑器 —— 行为不回退，只是表现方式退回旧版。这段刻意**内联**在本分支里
+   * 而不是抽成独立函数：msgEditResend 已在 markdown ↔ sessions/controller 的
+   * 符号环上，新符号一旦回指 _convRerun 就会被一起拉进环里（SCC 棘轮实测
+   * cyclicSymbols 104→105，改回内联后 +0）。 */
+  if (!input) {
+    const contentEl = (msgEl.querySelector && msgEl.querySelector('.content')) || msgEl;
+    const origHtml = contentEl.innerHTML;
+    contentEl.innerHTML = '';
+    const ta = document.createElement('textarea');
+    ta.className = 'msg-edit-ta';
+    ta.value = String(text || '');
+    ta.style.cssText = 'width:100%;min-height:64px;padding:8px 10px;border:1px solid var(--border);' +
+      'border-radius:var(--radius-sm);background:var(--main-bg);color:var(--text);font-size:13px;resize:vertical;outline:none;';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;margin-top:6px;justify-content:flex-end;';
+    const mkBtn = (label, cls, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = cls; b.textContent = label; b.onclick = fn;
+      row.appendChild(b); return b;
+    };
+    mkBtn('取消', 'modal-btn', () => { contentEl.innerHTML = origHtml; });
+    mkBtn('保存并重发', 'modal-btn primary', () => {
+      const next = String(ta.value || '').trim();
+      if (!next) { if (typeof toast === 'function') toast('编辑后的提问为空', 'warn'); return; }
+      const m = s.messages[midx];
+      // 内容替换：数组形态保留非文本部分（图片/附件占位），文本段原地替换
+      if (Array.isArray(m.content)) {
+        const ti = m.content.findIndex(p => p && p.type === 'text');
+        if (ti >= 0) m.content[ti].text = next;
+        else m.content.unshift({ type: 'text', text: next });
+      } else {
+        m.content = next;
+      }
+      m.edited = true;
+      s.messages.splice(midx + 1);   // 截断其后（user 边界=配平安全点）
+      s.updatedAt = Date.now();      // R99 P0：截断改了会话内容，必须推进 updatedAt
+      if (typeof toast === 'function') toast('已更新提问，正在重新生成…', 'ok');
+      _convRerun(s);
+    });
+    contentEl.appendChild(ta);
+    contentEl.appendChild(row);
+    if (typeof updateCostEstimate === 'function') { try { ta.addEventListener('input', updateCostEstimate); } catch (e) {} }
+    ta.focus();
+    return;
+  }
+  msgEditMarkPending(msgEl, s, midx);
+  input.value = String(text || '');
+  try { input.style.height = 'auto'; } catch (e) {}
+  try { if (typeof input.focus === 'function') input.focus(); } catch (e) {}
+  if (typeof updateCostEstimate === 'function') { try { updateCostEstimate(); } catch (e) {} }
+  if (typeof toast === 'function') toast('编辑中：改完点发送，将覆盖这条提问之后的内容（Esc 取消）', 'info');
 }
+
+/** 把某条 user 消息标记为「编辑中」（同一时刻只允许一条）。 */
+function msgEditMarkPending(msgEl, s, midx) {
+  msgEditClearPending();   // 单例：切到另一条时自动取消上一条
+  if (!msgEl) return;
+  try { if (msgEl.classList) msgEl.classList.add('editing'); } catch (e) {}
+  try {
+    if (msgEl.dataset) {
+      msgEl.dataset.editMidx = String(midx);
+      msgEl.dataset.editSid = String((s && s.id) || '');
+    }
+  } catch (e) {}
+  // 视觉提示：气泡顶部一行小字（不靠颜色单独承载语义，色盲用户也读得到）
+  try {
+    const flag = document.createElement('div');
+    flag.className = 'edit-flag';
+    flag.textContent = '编辑中 · 发送后覆盖本条之后的内容';
+    const anchor = (typeof msgEl.insertBefore === 'function') ? msgEl : null;
+    if (anchor) anchor.insertBefore(flag, msgEl.firstChild || null);
+  } catch (e) {}
+}
+
+/** 清除全部「编辑中」标记（发送完成、Esc 取消、切换编辑目标时调用）。 */
+function msgEditClearPending() {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+  let els = [];
+  try { els = document.querySelectorAll('.content.editing') || []; } catch (e) { return; }
+  Array.prototype.forEach.call(els, (el) => {
+    if (!el) return;
+    try { if (el.classList) el.classList.remove('editing'); } catch (e) {}
+    try { if (el.dataset) { delete el.dataset.editMidx; delete el.dataset.editSid; } } catch (e) {}
+    try {
+      const flag = (typeof el.querySelector === 'function') ? el.querySelector('.edit-flag') : null;
+      if (flag && typeof flag.remove === 'function') flag.remove();
+    } catch (e) {}
+  });
+}
+
+/** Esc 取消编辑态（顶层匿名监听器不算符号，不会进符号依赖图）。
+ *  内联审批卡打开时让位：那一张卡的 Esc = 拒绝，两件事不该被一次按键同时触发。 */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('keydown', (e) => {
+    if (!e || e.key !== 'Escape') return;
+    if (typeof document.querySelector !== 'function') return;
+    let on = null;
+    try {
+      if (document.querySelector('.guard-inline')) return;   // 审批卡优先（DOM 判断，无跨模块引用）
+      on = document.querySelector('.content.editing');
+    } catch (err) { on = null; }
+    if (!on) return;
+    msgEditClearPending();
+    if (typeof toast === 'function') toast('已取消编辑', 'info');
+  });
+}
+
+/** 撤回 user 消息：midx 起删到下一个 user/system 前（仅当这些是会话末尾消息），内容回输入框。 */
 
 function msgRollback(msgEl, text) {
   if (_convBusyGuard()) { if (typeof toast === 'function') toast('本会话正在生成回复，请先停止或等待完成', 'warn'); return; }

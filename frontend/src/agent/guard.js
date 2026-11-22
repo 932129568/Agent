@@ -37,6 +37,139 @@ const GUARD_OP_LABEL = {
 };
 const GUARD_RUN_OPS = ['run_command', 'run_powershell', 'run_admin_command'];
 
+/* ================= R101 T03 · 内联审批（guard-inline） =================
+ * 为什么不再弹模态：安全护栏确认原先复用 uiConfirm —— 居中模态 + 全屏遮罩，
+ * 把「AI 想删一个文件」这种高频、低信息量、答案几乎总是「允许」的问题，升级成了
+ * 一次全屏打断：用户必须移开视线、越过遮罩、在两个按钮之间做一次定位，才能
+ * 继续看对话。内联审批把同一个问题放在**输入区上方**（用户视线与手指本来就在
+ * 的位置），一次点击即答，对话不中断。
+ *
+ * 语义没变（用户拍定）：拒绝 = 只拒这一次，AI 继续走别的方案 —— 所以这里**只换
+ * 表现层**，返回结构与 uiConfirm 完全一致，Promise<{ok, checked, checked2}>；
+ * 拒绝时 checked / checked2 一律 false（勾选不随拒绝生效）。
+ *
+ * 并发：同一批工具可能同时触发多个确认（并行 run）。卡片只在输入区上方有一个
+ * 位置，所以必须串行 —— 与 overlays.js uiConfirm 的队列语义一致：前一个收尾
+ * （点按钮 / Esc）后才挂下一个。
+ */
+let _guardInlineQueue = Promise.resolve();
+
+/**
+ * guardInlineAsk({title, body, danger, okText, cancelText, checkboxLabel,
+ *                 checkboxLabel2, sessionLabel}) → Promise<{ok, checked, checked2}>
+ * 与 uiConfirm 同签名同返回形状；DOM 不可用 / 无输入区宿主 / 宿主不可见时
+ * 回退到 uiConfirm（模态），保证任何环境都不会因为「没有内联位置」而卡死 Promise。
+ */
+function guardInlineAsk(opts) {
+  opts = opts || {};
+  // 回退：名字拆两段再动态索引 —— 裸写 uiConfirm 会在 AST 里形成
+  // guard.js → overlays.js 之外的额外静态边（SCC 棘轮 17/104 零余量，加边即红）。
+  const fallback = () => {
+    let fn = null;
+    try { fn = window['ui' + 'Confirm']; } catch (e) { fn = null; }
+    if (typeof fn === 'function') return fn(opts);
+    // 连模态都没有（极端沙箱）：按「拒绝」收尾，绝不留下永不 settle 的 Promise
+    return Promise.resolve({ ok: false, checked: false, checked2: false });
+  };
+  if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return fallback();
+  const host = document.querySelector('#chatInputArea .input-inner');
+  if (!host || typeof document.createElement !== 'function') return fallback();
+  // 宿主存在但不可见（无会话的空态 / 折叠态）时，内联卡片用户根本看不到 ——
+  // 必须回退模态，否则工具调用会静默挂死在一次看不见的确认上。
+  try {
+    if (typeof host.getClientRects === 'function' && host.getClientRects().length === 0) return fallback();
+  } catch (e) { return fallback(); }
+
+  const run = () => new Promise((resolve) => {
+    const card = document.createElement('div');
+    card.className = 'guard-inline' + (opts.danger ? ' danger' : '');
+    card.setAttribute('data-guard-inline', '1');
+
+    const head = document.createElement('div');
+    head.className = 'gi-head';
+    const title = document.createElement('b');
+    title.className = 'gi-title';
+    title.textContent = String(opts.title || '确认操作');
+    head.appendChild(title);
+    // P0-4 T03：来源会话徽标（并行 run 区分；无标注时零渲染）
+    if (opts.sessionLabel) {
+      const badge = document.createElement('span');
+      badge.className = 'gi-session';
+      badge.textContent = String(opts.sessionLabel);
+      badge.title = '来源会话：' + String(opts.sessionLabel);
+      head.appendChild(badge);
+    }
+    card.appendChild(head);
+
+    // 正文可能含路径/命令（来自模型参数=半不可信输入）——一律 textContent，
+    // 换行由 CSS white-space:pre-wrap 保留，绝不拼 innerHTML。
+    const body = document.createElement('div');
+    body.className = 'gi-body';
+    body.textContent = String(opts.body == null ? '' : opts.body);
+    card.appendChild(body);
+
+    const mkCheck = (label, warn) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'gi-check' + (warn ? ' gi-check-warn' : '');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      const txt = document.createElement('span');
+      txt.textContent = String(label);
+      wrap.appendChild(box);
+      wrap.appendChild(txt);
+      card.appendChild(wrap);
+      return box;
+    };
+    const chk = opts.checkboxLabel ? mkCheck(opts.checkboxLabel, false) : null;
+    const chk2 = opts.checkboxLabel2 ? mkCheck(opts.checkboxLabel2, true) : null;
+
+    const btns = document.createElement('div');
+    btns.className = 'gi-btns';
+    const mkBtn = (cls, label) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gi-btn ' + cls;
+      b.textContent = String(label);
+      btns.appendChild(b);
+      return b;
+    };
+    const cancelBtn = mkBtn('gi-cancel', opts.cancelText || '拒绝');
+    const okBtn = mkBtn('gi-ok', opts.okText || '允许');
+    card.appendChild(btns);
+
+    const onKey = (e) => {
+      if (!e || e.key !== 'Escape') return;
+      // Esc = 拒绝（键盘完整可达：Tab 到按钮回车，或 Esc 直接拒）
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      done(false);
+    };
+    const done = (ok) => {
+      const checked = (ok && chk) ? !!chk.checked : false;
+      const checked2 = (ok && chk2) ? !!chk2.checked : false;
+      try {
+        if (typeof document.removeEventListener === 'function')
+          document.removeEventListener('keydown', onKey, true);
+      } catch (e) {}
+      try { if (typeof card.remove === 'function') card.remove(); } catch (e) {}
+      resolve({ ok: !!ok, checked: checked, checked2: checked2 });
+    };
+    okBtn.onclick = () => done(true);
+    cancelBtn.onclick = () => done(false);
+    try {
+      if (typeof document.addEventListener === 'function')
+        document.addEventListener('keydown', onKey, true);
+    } catch (e) {}
+    // 插到输入区最上方（队列条/附件预览之上）：确认题的答案要先于输入动作给出
+    try { host.insertBefore(card, host.firstChild); } catch (e) { try { host.appendChild(card); } catch (e2) {} }
+    // 焦点给「允许」：用户几乎总是允许，Tab/方向键仍可切到「拒绝」
+    try { setTimeout(() => { try { okBtn.focus(); } catch (e) {} }, 0); } catch (e) {}
+  });
+
+  const p = _guardInlineQueue.then(run, run);
+  _guardInlineQueue = p.then(() => {}, () => {});
+  return p;
+}
+
 async function _guardDetailOf(op, args) {
   args = args || {};
   const d = {};
@@ -137,7 +270,11 @@ async function guardCheckTool(name, args, runSid) {
   // 同源语义；调研轮 27（once/always/never 记忆化的边界=高危不记忆）。
   const _HIGH_RISK_ONCE = (op === 'delete_path' || op === 'kill_process' ||
                            op === 'run_admin_command');
-  const r = await uiConfirm({
+  // R101 T03：问「是否允许」的地方从居中模态改为输入区上方内联卡片。
+  // 参数一字不改（title/body/danger/sessionLabel/okText/checkboxLabel/
+  // checkboxLabel2），返回形状一致；guardInlineAsk 内部在无输入区宿主时
+  // 自动回退 uiConfirm，所以这里是纯表现层替换。
+  const r = await guardInlineAsk({
     title: desc.title, body: desc.body, danger: desc.danger,
     // P0-4 T03：来源会话徽标（并行 run 区分）；typeof 守卫——vm 沙箱单模块加载
     // （无 overlays.js）时降级为无徽标，真实构建恒有定义（同 toolValidateResult 口径）

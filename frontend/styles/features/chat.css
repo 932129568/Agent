@@ -601,3 +601,33 @@ body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
 .et-sum{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)}
 .et-empty{color:var(--text-3)}
 .et-more{color:var(--text-3);margin-top:2px}
+
+/* ===== R101 T03 · 记忆溯源条（.mem-trace）=====
+   收藏到记忆后挂在消息下方的一行折叠摘要：折叠态「记忆 N 条 · 来源：X」，
+   点开才显示被收藏的正文（前 200 字）。默认折叠是因为溯源信息是「想核对时
+   才看」的次要信息，常驻展开会把每条回复都撑长。
+   颜色只用既有令牌；展开箭头用 ::before 文字三角（不新增图标资源）。 */
+.mem-trace{margin:6px 2px 0;font-size:11.5px;color:var(--text-3)}
+.mem-trace-head{display:flex;align-items:center;gap:6px;font:inherit;font-size:11.5px;
+  color:var(--text-2);background:transparent;border:0;padding:2px 0;cursor:pointer;
+  text-align:left;border-radius:var(--radius-sm)}
+.mem-trace-head:hover{color:var(--primary)}
+.mem-trace-head:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.mem-trace-head::before{content:'\25B8';font-size:9px;color:var(--text-3);
+  transition:transform var(--dur-fast) var(--ease-out)}
+.mem-trace.open .mem-trace-head::before{transform:rotate(90deg)}
+.mem-trace-body{display:none;margin:2px 0 0 15px;padding:6px 9px;font-size:11.5px;
+  line-height:1.6;color:var(--text-2);background:var(--surface-2);
+  border-left:2px solid var(--border);border-radius:var(--radius-sm);white-space:pre-wrap;
+  word-break:break-word}
+.mem-trace.open .mem-trace-body{display:block}
+
+/* ===== R101 T03 · 「编辑中」消息标记（覆盖删除的前置态）=====
+   点消息操作条的「编辑」后，该条提问被标成编辑中：原文已回填输入区，
+   这里只用虚线圈出目标 + 顶部一行说明，确保用户知道「发送会覆盖其后内容」。
+   用虚线描边而不是实心高亮：它是「待确认的目标」，不是「已完成的状态」。 */
+.content.editing{outline:1.5px dashed var(--primary);outline-offset:3px;
+  border-radius:var(--radius-md)}
+.edit-flag{margin-bottom:6px;font-size:10.5px;line-height:1.5;color:var(--primary);
+  background:var(--primary-soft);border-radius:var(--radius-full);padding:2px 9px;
+  display:inline-block}

@@ -116,7 +116,11 @@ def test_any_file_becomes_attachment(tmp_path):
 # ---------------------------------------------------------------- ③ 功能市场入口与页面
 def test_market_entry_and_page_dom():
     tpl = (ROOT / 'frontend' / 'index.template.html').read_text(encoding='utf-8')
-    assert 'data-tip="功能市场"' in tpl and 'aria-label="功能市场"' in tpl
+    # R101 T02：Rail 一级入口按架构定稿改名为「能力中心」（该钮同时是功能市场的入口，
+    # 图标仍是 i-market、id 仍是 expertCenterBtn、点开的页面标题仍是「功能市场」）。
+    # 本断言守的是「存在一个带无障碍标签的市场入口」，不是「标签必须叫功能市场」——
+    # 所以只改标签字面量，其余（i-market 图标、id、市场页 DOM）一条不动。
+    assert 'data-tip="能力中心"' in tpl and 'aria-label="能力中心"' in tpl
     assert 'id="expertCenterBtn"' in tpl and '<use href="#i-market"/>' in tpl
     assert '<symbol id="i-market"' in tpl
     assert '>E</span></button>' not in tpl, '字母 E 图标仍存在'

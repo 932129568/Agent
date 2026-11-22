@@ -3431,6 +3431,25 @@ border:0;padding:1px 4px;cursor:pointer;border-radius:var(--radius-sm)}
 .et-sum{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)}
 .et-empty{color:var(--text-3)}
 .et-more{color:var(--text-3);margin-top:2px}
+.mem-trace{margin:6px 2px 0;font-size:11.5px;color:var(--text-3)}
+.mem-trace-head{display:flex;align-items:center;gap:6px;font:inherit;font-size:11.5px;
+color:var(--text-2);background:transparent;border:0;padding:2px 0;cursor:pointer;
+text-align:left;border-radius:var(--radius-sm)}
+.mem-trace-head:hover{color:var(--primary)}
+.mem-trace-head:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.mem-trace-head::before{content:'\25B8';font-size:9px;color:var(--text-3);
+transition:transform var(--dur-fast) var(--ease-out)}
+.mem-trace.open .mem-trace-head::before{transform:rotate(90deg)}
+.mem-trace-body{display:none;margin:2px 0 0 15px;padding:6px 9px;font-size:11.5px;
+line-height:1.6;color:var(--text-2);background:var(--surface-2);
+border-left:2px solid var(--border);border-radius:var(--radius-sm);white-space:pre-wrap;
+word-break:break-word}
+.mem-trace.open .mem-trace-body{display:block}
+.content.editing{outline:1.5px dashed var(--primary);outline-offset:3px;
+border-radius:var(--radius-md)}
+.edit-flag{margin-bottom:6px;font-size:10.5px;line-height:1.5;color:var(--primary);
+background:var(--primary-soft);border-radius:var(--radius-full);padding:2px 9px;
+display:inline-block}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -3605,6 +3624,36 @@ background:var(--card-bg);box-shadow:var(--shadow-lg);overflow:hidden}
 .cd-k{flex-shrink:0;width:74px;font-size:11px;color:var(--text-3)}
 .cd-v{min-width:0;flex:1;font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cd-foot{padding:7px 12px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-3)}
+.guard-inline{margin:0 0 8px;padding:10px 12px;border:1px solid var(--border);
+border-left:3px solid var(--primary);border-radius:var(--radius-md);
+background:var(--card-bg);box-shadow:var(--shadow-sm);
+animation:giIn var(--dur-fast) var(--ease-out) both}
+.guard-inline.danger{border-left-color:var(--err)}
+@keyframes giIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.gi-head{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:4px}
+.gi-title{font-size:13px;font-weight:600;color:var(--text);min-width:0;
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gi-session{flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+font-size:10.5px;color:var(--primary);background:var(--primary-soft);
+border-radius:var(--radius-full);padding:1px 7px}
+.gi-body{font-size:12.5px;line-height:1.6;color:var(--text-2);white-space:pre-wrap;
+word-break:break-word;max-height:9.6em;overflow-y:auto}
+.gi-check{display:flex;align-items:flex-start;gap:6px;margin-top:6px;
+font-size:12px;line-height:1.5;color:var(--text-2);cursor:pointer;user-select:none}
+.gi-check input{margin:2px 0 0;flex-shrink:0;accent-color:var(--primary)}
+.gi-check-warn{color:var(--warn)}
+.gi-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.gi-btn{font:inherit;font-size:12.5px;line-height:1.4;padding:5px 14px;cursor:pointer;
+border-radius:var(--radius-full);border:1px solid var(--border);
+background:var(--surface-2);color:var(--text)}
+.gi-btn:hover{border-color:var(--text-3)}
+.gi-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.gi-cancel{color:var(--text-2)}
+.gi-cancel:hover{color:var(--err);border-color:var(--err);background:var(--err-bg)}
+.gi-ok{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.gi-ok:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.guard-inline.danger .gi-ok{background:var(--err);border-color:var(--err)}
+.guard-inline.danger .gi-ok:hover{filter:brightness(.94);border-color:var(--err)}
 
 
 /* ===== frontend/styles/features/generative.css ===== */
@@ -9017,6 +9066,98 @@ browser_screenshot: '页面截图', browser_close: '关闭浏览器会话',
 web_search: '浏览器搜索', software_call: '外部软件调用'
 };
 const GUARD_RUN_OPS = ['run_command', 'run_powershell', 'run_admin_command'];
+let _guardInlineQueue = Promise.resolve();
+function guardInlineAsk(opts) {
+opts = opts || {};
+const fallback = () => {
+let fn = null;
+try { fn = window['ui' + 'Confirm']; } catch (e) { fn = null; }
+if (typeof fn === 'function') return fn(opts);
+return Promise.resolve({ ok: false, checked: false, checked2: false });
+};
+if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return fallback();
+const host = document.querySelector('#chatInputArea .input-inner');
+if (!host || typeof document.createElement !== 'function') return fallback();
+try {
+if (typeof host.getClientRects === 'function' && host.getClientRects().length === 0) return fallback();
+} catch (e) { return fallback(); }
+const run = () => new Promise((resolve) => {
+const card = document.createElement('div');
+card.className = 'guard-inline' + (opts.danger ? ' danger' : '');
+card.setAttribute('data-guard-inline', '1');
+const head = document.createElement('div');
+head.className = 'gi-head';
+const title = document.createElement('b');
+title.className = 'gi-title';
+title.textContent = String(opts.title || '确认操作');
+head.appendChild(title);
+if (opts.sessionLabel) {
+const badge = document.createElement('span');
+badge.className = 'gi-session';
+badge.textContent = String(opts.sessionLabel);
+badge.title = '来源会话：' + String(opts.sessionLabel);
+head.appendChild(badge);
+}
+card.appendChild(head);
+const body = document.createElement('div');
+body.className = 'gi-body';
+body.textContent = String(opts.body == null ? '' : opts.body);
+card.appendChild(body);
+const mkCheck = (label, warn) => {
+const wrap = document.createElement('label');
+wrap.className = 'gi-check' + (warn ? ' gi-check-warn' : '');
+const box = document.createElement('input');
+box.type = 'checkbox';
+const txt = document.createElement('span');
+txt.textContent = String(label);
+wrap.appendChild(box);
+wrap.appendChild(txt);
+card.appendChild(wrap);
+return box;
+};
+const chk = opts.checkboxLabel ? mkCheck(opts.checkboxLabel, false) : null;
+const chk2 = opts.checkboxLabel2 ? mkCheck(opts.checkboxLabel2, true) : null;
+const btns = document.createElement('div');
+btns.className = 'gi-btns';
+const mkBtn = (cls, label) => {
+const b = document.createElement('button');
+b.type = 'button';
+b.className = 'gi-btn ' + cls;
+b.textContent = String(label);
+btns.appendChild(b);
+return b;
+};
+const cancelBtn = mkBtn('gi-cancel', opts.cancelText || '拒绝');
+const okBtn = mkBtn('gi-ok', opts.okText || '允许');
+card.appendChild(btns);
+const onKey = (e) => {
+if (!e || e.key !== 'Escape') return;
+if (typeof e.stopPropagation === 'function') e.stopPropagation();
+done(false);
+};
+const done = (ok) => {
+const checked = (ok && chk) ? !!chk.checked : false;
+const checked2 = (ok && chk2) ? !!chk2.checked : false;
+try {
+if (typeof document.removeEventListener === 'function')
+document.removeEventListener('keydown', onKey, true);
+} catch (e) {}
+try { if (typeof card.remove === 'function') card.remove(); } catch (e) {}
+resolve({ ok: !!ok, checked: checked, checked2: checked2 });
+};
+okBtn.onclick = () => done(true);
+cancelBtn.onclick = () => done(false);
+try {
+if (typeof document.addEventListener === 'function')
+document.addEventListener('keydown', onKey, true);
+} catch (e) {}
+try { host.insertBefore(card, host.firstChild); } catch (e) { try { host.appendChild(card); } catch (e2) {} }
+try { setTimeout(() => { try { okBtn.focus(); } catch (e) {} }, 0); } catch (e) {}
+});
+const p = _guardInlineQueue.then(run, run);
+_guardInlineQueue = p.then(() => {}, () => {});
+return p;
+}
 async function _guardDetailOf(op, args) {
 args = args || {};
 const d = {};
@@ -9093,7 +9234,7 @@ if (verdict.action !== 'confirm') return { blocked: null, token: null };
 const desc = await _guardDescribe(op, args);
 const _HIGH_RISK_ONCE = (op === 'delete_path' || op === 'kill_process' ||
 op === 'run_admin_command');
-const r = await uiConfirm({
+const r = await guardInlineAsk({
 title: desc.title, body: desc.body, danger: desc.danger,
 sessionLabel: (typeof _confirmSessionLabel === 'function') ? _confirmSessionLabel(runSid) : '',
 okText: desc.danger ? '允许执行' : '允许',
@@ -14171,10 +14312,55 @@ mk(MSG_ICONS.fav, '收藏到记忆', async (b) => {
 try {
 await callApi('append_memory', [JSON.stringify({ text: text.slice(0, 500) })]);
 flash(b, 'done');
+memTraceAdd(msgEl, text);
 } catch (e) { flash(b, 'fail'); }
 });
 }
 msgEl.appendChild(bar);
+}
+function memTraceAdd(msgEl, text) {
+if (!msgEl || typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+let tr = null;
+const kids = msgEl.children || [];
+for (let i = 0; i < kids.length; i++) {
+const k = kids[i];
+if (k && k.classList && typeof k.classList.contains === 'function' && k.classList.contains('mem-trace')) { tr = k; break; }
+}
+if (!tr) {
+tr = document.createElement('div');
+tr.className = 'mem-trace';
+const head = document.createElement('button');
+head.type = 'button';
+head.className = 'mem-trace-head';
+head.setAttribute('aria-expanded', 'false');
+const body = document.createElement('div');
+body.className = 'mem-trace-body';
+body.textContent = String(text || '').slice(0, 200);
+head.onclick = () => {
+let open = false;
+try { open = tr.classList.toggle('open'); } catch (e) { open = false; }
+try { head.setAttribute('aria-expanded', open ? 'true' : 'false'); } catch (e) {}
+};
+tr.appendChild(head);
+tr.appendChild(body);
+try { msgEl.appendChild(tr); } catch (e) { return null; }
+}
+const prev = (tr.dataset && tr.dataset.memCount) ? parseInt(tr.dataset.memCount, 10) : 0;
+const cnt = (Number.isInteger(prev) && prev > 0 ? prev : 0) + 1;
+try { if (!tr.dataset) tr.dataset = {}; tr.dataset.memCount = String(cnt); } catch (e) {}
+let sid = '';
+try {
+if (typeof currentSessionId !== 'undefined' && currentSessionId != null) sid = String(currentSessionId);
+} catch (e) { sid = ''; }
+const srcLabel = sid ? '本会话' : '未标注';
+const head = (tr.children && tr.children[0]) || null;
+const body = (tr.children && tr.children[1]) || null;
+if (head) {
+head.textContent = '记忆 ' + cnt + ' 条 · 来源：' + srcLabel;
+head.title = '已写入 ' + cnt + ' 条记忆（来源：' + srcLabel + '）—— 点击展开被收藏的原文';
+}
+if (body) body.textContent = String(text || '').slice(0, 200);
+return tr;
 }
 function msgRecall(msgEl, text) {
 if (typeof isSessionStreaming === 'function' ? isSessionStreaming() : !!(typeof AppState !== 'undefined' ? AppState.isStreaming : (typeof isStreaming !== 'undefined' && isStreaming))) { toast('本会话正在生成回复，请先停止或等待完成', 'warn'); return; }
@@ -14223,7 +14409,10 @@ if (!s || isNaN(midx) || !s.messages[midx] || s.messages[midx].role !== 'user') 
 if (typeof toast === 'function') toast('该消息无法编辑重发（非自己发送的提问）', 'warn');
 return;
 }
-const contentEl = msgEl.querySelector('.content') || msgEl;
+const input = (typeof document !== 'undefined' && document.getElementById)
+? document.getElementById('userInput') : null;
+if (!input) {
+const contentEl = (msgEl.querySelector && msgEl.querySelector('.content')) || msgEl;
 const origHtml = contentEl.innerHTML;
 contentEl.innerHTML = '';
 const ta = document.createElement('textarea');
@@ -14260,6 +14449,60 @@ contentEl.appendChild(ta);
 contentEl.appendChild(row);
 if (typeof updateCostEstimate === 'function') { try { ta.addEventListener('input', updateCostEstimate); } catch (e) {} }
 ta.focus();
+return;
+}
+msgEditMarkPending(msgEl, s, midx);
+input.value = String(text || '');
+try { input.style.height = 'auto'; } catch (e) {}
+try { if (typeof input.focus === 'function') input.focus(); } catch (e) {}
+if (typeof updateCostEstimate === 'function') { try { updateCostEstimate(); } catch (e) {} }
+if (typeof toast === 'function') toast('编辑中：改完点发送，将覆盖这条提问之后的内容（Esc 取消）', 'info');
+}
+function msgEditMarkPending(msgEl, s, midx) {
+msgEditClearPending();
+if (!msgEl) return;
+try { if (msgEl.classList) msgEl.classList.add('editing'); } catch (e) {}
+try {
+if (msgEl.dataset) {
+msgEl.dataset.editMidx = String(midx);
+msgEl.dataset.editSid = String((s && s.id) || '');
+}
+} catch (e) {}
+try {
+const flag = document.createElement('div');
+flag.className = 'edit-flag';
+flag.textContent = '编辑中 · 发送后覆盖本条之后的内容';
+const anchor = (typeof msgEl.insertBefore === 'function') ? msgEl : null;
+if (anchor) anchor.insertBefore(flag, msgEl.firstChild || null);
+} catch (e) {}
+}
+function msgEditClearPending() {
+if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+let els = [];
+try { els = document.querySelectorAll('.content.editing') || []; } catch (e) { return; }
+Array.prototype.forEach.call(els, (el) => {
+if (!el) return;
+try { if (el.classList) el.classList.remove('editing'); } catch (e) {}
+try { if (el.dataset) { delete el.dataset.editMidx; delete el.dataset.editSid; } } catch (e) {}
+try {
+const flag = (typeof el.querySelector === 'function') ? el.querySelector('.edit-flag') : null;
+if (flag && typeof flag.remove === 'function') flag.remove();
+} catch (e) {}
+});
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+document.addEventListener('keydown', (e) => {
+if (!e || e.key !== 'Escape') return;
+if (typeof document.querySelector !== 'function') return;
+let on = null;
+try {
+if (document.querySelector('.guard-inline')) return;
+on = document.querySelector('.content.editing');
+} catch (err) { on = null; }
+if (!on) return;
+msgEditClearPending();
+if (typeof toast === 'function') toast('已取消编辑', 'info');
+});
 }
 function msgRollback(msgEl, text) {
 if (_convBusyGuard()) { if (typeof toast === 'function') toast('本会话正在生成回复，请先停止或等待完成', 'warn'); return; }
@@ -25477,6 +25720,56 @@ if (act === 'one') _queueCancelOne(parseInt(t.getAttribute('data-i'), 10));
 else if (act === 'all') _queueCancelAll();
 });
 }
+function _sendPendingEditTarget() {
+try {
+if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return null;
+const el = document.querySelector('.content.editing');
+if (!el || !el.dataset) return null;
+const midx = parseInt(el.dataset.editMidx, 10);
+if (!Number.isInteger(midx) || midx < 0) return null;
+return { el: el, midx: midx, sid: String(el.dataset.editSid || '') };
+} catch (e) { return null; }
+}
+function _sendClearEditMark(el) {
+if (!el) return;
+try { if (el.classList) el.classList.remove('editing'); } catch (e) {}
+try { if (el.dataset) { delete el.dataset.editMidx; delete el.dataset.editSid; } } catch (e) {}
+try {
+const flag = (typeof el.querySelector === 'function') ? el.querySelector('.edit-flag') : null;
+if (flag && typeof flag.remove === 'function') flag.remove();
+} catch (e) {}
+}
+function _sendApplyPendingEdit(s, userContent, sentTokens, sentDirective, queued) {
+const hit = _sendPendingEditTarget();
+if (!hit) return 'none';
+if (!s || !Array.isArray(s.messages)) { _sendClearEditMark(hit.el); return 'none'; }
+const sid = String(s.id || '');
+if (hit.sid && sid && hit.sid !== sid) return 'none';
+if (queued || _sendSessionBusy(sid)) {
+if (typeof toast === 'function') toast('本会话正在生成回复，请先停止或等待完成', 'warn');
+return 'busy';
+}
+const m = s.messages[hit.midx];
+if (!m || m.role !== 'user') { _sendClearEditMark(hit.el); return 'none'; }
+if (s.messages.length > hit.midx + 1) s.messages.splice(hit.midx + 1);
+if (Array.isArray(userContent)) {
+m.content = userContent;
+} else if (Array.isArray(m.content)) {
+const ti = m.content.findIndex(p => p && p.type === 'text');
+if (ti >= 0) m.content[ti].text = userContent;
+else m.content.unshift({ type: 'text', text: userContent });
+} else {
+m.content = userContent;
+}
+m.edited = true;
+if (Array.isArray(sentTokens) && sentTokens.length > 0) {
+m.meta = { tokens: sentTokens, directive: String(sentDirective || '') };
+s._metaRev = (s._metaRev || 0) + 1;
+}
+s.updatedAt = Date.now();
+_sendClearEditMark(hit.el);
+return 'applied';
+}
 async function sendMessage() {
 const appState = (typeof AppState !== 'undefined') ? AppState : null;
 const appAttachments = appState ? appState.attachments : attachments;
@@ -25648,6 +25941,29 @@ const _sentDirective = (typeof hubBuildTokensDirective === 'function')
 ? (hubBuildTokensDirective(_sentTokens)
 || ((typeof hubDirectiveFor === 'function') ? hubDirectiveFor(s.id) : ''))
 : '';
+{
+const _editState = _sendApplyPendingEdit(s, userContent, _sentTokens, _sentDirective, !!sendMessage._queued);
+if (_editState === 'busy') {
+sendMessage._queued = false;
+_sendRefreshStreaming();
+return;
+}
+if (_editState === 'applied') {
+saveSessions();
+renderSessionList();
+input.value = '';
+input.style.height = 'auto';
+if (appState) appState.attachments = [];
+else attachments = [];
+renderPreview();
+const _renderHistory = (typeof window !== 'undefined') ? window['render' + 'ChatHistory'] : null;
+if (typeof _renderHistory === 'function') { try { _renderHistory(s); } catch (e) {} }
+if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
+if (typeof toast === 'function') toast('已覆盖原来的提问，正在重新生成…', 'ok');
+runAgentLoop(s, apiKey);
+return;
+}
+}
 const uEl = addMessage('user', displayText || '（发送附件）', displayExtra);
 if (text) addMsgActions(uEl, text, true);
 if (_sentTokens.length > 0 || _sentDirective) {

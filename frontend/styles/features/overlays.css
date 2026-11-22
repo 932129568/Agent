@@ -78,3 +78,44 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
 .cd-k{flex-shrink:0;width:74px;font-size:11px;color:var(--text-3)}
 .cd-v{min-width:0;flex:1;font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cd-foot{padding:7px 12px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-3)}
+
+/* ===== R101 T03 · 内联审批（guard-inline）=====
+   安全护栏的「是否允许」从居中模态改成输入区上方的一张卡：同一个问题原先要
+   移开视线、越过全屏遮罩、在模态里重新定位按钮；内联后是原地的两次点击，
+   对话不中断。
+   颜色全部走既有令牌：危险操作用 --err 只染左侧条与主按钮描边，不做红底满铺
+   （「删除一个文件」不该看起来像删库）。主按钮文字用 #fff，与既有
+   legacy.css `.modal-btn.primary{color:#fff}` 同口径——它表达的是
+   accent 之上的前景色，令牌体系里没有对应项，跨主题恒定。
+   动效：一次 8px 上浮淡入，时长走 --dur-fast 令牌（fx-off / reduced-motion
+   时由全局 .01ms 规则接管），不做位移以外的属性动画。 */
+.guard-inline{margin:0 0 8px;padding:10px 12px;border:1px solid var(--border);
+  border-left:3px solid var(--primary);border-radius:var(--radius-md);
+  background:var(--card-bg);box-shadow:var(--shadow-sm);
+  animation:giIn var(--dur-fast) var(--ease-out) both}
+.guard-inline.danger{border-left-color:var(--err)}
+@keyframes giIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.gi-head{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:4px}
+.gi-title{font-size:13px;font-weight:600;color:var(--text);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gi-session{flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:10.5px;color:var(--primary);background:var(--primary-soft);
+  border-radius:var(--radius-full);padding:1px 7px}
+.gi-body{font-size:12.5px;line-height:1.6;color:var(--text-2);white-space:pre-wrap;
+  word-break:break-word;max-height:9.6em;overflow-y:auto}
+.gi-check{display:flex;align-items:flex-start;gap:6px;margin-top:6px;
+  font-size:12px;line-height:1.5;color:var(--text-2);cursor:pointer;user-select:none}
+.gi-check input{margin:2px 0 0;flex-shrink:0;accent-color:var(--primary)}
+.gi-check-warn{color:var(--warn)}
+.gi-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.gi-btn{font:inherit;font-size:12.5px;line-height:1.4;padding:5px 14px;cursor:pointer;
+  border-radius:var(--radius-full);border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text)}
+.gi-btn:hover{border-color:var(--text-3)}
+.gi-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.gi-cancel{color:var(--text-2)}
+.gi-cancel:hover{color:var(--err);border-color:var(--err);background:var(--err-bg)}
+.gi-ok{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.gi-ok:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.guard-inline.danger .gi-ok{background:var(--err);border-color:var(--err)}
+.guard-inline.danger .gi-ok:hover{filter:brightness(.94);border-color:var(--err)}

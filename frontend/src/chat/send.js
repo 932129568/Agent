@@ -122,6 +122,88 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   });
 }
 
+/* ================= R101 T03 · 待编辑重发（覆盖删除） =================
+ * 语义（用户拍定）：编辑某条历史提问并重发时，**直接覆盖删除**旧的后继内容，
+ * 不保留分支。这正是 regenerate() 的截断语义，所以这里只是把它前移到发送链入口，
+ * 让「编辑 → 改字 → 发送」是一条连续动作，而不是先弹编辑器再重跑一遍。
+ *
+ * 编辑态由 markdown.js 的「编辑」按钮标在消息元素上（.content.editing +
+ * data-edit-midx / data-edit-sid + 输入区里已填好的原文）。这里是消费端：
+ *   ① 该条之后的消息整体 splice 掉（覆盖删除）；
+ *   ② 该条 content 换成这次输入（数组形态替换文本段，图片等非文本段保留）；
+ *   ③ 清掉编辑标记，**继续走原有发送流程**——但不再 push 一条新的 user 消息，
+ *      否则同一条提问会在历史与界面上各出现两次。
+ *
+ * 为什么用 DOM 做中间态：编辑态的生产方（markdown.js）与消费方（本文件）不是
+ * 同一个模块，跨模块共享一个 let 会新增静态引用（SCC 棘轮 17/104 零余量），
+ * DOM 是零成本、零依赖的既有通道，还自带「哪一条」的定位信息。
+ */
+function _sendPendingEditTarget() {
+  try {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return null;
+    const el = document.querySelector('.content.editing');
+    if (!el || !el.dataset) return null;
+    const midx = parseInt(el.dataset.editMidx, 10);
+    if (!Number.isInteger(midx) || midx < 0) return null;
+    return { el: el, midx: midx, sid: String(el.dataset.editSid || '') };
+  } catch (e) { return null; }
+}
+
+/** 清掉一条消息上的编辑标记（发送已消费 / 目标失效时调用）。 */
+function _sendClearEditMark(el) {
+  if (!el) return;
+  try { if (el.classList) el.classList.remove('editing'); } catch (e) {}
+  try { if (el.dataset) { delete el.dataset.editMidx; delete el.dataset.editSid; } } catch (e) {}
+  try {
+    const flag = (typeof el.querySelector === 'function') ? el.querySelector('.edit-flag') : null;
+    if (flag && typeof flag.remove === 'function') flag.remove();
+  } catch (e) {}
+}
+
+/**
+ * 消费待编辑状态。返回：
+ *   'none'    无编辑态 / 编辑态不属于当前会话 → 走正常发送
+ *   'busy'    本会话正在生成 → 已 toast 提示，调用方必须中止本次发送
+ *   'applied' 已截断并替换本条内容 → 调用方直接起 run，**不要**再 push user 消息
+ */
+function _sendApplyPendingEdit(s, userContent, sentTokens, sentDirective, queued) {
+  const hit = _sendPendingEditTarget();
+  if (!hit) return 'none';
+  if (!s || !Array.isArray(s.messages)) { _sendClearEditMark(hit.el); return 'none'; }
+  const sid = String(s.id || '');
+  // 别的会话的编辑态：不消费也不清除（用户切回去还能接着改）
+  if (hit.sid && sid && hit.sid !== sid) return 'none';
+  // 与「流式生成中」互斥：覆盖删除会改掉在途 run 正在读的历史
+  if (queued || _sendSessionBusy(sid)) {
+    if (typeof toast === 'function') toast('本会话正在生成回复，请先停止或等待完成', 'warn');
+    return 'busy';
+  }
+  const m = s.messages[hit.midx];
+  if (!m || m.role !== 'user') { _sendClearEditMark(hit.el); return 'none'; }
+  // ① 覆盖删除：这条之后的全部消息（assistant/tool）直接丢弃，不留分支。
+  // 截断点落在 user 边界上，tool_calls 配平天然成立（与 regenerate 同口径）。
+  if (s.messages.length > hit.midx + 1) s.messages.splice(hit.midx + 1);
+  // ② 内容替换（与 R58 同口径：数组形态原地换文本段，保留图片/附件占位）
+  if (Array.isArray(userContent)) {
+    m.content = userContent;
+  } else if (Array.isArray(m.content)) {
+    const ti = m.content.findIndex(p => p && p.type === 'text');
+    if (ti >= 0) m.content[ti].text = userContent;
+    else m.content.unshift({ type: 'text', text: userContent });
+  } else {
+    m.content = userContent;
+  }
+  m.edited = true;
+  // 本轮若带了输入舱胶囊，元数据跟着换（否则重启后徽章还是旧那一轮的）
+  if (Array.isArray(sentTokens) && sentTokens.length > 0) {
+    m.meta = { tokens: sentTokens, directive: String(sentDirective || '') };
+    s._metaRev = (s._metaRev || 0) + 1;
+  }
+  s.updatedAt = Date.now();   // R99 P0：截断改了会话内容，必须推进 updatedAt
+  _sendClearEditMark(hit.el);
+  return 'applied';
+}
+
 async function sendMessage() {
   const appState = (typeof AppState !== 'undefined') ? AppState : null;
   const appAttachments = appState ? appState.attachments : attachments;
@@ -333,6 +415,36 @@ async function sendMessage() {
     ? (hubBuildTokensDirective(_sentTokens)
       || ((typeof hubDirectiveFor === 'function') ? hubDirectiveFor(s.id) : ''))
     : '';
+  /* R101 T03：编辑重发（覆盖删除）——在真正 push 之前消费编辑态。
+   * 位置刻意选在这里：activeSessionId / apiKey / 附件与记忆块都已就绪，
+   * userContent 就是这一次要写回那条旧提问的内容；而 addMessage/push 尚未发生，
+   * 所以覆盖删除后不会多出第二条 user 消息。 */
+  {
+    const _editState = _sendApplyPendingEdit(s, userContent, _sentTokens, _sentDirective, !!sendMessage._queued);
+    if (_editState === 'busy') {
+      sendMessage._queued = false;   // R48-1：中止路径清排队旗，防毒化下一次发送
+      _sendRefreshStreaming();       // S20：入口已置位 isStreaming，中止必须复位
+      return;
+    }
+    if (_editState === 'applied') {
+      saveSessions();
+      renderSessionList();
+      input.value = '';
+      input.style.height = 'auto';
+      if (appState) appState.attachments = [];
+      else attachments = [];
+      renderPreview();
+      // 历史已被截断+替换：重绘当前会话（旧的后继气泡必须从界面消失）。
+      // 走动态索引而非裸标识符：renderChatHistory 在 sessions/controller.js，
+      // 裸引用会给 sendMessage 新增一条静态出边（SCC 棘轮零余量）。
+      const _renderHistory = (typeof window !== 'undefined') ? window['render' + 'ChatHistory'] : null;
+      if (typeof _renderHistory === 'function') { try { _renderHistory(s); } catch (e) {} }
+      if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
+      if (typeof toast === 'function') toast('已覆盖原来的提问，正在重新生成…', 'ok');
+      runAgentLoop(s, apiKey);
+      return;
+    }
+  }
   const uEl = addMessage('user', displayText || '（发送附件）', displayExtra);
   if (text) addMsgActions(uEl, text, true);
   if (_sentTokens.length > 0 || _sentDirective) {

@@ -339,8 +339,10 @@
         "GUARD_RUN_OPS",
         "_guardDescribe",
         "_guardDetailOf",
+        "_guardInlineQueue",
         "_trustPersistently",
         "guardCheckTool",
+        "guardInlineAsk",
         "loadGuardConfig",
         "maybeBudgetInvite",
         "renderGrantBudgetBar",
@@ -917,6 +919,9 @@
         "escapeHtml",
         "fillErrorBubble",
         "flushRender",
+        "memTraceAdd",
+        "msgEditClearPending",
+        "msgEditMarkPending",
         "msgEditResend",
         "msgRecall",
         "msgRollback",
@@ -2083,7 +2088,10 @@
         "_queuePrune",
         "_queueRender",
         "_queueSid",
-        "_sendQueue"
+        "_sendQueue",
+        "_sendApplyPendingEdit",
+        "_sendClearEditMark",
+        "_sendPendingEditTarget"
       ],
       "requires": [
         "isStreaming",
