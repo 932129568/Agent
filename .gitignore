@@ -3,6 +3,14 @@ node_modules/
 build/
 # M2 真编译产物（.obj/.exe/.cso/.asm）只落本地，不入库
 native/build/
+# 上面那条注释承诺了 .obj/.exe/.cso/.asm 不入库，但此前只有注释、没有规则 ——
+# 于是 shaders/tiers/*.cso / *.asm 一度处于「可被 git add」状态（40 KB 编译产物）。
+# 补上真实规则，让注释与行为一致。仓库里这四类文件当前 0 个已跟踪，故不会误伤。
+*.obj
+*.cso
+*.asm
+# 注意：exe 的排除见下方「发行分发」条（只排 dist/ 下的安装包），
+# 这里不写全局 *.exe，避免与那条的意图重复表达。
 *.pyc
 __pycache__/
 .pytest_cache/
