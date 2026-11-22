@@ -35,6 +35,13 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
    结构：.cp-mask（复用 .modal-mask 的遮罩）> .cp-card > input.cp-input + .cp-list > .cp-row
    为什么不用 .sc-card 那套：帮助浮层是「读」，命令面板是「打字 + 上下选」，
    需要贴顶输入框与自身滚动区，复用会互相牵制。遮罩仍复用，保证 Esc/点外部行为一致。 */
+/* 层级：这两个浮层挂在 body 上（不挂 #modalRoot，因为该容器是模态按需创建的，
+   启动时不存在），而 .modal-mask 的 z-index 是 auto ⇒ 会被应用内任何
+   带 z-index 的定位元素压过去（实测：空态引导卡直接盖在命令面板上面）。
+   取 500：高于应用内容，低于首跑引导 .ob-root 的 600 —— 引导是阻断式流程，
+   不允许被命令面板绕过。 */
+.cp-mask{z-index:500}
+#collabMask{z-index:500}
 .cp-card{padding:0;overflow:hidden;width:min(560px,calc(100vw - 24px));align-self:flex-start;margin-top:12vh}
 .cp-input{width:100%;box-sizing:border-box;font:inherit;font-size:15px;color:var(--text);
   background:transparent;border:0;border-bottom:1px solid var(--border);padding:14px 16px;outline:none}
