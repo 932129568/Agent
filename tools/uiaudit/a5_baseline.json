@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "_note": "A5b 棘轮基线：只增不减地记录每份 CSS 的裸时长个数。A5a 只判「某文件裸值比基线多」= 新增技术债；A5b 报告「比基线少」= 债务已偿还，提示可下调基线。重建：python tools/uiaudit/assert_motion.py --write-a5-baseline",
+  "_why_per_file_not_per_line": "行号会随任何编辑整体平移；按行做基线则每次改动都要重建，棘轮退化成噪音。按文件只关心「变多没有」。",
+  "total": 62,
+  "files": {
+    "frontend/styles/components.css": 5,
+    "frontend/styles/features/chat.css": 2,
+    "frontend/styles/features/generative.css": 11,
+    "frontend/styles/features/plan.css": 1,
+    "frontend/styles/legacy.css": 34,
+    "frontend/styles/responsive.css": 4,
+    "frontend/styles/shell.css": 5
+  }
+}

@@ -81,6 +81,37 @@ var-fallback-skipped=234`，四个数加起来 315 ≠ 375 —— **有 60 个�
 修法 = 先剥 `var(...)`（含括号内回退值、含嵌套）再找时长令牌。
 实测 65 → **62**，`island.css:139` 彻底消失，与 team-lead 独立预测逐项相等。
 
+**A5 已拆成 A5a / A5b（2026-11-22 晚）—— 存量债不该天天判红**
+
+62 条存量裸值不是一天能修完的。把「62」本身当红，会让整门长期红，最后必然被
+当成噪音关掉；真正该守的红线是**不许再加新的**。所以拆成门与账：
+
+| | 判据 | required | 红了会怎样 |
+|---|---|---|---|
+| **A5a** | 每份 CSS 的裸时长个数 **> 基线** ⇒ 新增技术债 | **是** | FAIL，点名 `[A5a] 新增裸时长: <file> 多 N 条（base -> cur）` |
+| **A5b** | 每份 CSS 的裸时长个数 **< 基线** ⇒ 债务已偿还 | 否 | 只打 `[A5b] 已偿还: …` + `reducible`，**不判红**，提示下调基线 |
+
+基线 `a5_baseline.json`（与脚本同目录）当前 `total=62`，按文件分布：
+`legacy.css 34 / generative.css 11 / components.css 5 / shell.css 5 / responsive.css 4 / features/chat.css 2 / features/plan.css 1`。
+
+**为什么基线按文件计数、不按行号**：行号会随任何一次编辑整体平移，按行做基线等于
+每次改动都要重建基线，棘轮退化成噪音。按文件只回答一个可判定问题——「这份文件变多没有」。
+
+**基线缺失 = 红，不是跳过**（fail-closed）：没基线就无法判定「是否新增」，
+此时输出 `A5a: FAIL (baseline missing)` 并计入 `total`。
+三条路径都实测过：
+
+```
+正常              A5a: PASS | 新增 0 条 | 基线 total=62，当前 total=62     → 只有 A1 计红
+注入 137ms        [A5a] 新增裸时长: frontend/styles/features/plan.css 多 1 条（1 -> 2）
+                  A5a: FAIL | 新增 1 条                                    → total +1
+基线指向不存在的文件  A5a: FAIL (baseline missing)                          → total +1
+基线故意调高 5       [A5b] 已偿还: … 少 5 条（6 -> 1）  A5b: reducible     → total 不变
+```
+
+重建基线：`python tools/uiaudit/assert_motion.py --write-a5-baseline`
+（只在**债务减少后**重建，否则等于把新债洗成存量——这正是棘轮要防的事）。
+
 ### 1.2 `assert_dead_controls.py` —— 死控件 / 调试残余 A6–A9
 
 ```bash

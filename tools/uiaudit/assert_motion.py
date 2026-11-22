@@ -330,10 +330,75 @@ def render_line(v):
     return '[%s] 未分类违例: %s' % (vid, json.dumps(v, ensure_ascii=False))
 
 
+def a5_per_file_counts(a5):
+    """把 A5 违例按文件汇总成 {相对路径: 裸时长个数}。
+
+    A5a/A5b 的棘轮就是建立在这个字典上的 —— **按文件计数**而不是按行号，
+    理由：行号会随任何一次编辑整体平移，把它做进基线等于每次改动都要重建基线，
+    棘轮会退化成噪音。按文件则只关心「这份文件里的裸值有没有变多」。
+    """
+    out = {}
+    for v in a5:
+        out[v['file']] = out.get(v['file'], 0) + 1
+    return out
+
+
+def load_a5_baseline(path):
+    """读棘轮基线。返回 (files_dict, total) 或 (None, None) 表示基线缺失。
+
+    基线文件从**本工具所在目录**读，不从 --root 读。原因：负控会把 CSS 复制到
+    临时目录再用 --root 指过去，工具目录是稳定的，根目录不是。
+    """
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None, None
+    files = raw.get('files')
+    if not isinstance(files, dict):
+        return None, None
+    return {str(k): int(v) for k, v in files.items()}, int(raw.get('total', 0))
+
+
+def write_a5_baseline(path, per_file, total):
+    payload = {
+        'version': 1,
+        '_note': ('A5b 棘轮基线：只增不减地记录每份 CSS 的裸时长个数。'
+                  'A5a 只判「某文件裸值比基线多」= 新增技术债；'
+                  'A5b 报告「比基线少」= 债务已偿还，提示可下调基线。'
+                  '重建：python tools/uiaudit/assert_motion.py --write-a5-baseline'),
+        '_why_per_file_not_per_line': ('行号会随任何编辑整体平移；按行做基线则每次改动都要重建，'
+                                       '棘轮退化成噪音。按文件只关心「变多没有」。'),
+        'total': total,
+        'files': dict(sorted(per_file.items())),
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+
+def diff_a5_ratchet(per_file, base_files):
+    """算出 (新增债务, 已偿还) 两组，均为 [(file, cur, base)]。
+
+    新增 = cur > base（含 baseline 里没有的新文件，base 记为 0）
+    偿还 = cur < base（含文件被删、变成 0）
+    """
+    grew, shrank = [], []
+    for f in sorted(set(per_file) | set(base_files)):
+        cur = per_file.get(f, 0)
+        base = base_files.get(f, 0)
+        if cur > base:
+            grew.append((f, cur, base))
+        elif cur < base:
+            shrank.append((f, cur, base))
+    return grew, shrank
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description='动效静态断言 A1–A5')
+    ap = argparse.ArgumentParser(description='动效静态断言 A1–A5（A5 拆 A5a 新增 / A5b 存量棘轮）')
     ap.add_argument('--root', default='', help='仓库根（默认按本文件位置推导）')
     ap.add_argument('--json', action='store_true', help='额外输出一行机读 JSON')
+    ap.add_argument('--a5-baseline', default=str(HERE / 'a5_baseline.json'),
+                    help='A5b 棘轮基线路径（默认取工具目录下的 a5_baseline.json）')
+    ap.add_argument('--write-a5-baseline', action='store_true',
+                    help='把当前 A5 存量写成棘轮基线后退出（不判红绿）')
     args = ap.parse_args(argv)
 
     root = Path(args.root).resolve() if args.root else HERE.parent.parent
@@ -349,12 +414,56 @@ def main(argv=None):
     a4, s4 = check_a4_transition_all(loaded)
     a5, s5 = check_a5_bare_durations(loaded)
 
+    # ── A5 拆两条：A5a 新增债务（required）/ A5b 存量棘轮（report-only）────────
+    # 为什么要拆：A5 的数（62）是存量债，它一天修不完；把它当红会让整门长期红，
+    # 最终被当成噪音关掉。真正的红线是「不许再加新的」。所以：
+    #   A5a（门）= 某文件裸值比基线多 ⇒ 新增技术债 ⇒ FAIL
+    #   A5b（账）= 比基线少 ⇒ 已偿还 ⇒ 只提示下调基线，不判红
+    # 基线按文件计数、不按行号（行号会整体平移，见 a5_per_file_counts 注释）。
+    per_file = a5_per_file_counts(a5)
+    base_files, base_total = load_a5_baseline(Path(args.a5_baseline))
+
+    if args.write_a5_baseline:
+        write_a5_baseline(Path(args.a5_baseline), per_file, len(a5))
+        print('MOTION_STATIC: wrote A5 baseline -> %s (total=%d, files=%d)'
+              % (args.a5_baseline, len(a5), len(per_file)))
+        return 0
+
+    if base_files is None:
+        a5a_new, a5b_paid = [], []
+        a5_baseline_state = 'MISSING'
+    else:
+        a5a_new, a5b_paid = diff_a5_ratchet(per_file, base_files)
+        a5_baseline_state = 'ok'
+
+    # A5a 只统计「多出来的那几条」，不是整个文件的存量
+    a5a_count = sum(cur - base for _f, cur, base in a5a_new)
+    a5b_count = sum(base - cur for _f, cur, base in a5b_paid)
+
     all_v = a1 + a2 + a3 + a4 + a5
 
     print('MOTION_STATIC: scanned %d css files' % len(loaded))
     for label, _t, _m, nl in loaded:
         if nl != 'lf':
             print('MOTION_STATIC: note: %s newline=%s（判据已统一为 LF 后比对）' % (label, nl))
+    print('')
+
+    # ── A5a 新增债务（门）/ A5b 存量偿还（账）─────────────────────────────────
+    # 输出必须能被逐字匹配：负控 M5 靠 `[A5] 违例: 裸时长` 命中，
+    # 而「新增债务」这条要能单独点名是哪份文件多了几条。
+    if a5_baseline_state == 'MISSING':
+        print('A5a: FAIL (baseline missing) %s — 无法判定「是否新增」，'
+              '先跑 --write-a5-baseline 建基线' % args.a5_baseline)
+    else:
+        for f, cur, base in a5a_new:
+            print('[A5a] 新增裸时长: %s 多 %d 条（%d -> %d）' % (f, cur - base, base, cur))
+        print('A5a: %s | 新增 %d 条 | 基线 total=%d，当前 total=%d'
+              % ('PASS' if a5a_count == 0 else 'FAIL', a5a_count, base_total, len(a5)))
+    for f, cur, base in a5b_paid:
+        print('[A5b] 已偿还: %s 少 %d 条（%d -> %d）' % (f, base - cur, base, cur))
+    print('A5b: %s | 已偿还 %d 条%s'
+          % ('clean' if a5b_count == 0 else 'reducible', a5b_count,
+             '' if a5b_count == 0 else '（债务减少是好事，不判红；可下调基线）'))
     print('')
 
     # 按 ID 分组打印，组内按 file:line 排序 —— 顺序稳定才能逐字比对
@@ -394,21 +503,30 @@ def main(argv=None):
              s5['checked'], s5['bare_only'], s5['mixed'], s5['exempt_loop'],
              s5['exempt_kill'], s5['tokenized'], s5['no_duration'], len(a5)))
 
-    status = 'PASS' if not all_v else 'FAIL'
-    print('MOTION_STATIC: %s (A1=%d A2=%d A3=%d A4=%d A5=%d total=%d)'
-          % (status, len(a1), len(a2), len(a3), len(a4), len(a5), len(all_v)))
+    # 基线缺失本身算一条红：A5a 失去闸门 = 「新增债务无法判定」，
+    # 不能因为「没基线」就默默当作 0 条新增（那正是假绿）。
+    a5_gate_red = a5a_count + (1 if a5_baseline_state == 'MISSING' else 0)
+    total_red = len(a1) + len(a2) + len(a3) + len(a4) + a5_gate_red
+    status = 'PASS' if total_red == 0 else 'FAIL'
+    print('MOTION_STATIC: %s (A1=%d A2=%d A3=%d A4=%d A5a=%d A5b=%d legacy-A5=%d total=%d)'
+          % (status, len(a1), len(a2), len(a3), len(a4), a5a_count, a5b_count,
+             len(a5), total_red))
 
     if args.json:
         print(json.dumps({
             'status': status,
             'counts': {'A1': len(a1), 'A2': len(a2), 'A3': len(a3),
-                       'A4': len(a4), 'A5': len(a5)},
+                       'A4': len(a4), 'A5a': a5a_count, 'A5b': a5b_count,
+                       'A5_legacy': len(a5)},
+            'a5Baseline': a5_baseline_state,
+            'a5Grew': [{'file': f, 'cur': c, 'base': b} for f, c, b in a5a_new],
+            'a5Shrank': [{'file': f, 'cur': c, 'base': b} for f, c, b in a5b_paid],
             'deadRefs': sorted({v['name'] for v in a1}),
             'dupKeyframes': sorted({v['name'] for v in a2}),
             'lines': [render_line(v) for v in all_v],
         }, ensure_ascii=False, sort_keys=True))
 
-    return 0 if not all_v else 1
+    return 0 if total_red == 0 else 1
 
 
 if __name__ == '__main__':
