@@ -23,8 +23,10 @@
         只采 engtype_3D，否则会把视频解码占用算进 3D 红线。
       · 多 GPU（核显 + 独显）时实例的 luid 不同。默认全部采，但按 luid 分组
         单独输出，避免把两张卡的占用加总成一个不存在的「总占用」。
-      · 计数器在无 GPU 活动的机器上可能返回空集（不是 0），必须区分
-        NO_INSTANCES / ZERO_ACTIVITY / MEASURED 三种状态，不能把空集当 0%。
+      · 计数器在无 GPU 活动的机器上可能返回空集（不是 0），必须区分「测不到」与
+        「很干净」。判据不是按「整机有没有实例」写的，而是按**「你测的那个集合」**写的
+        —— 详见下面「三态判定」与 $matchedCounts 的注释（这里曾有一个恒真门。
+        实测：-TargetPid 999999（不存在的 PID）曾返回 rc=0 + PASS，p95=0%）。
 
 .PARAMETER WarmupSeconds
     采样前静置秒数。默认 10。必须是整数。
@@ -40,10 +42,29 @@
     额外输出一行机器可读 JSON（供 CI 解析）。给开关即输出，默认不输出。
 
 .OUTPUTS
-    逐行文本；最后一行是结论行。退出码：
+    逐行文本；最后一行是结论行。
+
+    三态判定（输出里 state[1/3] / state[2/3] / state[3/3] 各报一次，
+    这样「测不到」与「很干净」在输出上立刻可分）：
+
+        state[1/3]  整机实例数 == 0                  → blocked (NO_MACHINE_INSTANCES)
+                    驱动不上报 / 无 3D 活动，二者不可分辨，拒绝报 0%
+
+        state[2/3]  filterActive && 匹配实例数 == 0  → blocked (NO_INSTANCES)
+                    PID 写错 / 进程没起来 / 作用域取错。
+                    **这是 Q13 的 N0 判据**：Harbor 完全退出时同口径必须走到这里。
+                    若这里出了 PASS，说明探针在撒谎。
+
+        state[3/3]  MEASURED                          → 按 p95 判 PASS/FAIL
+
+    ⇒ 「输出中出现 PASS」等价于「确实匹配到了目标实例」。这是可被断言检验的强性质：
+      负控要验的不是 rc，而是 **A 组输出里不出现 PASS 字样**（rc=2 但仍有 PASS 行
+      这种半修状态最容易发生）。
+
+    退出码：
       0 = MEASURED 且通过阈值
       1 = MEASURED 但超过阈值
-      2 = blocked-by-environment（计数器不可用 / 无实例 / 采样失败）
+      2 = blocked（计数器不可用 / 整机空集 / 过滤后空集 / 采样失败）
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools/uiaudit/probe_idle_gpu.ps1
@@ -142,10 +163,11 @@ if ($WarmupSeconds -gt 0) {
 }
 
 # ---- 采样 ---------------------------------------------------------------------
-$sampleTotals = @()          # 每次采样的「全机 3D 占用总和」
+$sampleTotals = @()          # 每次采样的「作用域内 3D 占用总和」
 $perPid  = @{}          # pid -> 累计贡献（用于报告「谁在占用」）
 $perLuid = @{}          # luid -> 累计总和（多 GPU 时分开看）
-$instanceCounts = @()
+$instanceCounts = @()    # 每次采样的「整机」实例数
+$matchedCounts = @()     # 每次采样的「过滤后命中」实例数（关键：与整机分开统计）
 
 for ($i = 1; $i -le $Samples; $i++) {
     try {
@@ -156,6 +178,7 @@ for ($i = 1; $i -le $Samples; $i++) {
     $cs = @($reading.CounterSamples)
     $instanceCounts += $cs.Count
     $sum = 0.0
+    $matchedInSample = 0
     foreach ($s in $cs) {
         $v = [double]$s.CookedValue
         if ([double]::IsNaN($v) -or [double]::IsInfinity($v)) { continue }
@@ -170,6 +193,7 @@ for ($i = 1; $i -le $Samples; $i++) {
             if (-not $perLuid.ContainsKey($luid)) { $perLuid[$luid] = 0.0 }
             $perLuid[$luid] += $v
             if ($filterActive -and -not ($pidFilter -contains $p)) { continue }
+            $matchedInSample++          # ← 过滤后命中计数（不论数值是否为 0）
             $sum += $v
         } elseif (-not $filterActive) {
             # 实例名不含 pid（极少数驱动/会话）→ 只在全机模式下计入总和
@@ -177,14 +201,52 @@ for ($i = 1; $i -le $Samples; $i++) {
         }
     }
     $sampleTotals += $sum
+    $matchedCounts += $matchedInSample
 }
 
 $totalInstances = ($instanceCounts | Measure-Object -Sum).Sum
+$totalMatched = ($matchedCounts | Measure-Object -Sum).Sum
 
-# 空集 ≠ 0%：计数器返回 0 个实例说明「没有进程在用 3D 引擎」或「驱动不上报」，
-# 这两种情况必须显式区分，否则会把「测不到」当成「很干净」。
-if ($sampleTotals.Count -eq 0 -or $totalInstances -eq 0) {
+# ── 三态判定（顺序写死，不可调换）──────────────────────────────────────────────
+# 为什么必须区分「整机实例数」与「命中实例数」：
+#   滤波在采样循环里用 continue 跳过不匹配的实例，**从来不统计命中几个**。
+#   于是「整机有实例、但过滤后一个都没命中」会落进 sum=0 的正常路径 ⇒ p95=0% ⇒ PASS。
+#   实测后果：-TargetPid 999999（根本不存在的 PID）拿到了 rc=0 + PASS。
+#   这是**恒真门**，且藏在主判决位上：任何 PID 写错 / 进程没起来 / 作用域取错，
+#   都会静默变绿 —— 比红更危险，因为在 CI 上看起来是"通过了"。
+#   教训：空集保护要保护「你测的那个集合」，不是「存在的那个集合」。
+$machineEmpty = ($instanceCounts.Count -eq 0) -or ($totalInstances -eq 0)
+
+if ($machineEmpty) {
+    # 状态 1：整机 0 实例 —— 分不清「无 3D 活动」与「驱动不上报」，拒绝报 0%
+    Write-Output ('{0}: state[1/3] NO_MACHINE_INSTANCES | machine=0 matched=0' -f $RIG)
     Write-Blocked "counter returned 0 instances across $Samples samples; cannot distinguish 'no 3D activity' from 'driver does not report' (refusing to report 0%)"
+}
+Write-Output ('{0}: state[1/3] MACHINE_INSTANCES_OK | machine={1}/sample matched={2}/sample' -f `
+        $RIG, (($instanceCounts | Sort-Object -Unique) -join ','), (($matchedCounts | Sort-Object -Unique) -join ','))
+
+if ($filterActive -and $totalMatched -eq 0) {
+    # 状态 2：过滤后 0 命中 —— PID 写错 / 进程没起来 / 作用域取错。
+    # 这正是 Q13 的 N0 判据（Harbor 完全退出时同口径必须 NO_INSTANCES），
+    # 也是本探针曾经漏掉的那个洞。**不许出 PASS**。
+    $scopeMsg = ('targeted pids [{0}] matched 0 of {1} machine instances across {2} samples; ' +
+        'PID typo / process not running / wrong scope. Refusing to report 0% as a passing ' +
+        'measurement (this is the N0 scope check: Harbor fully exited MUST yield NO_INSTANCES)') -f `
+        ($pidFilter -join ','), $totalInstances, $Samples
+    Write-Output ('{0}: state[2/3] NO_INSTANCES | filter pids=[{1}] matched=0 while machine={2} instances/sample' -f `
+            $RIG, ($pidFilter -join ','), (($instanceCounts | Sort-Object -Unique) -join ','))
+    Write-Blocked $scopeMsg
+}
+if ($filterActive) {
+    Write-Output ('{0}: state[2/3] SCOPE_MATCHED | matched={1}/{2} instances' -f $RIG, $totalMatched, $totalInstances)
+    # 部分采样点 0 命中 ⇒ 进程在采样期间抖动/退出，数值只覆盖部分时间窗，必须如实标注
+    $zeroSamples = @($matchedCounts | Where-Object { $_ -eq 0 }).Count
+    if ($zeroSamples -gt 0) {
+        Write-Output ('{0}: WARN {1}/{2} samples had 0 matched instances (process churn during sampling; value covers only the rest)' -f `
+                $RIG, $zeroSamples, $Samples)
+    }
+} else {
+    Write-Output ('{0}: state[2/3] WHOLE_MACHINE_ONLY | diagnostic scope, not the acceptance scope' -f $RIG)
 }
 
 $sorted = @($sampleTotals | Sort-Object)
@@ -238,24 +300,33 @@ if ($perPid.Count -gt 0) {
 # 并且必须在报告里写明用的是 p95。
 $pass = ($p95 -le $Threshold)
 $state = if ($pass) { 'PASS' } else { 'FAIL' }
+# state[3/3]：只有走到这里才允许出 PASS/FAIL。前面两道 guard 已经 exit 2，
+# 所以「输出里出现 PASS」等价于「确实测到了目标实例」—— 这是可被断言的强性质。
+Write-Output ('{0}: state[3/3] MEASURED | scope={1} matched={2} instances over {3} samples' -f `
+        $RIG, $(if ($filterActive) { 'targeted' } else { 'whole-machine' }), $totalMatched, $Samples)
 Write-Verdict $state ('p95 = {0}% vs threshold {1}% (median {2}%, samples {3})' -f `
         [math]::Round($p95, 4), $Threshold, [math]::Round($median, 4), $Samples)
 
 if ($Json) {
     Write-Output (@{
-            state       = 'MEASURED'
-            verdict     = $state
-            counter     = $COUNTER
-            warmupSec   = $WarmupSeconds
-            samples     = $Samples
-            threshold   = $Threshold
-            min         = [math]::Round($min, 4)
-            median      = [math]::Round($median, 4)
-            mean        = [math]::Round($mean, 4)
-            p95         = [math]::Round($p95, 4)
-            max         = [math]::Round($max, 4)
-            pass        = $pass
-            rawSamples  = ($sampleTotals | ForEach-Object { [math]::Round($_, 4) })
+            state            = 'MEASURED'
+            verdict          = $state
+            counter          = $COUNTER
+            warmupSec        = $WarmupSeconds
+            samples          = $Samples
+            threshold        = $Threshold
+            # 作用域证据：没有这两个数，p95=0% 无法与「测不到」区分
+            scope            = $(if ($filterActive) { 'targeted' } else { 'whole-machine' })
+            targetPids       = @($pidFilter)
+            machineInstances = $totalInstances
+            matchedInstances = $totalMatched
+            min              = [math]::Round($min, 4)
+            median           = [math]::Round($median, 4)
+            mean             = [math]::Round($mean, 4)
+            p95              = [math]::Round($p95, 4)
+            max              = [math]::Round($max, 4)
+            pass             = $pass
+            rawSamples       = ($sampleTotals | ForEach-Object { [math]::Round($_, 4) })
         } | ConvertTo-Json -Compress)
 }
 

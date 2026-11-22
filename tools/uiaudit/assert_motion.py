@@ -236,16 +236,37 @@ def check_a4_transition_all(loaded):
 def check_a5_bare_durations(loaded):
     """A5：动画/过渡时长必须取令牌，不得裸写毫秒/秒魔数。
 
-    豁免两类（豁免项在 summary 里显式计数，不静默丢弃）：
-      · 值里含 `infinite` → 循环动画，令牌体系当前无循环档（架构 §6.2 已登记缺口）
-      · `.01ms` → fx-off / reduced-motion 的停用写法，字面量即语义
+    **会计契约（最重要的一条）**：每个被扫到的声明必须**恰好落进一个**分类，
+    且 `checked` 必须等于各分类之和。否则「豁免是计数的、不是静默丢弃」这句
+    承诺就是空话 —— 有声明既没违例也没被计为豁免，等于悄悄消失。
+
+    六个分类（互斥且穷尽）：
+      · bare_only      裸时长，判违例（A5 唯一的红来源）
+      · exempt_loop    值含 `infinite` → 循环动画，令牌体系当前无循环档
+                       （架构 §6.2 已登记缺口）
+      · exempt_kill    `.01ms` → fx-off / reduced-motion 的停用写法，字面量即语义
+      · tokenized      **正确状态**：时长已经通过 `var(--dur-*)` 给了，剥掉 var 跨度后
+                       没有残留裸值。这是绝大多数声明该有的样子，不是「豁免」
+      · no_duration    值里既无时长也无 var，例如 `transition: none` /
+                       `animation: none!important` —— 本来就没有时长可判，不是缺陷
+      · mixed          同一值里既有裸时长又有 `.01ms`（当前实测 0 条，保留分类
+                       是为了分类穷尽性，将来出现时不会被静默吞掉）
+
+    注意分类口径：违例按 **token** 计数（一个 `transition` 声明里有 3 个裸值就报 3 条），
+    而 `checked` / 各豁免按 **声明** 计数。所以 `bare` 可能大于 `bare_only`
+    （实测 36 个声明 → 62 个裸值）。两者**不是同一维度**，报告里不能相加。
 
     **必须先剥 `var(...)` 再找时长**：`var(--dur-fast, .12s)` 里的 `.12s` 是回退值，
     令牌已经用了，把回退值当裸魔数是假阳性。实测 island.css:139 一行有 3 个回退值，
     不剥会一次报 3 条假违例（好险没把它当「3 处真问题」报给产品）。
     """
     violations = []
-    stats = {'exempt_loop': 0, 'exempt_kill': 0, 'checked': 0, 'var_fallback_skipped': 0}
+    stats = {
+        'checked': 0,
+        'bare_only': 0, 'mixed': 0,
+        'exempt_loop': 0, 'exempt_kill': 0,
+        'tokenized': 0, 'no_duration': 0,
+    }
     for label, _text, masked, _nl in loaded:
         for prop_l, raw_prop, value, offset in iter_decls(masked):
             if prop_l not in ('animation', 'transition',
@@ -257,19 +278,24 @@ def check_a5_bare_durations(loaded):
             stripped = strip_var_spans(value)
             tokens = [m.group(0).strip() for m in _DURATION_TOKEN_RE.finditer(stripped)]
             if not tokens:
+                # 无残留裸时长。要么时长已由 var(--dur-*) 提供（= 正确状态），
+                # 要么本来就没有时长（transition:none）。两者都不是违例，
+                # 但**必须各自计数**，否则就是静默丢弃。
                 if value != stripped:
-                    stats['var_fallback_skipped'] += 1
+                    stats['tokenized'] += 1
+                else:
+                    stats['no_duration'] += 1
                 continue
             if 'infinite' in low:
-                stats['exempt_loop'] += len(tokens)
+                stats['exempt_loop'] += 1
                 continue
-            if all(KILL_DURATION_RE.match(t.replace('.01ms', '.01ms')) for t in tokens):
-                stats['exempt_kill'] += len(tokens)
+            bare = [t for t in tokens if t.replace(' ', '').lower() != '.01ms']
+            kill = [t for t in tokens if t.replace(' ', '').lower() == '.01ms']
+            if not bare:
+                stats['exempt_kill'] += 1     # 整个声明只有 .01ms
                 continue
-            for tok in tokens:
-                if tok.replace(' ', '').lower() == '.01ms':
-                    stats['exempt_kill'] += 1
-                    continue
+            stats['mixed' if kill else 'bare_only'] += 1
+            for tok in bare:
                 violations.append({
                     'id': 'A5', 'kind': 'bare-duration', 'token': tok,
                     'file': label, 'line': masked.count('\n', 0, offset) + 1,
@@ -344,16 +370,29 @@ def main(argv=None):
             print(render_line(v))
     print('')
 
+    # ── A5 会计不变式：每个声明必须恰好落进一个分类 ──────────────────────────
+    # 这条断言的存在意义：一旦有人加了新分支却忘了计数（或 `continue` 漏了统计），
+    # 分类之和就会小于 checked，声明会静默消失。判据必须自己盯住自己。
+    a5_cat_sum = (s5['bare_only'] + s5['mixed'] + s5['exempt_loop']
+                  + s5['exempt_kill'] + s5['tokenized'] + s5['no_duration'])
+    if a5_cat_sum != s5['checked']:
+        print('MOTION_STATIC: FAIL (A5 accounting broken) checked=%d but categories sum=%d '
+              '(bare_only=%d mixed=%d loop=%d kill=%d tokenized=%d no_duration=%d)'
+              % (s5['checked'], a5_cat_sum, s5['bare_only'], s5['mixed'],
+                 s5['exempt_loop'], s5['exempt_kill'], s5['tokenized'], s5['no_duration']))
+        return 2
+
     print('MOTION_STATIC: A1 refs=%d defs=%d dead=%d | A2 defs=%d unique=%d dup-groups=%d '
           '| A3 kf=%d layout=%d noncomp=%d | A4 transition-decls=%d all=%d '
-          '| A5 checked=%d bare=%d exempt-loop=%d exempt-kill=%d var-fallback-skipped=%d'
+          '| A5 checked=%d [bare-only=%d mixed=%d loop=%d kill=%d tokenized=%d '
+          'no-duration=%d] bare-tokens=%d'
           % (s1['refs'], s1['defs_unique'], len(a1),
              s2['defs_total'], s2['defs_unique'], len(a2),
              s3['keyframes'], len([v for v in a3 if v['kind'] == 'layout-prop']),
              len([v for v in a3 if v['kind'] == 'non-compositor']),
              s4['transition_decls'], len(a4),
-             s5['checked'], len(a5), s5['exempt_loop'], s5['exempt_kill'],
-             s5['var_fallback_skipped']))
+             s5['checked'], s5['bare_only'], s5['mixed'], s5['exempt_loop'],
+             s5['exempt_kill'], s5['tokenized'], s5['no_duration'], len(a5)))
 
     status = 'PASS' if not all_v else 'FAIL'
     print('MOTION_STATIC: %s (A1=%d A2=%d A3=%d A4=%d A5=%d total=%d)'

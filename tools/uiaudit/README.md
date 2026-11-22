@@ -49,12 +49,34 @@ C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/ui
 
 没有这两条负控，读报告的人无法区分「零」和「判据没跑」。
 
-**A5 的两类豁免（豁免项在输出里显式计数，不静默丢弃）**：
-- `infinite` 循环动画（实测豁免 15 个时长）：令牌体系当前**没有**循环档
-  （架构文档 §6.2 已登记该缺口）。此时硬要求令牌 = 要求工程师先造令牌。
-- `.01ms` 降级开关（4 个）：fx-off / reduced-motion 的**停用**写法，字面量即语义。
+**A5 的会计契约：每个被扫到的声明必须恰好落进一个分类，`checked` = 各分类之和。**
 
-**A5 第一版有个假阳性，已修**：`var(--dur-fast, .12s)` 里的 `.12s` 是**回退值**，
+这条是第二版加的。第一版输出 `checked=375 bare=62 exempt-loop=15 exempt-kill=4
+var-fallback-skipped=234`，四个数加起来 315 ≠ 375 —— **有 60 个声明既没违例也没被
+计为豁免，凭空消失**。那一刻「豁免是计数的」是不成立的。现在六个互斥分类：
+
+| 分类 | 条数 | 含义 |
+|---|---|---|
+| `bare-only` | 36 个声明 | 有裸时长 ⇒ 违例（唯一的红来源） |
+| `mixed` | 0 | 同值既有裸时长又有 `.01ms`（保留分类为穷尽性） |
+| `loop` | 15 个声明 | 豁免：值含 `infinite`，令牌体系**没有**循环档（架构 §6.2 已登记缺口）。`3s infinite` 的 `3s` 是周期长度，不是过渡时长 |
+| `kill` | 4 个声明 | 豁免：整个声明只有 `.01ms`，fx-off / reduced-motion 的停用写法，字面量即语义 |
+| `tokenized` | 234 个声明 | **不是豁免，是正确状态**：时长已由 `var(--dur-*)` 提供，剥掉 var 跨度后无残留裸值 |
+| `no-duration` | 86 个声明 | `transition: none` / `animation: none!important` —— 本来就没有时长可判 |
+| 合计 | **375** | = `checked`，闭合 |
+
+**两个口径不能相加**：`checked` 与六个分类按**声明**计数（375）；违例按 **token** 计数
+（36 个声明含多个裸值 ⇒ `bare-tokens=62`）。同一批声明的两种计量，不是两批东西。
+
+**上一版 `var-fallback-skipped=234` 这个名字是错的**：它统计的不是「跳过了 var 回退值」，
+而是「时长走令牌、无裸值残留」——把**最理想的状态标成了可疑状态**。
+
+**会计不变式（判据自己盯自己）**：`main()` 里断言 `checked == 各分类之和`，不等就
+`FAIL (A5 accounting broken)` + rc=2。实测验证它是活的：故意把 `tokenized` 的 `+=1`
+换成 `pass`，立刻报 `checked=375 but categories sum=141 (tokenized=0)`，精确指出漏了 234。
+⇒ 将来谁加了分支忘了计数，脚本当场红，不会重犯第一版那个洞。
+
+**A5 第一版还有个假阳性，已修**：`var(--dur-fast, .12s)` 里的 `.12s` 是**回退值**，
 令牌已经用了。第一版对整条 value 做 `finditer`，`island.css:139` 一行就被报 3 次。
 修法 = 先剥 `var(...)`（含括号内回退值、含嵌套）再找时长令牌。
 实测 65 → **62**，`island.css:139` 彻底消失，与 team-lead 独立预测逐项相等。
@@ -163,7 +185,10 @@ C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/ui
 ```powershell
 & tools/uiaudit/probe_idle_gpu.ps1                      # 默认 warmup 10s / 9 采样 / 阈值 0.5%
 & tools/uiaudit/probe_idle_gpu.ps1 -WarmupSeconds 20 -Samples 15 -Json
-& tools/uiaudit/probe_idle_gpu.ps1 -TargetPid 1234       # 只看指定进程
+& tools/uiaudit/probe_idle_gpu.ps1 -TargetPid 1234       # 只看指定进程（进程树口径，见 §6.3）
+
+# 作用域负控（改探针后必跑；它验的是「假 PID 不会变绿」）
+& tools/uiaudit/probe_idle_gpu_selftest.ps1              # 期望 4 PASS / 0 FAIL，rc=0
 ```
 
 采 `\GPU Engine(*engtype_3D)\Utilization Percentage`（核显无 `nvidia-smi`，
@@ -174,7 +199,7 @@ C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/ui
 3. **必须报告谁在占用**（按 pid / luid 分组）—— 20 个实例各 0.1% 和 1 个实例 0.4%
    是两件不同的事。
 
-**四个 PowerShell 陷阱（都实测踩过，已修）**：
+**六个 PowerShell 陷阱（都实测踩过，已修）**：
 - **`.ps1` 含中文时必须存 UTF-8 带 BOM**（最隐蔽的一个，会让文件整体不可执行）。
   `powershell.exe`（5.1，Win10/11 自带，也是本文档 `.EXAMPLE` 用的解释器）读 `.ps1`
   **不做 UTF-8 探测**，直接按当前 ANSI 代码页（本机 CP936）解码。本文件有 62 行中文注释，
@@ -182,7 +207,18 @@ C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/ui
   在 104/106 行抛「表达式或语句中包含意外的标记"}"」。实测：无 BOM → PS5.1 解析 2 个错误；
   加 BOM → 0 个错误。**这个坑在 `pwsh` 7 下完全不暴露**（pwsh 默认按 UTF-8 读），
   所以只在 pwsh 里测过的脚本，交付前必须再用 `powershell.exe` 跑一遍。
-  （`probe_idle_gpu.ps1` 现在 13,616 B、首三字节 `EF BB BF`，改动时不要弄丢 BOM。）
+  （`probe_idle_gpu.ps1` 工作区 **13,616 B**（CRLF）、首三字节 `EF BB BF`，改动时不要弄丢 BOM。）
+  **BOM 必须能过提交这一关**（team-lead 补验的关键一环）：本仓 `core.autocrlf=true`，
+  「本地修好了但提交后被改掉」是常见陷阱。实测入库后
+  `git cat-file blob HEAD:tools/uiaudit/probe_idle_gpu.ps1 | od -An -tx1 -N8`
+  → 首三字节仍是 **`ef bb bf`** ✅ ⇒ clone 端不会复现这个坑。
+  **改这个文件后请重跑这条命令确认 BOM 还在。**
+
+  ⚠️ 但**字节数会变**，写文档时别用错口径：blob 是 **13,355 B**、工作区是 **13,616 B**，
+  差 **261 B** 恰好等于行数（261 行）—— 即 `autocrlf` 把 CRLF 归一成 LF。
+  所以「13,616 B 不变」这个说法只在**工作区**成立；`git cat-file` 看到的一定是 13,355。
+  这与本仓 `harbor.html` 那条纪律同源（三种行尾约定下字节数互不相同，**禁止写绝对字节数**）。
+  BOM 判断请认**首三字节**，不要认总字节数。
 - `param([string]$Pid)` → 运行时抛「无法覆盖变量 Pid，因为它是只读变量或常量」。
   `$Pid` / `$IsWindows` 是**只读自动变量**。改用 `-TargetPid` / `$onWin`。
 - `$samples = @()` 会**覆盖参数 `$Samples`**（变量名大小写不敏感）⇒ `for` 循环拿数组
@@ -190,9 +226,96 @@ C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/ui
 - `Get-Counter -ListSet` 返回的 `Paths` 是**模板路径**（`\GPU Engine(*)\Utilization Percentage`），
   不是展开后的实例名。在模板上 grep `engtype_3D` 永远匹配不到 ⇒ 会把可用环境误判成
   blocked。实例维度只能在真正采样后判定。
+- **`-f` 运算符优先级**：`("a{0} " + "b{1}" -f $x, $y)` 被解析成
+  `"a{0} " + ("b{1}" -f $x, $y)` ⇒ 前一段的 `{0}` **永不替换**，输出里留下字面量
+  `{0} {1} {2}`。修法：先 `$msg = (...) -f ...` 存进变量再拼接。
+  （实测踩过：blocked 文案变成了 `targeted pids [{0}] matched 0 of {1} ...`。）
+- **函数内 `Write-Output` 会混入返回值流**：`$results += Test-Expect ...` 会把函数里
+  `Write-Output` 打出的字符串**一起收进数组** ⇒ 明细行永远打印不出来，只剩汇总行。
+  修法：判定函数只 `return` hashtable，由调用方统一打印。
+  （这条和上面那条都是「PowerShell 与常规语言语义不同」，跑一次就能发现，但**不跑就发现不了**。）
 
-**空集 ≠ 0%**：计数器返回 0 个实例时，无法区分「没有 3D 活动」与「驱动不上报」，
-脚本拒绝报 0%，直接 `blocked-by-environment`。
+**空集保护要保护「你测的那个集合」，不是「存在的那个集合」**（本轮抓到的第二个恒真门，
+比第一个更危险，因为它藏在主判决位上）：
+
+第一版只检查「整机有没有 3D 实例」：
+
+```powershell
+$instanceCounts += $cs.Count          # 整机实例数
+...
+if ($filterActive -and -not ($pidFilter -contains $p)) { continue }   # 跳过不匹配的
+...
+if ($sampleTotals.Count -eq 0 -or $totalInstances -eq 0) { Write-Blocked ... }
+```
+
+**滤波用了 `continue` 却从不统计「命中几个」** ⇒ 整机有 218 个实例、过滤后 0 个命中，
+guard 不触发、`$sum` 恒为 0 ⇒ p95 = 0% ⇒ **PASS**。实测后果：
+
+```
+-TargetPid 999999（根本不存在的 PID）→ rc=0 + "PASS | p95 = 0%"
+```
+
+任何 PID 写错 / 进程没起来 / 作用域取错，都会**静默变绿**。在 CI 上看起来是「通过了」。
+
+**修法**：单独统计 `$matchedCounts`（每次采样命中几个），三态顺序写死：
+
+| state | 条件 | 结果 |
+|---|---|---|
+| `[1/3]` | 整机实例数 == 0 | blocked（驱动不上报 / 无 3D 活动，不可分辨） |
+| `[2/3]` | `filterActive && 匹配实例数 == 0` | **NO_INSTANCES → blocked, rc=2** ← 本次修的就是这条 |
+| `[3/3]` | 走到这里 | MEASURED，按 p95 判 PASS/FAIL |
+
+⇒ **「有判决行」等价于「确实匹配到了目标实例」**，这是可被断言检验的强性质。
+
+**负控判据必须是「判决行结构匹配」，不是「关键词匹配」**（team-lead 纠正过一版，
+我第一版写的是 `-ForbidSubstring 'PASS'`，是错的）：
+
+```powershell
+# ✅ 正确：只认判决行的结构
+$verdict = @($out -split "`n" | Where-Object { $_.Trim() -match '^\S+: (PASS|FAIL) \| p95' })
+# blocked 组要求 $verdict.Count -eq 0；MEASURED 组要求 -eq 1
+
+# ❌ 错误：全文搜关键词
+if ($out -match 'PASS') { ... }
+```
+
+**为什么关键词匹配是错的**：说明文字里出现「PASS」是**合理的** ——
+`"Refusing to report 0% as a passing measurement"` 正是在**解释它为什么不出 PASS**。
+用关键词判定 = **把解释当成结论**。实测差异：修好后 `-cmatch 'PASS'` 为 False，
+但只要文案里保留「as a PASS」这种解释性表述，关键词判据就会误报。
+
+**还有一个陷阱**：PowerShell 的 `-match` **默认不区分大小写**（`-cmatch` 才区分）。
+所以 `-match 'PASS'` 会命中 `passing`、`passed`。这一条本身就会让关键词判据产生假阳性。
+
+**纪律（与本仓「规则/说明行禁复用判决量 KEY」同源）**：
+> **判据不要匹配说明文字里的关键词，要匹配判决行的结构。**
+
+**这道负控已固化成脚本**：`probe_idle_gpu_selftest.ps1`，四组对照：
+
+| 组 | 输入 | 期望 |
+|---|---|---|
+| A | 假 PID `999999` | rc=2 + `NO_INSTANCES` + **判决行数 = 0** |
+| B | **真实存在但无 3D 实例**的进程（用自身 `$PID`） | 同上 —— 这是 Q13 的 N₀ 语义 |
+| C | 不带 `-TargetPid` | MEASURED + **判决行数 = 1**（证明主路径没被改坏） |
+| D | 真实 Harbor 进程树 | MEASURED + **判决行数 = 1**（无进程时如实 SKIP，不算通过） |
+
+**实测分辨力**（这是判据有区分力的证据，不是断言它「应该」有）：
+
+| 场景 | 判决行数 | 结果 |
+|---|---|---|
+| 修复后 A 组（假 PID） | **0** | PASS |
+| 修复后 B 组（整机） | **1** | PASS |
+| **重注入缺陷后 A 组** | **1** | **FAIL**（`verdict-line count=1 want=0`） |
+
+**这道自检自己也验过会红**：故意把 `if ($filterActive -and $totalMatched -eq 0)` 改回
+`if ($false)` 重注入原缺陷 ⇒ 立即 `2 PASS / 2 FAIL`，并**自动打印**
+`rc=0 want=2; missing 'NO_INSTANCES'; verdict-line count=1 want=0` 三条问题 +
+被探测针的完整原始输出（含那行 `PASS | p95 = 0%`）。恢复后回到 `4 PASS / 0 FAIL`。
+**没有这一步验证，负控自己就可能是恒真门** —— 这与 M6 的教训同源。
+
+同类错误会在「按用户筛选」「按时间窗筛选」「按 label 筛选」的判据上重演。
+**通用规则：凡是"先过滤再统计"的判据，必须同时统计"过滤后命中了多少"，
+并让 0 命中走 blocked 而不是走"数值为 0 ⇒ 通过"。**
 
 ---
 
@@ -204,7 +327,7 @@ C:/Users/陈/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/ui
 | A2 无重复关键帧名 | assert_motion.py | **1**（`v4MaskIn`×2 @ legacy.css:454,:987） | 真缺陷 | M2 |
 | A3 合成器直通属性 | assert_motion.py | **0** | 真实零 | M3 |
 | A4 无 transition:all | assert_motion.py | **0** | 真实零 | M4 |
-| A5 时长取令牌 | assert_motion.py | **62**（豁免 infinite 15 / .01ms 4） | 真缺陷 | M5 |
+| A5 时长取令牌 | assert_motion.py | **62 token**（36 声明违例；豁免 loop 15 / kill 4；tokenized 234 + no-duration 86 非违例） | 真缺陷 | M5 |
 | A6 静置暂停钩子 | assert_dead_controls.py | **1**（0 钩子 / 26 条 infinite 循环） | 真缺陷 | M6（计数维度） |
 | A7 模板无死控件 | assert_dead_controls.py | **1**（死 1 + 豁免 2） | 真缺陷 | M7 |
 | A8 JS 生成按钮有说明 | assert_dead_controls.py | **2** | 真缺陷 | M8 |
@@ -319,6 +442,7 @@ T01 期间**未**修改 `run_normalized_gates.py`（改动归 T02）。
 | `assert_dead_controls.py` | 死控件 / 调试残余 A6–A9 | `_common.py` |
 | `assert_motion_negative.py` | 注入式负控 M1–M9 + M0 反向负控 + 恒真式自检 | 两个断言脚本 |
 | `probe_compose_height.py` | 实测「释放 56px」 | Edge/Chrome + playwright-core + harbor.html |
-| `probe_idle_gpu.ps1` | 静置 GPU 3D 占用 | Windows WDDM 2.0+ |
+| `probe_idle_gpu.ps1` | 静置 GPU 3D 占用（三态判定：整机空集 / 作用域空集 / MEASURED） | Windows WDDM 2.0+ |
+| `probe_idle_gpu_selftest.ps1` | 探针的作用域负控 A/B/C/D（假 PID 必须 blocked 且判决行数 = 0） | 上面的探针 |
 
 零产品代码改动：本目录全部为**新增**文件，`frontend/**` 与 `tools/run_normalized_gates.py` 均未修改。
