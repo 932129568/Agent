@@ -1,0 +1,496 @@
+{
+  "schema": "r101-d1-noise/v1",
+  "runId": "r101-20261121-d1-t04",
+  "prdTier": "165",
+  "primaryStatistic": {
+    "name": "coupleRatio",
+    "definition": "DROP_COUNT_OTHER_WIN / INJECT_COUNT",
+    "armA_I": {
+      "originalValues": [
+        0.010127,
+        0.012626,
+        0.015152,
+        0.012626,
+        0.010101
+      ],
+      "rangeRatio": 1.50005,
+      "N_definition": "三轮极差（本轮 n=5，极差 = max/min）",
+      "N": 1.50005,
+      "n_eff_note": "每轮 INJECT_COUNT≈396，故 coupleRatio 的分辨格点 = 1/396 = 0.002525。A-I 臂实测值 0.010101~0.015152 = 4~6 个格点，极差 2 个格点。"
+    },
+    "armA_NC": {
+      "originalValues": [
+        1.010101,
+        1.020202
+      ],
+      "rangeRatio": 1.0099999901
+    }
+  },
+  "secondaryStatistic": {
+    "name": "AC6 结构判别式（架构裁定 §3.2 末段 / T04 AC6）",
+    "formula": "std(win0.relUs - win1.relUs) / medianIntervalUs，按索引逐帧配对",
+    "measured": {
+      "A-I_r4": {
+        "n": 9838,
+        "stdDiffUs": 96944.3,
+        "medianIntervalUs": 6058,
+        "ac6": 16.0027,
+        "driftMs": 339.861,
+        "driftFrames": 56.1012,
+        "ac6Detrend": 2.4089,
+        "slopeUsPerFrame": 33.7465
+      },
+      "A-NC_s2": {
+        "n": 9457,
+        "stdDiffUs": 1387.9,
+        "medianIntervalUs": 6056.0,
+        "ac6": 0.2292,
+        "driftMs": -0.115,
+        "driftFrames": 0.019,
+        "ac6Detrend": 0.2281,
+        "slopeUsPerFrame": -0.0495
+      }
+    },
+    "verdict": "FAIL_BAND_ASSIGNMENT",
+    "failureDetail": "AC6 原式要求串行臂 <0.05，实测 A-NC_s2 = 0.2292，落进「并行」档（>0.20）⇒ 二值判别在串行臂上给错答案。并行臂 16.0027 判对。两臂比值 69.82 倍（分离度足够），但绝对阈值 0.20/0.05 无法同时容纳两臂。",
+    "rootCause": "AC6 的分子是 std(diff)，它对「抖动」与「漂移」不加区分。串行臂 diff 几乎无漂移（总漂移 -0.115ms = 0.019 帧），但逐帧抖动 std=1387.9us ⇒ 0.2292。并行臂 std=96944.3us 主要来自漂移（总 339.861ms = 56.10 帧）。",
+    "alternativeMeasured": "改用「总漂移量（帧）」作分子：并行 56.1012 帧 / 串行 0.0190 帧 = 2952.7 倍分离。去趋势后 AC6：并行 2.4089 / 串行 0.2281，阈值 0.20 仍误判串行为并行。",
+    "doNotRetune": "本轮【不】改 0.20/0.05 阈值 —— 事后按实测结果调阈值即「看着结果挑标准」。此处只登记失败与替代量的实测值，阈值重定须由架构师在下一轮以预置方式给出。"
+  },
+  "gateDefects": [
+    {
+      "id": "DEFECT-1",
+      "name": "COUPLED_BY_TIME_WINDOW 恒真（恒不触发）",
+      "evidence": [
+        0.002,
+        0.006,
+        0.003,
+        0.003,
+        -0.001,
+        0.002,
+        0.002
+      ],
+      "detail": "五轮（含应红的串行负控）P50 delta 全为 -0.001~0.006ms，阈值 d>3.0 从未触发 ⇒ 5/5 不触发。它导致串行臂 INDEP_AGREEMENT=OUT_OF_AGREEMENT（掉拍计数判 COUPLED、时间窗判不耦合）。",
+      "rootCause": "注入是每 150ms 一次 12ms stall，只占 8% 样本，P50 不受影响；P95 才有响应（串行 OTHER_STALL_P95=16.1526 vs CLEAN_P95=6.2030 = 2.604 倍；并行臂 6.2010/6.2070 = 0.999 倍）。",
+      "severity": "不影响主判决（INDEP 只由 COUPLED_BY_DROP_COUNT 决定），但使 INDEP_AGREEMENT 在串行臂上必然报不一致，等于该交叉校验字段恒真。",
+      "suggestedFix": "改用 P95 比值作交叉判据（实测 4 并行 0.999~1.001 / 2 串行 2.604 ⇒ 阈值取 1.5 有 1.7 倍两侧余量）。",
+      "status": "FIXED (2026-11-22 01:46~01:51)"
+    },
+    {
+      "id": "DEFECT-2",
+      "name": "AC6 阈值带与实测不兼容",
+      "evidence": "见 secondaryStatistic",
+      "severity": "T04 AC6 判定 FAIL；不影响 coupleRatio 主判据（AC1/AC2/AC7 全 PASS）",
+      "status": "SUPERSEDED by 架构师 v2.4 §14.2 → AC6_DRIFT_FRAMES 已实现"
+    },
+    {
+      "id": "DEFECT-3",
+      "name": "零分母假通过（NC-D1-INDEP-3 FAIL）",
+      "evidence": {
+        "NC3_8s": "t04_NC3_zero.txt: INJECT_COUNT=0 但 INDEP_VERDICT=INDEPENDENT",
+        "A_N_60s": [
+          "t04_AN_r1.txt: INJECT_COUNT=0 但 INDEP_VERDICT=INDEPENDENT",
+          "t04_AN_r2.txt: INJECT_COUNT=0 但 INDEP_VERDICT=INDEPENDENT",
+          "t04_AN_r3.txt: INJECT_COUNT=0 但 INDEP_VERDICT=INDEPENDENT"
+        ]
+      },
+      "detail": "架构裁定 AC3 要求 injectCount=0 时必须出 coupleRatio=null / UNMEASURABLE / ZERO_DENOMINATOR。实测 4/4 份（1 份 8s + 3 份 60s）全部输出 INDEP_VERDICT=INDEPENDENT，且 COUPLED_BY_DROP_COUNT=0/COUPLED_BY_TIME_WINDOW=0 都写 0 而不是 null。",
+      "rootCause": "代码 source/d1_indep_probe2.cpp:602~634（旧实现）写 `coupledByDrops = (injCount > 0) && (otherDrops*2 >= injCount)` —— 守卫只让「耦合」判不出来，却让「不耦合」照常输出；L604 `verdict = coupledByDrops ? COUPLED : INDEPENDENT` 于是 0 分母落到 INDEPENDENT。空集被当成 0 参与判决（教训 #1 的经典形态）。",
+      "severity": "HIGH —— 这是「缺席证据被当成证据成立」，与 R100 的 nonBlack>0、R101 的 CLOCK_BASE=UNKNOWN 同族。任何「没注入」的轮次都会被读成「两链独立」。",
+      "suggestedFix": "injCount==0 时 verdict 必须为 UNMEASURABLE 并写 ZERO_DENOMINATOR，不得落 INDEPENDENT；同时 INJ_WIN_DROP 的 [0.8,1.5]×injCount 带在 injCount=0 时退化成 [0,0]，必须显式判 INVALID。",
+      "status": "FIXED (2026-11-22 01:46~01:51)"
+    },
+    {
+      "id": "DEFECT-4",
+      "name": "代码缺「中间带」，0.05 上界从未实施（AC2 形同虚设）",
+      "severity": "CRITICAL —— 它决定 T04 结论是否成立，比 DEFECT-1/2/3 都更根本",
+      "detail": "架构文档 AC2 要求 coupleRatio 落在 0.000~0.050 才判 INDEPENDENT，§2.4 状态转移表第 3 行要求 0.050~0.500 判「中间带 ⇒ UNMEASURABLE/blocked」。但旧实现（source/d1_indep_probe2.cpp:636~655 之前的版本）实际只做二值判定 `coupledByDrops = (injCount > 0) && (otherDrops * 2 >= injCount)`，即 coupleRatio >= 0.5 才 COUPLED，**没有任何 0.05 上界**。于是 0.050~0.500 整段被静默判成 INDEPENDENT。",
+      "evidence": {
+        "code": "source/d1_indep_probe2.cpp:636~655（旧实现只有 otherDrops*2 >= injCount 一条边界，grep \"INCONCLUSIVE|中间带|0.05\" 在判决分支里 0 命中）",
+        "live": "t04v2_AI_r1 报 coupleRatio=0.349367 → INDEPENDENT（按文档应为 UNMEASURABLE）",
+        "live2": "t04v2_AI_r2 报 coupleRatio=0.446701 → INDEPENDENT（同上）",
+        "live3": "t04v2_AI_r3 报 coupleRatio=0.316456 → INDEPENDENT（同上）"
+      },
+      "impact": "文件里\"0.000~0.050 才算 INDEPENDENT\"这句要求，在代码里没有任何分支承接 ⇒ AC2 的验收标准（喂 s2.txt 出 0.000~0.050）实际只能靠\"数据恰好落在那儿\"满足，不是靠判据拦住。这正是教训 #34「规则写在注释里、不写进代码分支 = 没写」的又一实例。",
+      "suggestedFix": "判决改为三带：<0.05 → INDEPENDENT；0.05~0.50 → BAND_INCONCLUSIVE（并写 INDEP_UNMEASURABLE_REASON=BAND_AMBIGUOUS）；>=0.50 → COUPLED。边界值必须与 §2.4 状态转移表逐字对齐，最好由常量驱动（INDEP_BAND_LO/HI）以免再次漂移。",
+      "status": "FIXED (2026-11-22 01:44)",
+      "fixSummary": "三带常量驱动：<0.05 INDEPENDENT / [0.05,0.50) BAND_INCONCLUSIVE→UNMEASURABLE / >=0.50 COUPLED"
+    },
+    {
+      "id": "DEFECT-5",
+      "name": "解读规则行复用判决量的 KEY（可核对性缺陷）",
+      "severity": "HIGH —— 不改变判决，但让「按 KEY 核对日志」这套方法失效",
+      "detail": "探针的解读规则段用 `printf(\"INDEP_VERDICT=UNMEASURABLE (ZERO_DENOMINATOR) => ...\")` 打印一条说明，它是**无条件常量**（每份日志都打），却与真正的判决行同形同 KEY。后果：任何 `grep \"^INDEP_VERDICT=\"` 都会在每一份日志里命中 2 行，于是一轮明明判 INDEPENDENT 的输出里同时出现 UNMEASURABLE，下游（包括 team-lead 自己的核对脚本）会误判该轮是零分母轮。",
+      "evidence": {
+        "code": "解读规则段的 printf 常量与分支产物共用 INDEP_VERDICT 前缀",
+        "before": "grep -c \"^INDEP_VERDICT=\" = 2（每一份日志，含判 INDEPENDENT 的轮次）",
+        "after": "grep -c \"^INDEP_VERDICT=\" = 1（每份日志恰好 1 行，全部是分支产物）"
+      },
+      "impact": "根因不是「读日志不仔细」，而是规则行借用了判决量的 KEY，让人无法靠 KEY 区分常量与结果。这使「用 grep KEY 做批量核对」这一最常用的证据复核手段整体失效。",
+      "suggestedFix": "规则/说明行的 KEY 一律加 `RULE_` 前缀（RULE_ZERO_DENOMINATOR / RULE_BAND_AMBIGUOUS / RULE_EFFECTIVE_PLUS_INDEPENDENT / RULE_EFFECTIVE_PLUS_COUPLED），判决量的 KEY 只由分支产出。",
+      "status": "FIXED (2026-11-22 01:46~01:51)",
+      "fixSummary": "解读规则段全部改 RULE_ 前缀；INDEP_VERDICT 从 2 行降到恰好 1 行"
+    },
+    {
+      "id": "DEFECT-6",
+      "name": "架构师 §14.2 的兼容性检查表与其正文公式不对应（文档不自洽）",
+      "severity": "MEDIUM —— 不影响判决方向，但使兼容表的数值不可复核",
+      "detail": "架构裁定 v2.4 §14.2 的正文定义 DRIFT_FRAMES := |median(diff, 后10%) − median(diff, 前10%)| / medianIntervalUs；但同一节的兼容性检查表列的实测值 56.1012 / 0.019 是「端点差法」( diff[last] − diff[0] ) 的结果。按正文公式复算同一批 JSONL 得 47.3967 / 0.0017。示例同一文件 t04_AI_r4.jsonl 上两法差 1.18 倍，t04_ANC_s2.jsonl 上差 11.15 倍。",
+      "evidence": {
+        "table": "56.1012 (并行) / 0.0190 (串行) —— 端点差法，1 个样本",
+        "formula": "47.3967 (并行) / 0.0017 (串行) —— 正文公式，983 个样本",
+        "sameFileRatio": "1.18 倍 与 11.15 倍"
+      },
+      "impact": "两法判决方向一致（>5.0 / <1.0），故**不改变结论**；但任何人拿公式去验表都会得到对不上的数，兼容表因此失去「可复核」这一作用。讽刺之处：端点差法只用 1 个样本，正是架构师自己在 §14.2 理由 1 里批评的「把无关成分混进读数」的轻量版。",
+      "suggestedFix": "二选一且不可混用：(1) 兼容表改用公式对应的数（47.3967 / 0.0017）；(2) 把公式改成端点差法并论证为何不怕单点噪声。",
+      "status": "OPEN —— 已登记未修（探针按正文公式落地，未擅自改架构师文档）",
+      "fixSummary": "探针实现按正文公式（983 样本），完整登记于 ac6DriftFrames.DISCREPANCY"
+    }
+  ],
+  "acSummary": {
+    "AC1_env.json_tiers": "PASS (tiersAvailable=[\"165\"] + 60Hz 不存在登记)",
+    "AC2_injectCount_ge_200": "PASS (395~396，理论 400，落地率 98.75%~99.00%)",
+    "AC3_A_N_arm_dropRate_le_0.002": "PASS (A-N 3 轮: max win0=0.000505 / win1=0.000506，均 ≤0.002 阈 4 倍余量)",
+    "AC4_A_I_vs_A_N_separation": "PASS (A-N 无注入 vs A-I 有注入：A-N 两窗掉拍 4~5 次对称、A-I 注入窗 399~401 次/另一窗 4~6 次；臂别可分)",
+    "AC5_repro_md": "PASS (见 repro.md)",
+    "AC6_structural_discriminator": "SUPERSEDED —— 架构师 v2.4 §14.2 已作废旧 std 判别式，改用 DRIFT_FRAMES（串行<1.0 / 并行>5.0）；实测 0.019 vs 56.1012 = 2952.7 倍分离，两项兼容",
+    "AC7_noise_N_range": "PASS (A-I n=5 极差 1.5000 倍，逐轮原值齐全)",
+    "AC8_code_band_matches_doc": "PASS after DEFECT-4 fix —— 三带常量 INDEP_BAND_LO/HI=0.050/0.500 落地；实测 0.189873/0.237975/0.275949 全部正确落 INCONCLUSIVE→UNMEASURABLE；合成边界扫描（0/0.047980/0.050505/0.348485/0.497475/0.500000/1.010101）无重叠无空洞。修复前为 FAIL（0.05~0.50 静默判 INDEPENDENT）"
+  },
+  "armA_N": {
+    "n": 3,
+    "rounds": [
+      {
+        "round": "A-N r1",
+        "injectCount": 0,
+        "win0DropRate": 0.000404,
+        "win1DropRate": 0.000404,
+        "win0Drops": 4,
+        "win1Drops": 4,
+        "injWinDrops": 4,
+        "otherWinDrops": 4,
+        "reportedVerdict": "INDEPENDENT",
+        "reportedCoupleRatio": "UNDEFINED (分母=0)"
+      },
+      {
+        "round": "A-N r2",
+        "injectCount": 0,
+        "win0DropRate": 0.000505,
+        "win1DropRate": 0.000506,
+        "win0Drops": 5,
+        "win1Drops": 5,
+        "injWinDrops": 5,
+        "otherWinDrops": 5,
+        "reportedVerdict": "INDEPENDENT",
+        "reportedCoupleRatio": "UNDEFINED (分母=0)"
+      },
+      {
+        "round": "A-N r3",
+        "injectCount": 0,
+        "win0DropRate": 0.000404,
+        "win1DropRate": 0.000404,
+        "win0Drops": 4,
+        "win1Drops": 4,
+        "injWinDrops": 4,
+        "otherWinDrops": 4,
+        "reportedVerdict": "INDEPENDENT",
+        "reportedCoupleRatio": "UNDEFINED (分母=0)"
+      }
+    ],
+    "AC3_dropRate_le_0.002": {
+      "pass": true,
+      "maxWin0": 0.000505,
+      "maxWin1": 0.000506
+    },
+    "note": "A-N 是无注入臂，coupleRatio 分母为 0，**不是数值**。程序仍打印 INDEP_VERDICT=INDEPENDENT（见 DEFECT-3），该标签不得引用。"
+  },
+  "environmentSensitivity": {
+    "finding": "coupleRatio 对环境负载极度敏感，同一二进制、同一臂、同样 60s，跨负载差 30 倍以上",
+    "quiet": {
+      "when": "2026-11-21 22:53~23:00",
+      "A_I_otherDrops": [
+        4,
+        5,
+        6
+      ],
+      "A_I_coupleRatio": [
+        0.010127,
+        0.012626,
+        0.015152
+      ],
+      "A_N_win0DropRate": [
+        0.000404,
+        0.000505,
+        0.000404
+      ],
+      "note": "当时每轮串行、无并发工具调用"
+    },
+    "loaded": {
+      "when": "2026-11-22 00:20~00:50",
+      "A_I_otherDrops": [
+        138,
+        176,
+        125
+      ],
+      "A_I_coupleRatio": [
+        0.349367,
+        0.446701,
+        0.316456
+      ],
+      "A_N_win0DropRate": [
+        0.013933
+      ],
+      "note": "后台有 6 个 WorkBuddy + 3 个 msedge + msedgewebview2 + sandbox-center + GameViewer 进程，CPU 累计 340/243/220…"
+    },
+    "ratio": {
+      "exprOtherDrops": "138 / 4 = 34.5 倍",
+      "exprDropRate": "0.013933 / 0.000404 = 34.5 倍",
+      "interpretation": "两个量同倍数放大 ⇒ 不是判据变了，是环境基线变了"
+    },
+    "consequence": "T04 的 A-I/A-NC 结论【只在安静环境成立】。当前会话无法造出安静环境（后台进程属本会话自身，不能擅自杀）。因此这批数据必须标注 environment=\"quiet\", capturedAt=\"2026-11-21T22:53~23:00\"，任何复跑都必须先确认环境基线（A-N 的 dropRate ≤ 0.002）再采。",
+    "gateProposal": "每轮采集前先跑一次 A-N 短轮（8s）做环境前置门：win0/win1 dropRate > 0.002 ⇒ ENV_NOT_QUIET，abort、不产出任何 coupleRatio。",
+    "probeOfCurrentSession": {
+      "what": "本会话收口时（2026-11-22 02:0x）实测环境基线仍未恢复安静。",
+      "command": "./d1_indep_probe2.exe --seconds=8 --stall-every=150 --stall-ms=0 --inject-win=0",
+      "measured": {
+        "win0DropRate": 0.118745,
+        "win1DropRate": 0.07498,
+        "win0Drops": 140,
+        "win1Drops": 92
+      },
+      "threshold": 0.002,
+      "conclusion": "0.118745 / 0.002 = 59.4 倍、0.074980 / 0.002 = 37.5 倍 ⇒ 远超前置门阈值，本会话**无法**重采安静环境数据。",
+      "soWhat": "本轮的修复验证（DEFECT-1 P95 / AC6 DRIFT_FRAMES）只能在高负载下做方向验证，不能做绝对基线验证。这一点已登记在 ac6DriftFrames.implemented.environmentOfVerification。"
+    },
+    "verificationRoundsEnvironment": {
+      "what": "用来验证修复的 v5/v6 轮的实际环境标注（此前未登记）。",
+      "rounds": {
+        "v5_AI": {
+          "win1DropRate": 0.009598,
+          "verdict": "UNMEASURABLE",
+          "env": "loaded"
+        },
+        "v5_serial": {
+          "win1DropRate": 0.059072,
+          "verdict": "COUPLED",
+          "env": "loaded"
+        },
+        "v6_AI": {
+          "win1DropRate": 0.011553,
+          "verdict": "UNMEASURABLE",
+          "env": "loaded"
+        },
+        "v6_serial": {
+          "win1DropRate": 0.062153,
+          "verdict": "COUPLED",
+          "env": "loaded"
+        }
+      },
+      "quietReference": {
+        "t04_AI_r1_r3_win1DropRate": [
+          0.000404,
+          0.000506,
+          0.000606
+        ]
+      },
+      "note": "四轮全部 ≈ 20~150 倍于安静基线 ⇒ 全部属 loaded。这**不影响**修复验证的有效性（方向判别），但绝对数值不可与安静轮比较。"
+    }
+  },
+  "probeVersion": {
+    "initial": {
+      "exe": "d1_indep_probe2.exe",
+      "size": 82944,
+      "mtime": "2026-11-21 16:06",
+      "usedBy": "T04 首轮 10 轮采集（22:53~23:00）",
+      "knownDefects": [
+        "DEFECT-1",
+        "DEFECT-2",
+        "DEFECT-3",
+        "DEFECT-4",
+        "DEFECT-5"
+      ]
+    },
+    "fixed": {
+      "exe": "d1_indep_probe2.exe",
+      "size": 86528,
+      "mtime": "2026-11-22 01:46",
+      "fixedDefects": [
+        "DEFECT-1",
+        "DEFECT-3",
+        "DEFECT-4",
+        "DEFECT-5"
+      ],
+      "stillOpen": [
+        "DEFECT-2"
+      ],
+      "note": "DEFECT-2（v2.3 的 std 判别式）已由架构师 v2.4 §14.2 改为 DRIFT_FRAMES，但该量尚未在探针里落盘 —— 属于未实现项，不是缺陷未修。"
+    }
+  },
+  "fixVerification": [
+    {
+      "id": "DEFECT-1",
+      "fix": "P50 判据改为 CROSS_P95_RATIO > 1.5，带 CROSS_CHECK_ONLY=1 与 EMPTY_SET 单列",
+      "verifiedBy": [
+        "v5_serial.txt（P95=3.6477 → TRIGGERED）",
+        "v6_serial.txt（P95=3.5996 → TRIGGERED）",
+        "v5_AI.txt（P95=0.9989 → NOT_TRIGGERED）",
+        "v6_AI.txt（P95=1.0039 → NOT_TRIGGERED）"
+      ],
+      "result": {
+        "serial": "TRIGGERED ×2（3.6477 / 3.5996）+ INDEP_AGREEMENT=STRONG（修复前 5/5 全 OUT_OF_AGREEMENT）",
+        "parallel": "NOT_TRIGGERED ×2（0.9989 / 1.0039，不误触发）"
+      },
+      "PASS": true,
+      "environmentCaveat": "四轮均在高负载环境采集（见 ac6DriftFrames.implemented.environmentOfVerification）；比值为比量，负载同时抬高两臂 P95，故方向仍可判"
+    },
+    {
+      "id": "DEFECT-2",
+      "fix": "AC6 判别式由 std(diff)/medianIntervalUs 整体替换为 DRIFT_FRAMES（首尾各 10% 中位数差），带 n<5000 → INSUFFICIENT_PAIRS 与 [1.0,5.0] 不判 fail 带",
+      "verifiedBy": [
+        "v6_serial.txt（0.0041 → SERIAL）",
+        "v6_serial.jsonl（n_pairs=8995）",
+        "v6_AI.txt（303.2886 → PARALLEL）",
+        "v6_AI.jsonl（n_pairs=9443）"
+      ],
+      "result": {
+        "serial": 0.0041,
+        "serialVerdict": "SERIAL",
+        "parallel": 303.2886,
+        "parallelVerdict": "PARALLEL",
+        "separation": "303.2886 / 0.0041 = 73972.8 倍"
+      },
+      "beforeAfter": {
+        "before_std_serial": 0.2292,
+        "before_stillJudgeParallel": true,
+        "note": "修复前串行臂 0.2292 > 0.20 被判成 PARALLEL（错）；去趋势后仍 0.2281 > 0.20 ⇒ 是量选错，不是阈值选错"
+      },
+      "environmentCaveat": "两轮均在高负载环境采集（见 ac6DriftFrames.implemented.environmentOfVerification）；只证方向，绝对值不可与安静轮比较",
+      "PASS": true
+    },
+    {
+      "id": "DEFECT-3",
+      "fix": "injCount==0 ⇒ DIVIDE_GUARD=ZERO_DENOMINATOR + COUPLE_RATIO=null + INDEP_VERDICT=UNMEASURABLE",
+      "verifiedBy": "v4_zero.txt",
+      "result": {
+        "INDEP_VERDICT": "UNMEASURABLE",
+        "COUPLE_RATIO": "null",
+        "DIVIDE_GUARD": "ZERO_DENOMINATOR"
+      },
+      "PASS": true
+    },
+    {
+      "id": "DEFECT-4",
+      "fix": "补回 [0.050,0.500) 中间带，边界由 INDEP_BAND_LO/HI 常量驱动",
+      "verifiedBy": [
+        "v3_AI_band.txt（0.189873→INCONCLUSIVE）",
+        "v5_AI.txt（0.237975→INCONCLUSIVE）",
+        "合成边界扫描（无重叠无空洞）"
+      ],
+      "result": {
+        "underLO": "INDEPENDENT",
+        "atLO": "UNMEASURABLE",
+        "midBand": "UNMEASURABLE",
+        "atHI": "COUPLED"
+      },
+      "PASS": true
+    },
+    {
+      "id": "DEFECT-5",
+      "fix": "解读规则段 KEY 改 RULE_ 前缀，判决量 KEY 只由分支产出",
+      "verifiedBy": "v4_zero.txt / v5_*.txt",
+      "result": {
+        "INDEP_VERDICT_lines": "恰好 1（修复前 v3 是 2）"
+      },
+      "PASS": true
+    }
+  ],
+  "ac6DriftFrames": {
+    "ref": "架构师 v2.4 §14.2 预置裁定（替换 v2.3 的 std 判别式）",
+    "formula_arch": "DRIFT_FRAMES := |median(diff[k], 后10%) - median(diff[k], 前10%)| / medianIntervalUs",
+    "bands": {
+      "serial": "< 1.0",
+      "threaded": "> 5.0",
+      "gap": "1.0~5.0 ⇒ AC6_INCONCLUSIVE（不判 fail、不计证据）"
+    },
+    "measured": {
+      "A_I_r4_parallel": {
+        "endpoint": 56.1012,
+        "arch_10pct_median": 47.3967
+      },
+      "A_NC_s2_serial": {
+        "endpoint": 0.019,
+        "arch_10pct_median": 0.0017
+      }
+    },
+    "verdict": "PASS（两法判决一致）",
+    "DISCREPANCY": {
+      "id": "DEFECT-6",
+      "severity": "MEDIUM（不影响判决，但兼容表数值不可复核）",
+      "detail": "架构师 §14.2 兼容表列出的 56.1012 / 0.019 是【端点差法】(diff[-1]-diff[0])，而他正文 §14.2 定义的公式是【首尾各 10% 中位数差】。按他的公式复算得 47.3967 / 0.0017。两法判决方向一致（>5.0 与 <1.0），但表里数值与表头公式不对应。",
+      "ratio": "47.3967/0.0017 = 27880 倍（架构师公式）vs 56.1012/0.019 = 2952.7 倍（端点差法）",
+      "why": "端点差法对单点噪声敏感（用 1 个样本）；首尾10%中位数法用 983/945 个样本，抗噪 31.5 倍。架构师的公式更稳，表却引了不稳定的那个数。",
+      "note": "这正是他自己 §14.2 理由 1 批评的「std 混进无关成分」的轻量版：端点法把单点噪声混进了漂移读数。",
+      "action": "兼容表必须改用公式对应的数（47.3967 / 0.0017），或把公式改成端点法并说明为何不怕单点噪声。两者选一，不能混。",
+      "example_sameFile": {
+        "t04_AI_r4.jsonl": {
+          "endpoint": 56.1012,
+          "arch_formula": 47.3967,
+          "ratio": 1.18
+        },
+        "t04_ANC_s2.jsonl": {
+          "endpoint": 0.019,
+          "arch_formula": 0.0017,
+          "ratio": 11.15
+        },
+        "note": "同一份文件上两法差 1.18 倍与 11.15 倍 ⇒ DEFECT-6 的实质是公式定义不一致，不是数据噪声"
+      }
+    },
+    "implemented": {
+      "probeVersion": "d1_indep_probe2.exe 89600 B / 2026-11-22 01:51",
+      "outputKey": "AC6_DRIFT_FRAMES=... AC6_VERDICT=SERIAL|PARALLEL|INCONCLUSIVE|INSUFFICIENT_PAIRS",
+      "runs": {
+        "serial_v6": {
+          "driftFrames": 0.0041,
+          "n_pairs": 8995,
+          "k10": 899,
+          "verdict": "SERIAL"
+        },
+        "parallel_v6": {
+          "driftFrames": 303.2886,
+          "n_pairs": 9443,
+          "k10": 944,
+          "verdict": "PARALLEL"
+        }
+      },
+      "independenceCheck": {
+        "claim": "qpcUs 绝对时刻 与 relUs 相对时刻 两路径算同一量",
+        "measured": "both = 0.000000 相对差 0.000e+00%",
+        "interpretation": "零误差 ⇒ 这两个不是独立判据，是同一量的代数变形（教训 #50）。relUs = qpcUs − t0，只差常数偏移，中位数差把偏移相消。**故不能用\"两路径一致\"来证明公式正确** —— 要证明正确性只能靠构造性推导（架构师 §14.2 理由 1~5）。"
+      },
+      "environmentOfVerification": {
+        "problem": "验修复的两轮 v6_AI / v6_serial 是在**高负载**环境采的，不是安静环境（见 §5）。必须标出来，否则读者会以为修复是在干净基线上验证的。",
+        "evidence": {
+          "v6_AI_win1DropRate": 0.011553,
+          "v6_serial_win1DropRate": 0.062153,
+          "quietReference_win1DropRate": "0.000404 / 0.000506 / 0.000606（t04_AI_r1~r3）",
+          "ratio": "0.011553 / 0.000404 = 28.6 倍；0.062153 / 0.000404 = 153.8 倍"
+        },
+        "whyStillValid": "DRIFT_FRAMES 的修复验证是**方向判别**（串行应 SERIAL、并行应 PARALLEL），不依赖绝对基线。实测串行 0.0041 距上界 1.0 有 244 倍余量、并行 303.2886 距下界 5.0 有 60.7 倍余量，两臂跨 7.4 万倍分离 ⇒ 即便基线上浮一个数量级也不会翻判。但**绝对数值不可与将来安静轮直接比较**。",
+        "actionForNext": "M3 若要用 AC6 的绝对值做门，必须在安静环境重采一次。"
+      }
+    }
+  },
+  "gateObservations": [
+    {
+      "id": "OBS-1",
+      "gate": "INJ_WIN_DROP_RATIO_CHECK",
+      "band": "[0.8, 1.5] × injectCount",
+      "what": "该门是「仪器自检」：注入窗的掉拍数应当 ≈ 注入次数。高负载串行轮 v6_serial 报 FAIL，实测 injDropRatio=1.549367（612 掉拍 / 395 注入），越上界 1.5 约 3.3%。",
+      "why": "串行臂两个窗串行采样，一次 12ms stall 会同时拖长多个相邻间隔，所以「1 次注入」可能产出 >1 个长间隔。负载越高，采样相对 stall 越密，该比值越大。",
+      "triggerRate": "1/7 轮（1 红 6 绿）。安静轮 1.010~1.038，高负载并行 1.246~1.268，高负载串行 1.438 / 1.549 ⇒ **单调随负载上升**，是真实响应不是恒真/恒假。",
+      "direction": "SAFE —— 红 = 判为可疑，不会把坏数据判成好数据（与 DEFECT-3/4 的「假通过」方向相反）。",
+      "status": "登记不改。上界 1.5 无构造性依据（是拍出来的），且高负载下必红 ⇒ 属 PENDING-CALIBRATION，与 inflate=4.0 / PACING_RATIO=1.05 同族。",
+      "note": "本轮的 INDEP_VERDICT 不读这个门，所以它红不影响任何结论。但它是**将来做环境前置门时的现成信号**：该门红 ⇒ 环境不安静。"
+    }
+  ]
+}

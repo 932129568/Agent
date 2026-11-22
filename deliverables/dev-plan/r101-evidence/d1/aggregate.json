@@ -1,0 +1,169 @@
+{
+  "schema": "r101-d1-aggregate/v1",
+  "runId": "r101-20261121-d1-t04",
+  "prdTier": "165",
+  "rounds": [
+    {
+      "round": "AI_r1",
+      "injectCount": 395,
+      "injWinDrops": 399,
+      "otherWinDrops": 4,
+      "coupleRatio": 0.010127,
+      "ratioExpr": "4/395",
+      "verdict": "INDEPENDENT",
+      "agreement": "STRONG",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.207,
+      "otherStallP95": 6.201,
+      "otherP50DeltaMs": 0.002
+    },
+    {
+      "round": "AI_r2",
+      "injectCount": 396,
+      "injWinDrops": 401,
+      "otherWinDrops": 5,
+      "coupleRatio": 0.012626,
+      "ratioExpr": "5/396",
+      "verdict": "INDEPENDENT",
+      "agreement": "STRONG",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.2073,
+      "otherStallP95": 6.211,
+      "otherP50DeltaMs": 0.006
+    },
+    {
+      "round": "AI_r3",
+      "injectCount": 396,
+      "injWinDrops": 400,
+      "otherWinDrops": 6,
+      "coupleRatio": 0.015152,
+      "ratioExpr": "6/396",
+      "verdict": "INDEPENDENT",
+      "agreement": "STRONG",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.208,
+      "otherStallP95": 6.21,
+      "otherP50DeltaMs": 0.003
+    },
+    {
+      "round": "AI_r4",
+      "injectCount": 396,
+      "injWinDrops": 401,
+      "otherWinDrops": 5,
+      "coupleRatio": 0.012626,
+      "ratioExpr": "5/396",
+      "verdict": "INDEPENDENT",
+      "agreement": "STRONG",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.198,
+      "otherStallP95": 6.191,
+      "otherP50DeltaMs": 0.003
+    },
+    {
+      "round": "AI_rev",
+      "injectCount": 396,
+      "injWinDrops": 399,
+      "otherWinDrops": 4,
+      "coupleRatio": 0.010101,
+      "ratioExpr": "4/396",
+      "verdict": "INDEPENDENT",
+      "agreement": "STRONG",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.204,
+      "otherStallP95": 6.202,
+      "otherP50DeltaMs": -0.001
+    },
+    {
+      "round": "ANC_s1",
+      "injectCount": 396,
+      "injWinDrops": 401,
+      "otherWinDrops": 400,
+      "coupleRatio": 1.010101,
+      "ratioExpr": "400/396",
+      "verdict": "COUPLED",
+      "agreement": "OUT_OF_AGREEMENT",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.203,
+      "otherStallP95": 16.1526,
+      "otherP50DeltaMs": 0.002
+    },
+    {
+      "round": "ANC_s2",
+      "injectCount": 396,
+      "injWinDrops": 411,
+      "otherWinDrops": 404,
+      "coupleRatio": 1.020202,
+      "ratioExpr": "404/396",
+      "verdict": "COUPLED",
+      "agreement": "OUT_OF_AGREEMENT",
+      "injWinDropBand": true,
+      "injectEffective": true,
+      "otherCleanP95": 6.192,
+      "otherStallP95": 15.169,
+      "otherP50DeltaMs": 0.002
+    }
+  ],
+  "armA_I": {
+    "n": 5,
+    "values": [
+      0.010127,
+      0.012626,
+      0.015152,
+      0.012626,
+      0.010101
+    ],
+    "min": 0.010101,
+    "max": 0.015152,
+    "rangeRatio": 1.50005,
+    "band": "INDEPENDENT",
+    "bandThreshold": 0.05,
+    "marginX": 3.2999,
+    "verdict": "PASS: 5 轮全部落在 INDEPENDENT 带（<=0.05），最大 0.015152 距阈 3.30 倍余量"
+  },
+  "armA_NC": {
+    "n": 2,
+    "values": [
+      1.010101,
+      1.020202
+    ],
+    "min": 1.010101,
+    "max": 1.020202,
+    "band": "COUPLED",
+    "bandThreshold": 0.5,
+    "exceedX": 2.0202,
+    "verdict": "PASS: 串行负控判 COUPLED（>0.50），最小 1.010101 超阈 2.02 倍"
+  },
+  "separation": {
+    "exprA": "A-NC min / A-I max = 1.010101 / 0.015152",
+    "value": 66.6645,
+    "exprB": "A-NC min / A-I min = 1.010101 / 0.010101",
+    "valueConservative": 100.0001,
+    "note": "两口径都给出 2 个数量级分离；判据非恒真已得判据级证据"
+  },
+  "acChecks": {
+    "AC2_injectCount_ge_200": {
+      "pass": true,
+      "values": [
+        395,
+        396,
+        396,
+        396,
+        396,
+        396,
+        396
+      ]
+    },
+    "INJ_WIN_DROP_BAND": {
+      "pass": true
+    },
+    "injectEffective_all": {
+      "pass": true
+    }
+  }
+}

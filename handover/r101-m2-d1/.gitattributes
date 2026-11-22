@@ -1,0 +1,8 @@
+# 交接目录内的文件一律不做行尾转换（-text）。
+#
+# 原因：HANDOVER.md 对 source/ 下两个文件承诺了 sha256，而本仓 core.autocrlf=true
+# 会在 checkout 时把 LF 改写成 CRLF —— 那样 clone 出来的文件 sha256 与文档不符，
+# 「逐字节相同」就成了假承诺。加 -text 让 git 存取都按原样做。
+#
+# 只作用于本目录，不影响仓库其他地方。
+* -text

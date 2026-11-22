@@ -1,0 +1,190 @@
+classDiagram
+  class D1Spec {
+    +int windowX = 500
+    +int windowY = 400
+    +int windowW = 400
+    +int windowH = 300
+    +int collectSeconds = 60
+    +int injectEveryMs = 150
+    +int injectStallMs = 12
+    +double dropThresholdFactor = 1.5
+    +double coupleThreshold = 0.50
+    +double coupleFreeBound = 0.05
+    +int injectCountMin = 200
+    +double injWinDropLo = 0.8
+    +double injWinDropHi = 1.5
+    +double naturalDropGuard = 0.002
+    +double structSerialStd = 0.05
+    +double structThreadedStd = 0.20
+    +int identitySlackUs = 500
+    +double submitRatioGuard = 0.5
+    +int clockBaseTolMs = 5000
+    +double clockBaseTolLoMs = -5000
+    +double clockBaseTolHiMs = 5000
+    +double inflateUnusable = 4.0
+    +double bucketChi2Max = 31.264
+    +int rounds = 3
+    +fromJson(path) D1Spec
+    +validate() bool
+  }
+
+  class D1Sample {
+    +string runId
+    +string purpose
+    +string pathway
+    +string mode
+    +string geom
+    +string tier
+    +int win
+    +uint64 qpcUs
+    +uint64 relUs
+    +double submitUs
+    +double waitUs
+    +int waitRc
+    +string hrPresent
+    +int presentOk
+    +int injected
+    +toJsonLine() string
+    +fromJsonLine(line) D1Sample
+  }
+
+  class D1WinSlot {
+    +HWND hwnd
+    +ID3D11Device dev
+    +ID3D11DeviceContext ctx
+    +IDXGIFactory2 factory
+    +IDXGISwapChain2 chain2
+    +ID3D11RenderTargetView rtv
+    +IDCompositionTarget target
+    +IDCompositionVisual visual
+    +HANDLE waitable
+    +vector~D1Sample~ samples
+    +int injectedCount
+    -MakeDevice() bool
+    -BuildChain(spec) bool
+  }
+
+  class D1Host {
+    +IDCompositionDevice dcomp
+    +D1WinSlot slots[2]
+    +uint64 t0StartUs
+    +string preconditionFlags
+    +Init() bool
+    +CheckPreconditions(spec, failReason) bool
+    +AddWin(idx, rect, color) bool
+    +RunThreaded(cfg, stop) void
+    +RunSerial(cfg, stop) void
+    +Shutdown() void
+    +WriteJsonl(sample) void
+  }
+
+  class D1Header {
+    +bool isHeader = true
+    +string runId
+    +string collectorVer
+    +int syncInterval = 1
+    +int waitable = 1
+    +string dpiAware
+    +string adapterName
+    +int64 qpcFreq
+    +string windowRect
+    +string tier
+    +string geom
+    +toJsonLine() string
+  }
+
+  class D1RunResult {
+    +string runId
+    +string purpose
+    +string mode
+    +int injectCount
+    +int perWinN[2]
+    +int perWinDrops[2]
+    +double perWinMedianIntervalUs[2]
+    +int decodeOkBoth
+    +int flips
+    +int nEff
+    +double inflate
+    +double bucketChi2
+    +double bucketRSpan
+    +string evidenceGrade
+    +string verdict
+    +string verdictFlags
+    +verdictOf(bucketChi2, inflate, modeShare, ciLo, ciHi, spec) string
+    +gradeOf(preconditionFlags) string
+  }
+
+  class CoupleAggregate {
+    +double coupleRatio
+    +string band
+    +string reasonCode
+    +int injectCount
+    +int injWinDropCount
+    +int otherWinDropCount
+    +bool structurallyAbsent
+    +compute(samples, spec) void
+    +bandOf(ratio, spec) string
+    +guardsOk() bool
+  }
+
+  class RoundAggregate {
+    +int round
+    +CoupleAggregate couple
+    +bool identityOk
+    +bool injectionEffective
+    +bool envQuiet
+    +string clockBase
+    +string evidenceGrade
+    +bool usableForRange
+  }
+
+  class SeriesAggregate {
+    +RoundAggregate[] rounds
+    +RoundAggregate[] judgeGradeRounds
+    +RoundAggregate[] voidRounds
+    +double noiseRange
+    +string[] preconditionFailures
+    +string finalBand
+    +string finalStatus
+    +decide(spec) void
+    +rangeOf(judgeGradeRounds) double
+  }
+
+  class NegControl {
+    +string id
+    +string inject
+    +string expectDirection
+    +bool mustAbort
+    +run(driver) bool
+  }
+
+  class VerdictChecker {
+    +WEIGHTS map
+    +deriveCoverage(doc) int
+    +checkD1Row(doc) bool
+    +checkBlockedFields(doc) bool
+    +main(path) int
+  }
+
+  class Verdict4Stage {
+    <<enumeration>>
+    +R_NOT_A_RATIO
+    +R_UNUSABLE_DEPENDENT_SAMPLES
+    +R_UNUSABLE_BLOCKY
+    +R_HAS_RESOLUTION
+    +R_NO_RESOLUTION
+    +R_INCONCLUSIVE
+    +order() int
+  }
+
+  D1Spec ..> CoupleAggregate : 提供常量
+  D1Host *-- D1WinSlot : 两窗各一
+  D1Host --> D1Header : 每份文件一行（P0-5 自检字段）
+  D1Host --> D1Sample : 逐窗落盘
+  D1Sample --> RoundAggregate : 聚合输入
+  CoupleAggregate <-- RoundAggregate : 每轮一个
+  RoundAggregate --> SeriesAggregate : 三轮合成
+  D1Spec ..> SeriesAggregate : 判定阈值
+  D1RunResult ..> Verdict4Stage : 四段判序取值（顺序不可调换）
+  NegControl ..> D1Host : 驱动采集
+  SeriesAggregate ..> VerdictChecker : 产物

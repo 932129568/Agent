@@ -1,0 +1,59 @@
+sequenceDiagram
+  autonumber
+  participant DRV as run_d1.py
+  participant EXE as d1_collect.exe
+  participant HOST as D1Host
+  participant T0 as WindowThread(win0)
+  participant T1 as WindowThread(win1)
+  participant JSONL as d1_indep.jsonl
+  participant AGG as d1_indep_aggregate.py
+  participant VC as verify_r101_verdict.py
+
+  DRV->>DRV: 读 d1_spec.json，校验 arm×mode×purpose 组合合法
+  DRV->>EXE: 启动（--mode --inject-win --stall-ms --stall-every --seconds --jsonl）
+  EXE->>HOST: InitDpi()（PER_MONITOR_AWARE_V2，失败即非 0 退出）
+  EXE->>HOST: Init()（DComp 设备单实例）
+  HOST->>HOST: CheckPreconditions(clockBaseTolLoMs=-5000, clockBaseTolHiMs=+5000)  ← 陷阱 7（双侧）
+  alt 前置门失败（CLOCK_BASE=MISMATCH 或 UNKNOWN / DDA_AVAILABLE=0 / DPI 非 PMV2 / header 三项不齐）
+    HOST-->>EXE: PRECONDITION_FAILED（不产出任何测量量；header 必然已落盘，见 T02 AC7-ii）
+    EXE-->>DRV: 非 0 退出（NC-PRECOND-1 应红）
+  else 前置门通过
+  HOST->>JSONL: 写 header 行（__header:true, syncInterval, waitable, dpiAware, qpcFreq, windowRect）
+  HOST->>HOST: AddWin(0) → MakeDevice(0)（独立 device+ctx）
+  HOST->>HOST: AddWin(1) → MakeDevice(1)（独立 device+ctx）  ← H1
+  Note over HOST: 每窗 desc.Flags 含 FRAME_LATENCY_WAITABLE_OBJECT ← H2
+  HOST->>HOST: t0StartUs = NowUs()  ← H3（线程启动之前，只读）
+  HOST->>T0: std::thread(WindowThread(0, t0StartUs))
+  HOST->>T1: std::thread(WindowThread(1, t0StartUs))
+  loop 每窗各自循环，线程间零同步
+    T0->>T0: Clear → Present1(1,…) → 记录 submitUs
+    T0->>T0: 若 injectWin==0 且到点 → Sleep(12ms) → injected=1
+    T0->>T0: WaitForSingleObjectEx(waitable, 250)
+    T0->>JSONL: 写一行（win=0, qpcUs, relUs, submitUs, waitUs, waitRc, hrPresent, presentOk, injected）
+  end
+  T1->>JSONL: 同结构写 win=1 行
+  EXE->>HOST: stop=true → join 两线程 → 打印 INJECT_COUNT / per-win N / DROPS / MEDIAN / FLIPS_PER_SEC / nEff / inflate / R_BUCKET_00~11
+  EXE-->>DRV: exit 0 + KEY=VALUE
+  end
+  DRV->>DRV: 每轮即时回读，缺统计行即 fail（不靠事后统一解析）
+  DRV->>AGG: 4 臂 × 轮次目录
+  AGG->>AGG: 逐窗逐轮 median(intervalUs) → 阈值 1.5× → dropped
+  AGG->>AGG: coupleRatio = otherWinDropCount / injectCount
+  AGG->>AGG: 三条前置（injectCount≥200 / injWinDrop 在 [0.8,1.5]× / 恒等式 / 环境guard）
+  AGG->>AGG: header 三项不齐 → 整份拒绝；任一轮前置失败（MISMATCH/UNKNOWN/其余）→ preconditionFailures 记录并剔除该轮  ← 陷阱 7
+  AGG->>AGG: 每轮 evidenceGrade = 判据级 | 作废轮（仅旁证）；**极差只收判据级**  ← §1.6
+  AGG->>AGG: bucketChi2（12 桶，df=11）；缺桶即判定不可用（不得默认为通过）  ← §1.6
+  AGG->>AGG: VERDICT 六级判序（顺序不可调换）：0 PACING→PACING_ARTIFACT；1 chi2>31.264→NOT_A_RATIO；2 inflate>=4.0→DEPENDENT；3 λ<5且modeShare>0.9→BLOCKY(VERIFIABLE=0,待构造负控)；4 事件体制(占位 enabled=false 不发射)；5 否则 CI 三带  ← 陷阱 5
+  AGG->>AGG: 若① NOT_A_RATIO → 该轮只报「点估计 + 12 桶极差 + chi2」，精度声明位置留空（R_CI95 落盘但禁被引用）  ← §1.6
+  AGG->>AGG: bandOf(coupleRatio) → COUPLED / INDEPENDENT / UNMEASURABLE
+  AGG->>AGG: 三轮同带？→ SeriesAggregate.finalStatus
+  AGG-->>DRV: aggregate.json（每轮 medianIntervalUs / N=极差 / nEff / inflate / bucketChi2 / evidenceGrade）  ← 陷阱 5
+  DRV->>VC: verdict.json + aggregate.json
+  VC->>VC: deriveCoverage() 派生校验（30 / 60 / 80）  ← NC-COV-1
+  VC->>VC: D1 status 枚举 + weight==30 + blocked 必带 blockedReason/missingCapability
+  VC->>VC: 精度声明必须含「三轮原值 + 极差 + nEff」；只有单一 CI ⇒ 拒  ← 陷阱 5
+  VC->>VC: 极差的分母必须显式标注「CLOCK_BASE=OK 的轮次」；含作废轮即拒  ← §1.6
+  VC->>VC: VERDICT 必须为六级判序后的值；出现 R_HAS_RESOLUTION 但 λ>=5 且 bucketChi2>31.264 的记录即拒  ← 陷阱 5
+  VC->>VC: 每条主判序门的阳性样本数必须 >=1（0 则拒收该判据，要求补负控）  ← 陷阱 5 附加要求①
+  VC->>VC: 交叉校验必须带 CROSS_CHECK_ONLY=1，且不得出现在主链函数里  ← §14.3 / 禁令 2 豁免
+  VC-->>DRV: rc=0 或 rc=1（fail 时列出违规项）
