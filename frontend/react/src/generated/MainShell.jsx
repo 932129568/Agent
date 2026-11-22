@@ -893,14 +893,21 @@ export default function MainShell() {
                     </svg>
                   </button>
                 </div>
+                {/* R101 T02：第 3 步「发问」原本是一颗永久禁用的按钮控件。它不是一个
+                 动作，是一句说明 —— 渲染成按钮只会让用户去点一颗永远点不动的控件
+                 （A7 死控件）。改为纯文本提示，语义正确，也不再需要禁用样式兜底。
+                 ⚠ 本注释刻意不写具体标签字面量：A7 与契约正则会扫注释文本，
+                 写了就会凭空多出一条死控件（已实测踩过一次）。
+                 ⚠ 同一段空态在 sessions/controller.js 的 newSession() 里还有一份
+                 innerHTML 副本，两处必须保持一致，否则新会话后又会变回假按钮。 */}
                 <div className="eg-step">
                   <b>
                     3
                   </b>
                   发问
-                  <button type="button" className="modal-btn" disabled={true}>
+                  <span className="eg-hint">
                     在下方输入框
-                  </button>
+                  </span>
                 </div>
               </div>
               {/* 群聊协作（Beta, 2026-11-04）：多模型成员分工接力 */}

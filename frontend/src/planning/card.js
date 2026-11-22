@@ -141,7 +141,7 @@ function planCardRender(plan) {
     '</div>' +
     '<div class="plan-acts" id="planActs">' +
       '<button class="pill-btn primary" id="planApproveBtn">批准执行</button>' +
-      '<button class="pill-btn" id="planEditBtn" disabled title="当前版本不支持编辑计划；请拒绝后重新描述任务">编辑（不可用）</button>' +
+      '<button class="pill-btn" id="planEditBtn" title="就地编辑步骤文案；保存后按新文案执行">编辑</button>' +
       '<button class="pill-btn" id="planRejectBtn">拒绝</button>' +
     '</div>' +
     '<div class="plan-summary" id="planSummary"></div>' +
@@ -204,6 +204,45 @@ function planCardRender(plan) {
   if (ap) ap.onclick = () => planCardApprove();
   const rj = pcEl('planRejectBtn');
   if (rj) rj.onclick = () => planCardReject();
+  // R101 T02：planEditBtn 从「永久禁用 + title 自陈不可用」改为真激活。
+  // 为什么不是删掉：计划步骤文案写错是常见情况，逼用户「拒绝后重述任务」把
+  // 已经生成好的计划整个丢掉，代价远大于改一行字。原实现的 title 自己写着
+  // 「当前版本不支持编辑计划」——A8 正是抓这种「按钮自己声明自己没用」。
+  // 做法：就地编辑（不新开弹窗、不新增顶层符号），把 .txt 换成 input，
+  // 保存时写回 planCurrent.steps[i].text；批准链读的是同一个对象，故生效。
+  const ed = pcEl('planEditBtn');
+  if (ed) ed.onclick = () => {
+    const wrap = pcEl('planSteps');
+    if (!wrap || !planCurrent || !Array.isArray(planCurrent.steps)) return;
+    const editing = wrap.classList.contains('editing');
+    if (!editing) {
+      wrap.classList.add('editing');
+      Array.from(wrap.querySelectorAll('.plan-step')).forEach((row, i) => {
+        const txt = row.querySelector('.txt');
+        if (!txt || i >= planCurrent.steps.length) return;
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'plan-step-edit';
+        inp.value = planCurrent.steps[i].text || '';
+        inp.setAttribute('data-i', String(i));
+        inp.setAttribute('aria-label', '步骤 ' + (i + 1) + ' 文案');
+        txt.replaceWith(inp);
+      });
+      ed.textContent = '保存修改';
+      ed.classList.add('primary');
+      const first = wrap.querySelector('.plan-step-edit');
+      if (first) { try { first.focus(); } catch (e) {} }
+      return;
+    }
+    Array.from(wrap.querySelectorAll('.plan-step-edit')).forEach(inp => {
+      const i = parseInt(inp.getAttribute('data-i'), 10);
+      if (planCurrent.steps[i]) planCurrent.steps[i].text = inp.value;
+    });
+    wrap.classList.remove('editing');
+    ed.textContent = '编辑';
+    ed.classList.remove('primary');
+    if (typeof pcToast === 'function') pcToast('计划步骤已更新', 'ok');
+  };
   pcScrollChat();
   return card;
 }
@@ -227,6 +266,18 @@ async function planShow(plan) {
 function planCardApprove() {
   const card = planCardEl;
   if (!card || !planResolveApprove) return;
+  // R101 T02：若用户正处在「编辑计划」态就点批准，先把输入框里的文案落回对象，
+  // 否则批准的会是编辑前的旧文案（行为与界面不一致，且不会有任何报错）。
+  const stepsWrap = pcEl('planSteps');
+  if (stepsWrap && stepsWrap.classList.contains('editing') && planCurrent && Array.isArray(planCurrent.steps)) {
+    Array.from(stepsWrap.querySelectorAll('.plan-step-edit')).forEach(inp => {
+      const i = parseInt(inp.getAttribute('data-i'), 10);
+      if (planCurrent.steps[i]) planCurrent.steps[i].text = inp.value;
+    });
+    stepsWrap.classList.remove('editing');
+    const editBtn = pcEl('planEditBtn');
+    if (editBtn) { editBtn.textContent = '编辑'; editBtn.classList.remove('primary'); }
+  }
   // 前置守卫：批准后 planModeRun 会以任务文本走原发送链，若此刻有生成任务
   // 在途，sendMessage 入口的 isStreaming 检查会把这次发送静默吞掉（任务永不
   // 执行）。根因在 100-send 的裸 sendMessage；此处先行拦截并给用户人话。

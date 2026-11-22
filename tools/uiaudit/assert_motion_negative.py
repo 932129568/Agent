@@ -196,6 +196,13 @@ def m6_pause_hook(ctx):
     基线实测 N=26（注入 2 条后应为 28）。期望子串带 `26 条`，故：
       · 在未变异的仓库上跑 → 输出是「26 条」→ MISS（正确，不恒真）
       · 注入 2 条后跑     → 输出是「28 条」→ HIT
+
+    ⚠ 第二版也踩了一次，记下来：第二版的期望是 A6 **违规行**里的那句话
+    （`… 而 infinite 循环动画有 28 条`），而违规行只在 A6 为红时才打印。
+    A6 修好（hooks=1）之后该行彻底消失 ⇒ M6 永远 MISS，负控假红。
+    **教训：期望值不能挂在「只在失败时出现」的输出上。**
+    改用 A6 汇总行里的 `infinite-loops=N` —— 这行**无论红绿都打印**，
+    且注入 2 条后必然从 26 变 28，既能 HIT 又有区分力。
     """
     path = ctx['root'] / 'frontend/styles/legacy.css'
     append_text(path,
@@ -257,7 +264,7 @@ NEGATIVES = [
     ('M5', 'assert_motion.py', m5_bare_duration,
      '[A5] 违例: 裸时长 137ms', 'A5 时长取令牌'),
     ('M6', 'assert_dead_controls.py', m6_pause_hook,
-     'infinite 循环动画有 28 条', 'A6 隐藏窗口时循环动画可停（计数维度）'),
+     'infinite-loops=28', 'A6 隐藏窗口时循环动画可停（计数维度）'),
     ('M7', 'assert_dead_controls.py', m7_template_dead_button,
      '[A7] 假按钮: zzM7Probe @', 'A7 模板无死控件'),
     ('M8', 'assert_dead_controls.py', m8_js_dead_button,

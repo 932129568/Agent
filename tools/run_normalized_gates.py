@@ -60,7 +60,7 @@ GATES = [
     # 新增 18 个顶层符号、function_defs 1317→1335，故入库新基线 r100 并改比最新锚点；
     # 旧 r68/r89/r98/r99 原样保留（只增不删）。DOM id 三类锚点与 r99 逐项相等（479/54/124）。
     ('contract-diff', [PY, 'tools/contract_diff.py', '--compare',
-                       'deliverables/dev-plan/contract-baseline-r100.json'], True,
+                       'deliverables/dev-plan/contract-baseline-r101.json'], True,
      'r100 锚点零漂移（锚点链最新项）'),
     ('allowlist-ratchet', [NODE, 'tools/gen_allowlist.mjs', '--check'], True,
      '依赖棘轮 157'),

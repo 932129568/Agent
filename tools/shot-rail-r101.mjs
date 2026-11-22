@@ -85,6 +85,44 @@ try {
   reach = { error: String(e).slice(0, 200) }
 }
 
-console.log(JSON.stringify({ outDir, renderMode: info.renderMode, railFound: info.railFound, railButtons: info.railButtons, panels: info.panels, setWinClose: info.setWinClose, analyticsPanelExists: info.analyticsPanelExists, sessionsPanelExists: info.sessionsPanelExists, reachAfterClick: reach, errors: errors.slice(0, 8) }, null, 2))
+// ── A6 静置暂停：证明钩子真的生效，而不只是「CSS 里有条规则」 ────────────────
+// 静态判据 A6 只要看到 animation-play-state:paused 就算过；它无法区分「规则挂在
+// html[data-anim-paused] 上但没人切这个属性」。
+// ⚠ idle 状态下页面里真正在跑的 infinite 动画是 0 条（极光层 display:none），
+// 所以不能「找个现有元素测」—— 那会得到 running 而误判钩子失效。这里**注入**一个
+// 带 infinite 动画的元素，再切 document.hidden，断言它变 paused、切回后恢复 running。
+let ambPause = null
+try {
+  ambPause = await page.evaluate(async () => {
+    const probe = document.createElement('div')
+    probe.id = 'zzAmbProbe'
+    probe.style.cssText = 'position:fixed;left:-99px;top:-99px;width:8px;height:8px;'
+    document.body.appendChild(probe)
+    const st = document.createElement('style')
+    st.textContent = '@keyframes zzAmbSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}' +
+      '#zzAmbProbe{animation:zzAmbSpin 1s linear infinite}'
+    document.head.appendChild(st)
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const before = getComputedStyle(probe).animationPlayState
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    const attrOn = document.documentElement.hasAttribute('data-anim-paused')
+    const paused = getComputedStyle(probe).animationPlayState
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    document.dispatchEvent(new Event('visibilitychange'))
+    const attrOff = document.documentElement.hasAttribute('data-anim-paused')
+    const resumed = getComputedStyle(probe).animationPlayState
+    probe.remove(); st.remove()
+    return {
+      before, attrOn, paused, attrOff, resumed,
+      ok: before === 'running' && attrOn === true && paused === 'paused' &&
+          attrOff === false && resumed === 'running',
+    }
+  })
+} catch (e) {
+  ambPause = { error: String(e).slice(0, 200) }
+}
+
+console.log(JSON.stringify({ outDir, renderMode: info.renderMode, railFound: info.railFound, railButtons: info.railButtons, panels: info.panels, setWinClose: info.setWinClose, analyticsPanelExists: info.analyticsPanelExists, sessionsPanelExists: info.sessionsPanelExists, reachAfterClick: reach, ambPause, errors: errors.slice(0, 8) }, null, 2))
 
 await browser.close()

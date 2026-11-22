@@ -130,3 +130,40 @@ function createAnalyticalSpring(opts) {
     return { pos: pos, vel: vel, settled: settled };
   };
 }
+
+/* ================= A6 静置暂停：窗口不可见时停掉循环动画 =================
+ * 为什么需要：A6 判据实测「全仓 0 处 animation-play-state、0 处 animationPlayState」，
+ * 而 CSS 里有 26 条 infinite 声明。窗口在后台时这些循环照样按满帧跑，是耗电与风扇的
+ * 直接来源。
+ *
+ * ⚠ 第一版实现是错的，记下来：第一版把钩子只罩 [data-amb]（极光层）。运行时普查
+ * （tools/probe-anim-running-r101.mjs）证明 —— idle 状态下真正在跑的 infinite 动画
+ * 是 0 条，极光早在 base.css:16 就 display:none 了。也就是说那版钩子改的是一个
+ * 看不见的层，A6 会绿，但它一条动画都没暂停过。**判据绿了不等于机制有用。**
+ * 真正会跑的是生成期间才出现的 spinner / 流式脉冲，它们不在 [data-amb] 里。
+ *
+ * 为什么只认 document.hidden、不认 blur：切到别的窗口会触发 blur，但那时窗口仍然
+ * 可见，暂停会让画面「冻在半路」；只有 visibilitychange 且 document.hidden 才等价
+ * 于「用户真的看不到」。
+ *
+ * 为什么用 <html> 属性 + CSS 规则，而不是逐元素改 inline style：CSS 规则静态可读，
+ * A6 能扫到 animation-play-state:paused；inline style 是运行期副作用，静态判据看不见。
+ * 代价：A6 只要看到 CSS 命中就算过，删掉本段 JS 它不会变红 ⇒ 真实有效性由运行时
+ * 探针证明（tools/shot-rail-r101.mjs 的 ambPause 段会注入一个 infinite 元素再切
+ * document.hidden，断言它真的变成 paused）。
+ *
+ * 为什么不会卡住界面：只在 document.hidden 为真时生效（页面不可见）；一次性动画的
+ * animationend 有 MOTION.onAnimEnd 的 setTimeout 兜底，清理逻辑不依赖该事件。
+ */
+(() => {
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  const root = document.documentElement;
+  const apply = () => {
+    if (document.hidden) root.setAttribute('data-anim-paused', '');
+    else root.removeAttribute('data-anim-paused');
+  };
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', apply);
+  }
+  apply();
+})();

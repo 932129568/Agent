@@ -6,11 +6,11 @@
     "layers": {
       "legacyFrontend": {
         "files": 117,
-        "lines": 27417
+        "lines": 27505
       },
       "reactProduction": {
         "files": 16,
-        "lines": 2885
+        "lines": 2892
       },
       "normalizedApp": {
         "files": 46,
@@ -35,23 +35,23 @@
         "lines": 1182
       },
       "tools": {
-        "files": 68,
-        "lines": 13431
+        "files": 70,
+        "lines": 13755
       },
       "pytest": {
         "files": 88,
         "lines": 15968
       }
     },
-    "totalSourceLines": 47250,
+    "totalSourceLines": 47345,
     "readErrors": [],
-    "harborHtmlBytes": 3650734,
+    "harborHtmlBytes": 3654375,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {
     "modules": 117,
     "symbols": 1335,
-    "edges": 3244,
+    "edges": 3245,
     "sccCycles": 17,
     "cyclicSymbols": 104,
     "largestScc": 34,

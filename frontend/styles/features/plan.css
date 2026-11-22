@@ -13,6 +13,12 @@
 .plan-step{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;align-items:start;gap:8px;
   padding:9px 10px;border-radius:var(--radius-sm);background:var(--surface-2);line-height:1.55}
 .plan-step .txt{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+/* R101 T02 · 计划步骤就地编辑：把 .txt 换成 input 后必须撑满同一栏位，
+   否则 grid 的 minmax(0,1fr) 会让输入框缩成一小截，编辑体验与只读时完全错位。 */
+.plan-step .plan-step-edit{min-width:0;width:100%;font:inherit;color:inherit;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:2px 6px;transition:border-color var(--dur-comp) var(--ease-out-soft)}
+.plan-step .plan-step-edit:focus{outline:none;border-color:var(--primary)}
 .plan-step .st{width:14px;height:14px;margin-top:3px;border:1px solid var(--border-strong);border-radius:50%}
 .plan-step.done .st{border-color:var(--ok);background:var(--ok)}
 .plan-step.doing .st{border-color:var(--primary);background:var(--primary-soft)}

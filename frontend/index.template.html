@@ -77,7 +77,11 @@
   <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
   <symbol id="i-zip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l2 3h5a2 2 0 0 1 2 2z"/><path d="M10 12h4M12 12v3"/></symbol>
 </svg>
-<!-- E1 · 极光背景氛围层：只做背景，不遮挡内容（z-index:-1） -->
+<!-- E1 · 极光背景氛围层：只做背景，不遮挡内容（z-index:-1）
+     注：本层在 base.css:16 已被 display:none 停用（光井皮肤不需要它），
+     .au 的循环动画也随之不跑。窗口隐藏时的全局暂停由 core/motion.js 的
+     visibilitychange 钩子 + legacy.css 的 html[data-anim-paused] 规则负责，
+     不依赖本层是否存在。 -->
 <div id="auroraBg" aria-hidden="true">
   <div class="au au-1"></div>
   <div class="au au-2"></div>
@@ -642,7 +646,14 @@
           <div class="empty-guide" id="emptyGuide">
           <div class="eg-step"><b>1</b>选来源<button type="button" class="modal-btn" onclick="navGuidePickSource()">去选择<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
           <div class="eg-step"><b>2</b>填 Key<button type="button" class="modal-btn" onclick="navGuideFillKey()">去填写<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
-            <div class="eg-step"><b>3</b>发问<button type="button" class="modal-btn" disabled>在下方输入框</button></div>
+            <!-- R101 T02：第 3 步「发问」原本是一颗永久禁用的按钮控件。它不是一个
+                 动作，是一句说明 —— 渲染成按钮只会让用户去点一颗永远点不动的控件
+                 （A7 死控件）。改为纯文本提示，语义正确，也不再需要禁用样式兜底。
+                 ⚠ 本注释刻意不写具体标签字面量：A7 与契约正则会扫注释文本，
+                 写了就会凭空多出一条死控件（已实测踩过一次）。
+                 ⚠ 同一段空态在 sessions/controller.js 的 newSession() 里还有一份
+                 innerHTML 副本，两处必须保持一致，否则新会话后又会变回假按钮。 -->
+            <div class="eg-step"><b>3</b>发问<span class="eg-hint">在下方输入框</span></div>
           </div>
           <!-- 群聊协作（Beta, 2026-11-04）：多模型成员分工接力 -->
           <button type="button" class="group-beta-entry" onclick="groupWizardOpen()" title="配置多个大模型成员分工协作，靠交接文档接力完成任务">

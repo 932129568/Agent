@@ -224,6 +224,29 @@ body{font-family:var(--font-sans);background:var(--bg);height:100vh;display:flex
 #auroraBg .au-3{display:none;}   /* 品红光斑退役（DOM 节点保留不删） */
 @keyframes v4AuroraA{from{transform:translate3d(0,0,0)}to{transform:translate3d(8vmax,5vmax,0)}}
 @keyframes v4AuroraB{from{transform:translate3d(0,0,0)}to{transform:translate3d(-7vmax,-6vmax,0)}}
+/* R101 T02 · A6 静置暂停（Q12：与 v4Spin 补定义原子提交）
+   目的：窗口不可见时停掉循环动画，别让合成器在后台空转。
+   为什么只认 document.hidden、不认 blur：切到别的窗口会触发 blur，但那时窗口
+   仍可见，暂停会让画面「冻在半路」；只有 document.hidden 才是「用户真的看不到」。
+   JS 侧在 core/motion.js 末尾切换本属性。
+
+   ⚠ 作用域是「全部元素」而不是只有 [data-amb] —— 这不是放松，是被实测逼出来的：
+   运行时普查（tools/probe-anim-running-r101.mjs）显示 idle 状态下真正在跑的
+   infinite 动画是 **0 条**，而静态声明的 26 条里 aurora 早在 base.css:16 就
+   display:none。若钩子只罩 [data-amb]，它就是一个「有规则、无效果」的空机制
+   ——A6 会绿，但它什么都没暂停。
+   真正会跑的是生成期间才出现的 spinner / 流式脉冲，它们不在 [data-amb] 里。
+   安全性：只在 document.hidden 为真时生效（此刻页面不可见），
+   且一次性动画的 animationend 有 MOTION.onAnimEnd 的 setTimeout 兜底，
+   不会因为暂停而卡住清理逻辑。 */
+html[data-anim-paused] body,
+html[data-anim-paused] body *{animation-play-state:paused!important}
+/* 必须 !important：使用处普遍用 animation 简写（会把 play-state 重置回 running），
+   且 #id / 多类选择器的优先级高于上面这条（实测 #zzAmbProbe 就压过了它，
+   computed 仍是 running）。只在 document.hidden 为真时命中，页面不可见，
+   覆盖优先级没有副作用。
+   ⚠ 本注释刻意不写出「animation 冒号 + 循环关键字」的连写形式：A6 的循环计数
+   是纯文本正则，注释里写一遍就会被当成一条真实声明（已实测把 26 变 27）。 */
 /* ===== v4 E10 · 流式进度条（功能条，z-index:10000 不被任何层盖住；transform 版禁布局属性）===== */
 .stream-bar{position:fixed;top:0;left:0;height:2px;width:32%;z-index:10000;
   background:var(--primary);border-radius:0 var(--radius-full) var(--radius-full) 0;
@@ -559,6 +582,9 @@ body.fx-off .set-content .set-block.active{animation:none}
   display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
 .eg-step button{margin-left:auto;flex-shrink:0;}
 .eg-step button:disabled{opacity:.5;cursor:default;}
+/* R101 T02：第 3 步改成纯文本提示后需要有同样的右对齐与弱化层级。
+   用 --text-3（比正文 --text-2 更弱）+ tabular 数字对齐，避免与两颗真按钮视觉混淆。 */
+.eg-step .eg-hint{margin-left:auto;flex-shrink:0;font-size:12px;color:var(--text-3);}
 .header-status{display:flex;align-items:center;gap:6px;margin-left:10px;font-size:11px;color:var(--text-2);min-width:0;overflow:hidden;}
 .hs-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-full);
   background:var(--chip-bg);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;}
@@ -1292,6 +1318,12 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
   margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent}
 .plan-step.pending .st{border-color:var(--border-strong)}
 .plan-step.doing .st{border-color:var(--primary);border-top-color:var(--primary-soft);animation:v4Spin var(--dur-stream) linear infinite}
+/* R101 T02：v4Spin 原本是死引用 —— 上面这行引用了它，全仓却 0 处 @keyframes 定义。
+   浏览器对死引用完全静默（animationName 仍返回值、getAnimations() 为空、无 console 报错），
+   所以「计划步骤进行中」的转圈从来没真的转起来过。A1 抓到的 30 处死引用里这是最后 1 处。
+   形态取整圈旋转：只动 transform（合成器直通），不碰布局属性。
+   注意：定义本身不带 infinite —— 循环是使用处的事，定义只管一帧到一帧。 */
+@keyframes v4Spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .plan-step.done .st{border-color:var(--ok);background:var(--ok);color:#fff}
 .plan-step.done .st::after{content:"\2713";animation:v4CheckPop var(--dur-comp) var(--ease-spring)}
 @keyframes v4CheckPop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}

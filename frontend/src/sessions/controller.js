@@ -307,7 +307,7 @@ function newSession() {
       <div class="empty-guide" id="emptyGuide">
         <div class="eg-step"><b>1</b>选来源<button type="button" class="modal-btn" onclick="navGuidePickSource()">去选择<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
         <div class="eg-step"><b>2</b>填 Key<button type="button" class="modal-btn" onclick="navGuideFillKey()">去填写<svg class="ui-icon ui-icon-16"><use href="#i-arrow"/></svg></button></div>
-        <div class="eg-step"><b>3</b>发问<button type="button" class="modal-btn" disabled>在下方输入框</button></div>
+        <div class="eg-step"><b>3</b>发问<span class="eg-hint">在下方输入框</span></div>
       </div>
       <button type="button" class="group-beta-entry" onclick="groupWizardOpen()" title="配置多个大模型成员分工协作，靠交接文档接力完成任务">
         👥 群聊协作 · 多模型接力 <span class="gb-beta">Beta</span>
