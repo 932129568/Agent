@@ -163,11 +163,18 @@ check('壳层是 classic script：无顶层 export / import', () => {
   assert.ok(!/^\s*import\s/m.test(shellJs), 'shell 含 import —— 同上');
 });
 
-check('壳层走 manifest.prebuilt 内联，不占 117 scripts 名额', () => {
+check('壳层走 manifest.prebuilt 内联，不占 scripts 名额', () => {
   const pre = (manifest.prebuilt || []).map(e => e.path);
   assert.ok(pre.includes('frontend/skin/lightwellShell.js'),
     'manifest.prebuilt 未登记 lightwellShell.js');
-  assert.equal(manifest.scripts.length, 117, `manifest.scripts 应为 117，实为 ${manifest.scripts.length}`);
+  // 2026-11-23：原断言是 `scripts.length === 117`。那是个**代理值**，不是意图本身——
+  // 意图是「壳层不进 scripts，否则会被当普通模块重复内联」。
+  // T03 新增两个真实模块（execution-trace / context-dock）后 scripts 变成 119，
+  // 该断言红在数字上而非意图上。故改为直接验意图：壳层不得出现在 scripts 路径里。
+  // 保留 styles === 14 的数值锁（样式数确实应稳定；变动时需要显式评审）。
+  assert.ok(!manifest.scripts.some(e => String(e.path).endsWith('skin/lightwellShell.js')),
+    'lightwellShell.js 不应出现在 manifest.scripts（应只走 prebuilt）');
+  assert.ok(manifest.scripts.length > 0, 'manifest.scripts 不应为空');
   assert.equal(manifest.styles.length, 14, `manifest.styles 应为 14，实为 ${manifest.styles.length}`);
 });
 

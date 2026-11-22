@@ -1103,6 +1103,20 @@
       ]
     },
     {
+      "path": "frontend/src/agent/execution-trace.js",
+      "provides": [
+        "EXEC_TRACE",
+        "traceReset",
+        "traceAddToolRound",
+        "traceSnapshot",
+        "traceRenderHtml",
+        "traceRenderInto",
+        "_traceShortName",
+        "_traceVerdict"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/agent/run-controller-utils.js",
       "provides": [
         "setSendButtonVisual",
@@ -1698,6 +1712,21 @@
       "requires": [
         "_modalRoot"
       ]
+    },
+    {
+      "path": "frontend/src/shell/context-dock.js",
+      "provides": [
+        "CONTEXT_DOCK",
+        "_dockFn",
+        "_dockBuild",
+        "_dockSession",
+        "_dockText",
+        "contextDockRefresh",
+        "contextDockOpen",
+        "contextDockClose",
+        "contextDockToggle"
+      ],
+      "requires": []
     },
     {
       "path": "frontend/src/chat/navigation.js",

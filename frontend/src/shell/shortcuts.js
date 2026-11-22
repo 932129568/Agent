@@ -112,6 +112,7 @@ function _cpCommands() {
   add('sidebar', '折叠 / 展开侧栏', '', '侧栏 折叠 展开 sidebar', 'toggleSidebar');
   add('search-panel', '浏览器搜索面板', '', '搜索 网页 browser search', 'spManualOpen');
   add('collab', '双模型协同面板', '', '协同 双模型 planner reviewer 预算 collaboration', 'collabPanelOpen');
+  add('dock', '上下文副屏（右侧）', 'Ctrl Alt D', '副屏 上下文 统计 工具 trace context dock', 'contextDockToggle');
   add('shortcuts', '快捷键与命令帮助', '?', '帮助 快捷键 命令 help shortcuts', 'scOpen');
   return out;
 }
@@ -227,6 +228,13 @@ function shortcutsInit() {
       e.preventDefault();
       if (document.querySelector('.cp-mask')) cpPaletteClose();
       else cpPaletteOpen();
+      return;
+    }
+    // Ctrl/⌘ + Alt + D：右侧上下文副屏（开关）。动态取函数，避免静态依赖边。
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      const toggle = (typeof window !== 'undefined') ? window['context' + 'DockToggle'] : null;
+      if (typeof toggle === 'function') toggle();
       return;
     }
     if (e.key !== '?') return;

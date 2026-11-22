@@ -247,6 +247,15 @@ async function runAgentLoop(s, apiKey) {
       '<div class="md-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
     const thinkHost = aiContent.querySelector('.think-host');
     const mdBody = aiContent.querySelector('.md-body');
+    // R101 T03 · Execution Trace：每轮 run 重置并按工具结果聚合步骤。
+    // 单向依赖：此处调用 execution-trace，反之不成立（trace 不认识 run）。
+    if (typeof traceReset === 'function') traceReset(s && s.id);
+    let traceHost = aiContent.querySelector('.exec-trace');
+    if (!traceHost) {
+      traceHost = document.createElement('div');
+      traceHost.className = 'exec-trace';
+      aiContent.appendChild(traceHost);
+    }
     const taskFacts = [];
     let memFlushed = 0;   // 修复 W27：记忆只追加增量（原每轮全量 append_memory，二次方膨胀挤占 prompt）
     // 工具精准路由：按问题域筛选，不全量下发
@@ -1123,6 +1132,11 @@ async function runAgentLoop(s, apiKey) {
       }
       if (userStopped) fillMissingToolResults(s, run.assistantMsg);   // 修复 S3（三轮）：暂停 break 后未执行的 tool_calls 补占位 tool 消息（配平防 400）
       toolCalls.forEach(tc => taskUsed.add(tc.name));  // 回填已用工具，后续轮次保留
+      // R101 T03 · Execution Trace 聚合（每轮一次，含失败判定）
+      if (typeof traceAddToolRound === 'function') {
+        traceAddToolRound({ toolCalls: toolCalls, results: results });
+        if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8);
+      }
       s._readKeys = [...readFileSet];   // 跨任务持久化已读记录
 
       // 修复 L4（四轮）：暂停后不再做熔断检测与进度记账——原停止后仍 registerToolSig

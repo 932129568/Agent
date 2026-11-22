@@ -91,35 +91,132 @@
     }
   ],
   "batches": [
-    { "id": "B0", "domains": ["shell"], "moduleCount": 13, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "10 区域外壳由 layout/ 接管，导航/弹窗/市场外壳行为等价" },
-    { "id": "B1", "domains": ["chat"], "moduleCount": 5, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "L3 端到端发消息 + 流式渲染 + 发送按钮态" },
-    { "id": "B2", "domains": ["sessions"], "moduleCount": 6, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "会话切换 / 并行 run 隔离 / 项目空间" },
-    { "id": "B3", "domains": ["agent"], "moduleCount": 18, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "60-agent 回归全绿：工具循环 / 熔断 / 恢复横幅 / 预算" },
-    { "id": "B4", "domains": ["group"], "moduleCount": 4, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "名册接力 / 群文件 / 实时气泡 / 暂停保留正文" },
-    { "id": "B5", "domains": ["settings"], "moduleCount": 11, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "端点 / 护栏 / 工作目录配置持久化" },
-    { "id": "B6", "domains": ["expert", "generative", "planning"], "moduleCount": 24, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "专家一步生效 / 生成式 UI / 计划续跑" },
-    { "id": "B7", "domains": ["analytics", "search", "integrations", "workspace", "providers"], "moduleCount": 14, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "面板回归 / 本地模型流 / MCP 接入" },
-    { "id": "B8", "domains": ["core", "components"], "moduleCount": 11, "status": "pending",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "共享层下沉完成，全量契约零漂移" },
-    { "id": "B9", "domains": ["collaboration"], "moduleCount": 11, "status": "frozen-pending-product-decision",
-      "oldPins": [], "newPins": [], "domWritePoints": 0,
-      "acceptance": "先过产品决策（decisions-r67.md §1.3），再按整批姿势处理" }
+    {
+      "id": "B0",
+      "domains": [
+        "shell"
+      ],
+      "moduleCount": 14,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "10 区域外壳由 layout/ 接管，导航/弹窗/市场外壳行为等价"
+    },
+    {
+      "id": "B1",
+      "domains": [
+        "chat"
+      ],
+      "moduleCount": 5,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "L3 端到端发消息 + 流式渲染 + 发送按钮态"
+    },
+    {
+      "id": "B2",
+      "domains": [
+        "sessions"
+      ],
+      "moduleCount": 6,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "会话切换 / 并行 run 隔离 / 项目空间"
+    },
+    {
+      "id": "B3",
+      "domains": [
+        "agent"
+      ],
+      "moduleCount": 19,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "60-agent 回归全绿：工具循环 / 熔断 / 恢复横幅 / 预算"
+    },
+    {
+      "id": "B4",
+      "domains": [
+        "group"
+      ],
+      "moduleCount": 4,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "名册接力 / 群文件 / 实时气泡 / 暂停保留正文"
+    },
+    {
+      "id": "B5",
+      "domains": [
+        "settings"
+      ],
+      "moduleCount": 11,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "端点 / 护栏 / 工作目录配置持久化"
+    },
+    {
+      "id": "B6",
+      "domains": [
+        "expert",
+        "generative",
+        "planning"
+      ],
+      "moduleCount": 24,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "专家一步生效 / 生成式 UI / 计划续跑"
+    },
+    {
+      "id": "B7",
+      "domains": [
+        "analytics",
+        "search",
+        "integrations",
+        "workspace",
+        "providers"
+      ],
+      "moduleCount": 14,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "面板回归 / 本地模型流 / MCP 接入"
+    },
+    {
+      "id": "B8",
+      "domains": [
+        "core",
+        "components"
+      ],
+      "moduleCount": 11,
+      "status": "pending",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "共享层下沉完成，全量契约零漂移"
+    },
+    {
+      "id": "B9",
+      "domains": [
+        "collaboration"
+      ],
+      "moduleCount": 11,
+      "status": "frozen-pending-product-decision",
+      "oldPins": [],
+      "newPins": [],
+      "domWritePoints": 0,
+      "acceptance": "先过产品决策（decisions-r67.md §1.3），再按整批姿势处理"
+    }
   ]
 }

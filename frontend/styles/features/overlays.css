@@ -62,3 +62,19 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
 .collab-card{width:min(680px,calc(100vw - 24px));max-height:calc(100vh - 12vh);overflow:auto}
 .collab-card .sub{margin:4px 0 12px}
 .collab-host .set-block{border:0;padding:0;background:transparent}
+
+/* ===== R101 T03 · 右侧上下文副屏 =====
+   固定右上、宽度 260px，仅在打开时占位（不改主布局栅格，避免触发主区重排）。
+   层级 400：高于应用内容，低于命令面板(500)/引导(600)。 */
+.ctx-dock{position:fixed;top:56px;right:12px;width:260px;max-height:calc(100vh - 88px);z-index:400;
+  display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--card-bg);box-shadow:var(--shadow-lg);overflow:hidden}
+.cd-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border)}
+.cd-title{font-size:12px;font-weight:600;color:var(--text)}
+.cd-close{margin-left:auto;background:transparent;border:0;font-size:16px;line-height:1;color:var(--text-3);cursor:pointer}
+.cd-close:hover{color:var(--text)}
+.cd-body{padding:8px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.cd-sec{display:flex;align-items:baseline;gap:8px;min-width:0}
+.cd-k{flex-shrink:0;width:74px;font-size:11px;color:var(--text-3)}
+.cd-v{min-width:0;flex:1;font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cd-foot{padding:7px 12px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-3)}
