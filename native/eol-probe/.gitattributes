@@ -1,0 +1,6 @@
+# These samples exist to be byte-exact: the whole point of the probe is which
+# bytes cmd.exe sees, so git must not touch line endings or encodings.
+# Without -text, core.autocrlf=true rewrites every .bat to LF-in-index and the
+# LF/CRLF distinction disappears -- the two samples would collapse to one blob.
+*.bat -text
+run_probe.py -text
