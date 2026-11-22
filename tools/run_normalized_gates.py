@@ -36,6 +36,15 @@ GATES = [
     # 首位：先生成 gate-coverage 产物，供 arch-contract 读取（避免 CI 首跑顺序依赖）
     ('gate-coverage', [PY, 'tools/gate_coverage.py'], True,
      'canonical 门禁清单覆盖率（非代码覆盖率）'),
+    # 顺序依赖：arch-contract 会读 scc-trend-r69.json 与依赖冻结清单，
+    # 而这两个文件分别由 scc-ratchet / allowlist-ratchet 写出。原顺序把两条棘轮
+    # 排在其后 ⇒ arch-contract 判的是**上一轮遗留**的状态（本轮实测：scc 修好后
+    # 单独跑 arch-contract 82/82，门禁内仍报 81/82）。故前移到 arch-contract 之前。
+    ('scc-ratchet', [PY, 'tools/scc_ratchet.py'], True,
+     'SCC 单调下降'),
+    ('allowlist-ratchet', [NODE, 'tools/gen_allowlist.mjs', '--check'], True,
+     '依赖棘轮 157'),
+
     ('post-deletion-audit', [PY, 'tools/post_deletion_audit.py'], True,
      '删除后残留体检（运行时配置类真问题判红，文档漂移登记不阻塞）'),
     ('arch-contract', [NODE, 'frontend/app/tests/arch-contract.mjs'], True,
@@ -60,12 +69,8 @@ GATES = [
     # 新增 18 个顶层符号、function_defs 1317→1335，故入库新基线 r100 并改比最新锚点；
     # 旧 r68/r89/r98/r99 原样保留（只增不删）。DOM id 三类锚点与 r99 逐项相等（479/54/124）。
     ('contract-diff', [PY, 'tools/contract_diff.py', '--compare',
-                       'deliverables/dev-plan/contract-baseline-r101.json'], True,
+                       'deliverables/dev-plan/contract-baseline-r102.json'], True,
      'r100 锚点零漂移（锚点链最新项）'),
-    ('allowlist-ratchet', [NODE, 'tools/gen_allowlist.mjs', '--check'], True,
-     '依赖棘轮 157'),
-    ('scc-ratchet', [PY, 'tools/scc_ratchet.py'], True,
-     'SCC 单调下降'),
     ('type-annotation', [PY, 'tools/type_annotation_audit.py'], True,
      'JSDoc 类型契约覆盖率（非静态类型检查）'),
     ('arch-assessment', [PY, 'tools/arch_assessment.py'], True,

@@ -175,14 +175,80 @@ async function collaborationRecover() {
     return { status: 'recover_failed', error: { code: 'RECOVER_ERROR', message: String(error && error.message || error) } };
   }
 }
+/* R101 T02 · 双模型协同独立浮层
+ * 为什么要搬：这块配置此前被 collaborationUiInit() 追加进 #hybridBlock，
+ * 而 #hybridBlock 在**设置窗内**（工作区 → 模型路由）⇒ 用户要改协同预算/上限
+ * 必须先进设置再翻一层，入口与「运行协同」按钮的实际使用频率完全不匹配。
+ *
+ * 实现约束（都是踩过的坑）：
+ *  ① 浮层在 JS 里建，不写进模板：模板里新增 id 会进 contract_diff 的 dom_ids，
+ *     新增 onclick= 会进 onclick_fns —— 两者都算契约漂移，而这块 UI 不需要。
+ *  ② 不用 hidden 属性控制显隐：.modal-mask 带 display:flex，类选择器优先级高于
+ *     浏览器默认的 [hidden]{display:none}，hidden 会失效（浮层一直在屏上）。
+ *     用 inline style.display 显式切换。
+ *  ③ 块内所有 id 原样保留（collaborationEnabled / …Budget / …Status 等），
+ *     ui.js 其余部分全靠 getElementById，不做任何重命名。
+ */
+function _collabEnsureHost() {
+  let mask = document.getElementById('collabMask');
+  if (mask) return mask.querySelector('.collab-host');
+  mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.id = 'collabMask';
+  mask.style.display = 'none';
+  const card = document.createElement('div');
+  card.className = 'modal-card collab-card';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.innerHTML =
+    '<h3>双模型协同</h3>' +
+    '<div class="sub">planner/reviewer/finalizer 走云端，worker/reviser 走本地；保存配置不会调用模型。</div>' +
+    '<div class="collab-host"></div>' +
+    '<div class="modal-acts"><button type="button" class="modal-btn" data-act="close">关闭</button></div>';
+  mask.appendChild(card);
+  document.body.appendChild(mask);
+  mask.addEventListener('click', e => { if (e.target === mask) collabPanelClose(); });
+  const btn = card.querySelector('[data-act="close"]');
+  if (btn) btn.onclick = collabPanelClose;
+  mask.addEventListener('keydown', e => { if (e.key === 'Escape') collabPanelClose(); });
+  return card.querySelector('.collab-host');
+}
+
+function collabPanelOpen() {
+  if (typeof document === 'undefined') return;
+  _collabEnsureHost();
+  // 不在这里调 collaborationUiInit：hybrid.js 的 hybridInit 已在启动时调过它，
+  // 而这里再调会形成 collabPanelOpen ↔ collaborationUiInit 的符号级环
+  // （SCC 棘轮 17/104 零余量，实测被推到 19/109）。init 自身幂等，无需兜底。
+  const mask = document.getElementById('collabMask');
+  if (mask) mask.style.display = 'flex';
+}
+
+function collabPanelClose() {
+  const mask = document.getElementById('collabMask');
+  if (mask) mask.style.display = 'none';
+}
+
 function collaborationUiInit() {
   if (collaborationUiState.initialized || typeof document === 'undefined') return;
   const block = collaborationUiEl('collaborationBlock');
   if (!block) return;
   collaborationUiState.initialized = true;
-  const hybrid = collaborationUiEl('hybridBlock');
-  if (hybrid && block.parentNode !== hybrid) hybrid.appendChild(block);
+  // R101 T02：宿主从 #hybridBlock（设置窗内）改为独立浮层。
+  const host = _collabEnsureHost();
+  if (host && block.parentNode !== host) host.appendChild(block);
   block.hidden = false;
+  // 设置里留一个入口，否则搬走后就没人找得到了（JS 建，不用 onclick 字面量）。
+  const hybrid = collaborationUiEl('hybridBlock');
+  if (hybrid && !hybrid.querySelector('[data-act="open-collab"]')) {
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'modal-btn';
+    open.setAttribute('data-act', 'open-collab');
+    open.textContent = '打开双模型协同面板';
+    open.onclick = () => { if (typeof collabPanelOpen === 'function') collabPanelOpen(); };
+    hybrid.appendChild(open);
+  }
   const on = (id, event, handler) => { const element = collaborationUiEl(id); if (element) element.addEventListener(event, handler); };
   on('collaborationSaveBtn', 'click', () => collaborationUiSave());
   on('collaborationPreviewBtn', 'click', collaborationUiPreview);

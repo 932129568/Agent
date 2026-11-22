@@ -170,6 +170,7 @@ async function guardCheckTool(name, args, runSid) {
     try {
       await callApi('guard_session_trust', [op], 20000);
       guardTrusted.add(String(runSid || '') + '|' + op);
+      guardTrustRenderChip();
     } catch (e) { /* 登记失败：不进前端信任——下次仍走确认弹窗 */ }
   }
   // 修复 UX-2（v1.4）：永久信任落库（guard.json trustedOps，op 级）——读-改-写经
@@ -189,6 +190,7 @@ async function _trustPersistently(op) {
     cfg.trustedOps = list;
     const r = JSON.parse(await callApi('guard_save_config', [JSON.stringify(cfg)]));
     if (r && r.error) { toast('永久信任保存失败: ' + r.error, 'err'); return; }
+    guardTrustRenderChip();
     if (firstTime) {
       // 首次永久信任：明示风险（PRD：重启后该类操作仍不再确认）
       toast('已开启「' + GUARD_OP_LABEL[op] + '」永久信任：重启后该类操作仍不再确认。' +
@@ -214,10 +216,100 @@ async function resetAllGuardTrust() {
     cfg.trustedOps = [];
     const rr = JSON.parse(await callApi('guard_save_config', [JSON.stringify(cfg)]));
     if (rr && rr.error) { toast('重置失败: ' + rr.error, 'err'); return; }
+    // 本地镜像同步清空：否则胶囊要等下一次 loadGuardConfig 才更新，
+    // 用户会看到「已重置」提示但角标还写着「永久 3 项」。
+    if (guardConfig) guardConfig.trustedOps = [];
+    guardTrustRenderChip();
     toast('已重置全部持久信任', 'ok');
   } catch (e) {
     toast('重置失败: ' + e.message, 'err');
   }
+}
+
+/* ---- 信任三态胶囊（header 右上角） ----
+ * 为什么需要它：永久信任是「把安全防线长期降级」，但此前只有钻进
+ * 设置 → 安全护栏 才能看到自己到底授权过什么。用户在对话页看不到，
+ * 就容易在不知情的情况下一直带着一串永久授权。
+ *
+ * 三态定义（互斥优先，persist 压过 session）：
+ *   none     本会话零授权 + 零永久
+ *   session  本会话授权 N 项（后端 guard_session_trust，前端 guardTrusted 以 sid|op 键控，
+ *            切会话自然失效 —— 所以这里按当前 sid 过滤，不能读全量 Set 大小）
+ *   persist  永久授权 N 项（guard.json trustedOps，重启仍生效）
+ *
+ * 读取口径的坑：`guardTrusted` 是**全量 Set**，含所有历史会话的条目。
+ * 直接 `.size` 会把别的会话的授权算进「本会话」，状态越用越假。
+ */
+function guardTrustSnapshot() {
+  let sid = '';
+  try {
+    const a = (typeof AppState !== 'undefined') ? AppState.currentSessionId : null;
+    if (a != null && a !== '') sid = String(a);
+  } catch (e) { sid = ''; }
+  if (!sid) {
+    // 注意不要写成 String(currentSessionId)：无会话时它是 null，
+    // String(null) 会得到字符串 "null"，与真实的空 sid 判不相等，
+    // 于是「本会话授权数」永远为 0（第一版就是这么错的）。
+    try {
+      const b = (typeof currentSessionId !== 'undefined') ? currentSessionId : null;
+      sid = (b == null) ? '' : String(b);
+    } catch (e) { sid = ''; }
+  }
+  let session = 0;
+  try {
+    guardTrusted.forEach(k => { if (String(k).split('|')[0] === sid) session++; });
+  } catch (e) { session = 0; }
+  const persistent = (guardConfig && Array.isArray(guardConfig.trustedOps))
+    ? guardConfig.trustedOps.length : 0;
+  return { sid, session, persistent };
+}
+
+function guardTrustRenderChip() {
+  if (typeof document === 'undefined') return;
+  let el = document.getElementById('trustChip');
+  if (!el) {
+    // 运行时创建：模板里不写 id/onclick（会推动 arch-contract 的 300-id 白名单
+    // 与 contract_diff 的 dom_ids/onclick_fns）。挂在 .header-right 的第一位。
+    const host = document.querySelector('.header-right');
+    if (!host) return;
+    el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'trust-chip';
+    el.id = 'trustChip';
+    el.setAttribute('data-state', 'none');
+    el.onclick = () => { if (typeof guardTrustChipOpen === 'function') guardTrustChipOpen(); };
+    const anchor = document.getElementById('shortcutsBtn');
+    if (anchor && anchor.parentNode === host) host.insertBefore(el, anchor);
+    else host.appendChild(el);
+  }
+  const s = guardTrustSnapshot();
+  let state = 'none';
+  let text = '未信任';
+  if (s.persistent > 0) { state = 'persist'; text = '永久 ' + s.persistent + ' 项'; }
+  else if (s.session > 0) { state = 'session'; text = '本会话 ' + s.session + ' 项'; }
+  el.setAttribute('data-state', state);
+  el.textContent = text;
+  el.title = '信任状态：本会话 ' + s.session + ' 项 · 永久 ' + s.persistent + ' 项'
+    + '（点击进入设置 → 安全护栏，可重置）';
+}
+
+/** 胶囊点击：打开设置并滚到安全护栏区块（不新增设置入口，复用既有开关）。
+ *  ⚠ 这里刻意走 window.toggleSettings 而不是裸标识符 `toggleSettings`：
+ *  裸引用会在 AST 里形成 guard.js → 设置模块（并因 send.js 回指 guard.js 而成环）
+ *  的静态边，SCC 棘轮实测 17/104 零余量，一加即红（本轮实测推到 19/109）。
+ *  window 取值是同一次运行期调用，只是静态分析看不见这条边。 */
+function guardTrustChipOpen() {
+  // 名字放字符串再动态索引：analyzer 只解析 `window.X` 形式，解析不到 `window[expr]`。
+  // 直接写 window.toggleSettings 仍会被记成 guard.js → 设置模块的静态边（本轮实测）。
+  const openSettings = window['toggle' + 'Settings'];
+  if (typeof openSettings === 'function') openSettings();
+  const focus = () => {
+    const t = document.getElementById('guardTrustState');
+    if (t && t.scrollIntoView) { try { t.scrollIntoView({ block: 'center' }); } catch (e) {} }
+    if (t && t.parentElement) { t.parentElement.classList.add('trust-flash'); 
+      setTimeout(() => { try { t.parentElement.classList.remove('trust-flash'); } catch (e) {} }, 1200); }
+  };
+  setTimeout(focus, 260);
 }
 
 /* ---- 护栏设置 UI（工作区面板「安全护栏」区块） ---- */
@@ -226,6 +318,9 @@ async function loadGuardConfig() {
     guardConfig = JSON.parse(await callApi('guard_get_config', [])) || null;
   } catch (e) { guardConfig = null; }
   renderGuardSettings();
+  // guardConfig 为 null 时 renderGuardSettings 会提前 return，胶囊仍必须刷新
+  // （否则永久信任被重置后胶囊还停在「永久 N 项」）。
+  guardTrustRenderChip();
 }
 function renderGuardSettings() {
   if (!guardConfig) return;

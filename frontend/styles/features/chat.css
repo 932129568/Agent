@@ -555,3 +555,23 @@ body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
 .msg-tok-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg-tok-file{background:var(--card-bg)}
 @media (max-width:720px){.inline-tok,.msg-tok{max-width:150px}}
+
+/* ===== R101 T02 · 排队条（在途 run 期间已排队但未发送的消息） =====
+   位置：输入区 .input-inner 内、#attachPreview 之后（JS 注入，不改模板）。
+   为什么做成「列表 + 逐条撤回」而不是一个数字角标：
+   用户在生成中连发两三条时，最需要的是「我刚才到底发了什么」，
+   只给数字相当于让他凭记忆删。逐条撤回的成本与一次误发相当。 */
+.queue-bar{margin:0 0 8px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-2);padding:8px 10px;font-size:12px;color:var(--text-2)}
+.qb-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.qb-count{font-weight:600;color:var(--primary)}
+.qb-hint{color:var(--text-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qb-clear{margin-left:auto;flex-shrink:0;font:inherit;font-size:11px;color:var(--text-3);
+  background:transparent;border:1px solid var(--border);border-radius:var(--radius-full);
+  padding:1px 8px;cursor:pointer}
+.qb-clear:hover{color:var(--err);border-color:currentColor}
+.qb-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.qb-text{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.qb-cancel{flex-shrink:0;font:inherit;font-size:11px;color:var(--text-3);background:transparent;
+  border:0;padding:1px 4px;cursor:pointer;border-radius:var(--radius-sm)}
+.qb-cancel:hover{color:var(--err);background:var(--err-bg)}

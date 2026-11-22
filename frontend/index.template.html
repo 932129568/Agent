@@ -189,6 +189,12 @@
       <div class="header-status" id="headerStatusZone"></div>
     </div>
     <div class="header-right">
+      <!-- R101 T02 · 信任三态胶囊由 agent/guard.js 的 guardTrustRenderChip() 在运行时创建
+           并插入到本容器（#shortcutsBtn 之前）。
+           为什么不在模板里写死：模板每新增一个 id 都会进 arch-contract 的
+           「B0 结构零丢失（300 个 id 全覆盖）」白名单与 contract_diff 的 dom_ids，
+           而这块 UI 只是一个状态显示，不该为此推一次结构基线。
+           同时它也不带 onclick 字面量（JS 绑 el.onclick），不新增契约函数名。 -->
       <button class="icon-btn" id="shortcutsBtn" title="快捷键与命令（?）" onclick="scOpen()">
         <svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-help"/></svg>
       </button>

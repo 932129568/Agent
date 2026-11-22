@@ -35,6 +35,8 @@
     "requiredTrue": 11,
     "checkedPaths": [
       "tools/gate_coverage.py",
+      "tools/scc_ratchet.py",
+      "tools/gen_allowlist.mjs",
       "tools/post_deletion_audit.py",
       "frontend/app/tests/arch-contract.mjs",
       "frontend/app/tests/unit.test.mjs",
@@ -42,9 +44,7 @@
       "frontend/app/tests/smoke-render.mjs",
       "tools/contract_golden_replay.py",
       "tools/contract_diff.py",
-      "deliverables/dev-plan/contract-baseline-r101.json",
-      "tools/gen_allowlist.mjs",
-      "tools/scc_ratchet.py",
+      "deliverables/dev-plan/contract-baseline-r102.json",
       "tools/type_annotation_audit.py",
       "tools/arch_assessment.py",
       "deliverables/design/check_contract.py"

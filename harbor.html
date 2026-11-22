@@ -2860,6 +2860,15 @@ color:var(--primary);box-shadow:none;animation:none;font-family:var(--font-displ
 backdrop-filter:none;-webkit-backdrop-filter:none}
 .header-title{max-width:min(36vw,460px);font-family:var(--font-display);font-size:15px;font-weight:500;letter-spacing:0}
 .header-right{gap:8px}
+.trust-chip{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:var(--radius-full);
+font-size:11px;font-weight:500;line-height:1;white-space:nowrap;cursor:pointer;
+border:1px solid var(--border);background:var(--surface-2);color:var(--text-3);
+transition:border-color var(--dur-comp) var(--ease-out-soft),color var(--dur-comp) var(--ease-out-soft),
+background-color var(--dur-comp) var(--ease-out-soft)}
+.trust-chip:hover{border-color:var(--border-strong);color:var(--text-2)}
+.trust-chip[data-state="session"]{border-color:transparent;background:var(--primary-soft);color:var(--primary)}
+.trust-chip[data-state="persist"]{border-color:transparent;background:var(--warn-bg);color:var(--warn)}
+@media (max-width:720px){.trust-chip{display:none}}
 .main{background:var(--main-bg)}
 .panel-head{padding:20px var(--panel-pad) 12px;align-items:center;background:var(--main-bg)}
 .panel-title{font-size:var(--fs-display);font-weight:500;letter-spacing:-.02em}
@@ -3392,6 +3401,20 @@ color:var(--text-2);font-size:10px;line-height:1.6}
 .msg-tok-lbl{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg-tok-file{background:var(--card-bg)}
 @media (max-width:720px){.inline-tok,.msg-tok{max-width:150px}}
+.queue-bar{margin:0 0 8px;border:1px solid var(--border);border-radius:var(--radius-md);
+background:var(--surface-2);padding:8px 10px;font-size:12px;color:var(--text-2)}
+.qb-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.qb-count{font-weight:600;color:var(--primary)}
+.qb-hint{color:var(--text-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qb-clear{margin-left:auto;flex-shrink:0;font:inherit;font-size:11px;color:var(--text-3);
+background:transparent;border:1px solid var(--border);border-radius:var(--radius-full);
+padding:1px 8px;cursor:pointer}
+.qb-clear:hover{color:var(--err);border-color:currentColor}
+.qb-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.qb-text{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.qb-cancel{flex-shrink:0;font:inherit;font-size:11px;color:var(--text-3);background:transparent;
+border:0;padding:1px 4px;cursor:pointer;border-radius:var(--radius-sm)}
+.qb-cancel:hover{color:var(--err);background:var(--err-bg)}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -3536,6 +3559,22 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
 .set-win-head{position:sticky;top:0;z-index:4}
 .set-win-close{position:sticky;right:0}
 }
+.cp-card{padding:0;overflow:hidden;width:min(560px,calc(100vw - 24px));align-self:flex-start;margin-top:12vh}
+.cp-input{width:100%;box-sizing:border-box;font:inherit;font-size:15px;color:var(--text);
+background:transparent;border:0;border-bottom:1px solid var(--border);padding:14px 16px;outline:none}
+.cp-input::placeholder{color:var(--text-3)}
+.cp-list{max-height:min(46vh,360px);overflow-y:auto;padding:6px}
+.cp-row{display:flex;align-items:center;gap:10px;justify-content:space-between;
+padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--text)}
+.cp-row.on{background:var(--primary-soft);color:var(--primary)}
+.cp-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-kbd{flex-shrink:0;font-size:11px;color:var(--text-3);border:1px solid var(--border);
+border-radius:var(--radius-sm);padding:1px 5px;background:var(--surface-2)}
+.cp-row.on .cp-kbd{color:var(--primary);border-color:currentColor}
+.cp-empty{padding:18px 12px;text-align:center;font-size:13px;color:var(--text-3)}
+.collab-card{width:min(680px,calc(100vw - 24px));max-height:calc(100vh - 12vh);overflow:auto}
+.collab-card .sub{margin:4px 0 12px}
+.collab-host .set-block{border:0;padding:0;background:transparent}
 
 
 /* ===== frontend/styles/features/generative.css ===== */
@@ -4578,6 +4617,12 @@ background-color:transparent;
       <div class="header-status" id="headerStatusZone"></div>
     </div>
     <div class="header-right">
+      <!-- R101 T02 · 信任三态胶囊由 agent/guard.js 的 guardTrustRenderChip() 在运行时创建
+           并插入到本容器（#shortcutsBtn 之前）。
+           为什么不在模板里写死：模板每新增一个 id 都会进 arch-contract 的
+           「B0 结构零丢失（300 个 id 全覆盖）」白名单与 contract_diff 的 dom_ids，
+           而这块 UI 只是一个状态显示，不该为此推一次结构基线。
+           同时它也不带 onclick 字面量（JS 绑 el.onclick），不新增契约函数名。 -->
       <button class="icon-btn" id="shortcutsBtn" title="快捷键与命令（?）" onclick="scOpen()">
         <svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-help"/></svg>
       </button>
@@ -9043,6 +9088,7 @@ if (r.checked) {
 try {
 await callApi('guard_session_trust', [op], 20000);
 guardTrusted.add(String(runSid || '') + '|' + op);
+guardTrustRenderChip();
 } catch (e) {  }
 }
 if (r.ok && r.checked2) await _trustPersistently(op);
@@ -9058,6 +9104,7 @@ if (!list.includes(op)) list.push(op);
 cfg.trustedOps = list;
 const r = JSON.parse(await callApi('guard_save_config', [JSON.stringify(cfg)]));
 if (r && r.error) { toast('永久信任保存失败: ' + r.error, 'err'); return; }
+guardTrustRenderChip();
 if (firstTime) {
 toast('已开启「' + GUARD_OP_LABEL[op] + '」永久信任：重启后该类操作仍不再确认。' +
 '如需恢复，设置 → 安全护栏 → 重置全部信任。', 'warn', { stay: true });
@@ -9080,16 +9127,76 @@ try { cfg = JSON.parse(await callApi('guard_get_config', [])) || {}; } catch (e)
 cfg.trustedOps = [];
 const rr = JSON.parse(await callApi('guard_save_config', [JSON.stringify(cfg)]));
 if (rr && rr.error) { toast('重置失败: ' + rr.error, 'err'); return; }
+if (guardConfig) guardConfig.trustedOps = [];
+guardTrustRenderChip();
 toast('已重置全部持久信任', 'ok');
 } catch (e) {
 toast('重置失败: ' + e.message, 'err');
 }
+}
+function guardTrustSnapshot() {
+let sid = '';
+try {
+const a = (typeof AppState !== 'undefined') ? AppState.currentSessionId : null;
+if (a != null && a !== '') sid = String(a);
+} catch (e) { sid = ''; }
+if (!sid) {
+try {
+const b = (typeof currentSessionId !== 'undefined') ? currentSessionId : null;
+sid = (b == null) ? '' : String(b);
+} catch (e) { sid = ''; }
+}
+let session = 0;
+try {
+guardTrusted.forEach(k => { if (String(k).split('|')[0] === sid) session++; });
+} catch (e) { session = 0; }
+const persistent = (guardConfig && Array.isArray(guardConfig.trustedOps))
+? guardConfig.trustedOps.length : 0;
+return { sid, session, persistent };
+}
+function guardTrustRenderChip() {
+if (typeof document === 'undefined') return;
+let el = document.getElementById('trustChip');
+if (!el) {
+const host = document.querySelector('.header-right');
+if (!host) return;
+el = document.createElement('button');
+el.type = 'button';
+el.className = 'trust-chip';
+el.id = 'trustChip';
+el.setAttribute('data-state', 'none');
+el.onclick = () => { if (typeof guardTrustChipOpen === 'function') guardTrustChipOpen(); };
+const anchor = document.getElementById('shortcutsBtn');
+if (anchor && anchor.parentNode === host) host.insertBefore(el, anchor);
+else host.appendChild(el);
+}
+const s = guardTrustSnapshot();
+let state = 'none';
+let text = '未信任';
+if (s.persistent > 0) { state = 'persist'; text = '永久 ' + s.persistent + ' 项'; }
+else if (s.session > 0) { state = 'session'; text = '本会话 ' + s.session + ' 项'; }
+el.setAttribute('data-state', state);
+el.textContent = text;
+el.title = '信任状态：本会话 ' + s.session + ' 项 · 永久 ' + s.persistent + ' 项'
++ '（点击进入设置 → 安全护栏，可重置）';
+}
+function guardTrustChipOpen() {
+const openSettings = window['toggle' + 'Settings'];
+if (typeof openSettings === 'function') openSettings();
+const focus = () => {
+const t = document.getElementById('guardTrustState');
+if (t && t.scrollIntoView) { try { t.scrollIntoView({ block: 'center' }); } catch (e) {} }
+if (t && t.parentElement) { t.parentElement.classList.add('trust-flash');
+setTimeout(() => { try { t.parentElement.classList.remove('trust-flash'); } catch (e) {} }, 1200); }
+};
+setTimeout(focus, 260);
 }
 async function loadGuardConfig() {
 try {
 guardConfig = JSON.parse(await callApi('guard_get_config', [])) || null;
 } catch (e) { guardConfig = null; }
 renderGuardSettings();
+guardTrustRenderChip();
 }
 function renderGuardSettings() {
 if (!guardConfig) return;
@@ -21882,6 +21989,7 @@ const SC_SHORTCUTS = [
 { keys: ['Enter'], desc: '发送消息' },
 { keys: ['Shift', 'Enter'], desc: '输入框内换行' },
 { keys: ['Esc'], desc: '关闭浮层（设置 / 搜索面板 / 模态 / 图片查看）' },
+{ keys: ['Ctrl', 'K'], desc: '命令面板：搜功能、跳面板（macOS 为 ⌘K）' },
 { keys: ['Ctrl', 'N'], desc: '新建会话（macOS 为 ⌘N）' },
 { keys: ['?'], desc: '打开本帮助' }
 ];
@@ -21941,11 +22049,130 @@ if (mask) mask.remove();
 document.removeEventListener('keydown', scEsc);
 }
 let _scBound = false;
+function _cpCommands() {
+const out = [];
+const add = (id, label, hint, keywords, fn, argList) => {
+if (typeof window[fn] !== 'function') return;
+out.push({ id, label, hint: hint || '', keywords: (keywords || '') + ' ' + label,
+fn: fn, args: argList || [] });
+};
+add('new-chat', '新建对话', 'Ctrl N', '新建 会话 任务 new', 'openNewChatScreen');
+add('panel-chat', '切换到「对话」', '', '对话 聊天 chat panel', 'switchPanel', ['chat']);
+add('panel-workspace', '切换到「项目与文件」', '', '项目 文件 工作区 workspace panel', 'switchPanel', ['workspace']);
+add('panel-analytics', '切换到「记忆与洞察」', '', '记忆 洞察 分析 analytics 统计 panel', 'switchPanel', ['analytics']);
+add('panel-sessions', '打开「会话总览」', '', '会话 历史 筛选 搜索 sessions panel', 'switchPanel', ['sessions']);
+add('settings', '打开设置', '', '设置 偏好 settings', 'toggleSettings');
+add('theme', '切换深色 / 浅色', '', '主题 深色 浅色 外观 theme dark light', 'toggleTheme');
+add('sidebar', '折叠 / 展开侧栏', '', '侧栏 折叠 展开 sidebar', 'toggleSidebar');
+add('search-panel', '浏览器搜索面板', '', '搜索 网页 browser search', 'spManualOpen');
+add('collab', '双模型协同面板', '', '协同 双模型 planner reviewer 预算 collaboration', 'collabPanelOpen');
+add('shortcuts', '快捷键与命令帮助', '?', '帮助 快捷键 命令 help shortcuts', 'scOpen');
+return out;
+}
+let _cpIndex = 0;
+let _cpItems = [];
+function _cpRender(list) {
+const box = document.querySelector('.cp-list');
+if (!box) return;
+if (!list.length) {
+box.innerHTML = '<div class="cp-empty">没有匹配的命令</div>';
+_cpItems = [];
+return;
+}
+_cpItems = list;
+if (_cpIndex >= list.length) _cpIndex = 0;
+box.innerHTML = list.map((c, i) =>
+'<div class="cp-row' + (i === _cpIndex ? ' on' : '') + '" role="option" aria-selected="' +
+(i === _cpIndex) + '" data-i="' + i + '">' +
+'<span class="cp-label">' + _scEsc(c.label) + '</span>' +
+(c.hint ? '<kbd class="cp-kbd">' + _scEsc(c.hint) + '</kbd>' : '') +
+'</div>').join('');
+Array.prototype.forEach.call(box.querySelectorAll('.cp-row'), row => {
+row.onclick = () => { _cpIndex = parseInt(row.getAttribute('data-i'), 10) || 0; cpPaletteRun(); };
+row.onmouseenter = () => {
+_cpIndex = parseInt(row.getAttribute('data-i'), 10) || 0;
+Array.prototype.forEach.call(box.querySelectorAll('.cp-row'), r => {
+const on = r === row;
+r.classList.toggle('on', on);
+r.setAttribute('aria-selected', on ? 'true' : 'false');
+});
+};
+});
+}
+function _cpFilter(q) {
+const all = _cpCommands();
+const s = String(q || '').trim().toLowerCase();
+if (!s) return all;
+return all.filter(c => c.keywords.toLowerCase().indexOf(s) >= 0);
+}
+function cpPaletteOpen() {
+if (typeof document === 'undefined') return;
+if (document.querySelector('.cp-mask')) return;
+const mask = document.createElement('div');
+mask.className = 'modal-mask cp-mask';
+const card = document.createElement('div');
+card.className = 'modal-card cp-card';
+card.setAttribute('role', 'dialog');
+card.setAttribute('aria-modal', 'true');
+card.setAttribute('aria-label', '命令面板');
+card.innerHTML =
+'<input class="cp-input" type="text" placeholder="输入命令或功能名…（↑↓ 选择，Enter 执行，Esc 关闭）"' +
+' aria-label="搜索命令" autocomplete="off" spellcheck="false">' +
+'<div class="cp-list" role="listbox" aria-label="命令列表"></div>';
+mask.appendChild(card);
+document.body.appendChild(mask);
+mask.addEventListener('click', e => { if (e.target === mask) cpPaletteClose(); });
+const input = card.querySelector('.cp-input');
+_cpIndex = 0;
+_cpRender(_cpFilter(''));
+input.addEventListener('input', () => { _cpIndex = 0; _cpRender(_cpFilter(input.value)); });
+input.addEventListener('keydown', e => {
+if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+e.preventDefault();
+const list = _cpFilter(input.value);
+if (!list.length) return;
+_cpIndex = (e.key === 'ArrowDown')
+? (_cpIndex + 1) % list.length
+: (_cpIndex - 1 + list.length) % list.length;
+_cpRender(list);
+return;
+}
+if (e.key === 'Enter') { e.preventDefault(); cpPaletteRun(); return; }
+if (e.key === 'Escape') { e.preventDefault(); cpPaletteClose(); }
+});
+setTimeout(() => { try { input.focus(); } catch (e) {} }, 0);
+}
+function cpPaletteRun() {
+const c = _cpItems[_cpIndex];
+cpPaletteClose();
+if (!c) return;
+try {
+const fn = window[c.fn];
+if (typeof fn !== 'function') {
+console.warn('[命令面板] 命令目标未装载:', c.fn);
+return;
+}
+fn.apply(null, c.args || []);
+} catch (e) { console.error('[命令面板] 执行失败:', c.id, e); }
+}
+function cpPaletteClose() {
+const mask = document.querySelector('.cp-mask');
+if (mask) mask.remove();
+_cpItems = [];
+_cpIndex = 0;
+}
 function shortcutsInit() {
 if (typeof document === 'undefined') return false;
 if (_scBound) return true;
 _scBound = true;
 document.addEventListener('keydown', (e) => {
+if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
+(e.key === 'k' || e.key === 'K')) {
+e.preventDefault();
+if (document.querySelector('.cp-mask')) cpPaletteClose();
+else cpPaletteOpen();
+return;
+}
 if (e.key !== '?') return;
 const tag = (e.target && e.target.tagName) || '';
 if (tag === 'INPUT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -23904,6 +24131,7 @@ uiSeamCall('closeSidebarDrawer');
 if (typeof AppState !== 'undefined') AppState.currentSessionId = id;
 else currentSessionId = id;
 if (typeof syncAgentRunUiForSession === 'function') syncAgentRunUiForSession(id);
+if (typeof guardTrustRenderChip === 'function') guardTrustRenderChip();
 if (typeof hubRenderChip === 'function') hubRenderChip();
 _setNewChatScreenVisible(false);
 window.__hitRate = 0;
@@ -24875,6 +25103,81 @@ if (typeof AppState !== 'undefined') AppState.isStreaming = false;
 else isStreaming = false;
 return false;
 }
+const _sendQueue = [];
+function _queueSid() {
+try {
+return String((typeof AppState !== 'undefined' && AppState.currentSessionId)
+|| (typeof currentSessionId !== 'undefined' ? currentSessionId : '') || '');
+} catch (e) { return ''; }
+}
+function _queuePrune() {
+const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+const total = s && Array.isArray(s.messages) ? s.messages.length : 0;
+for (let i = _sendQueue.length - 1; i >= 0; i--) {
+const q = _sendQueue[i];
+if (q.sid !== _queueSid() || q.midx >= total) _sendQueue.splice(i, 1);
+}
+}
+function _queueRender() {
+if (typeof document === 'undefined') return;
+_queuePrune();
+const host = document.querySelector('#chatInputArea .input-inner');
+if (!host) return;
+let bar = document.getElementById('queueBar');
+if (!_sendQueue.length) { if (bar) bar.remove(); return; }
+if (!bar) {
+bar = document.createElement('div');
+bar.className = 'queue-bar';
+bar.id = 'queueBar';
+bar.setAttribute('role', 'status');
+const anchor = document.getElementById('attachPreview');
+if (anchor && anchor.parentNode === host) anchor.insertAdjacentElement('afterend', bar);
+else host.insertBefore(bar, host.firstChild);
+}
+const head = '<span class="qb-count">' + _sendQueue.length + ' 条排队中</span>' +
+'<span class="qb-hint">当前步骤结束后按顺序发送</span>';
+const rows = _sendQueue.map((q, i) =>
+'<div class="qb-row"><span class="qb-text"></span>' +
+'<button type="button" class="qb-cancel" data-qb-act="one" data-i="' + i +
+'" title="撤回这条排队消息">撤回</button></div>').join('');
+bar.innerHTML = '<div class="qb-head">' + head +
+'<button type="button" class="qb-clear" data-qb-act="all" title="撤回全部排队消息">全部撤回</button></div>' + rows;
+Array.prototype.forEach.call(bar.querySelectorAll('.qb-text'), (el, i) => {
+el.textContent = (_sendQueue[i] && _sendQueue[i].text) || '（无文本）';
+});
+}
+function _queueCancelOne(i) {
+const q = _sendQueue[i];
+if (!q) return;
+const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+if (!s || !Array.isArray(s.messages)) return;
+const last = s.messages.length - 1;
+if (q.midx !== last || !s.messages[last] || s.messages[last].role !== 'user') {
+_sendQueue.splice(i, 1);
+_queueRender();
+if (typeof toast === 'function') toast('该消息已被当前任务读取，无法撤回（队列显示已清理）', 'warn');
+return;
+}
+s.messages.splice(last, 1);
+_sendQueue.splice(i, 1);
+if (typeof saveSessions === 'function') saveSessions();
+if (typeof renderChatHistory === 'function') { try { renderChatHistory(s.id); } catch (e) {} }
+if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
+_queueRender();
+if (typeof toast === 'function') toast('已撤回排队消息', 'ok');
+}
+function _queueCancelAll() {
+for (let i = _sendQueue.length - 1; i >= 0; i--) _queueCancelOne(i);
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+document.addEventListener('click', (e) => {
+const t = e.target && e.target.closest ? e.target.closest('[data-qb-act]') : null;
+if (!t) return;
+const act = t.getAttribute('data-qb-act');
+if (act === 'one') _queueCancelOne(parseInt(t.getAttribute('data-i'), 10));
+else if (act === 'all') _queueCancelAll();
+});
+}
 async function sendMessage() {
 const appState = (typeof AppState !== 'undefined') ? AppState : null;
 const appAttachments = appState ? appState.attachments : attachments;
@@ -25068,6 +25371,14 @@ if (appState) appState.attachments = [];
 else attachments = [];
 renderPreview();
 if (sendMessage._queued) {
+try {
+_sendQueue.push({
+sid: s.id,
+midx: s.messages.length - 1,
+text: String(text || (textFiles && textFiles.length ? textFiles[0].name : '') || '').slice(0, 120)
+});
+_queueRender();
+} catch (e) {}
 sendMessage._queued = false;
 return;
 }
@@ -29498,14 +29809,58 @@ collaborationUiStatus('恢复失败：' + (error && error.message || error), 'er
 return { status: 'recover_failed', error: { code: 'RECOVER_ERROR', message: String(error && error.message || error) } };
 }
 }
+function _collabEnsureHost() {
+let mask = document.getElementById('collabMask');
+if (mask) return mask.querySelector('.collab-host');
+mask = document.createElement('div');
+mask.className = 'modal-mask';
+mask.id = 'collabMask';
+mask.style.display = 'none';
+const card = document.createElement('div');
+card.className = 'modal-card collab-card';
+card.setAttribute('role', 'dialog');
+card.setAttribute('aria-modal', 'true');
+card.innerHTML =
+'<h3>双模型协同</h3>' +
+'<div class="sub">planner/reviewer/finalizer 走云端，worker/reviser 走本地；保存配置不会调用模型。</div>' +
+'<div class="collab-host"></div>' +
+'<div class="modal-acts"><button type="button" class="modal-btn" data-act="close">关闭</button></div>';
+mask.appendChild(card);
+document.body.appendChild(mask);
+mask.addEventListener('click', e => { if (e.target === mask) collabPanelClose(); });
+const btn = card.querySelector('[data-act="close"]');
+if (btn) btn.onclick = collabPanelClose;
+mask.addEventListener('keydown', e => { if (e.key === 'Escape') collabPanelClose(); });
+return card.querySelector('.collab-host');
+}
+function collabPanelOpen() {
+if (typeof document === 'undefined') return;
+_collabEnsureHost();
+const mask = document.getElementById('collabMask');
+if (mask) mask.style.display = 'flex';
+}
+function collabPanelClose() {
+const mask = document.getElementById('collabMask');
+if (mask) mask.style.display = 'none';
+}
 function collaborationUiInit() {
 if (collaborationUiState.initialized || typeof document === 'undefined') return;
 const block = collaborationUiEl('collaborationBlock');
 if (!block) return;
 collaborationUiState.initialized = true;
-const hybrid = collaborationUiEl('hybridBlock');
-if (hybrid && block.parentNode !== hybrid) hybrid.appendChild(block);
+const host = _collabEnsureHost();
+if (host && block.parentNode !== host) host.appendChild(block);
 block.hidden = false;
+const hybrid = collaborationUiEl('hybridBlock');
+if (hybrid && !hybrid.querySelector('[data-act="open-collab"]')) {
+const open = document.createElement('button');
+open.type = 'button';
+open.className = 'modal-btn';
+open.setAttribute('data-act', 'open-collab');
+open.textContent = '打开双模型协同面板';
+open.onclick = () => { if (typeof collabPanelOpen === 'function') collabPanelOpen(); };
+hybrid.appendChild(open);
+}
 const on = (id, event, handler) => { const element = collaborationUiEl(id); if (element) element.addEventListener(event, handler); };
 on('collaborationSaveBtn', 'click', () => collaborationUiSave());
 on('collaborationPreviewBtn', 'click', collaborationUiPreview);

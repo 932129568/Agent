@@ -346,7 +346,10 @@
         "renderGrantBudgetBar",
         "renderGuardSettings",
         "resetAllGuardTrust",
-        "saveGuardSettings"
+        "saveGuardSettings",
+        "guardTrustChipOpen",
+        "guardTrustRenderChip",
+        "guardTrustSnapshot"
       ],
       "requires": [
         "callApi",
@@ -1681,7 +1684,15 @@
         "scClose",
         "scEsc",
         "scOpen",
-        "shortcutsInit"
+        "shortcutsInit",
+        "_cpCommands",
+        "_cpFilter",
+        "_cpIndex",
+        "_cpItems",
+        "_cpRender",
+        "cpPaletteClose",
+        "cpPaletteOpen",
+        "cpPaletteRun"
       ],
       "requires": [
         "_modalRoot"
@@ -2036,7 +2047,13 @@
         "toggleSettings",
         "toggleSidebar",
         "_sendSessionBusy",
-        "_sendRefreshStreaming"
+        "_sendRefreshStreaming",
+        "_queueCancelAll",
+        "_queueCancelOne",
+        "_queuePrune",
+        "_queueRender",
+        "_queueSid",
+        "_sendQueue"
       ],
       "requires": [
         "isStreaming",
@@ -2524,7 +2541,10 @@
         "collaborationRun",
         "collaborationStop",
         "collaborationRecover",
-        "collaborationUiInit"
+        "collaborationUiInit",
+        "_collabEnsureHost",
+        "collabPanelClose",
+        "collabPanelOpen"
       ],
       "requires": [
         "normalizeCollaborationConfig",

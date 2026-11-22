@@ -30,3 +30,28 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
   .set-win-head{position:sticky;top:0;z-index:4}
   .set-win-close{position:sticky;right:0}
 }
+
+/* ===== R101 T02 · Ctrl+K 命令面板 =====
+   结构：.cp-mask（复用 .modal-mask 的遮罩）> .cp-card > input.cp-input + .cp-list > .cp-row
+   为什么不用 .sc-card 那套：帮助浮层是「读」，命令面板是「打字 + 上下选」，
+   需要贴顶输入框与自身滚动区，复用会互相牵制。遮罩仍复用，保证 Esc/点外部行为一致。 */
+.cp-card{padding:0;overflow:hidden;width:min(560px,calc(100vw - 24px));align-self:flex-start;margin-top:12vh}
+.cp-input{width:100%;box-sizing:border-box;font:inherit;font-size:15px;color:var(--text);
+  background:transparent;border:0;border-bottom:1px solid var(--border);padding:14px 16px;outline:none}
+.cp-input::placeholder{color:var(--text-3)}
+.cp-list{max-height:min(46vh,360px);overflow-y:auto;padding:6px}
+.cp-row{display:flex;align-items:center;gap:10px;justify-content:space-between;
+  padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--text)}
+.cp-row.on{background:var(--primary-soft);color:var(--primary)}
+.cp-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-kbd{flex-shrink:0;font-size:11px;color:var(--text-3);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:1px 5px;background:var(--surface-2)}
+.cp-row.on .cp-kbd{color:var(--primary);border-color:currentColor}
+.cp-empty{padding:18px 12px;text-align:center;font-size:13px;color:var(--text-3)}
+
+/* ===== R101 T02 · 双模型协同独立浮层 =====
+   块内容沿用 .set-block 那套（collaboration-config-grid / collaboration-actions 等），
+   所以这里只负责外壳：宽度、内边距与滚动区，避免再写一份字段样式。 */
+.collab-card{width:min(680px,calc(100vw - 24px));max-height:calc(100vh - 12vh);overflow:auto}
+.collab-card .sub{margin:4px 0 12px}
+.collab-host .set-block{border:0;padding:0;background:transparent}

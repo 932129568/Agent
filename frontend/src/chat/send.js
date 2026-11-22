@@ -17,6 +17,111 @@ function _sendRefreshStreaming() {
   else isStreaming = false;
   return false;
 }
+/* ================= R101 T02 · 排队条 =================
+ * 现状问题：在途 run 期间发消息只会弹一句 toast「已排队」，随后消息被追加进
+ * s.messages 等下一轮 beforeRound 带走。用户看不到「排了几条、什么时候发、
+ * 能不能撤回」，只能干等 —— 提示是一次性的，队列本身在界面上不存在。
+ *
+ * 这里的队列**不是第二套发送机制**：消息仍在发送时就写进 s.messages（既有语义
+ * 不动，在途 run 的下一轮自然带上）。本队列只做「可见 + 可撤回」这一层视图。
+ *
+ * 撤回的边界（很重要，写错会删掉已被消费的消息）：
+ *   只在「该条仍是会话最后一条消息，且其后没有任何 assistant 回复」时才允许删。
+ *   一旦 run 已经把它当成一轮输入消费掉（后面出现了 assistant 内容），撤回就
+ *   不是「取消发送」而是「篡改历史」，必须拒绝。
+ */
+const _sendQueue = [];
+
+function _queueSid() {
+  try {
+    return String((typeof AppState !== 'undefined' && AppState.currentSessionId)
+      || (typeof currentSessionId !== 'undefined' ? currentSessionId : '') || '');
+  } catch (e) { return ''; }
+}
+
+function _queuePrune() {
+  const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+  const total = s && Array.isArray(s.messages) ? s.messages.length : 0;
+  for (let i = _sendQueue.length - 1; i >= 0; i--) {
+    const q = _sendQueue[i];
+    if (q.sid !== _queueSid() || q.midx >= total) _sendQueue.splice(i, 1);
+  }
+}
+
+function _queueRender() {
+  if (typeof document === 'undefined') return;
+  _queuePrune();
+  const host = document.querySelector('#chatInputArea .input-inner');
+  if (!host) return;
+  let bar = document.getElementById('queueBar');
+  if (!_sendQueue.length) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'queue-bar';
+    bar.id = 'queueBar';
+    bar.setAttribute('role', 'status');
+    const anchor = document.getElementById('attachPreview');
+    if (anchor && anchor.parentNode === host) anchor.insertAdjacentElement('afterend', bar);
+    else host.insertBefore(bar, host.firstChild);
+  }
+  const head = '<span class="qb-count">' + _sendQueue.length + ' 条排队中</span>' +
+    '<span class="qb-hint">当前步骤结束后按顺序发送</span>';
+  const rows = _sendQueue.map((q, i) =>
+    '<div class="qb-row"><span class="qb-text"></span>' +
+    '<button type="button" class="qb-cancel" data-qb-act="one" data-i="' + i +
+    '" title="撤回这条排队消息">撤回</button></div>').join('');
+  bar.innerHTML = '<div class="qb-head">' + head +
+    '<button type="button" class="qb-clear" data-qb-act="all" title="撤回全部排队消息">全部撤回</button></div>' + rows;
+  // 文案用 textContent 写入，避免用户输入里的尖括号被当 HTML
+  Array.prototype.forEach.call(bar.querySelectorAll('.qb-text'), (el, i) => {
+    el.textContent = (_sendQueue[i] && _sendQueue[i].text) || '（无文本）';
+  });
+  // 不在这里绑 onclick：绑定会让 render → cancel* 形成符号级环。
+  // 事件统一由文件末尾的 document 级委托处理（见 _queueBindDelegation）。
+}
+
+function _queueCancelOne(i) {
+  const q = _sendQueue[i];
+  if (!q) return;
+  const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+  if (!s || !Array.isArray(s.messages)) return;
+  const last = s.messages.length - 1;
+  // 只有「仍是最后一条」才安全；否则说明 run 已消费（或后面已有新消息）
+  if (q.midx !== last || !s.messages[last] || s.messages[last].role !== 'user') {
+    _sendQueue.splice(i, 1);
+    _queueRender();
+    if (typeof toast === 'function') toast('该消息已被当前任务读取，无法撤回（队列显示已清理）', 'warn');
+    return;
+  }
+  s.messages.splice(last, 1);
+  _sendQueue.splice(i, 1);
+  if (typeof saveSessions === 'function') saveSessions();
+  if (typeof renderChatHistory === 'function') { try { renderChatHistory(s.id); } catch (e) {} }
+  if (typeof navUpdateEmptyGuide === 'function') navUpdateEmptyGuide();
+  _queueRender();
+  if (typeof toast === 'function') toast('已撤回排队消息', 'ok');
+}
+
+function _queueCancelAll() {
+  // 从后往前撤：每次都让被撤的那条成为「最后一条」，边界判据始终成立
+  for (let i = _sendQueue.length - 1; i >= 0; i--) _queueCancelOne(i);
+}
+
+/* 队列条的点击统一在这里委托。
+ * 为什么不在 _queueRender 里逐按钮绑 onclick：那会让
+ * `_queueRender → _queueCancelOne → _queueRender` 形成符号级环
+ * （SCC 棘轮零余量，本轮实测把 17/104 推到 19/109）。
+ * 顶层匿名监听器不算符号，链路是单向的：监听器 → cancel → render。 */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('click', (e) => {
+    const t = e.target && e.target.closest ? e.target.closest('[data-qb-act]') : null;
+    if (!t) return;
+    const act = t.getAttribute('data-qb-act');
+    if (act === 'one') _queueCancelOne(parseInt(t.getAttribute('data-i'), 10));
+    else if (act === 'all') _queueCancelAll();
+  });
+}
+
 async function sendMessage() {
   const appState = (typeof AppState !== 'undefined') ? AppState : null;
   const appAttachments = appState ? appState.attachments : attachments;
@@ -256,6 +361,15 @@ async function sendMessage() {
     // R45（排队式 steering）：消息已入库——在途 run 的下一轮 beforeRound
     // 重建请求时自然带上；不启动第二 run。清标志，后续发送恢复正常语义。
     // isStreaming 由在途 run 所有权管理——此处不得复位（防误伤在途 run）。
+    // R101 T02：同时登记到可视队列（只做展示与撤回，不改发送语义）。
+    try {
+      _sendQueue.push({
+        sid: s.id,
+        midx: s.messages.length - 1,
+        text: String(text || (textFiles && textFiles.length ? textFiles[0].name : '') || '').slice(0, 120)
+      });
+      _queueRender();
+    } catch (e) {}
     sendMessage._queued = false;
     return;
   }

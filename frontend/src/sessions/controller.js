@@ -336,6 +336,9 @@ function switchSession(id, silent) {
   if (typeof AppState !== 'undefined') AppState.currentSessionId = id;
   else currentSessionId = id;
   if (typeof syncAgentRunUiForSession === 'function') syncAgentRunUiForSession(id);
+  // R101 T02：信任三态胶囊按 sid 过滤，切会话必须重算——否则会把上一个会话的
+  // 会话级授权算到新会话头上（guardTrusted 是全量 Set，键是 sid|op）。
+  if (typeof guardTrustRenderChip === 'function') guardTrustRenderChip();
   // R32：内置目录启用态按会话隔离，切会话即刷新可见 chip
   if (typeof hubRenderChip === 'function') hubRenderChip();
   _setNewChatScreenVisible(false);
