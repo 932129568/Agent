@@ -53,6 +53,7 @@
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -130,9 +131,34 @@ def m1_dead_reference(ctx):
 
 
 def m2_duplicate_keyframes(ctx):
+    """再追加**一份** v4MaskIn 定义，制造重复。
+
+    注意：这里只追加一份，不关心基线原本有几份 —— 期望值由
+    expect_m2_duplicate() 按「基线份数 + 1」动态算出。
+    历史教训：本负控最初把期望写死成 `x3`（当时基线恰好 2 份）。批 1 删掉
+    legacy.css:987 那份副本后基线变成 1 份，变异后实际报 `x2`，
+    负控自己 FAIL —— 但**变异逻辑完全正确，错的是期望被写死在会变的事实上**。
+    写死绝对份数的负控，每次基线份数变化都会假红，最终会被当成噪音关掉。
+    """
     append_text(probe_css_path(ctx['root']),
-                '\n/* M2: 再定义一次已有的 v4MaskIn（原本只有 2 处） */\n'
+                '\n/* M2: 再定义一次已有的 v4MaskIn（份数由基线决定，期望动态计算） */\n'
                 '@keyframes v4MaskIn{from{opacity:0}to{opacity:1}}\n')
+
+
+def expect_m2_duplicate(pristine_out):
+    """从**未变异基线**输出里读出 v4MaskIn 现有份数，期望变异后为 N+1。
+
+    基线上若无 `[A2] 重复定义: v4MaskIn xN` 行（即原本无重复），
+    则变异注入一份后应报 `x2`（两份相同定义）。
+    """
+    base = 1
+    for line in pristine_out.splitlines():
+        if line.startswith('[A2]') and 'v4MaskIn' in line:
+            m = re.search(r'x(\d+)', line)
+            if m:
+                base = int(m.group(1))
+            break
+    return '[A2] 重复定义: v4MaskIn x%d' % (base + 1)
 
 
 def m3_layout_prop(ctx):
@@ -220,8 +246,10 @@ def m9_debug_residue(ctx):
 NEGATIVES = [
     ('M1', 'assert_motion.py', m1_dead_reference,
      '[A1] 死引用: v4NoSuchKey', 'A1 无死动画引用'),
+    # expect 为 callable 时：传入未变异基线输出，返回期望子串（见 expect_m2_duplicate）。
+    # 这样期望不会因基线份数变化而假红。
     ('M2', 'assert_motion.py', m2_duplicate_keyframes,
-     '[A2] 重复定义: v4MaskIn x3', 'A2 无重复关键帧名'),
+     expect_m2_duplicate, 'A2 无重复关键帧名'),
     ('M3', 'assert_motion.py', m3_layout_prop,
      '[A3] 违例: zzBad 含 left', 'A3 合成器直通属性'),
     ('M4', 'assert_motion.py', m4_transition_all,
@@ -316,7 +344,25 @@ def main(argv=None):
 
     rows = []
     failures = 0
-    for nid, script, mutate, expect, live_name in todo:
+    # 动态期望需要「未变异基线输出」才能算出来（见 expect_m2_duplicate）。
+    # 只对 callable 型的 expect 跑这一次基线，静态期望不浪费一次子进程。
+    pristine_cache = {}
+
+    def resolve_expect(expect):
+        if not callable(expect):
+            return expect
+        script = None
+        for nid_, script_, _m, e_, _l in todo:
+            if e_ is expect:
+                script = script_
+                break
+        if script not in pristine_cache:
+            _rc, out = run_script(script, ['--root', str(ROOT)])
+            pristine_cache[script] = out
+        return expect(pristine_cache[script])
+
+    for nid, script, mutate, expect_spec, live_name in todo:
+        expect = resolve_expect(expect_spec)
         tmp = Path(tempfile.mkdtemp(prefix='uiaudit-neg-%s-' % nid.lower()))
         try:
             make_copy(tmp)
@@ -379,7 +425,8 @@ def main(argv=None):
     print('')
     print('NEG 恒真式自检：每条期望子串在未变异基线上必须 MISS（否则该负控没有区分力）')
     tautological = []
-    for nid, _script, _mutate, expect, live_name in todo:
+    for nid, _script, _mutate, expect_spec, live_name in todo:
+        expect = resolve_expect(expect_spec)
         rc, out = run_script(_script, ['--root', str(ROOT)])
         hit_on_pristine = expect in out
         if hit_on_pristine:

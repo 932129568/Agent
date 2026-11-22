@@ -26,9 +26,15 @@
                                          必须走到 NO_INSTANCES。用自身 PID 做代理样本，
                                          因为 PowerShell 进程几乎必然没有 engtype_3D 实例。
       C  不带 -TargetPid（整机）           → 必须 MEASURED（证明正常路径没被改坏）
-      D  真实 Harbor 进程树                → 必须 MEASURED 且 matchedInstances > 0
-                                         若本机没有 Harbor 进程，此组判 SKIP（如实标注，
-                                         不许把"没环境"算成"通过"）
+      D  真实 Harbor 进程树                → 必须 MEASURED 且判决行/JSON 里能看到 `Harbor`
+                                         候选名单 = Harbor / harbor-desktop（**Harbor 优先**）。
+                                         本机若没有 Harbor 进程，此组判 SKIP，并在总判决里
+                                         显式声明「Q13 的 Harbor 口径未被本轮覆盖」。
+                                         **不许用 WorkBuddy 顶替 Harbor** —— 那是测错对象。
+      D2 Electron 宿主代理（WorkBuddy + msedgewebview2）
+                                         → 仅作用域演练，标签写死 `NOT Harbor`，
+                                         不可作为 Q13 验收依据。D 组 SKIP 时它仍然跑，
+                                         因为它验证的是「多进程过滤」这个机制本身。
 
 .PARAMETER WarmupSeconds
     传给被测探针的静置秒数。默认 1（负控不关心数值稳定性，只关心状态机）。
@@ -37,8 +43,11 @@
 
 .OUTPUTS
     逐行文本。退出码：
-      0 = 四组全部 as-expected（含 SKIP 时不失败，但会显式计数并打印）
+      0 = 全部 as-expected **且** D 组（Harbor 口径）真的测到了
       1 = 有任何一组不符合预期
+      3 = 负控全部 as-expected，但 D 组被 SKIP ⇒ **Q13 的 Harbor 口径本轮未覆盖**
+          （不是失败，但也**不是绿**。用独立 rc 是为了防止「没环境」被当成「通过」；
+           这正是本仓「blocked-by-environment 不等于 0%」的同一条纪律。）
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools/uiaudit/probe_idle_gpu_selftest.ps1
@@ -114,6 +123,8 @@ function Test-Expect {
         [string]$WantSubstring = '',
         [string]$ForbidSubstring = '',
         [switch]$AllowVerdictLine,       # 默认禁止出现判决行
+        [string]$RequireProcessName = '', # 判决行/JSON 里必须看得到这个进程名
+        [string[]]$ResolvedNames = @(),   # 探针 -Json 里的 resolvedProcessNames
         [switch]$Skip,
         [string]$SkipReason = ''
     )
@@ -143,6 +154,24 @@ function Test-Expect {
     else {
         if ($verdictLines.Count -ne 0) {
             $problems += "verdict-line count=$($verdictLines.Count) want=0 (blocked 组不该有判决行)"
+        }
+    }
+
+    # 「测的进程名 == 标签写的进程名」这一条只能靠**反查清单**判定，不能靠全文 grep。
+    # 反例：探针在作用域里没有 Harbor 时会打印
+    #   'NOTICE scope contains no process named "Harbor"'
+    # —— 全文 grep 'Harbor' 会命中这行，从而把「明确不是 Harbor」判成「测到了 Harbor」。
+    # 这正是本仓反复出现的「关键词判定把解释当成结论」。
+    # 所以只认 resolvedProcessNames 里的 `<pid>:<name>` 结尾匹配。
+    if ($RequireProcessName) {
+        $wantSuffix = ':' + $RequireProcessName + '$'
+        $hit = @($ResolvedNames | Where-Object { $_ -match $wantSuffix }).Count
+        if ($hit -lt 1) {
+            $problems += ("resolvedProcessNames lacks ':$RequireProcessName' (got: " +
+                $(if ($ResolvedNames.Count -gt 0) { $ResolvedNames -join ',' } else { '<empty>' }) + ')')
+        }
+        if ($Result.Out -cmatch 'NOTICE scope contains no process named') {
+            $problems += "probe itself declared the scope is NOT $RequireProcessName"
         }
     }
 
@@ -188,21 +217,58 @@ $results += Test-Expect -Id 'C' -What 'whole-machine -> MEASURED, exactly one ve
     -Skip:(-not $hasMachine) -SkipReason 'no machine instances in this environment'
 
 # ── D：真实 Harbor 进程树 ───────────────────────────────────────────────────
+# 名字必须与实测一致：这一组叫 Harbor，候选名单里就**必须**有 Harbor。
+# 历史缺陷（本仓实测，第三次同族问题）：
+#   候选名单是 @('WorkBuddy','msedgewebview2')，-What 却写 "real Harbor tree"。
+#   Get-Process -Name Harbor 在同一台机器上恒为 0，10 + 17 = 27 pids 全部来自
+#   WorkBuddy（本仓库的开发工具本体）。标签读起来成立，但没人核对它指向什么。
+#   后果：Q13 的验收口径是「只测 Harbor 自己的 3D 占用」，若接这个口径，
+#   等于在验收 WorkBuddy 烧多少 GPU，与 Harbor 无关 —— 测错对象的典型。
+# ⇒ 修法：Harbor 优先；Harbor 不在就 SKIP（不许 WorkBuddy 顶替）；
+#   代理组单独立成 D2 并在标签里写明 NOT Harbor。
+$harborNames = @('Harbor', 'harbor-desktop')
 $harborPids = @()
-foreach ($n in @('WorkBuddy', 'msedgewebview2')) {
+foreach ($n in $harborNames) {
     $harborPids += @(Get-Process -Name $n -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
 }
 $harborPids = @($harborPids | Sort-Object -Unique)
 
 if ($harborPids.Count -eq 0) {
-    $results += Test-Expect -Id 'D' -What 'real Harbor process tree -> MEASURED' `
+    # SKIP 不是绿：汇总里会计入 $nSkip，总判决行必须显式声明 Q13 未覆盖。
+    $results += Test-Expect -Id 'D' -What 'real Harbor process tree -> MEASURED, verdict line must name Harbor' `
         -Result @{ Rc = 0; Out = '' } -WantRc 0 `
-        -Skip:$true -SkipReason 'no Harbor/WebView2 process running on this machine'
+        -Skip:$true -SkipReason ('no process named Harbor / harbor-desktop on this machine ' +
+        '(tried: ' + ($harborNames -join ', ') + '); Q13 Harbor-scope acceptance NOT covered by this run')
 }
 else {
-    $rD = Invoke-Probe -ExtraArgs @('-TargetPid', ($harborPids -join ','))
-    $results += Test-Expect -Id 'D' -What "real Harbor tree ($($harborPids.Count) pids) -> MEASURED, one verdict line" `
-        -Result $rD -WantRc $(if ($rD.Rc -eq 0) { 0 } else { 1 }) -WantSubstring 'MEASURED' -AllowVerdictLine
+    $rD = Invoke-Probe -ExtraArgs @('-TargetPid', ($harborPids -join ','), '-Json')
+    $rDnames = @()
+    $mNames = [regex]::Match($rD.Out, '"resolvedProcessNames":\[([^\]]*)\]')
+    if ($mNames.Success) { $rDnames = @($mNames.Groups[1].Value -split ',' | ForEach-Object { $_.Trim('"', ' ') }) }
+    $results += Test-Expect -Id 'D' -What "real Harbor tree ($($harborPids.Count) pids) -> MEASURED, verdict line names Harbor" `
+        -Result $rD -WantRc $(if ($rD.Rc -eq 0) { 0 } else { 1 }) -WantSubstring 'MEASURED' `
+        -RequireProcessName 'Harbor' -ResolvedNames $rDnames -AllowVerdictLine
+}
+
+# ── D2：Electron 宿主代理（口径演练，明确 NOT Harbor）────────────────────────
+# 存在的理由：本机常常没有 Harbor.exe（仓规禁止主动启动 dist/Harbor.exe），
+# 但「多进程 Electron 宿主」的作用域行为仍需演练。**它不能作为 Q13 的验收依据**，
+# 所以标签里写死 NOT Harbor，且 never 用 Harbor 这个名字。
+$proxyPids = @()
+foreach ($n in @('WorkBuddy', 'msedgewebview2')) {
+    $proxyPids += @(Get-Process -Name $n -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+}
+$proxyPids = @($proxyPids | Sort-Object -Unique)
+
+if ($proxyPids.Count -eq 0) {
+    $results += Test-Expect -Id 'D2' -What 'proxy replay (NOT Harbor) -> MEASURED' `
+        -Result @{ Rc = 0; Out = '' } -WantRc 0 `
+        -Skip:$true -SkipReason 'no WorkBuddy / msedgewebview2 process on this machine'
+}
+else {
+    $rD2 = Invoke-Probe -ExtraArgs @('-TargetPid', ($proxyPids -join ','), '-Json')
+    $results += Test-Expect -Id 'D2' -What "proxy replay: WorkBuddy+msedgewebview2, NOT Harbor ($($proxyPids.Count) pids) -> MEASURED" `
+        -Result $rD2 -WantRc $(if ($rD2.Rc -eq 0) { 0 } else { 1 }) -WantSubstring 'MEASURED' -AllowVerdictLine
 }
 
 # ── 汇总（先打印明细，再判总账）────────────────────────────────────────────
@@ -224,9 +290,23 @@ $nPass = @($results | Where-Object { $_.Status -eq 'PASS' }).Count
 
 Write-Output ('{0}: {1} PASS / {2} FAIL / {3} SKIP' -f $RIG, $nPass, $nFail, $nSkip)
 
+# D 组是否被 SKIP —— 决定 rc 是 0（真覆盖）还是 3（未覆盖口径）。
+# 不能因为 SKIP 就报 PASS：Q13 的验收口径是「Harbor 进程树的 3D 占用」，
+# 本机没有 Harbor 时，那一口径**一条证据都没有**。把它算绿 = 「没环境算通过」。
+$dStatus = (@($results | Where-Object { $_.Id -eq 'D' }) | Select-Object -First 1).Status
+if (-not $dStatus) { $dStatus = 'MISSING' }
+
 if ($nFail -gt 0) {
     Write-Output ('{0}: FAIL | scope negative-controls must all go blocked; a passing fake PID means the probe is tautological' -f $RIG)
     exit 1
+}
+if ($nSkip -gt 0) {
+    # 行先拼好再输出（本仓踩过 -f 优先级坑：`"a{0} " + "b{1}" -f $x,$y` 只会格式化后半段）
+    $incompleteLine = ('{0}: INCOMPLETE | {1} group(s) skipped; D={2} -> Q13 Harbor-scope acceptance is NOT covered by this run' -f $RIG, $nSkip, $dStatus)
+    Write-Output $incompleteLine
+    $noteLine = ('{0}: note | negative-controls themselves are all as-expected; this rc=3 is NOT a failure and NOT a pass (blocked-by-environment, same discipline as the probe''s own NO_INSTANCES trap)' -f $RIG)
+    Write-Output $noteLine
+    exit 3
 }
 Write-Output ('{0}: PASS | scope negative-controls all as-expected' -f $RIG)
 exit 0

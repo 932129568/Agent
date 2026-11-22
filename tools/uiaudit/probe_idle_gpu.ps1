@@ -101,6 +101,18 @@ $ProgressPreference = 'SilentlyContinue'
 $COUNTER = '\GPU Engine(*engtype_3D)\Utilization Percentage'
 $RIG = 'probe_idle_gpu'
 
+# 作用域证据（在任何 exit 之前就初始化，blocked 路径也要能输出它）。
+# 只有 pid 清单时，"28 个 pid" 无法分辨量的是 Harbor 还是 WorkBuddy ——
+# 这正是本仓实测踩过的坑：负控脚本把 @('WorkBuddy','msedgewebview2') 的结果
+# 标成 "real Harbor tree"，而 Get-Process -Name Harbor 在同一台机器上恒为 0。
+# ⇒ 判据不能只报 pid，必须把 pid 反查回**进程名**，让读报告的人一眼看出量的是谁。
+$resolvedNames = @()
+# 提前给默认值：Write-Blocked 在参数自检阶段就可能被调用（早于 TargetPid 解析），
+# 那时 $pidFilter/$filterActive 还没赋值。没有 Set-StrictMode 不会报错，
+# 但 blocked 路径的 JSON 会缺字段 —— 而 blocked 路径恰恰最需要作用域证据。
+$pidFilter = @()
+$filterActive = $false
+
 function Write-Verdict([string]$state, [string]$detail) {
     Write-Output ('{0}: {1} | {2}' -f $RIG, $state, $detail)
 }
@@ -108,7 +120,13 @@ function Write-Verdict([string]$state, [string]$detail) {
 function Write-Blocked([string]$reason) {
     Write-Verdict 'blocked-by-environment' $reason
     if ($Json) {
-        Write-Output (@{ state = 'blocked-by-environment'; reason = $reason } | ConvertTo-Json -Compress)
+        Write-Output (@{
+                state                = 'blocked-by-environment'
+                reason               = $reason
+                scope                = $(if ($filterActive) { 'targeted' } else { 'whole-machine' })
+                targetPids           = @($pidFilter)
+                resolvedProcessNames = @($resolvedNames)
+            } | ConvertTo-Json -Compress)
     }
     exit 2
 }
@@ -137,6 +155,24 @@ if ($TargetPid -and $TargetPid.Trim() -ne '') {
     if ($pidFilter.Count -eq 0) { Write-Blocked 'TargetPid 给了解析后为空的列表' }
 }
 $filterActive = ($pidFilter.Count -gt 0)
+
+# ---- 把 pid 反查成进程名（作用域自证）----------------------------------------
+# 为什么必须有这一步：本项目的 GPU 负控脚本曾把 WorkBuddy+msedgewebview2 的读数
+# 标成 "real Harbor tree"，而 Harbor.exe 在本机从未启动（Get-Process -Name Harbor = 0）。
+# 光看 "28 pids" 无法发现这个错 —— 只有把名字打出来才会暴露。
+# 进程可能在过滤后退出，反查失败时写 '(exited)'，不许静默丢项（丢项会让清单长度
+# 与 pid 数不符，读报告的人会以为漏测）。
+function Resolve-PidNames([int[]]$Ids) {
+    $out = @()
+    foreach ($p in $Ids) {
+        $nm = ''
+        try { $nm = (Get-Process -Id $p -ErrorAction Stop).ProcessName } catch { $nm = '(not running)' }
+        $out += ('{0}:{1}' -f $p, $nm)
+    }
+    return $out
+}
+
+if ($filterActive) { $resolvedNames = @(Resolve-PidNames $pidFilter) }
 
 # ---- 平台与计数器前置检查（fail-closed：不可用就是 blocked，不是 0%）----------
 $onWin = $true
@@ -269,6 +305,13 @@ Write-Output ('{0}: counter = {1}' -f $RIG, $COUNTER)
 Write-Output ('{0}: warmup = {1}s | samples = {2} | threshold = {3}%' -f $RIG, $WarmupSeconds, $Samples, $Threshold)
 if ($filterActive) {
     Write-Output ('{0}: scope = TARGETED pids {1} (other processes excluded from the total)' -f $RIG, ($pidFilter -join ','))
+    # 作用域自证：pid -> 进程名。没有这行，"量的是谁" 只能靠猜。
+    Write-Output ('{0}: resolved process names = {1}' -f $RIG, ($resolvedNames -join ', '))
+    if (@($resolvedNames | Where-Object { $_ -match ':Harbor$' }).Count -eq 0) {
+        # 不是错误（探针可以被指定测任何进程），但必须显式标注，
+        # 因为本仓 Q13 的验收口銕是 "Harbor 进程树"，两条作用域不能混用。
+        Write-Output ('{0}: NOTICE scope contains no process named "Harbor" (this reading is NOT Harbor-scope evidence)' -f $RIG)
+    }
 } else {
     Write-Output ('{0}: scope = WHOLE-MACHINE sum of all engtype_3D instances' -f $RIG)
 }
@@ -318,6 +361,7 @@ if ($Json) {
             # 作用域证据：没有这两个数，p95=0% 无法与「测不到」区分
             scope            = $(if ($filterActive) { 'targeted' } else { 'whole-machine' })
             targetPids       = @($pidFilter)
+            resolvedProcessNames = @($resolvedNames)
             machineInstances = $totalInstances
             matchedInstances = $totalMatched
             min              = [math]::Round($min, 4)
