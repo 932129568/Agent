@@ -241,7 +241,11 @@ async function runAgentLoop(s, apiKey) {
     }
     if (!agentRunCurrent(run)) return;
     aiContent = runAddMessage(run, 'assistant', '');
-    aiContent.innerHTML = '<div class="md-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+    // R101 T03 · S3：思考区独立成 .think-host（mdBody 的兄弟节点）。
+    // 正文只重建 .md-body；思考区首建后只改 textContent ⇒ 展开态不丢。
+    aiContent.innerHTML = '<div class="think-host" style="display:none"></div>' +
+      '<div class="md-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+    const thinkHost = aiContent.querySelector('.think-host');
     const mdBody = aiContent.querySelector('.md-body');
     const taskFacts = [];
     let memFlushed = 0;   // 修复 W27：记忆只追加增量（原每轮全量 append_memory，二次方膨胀挤占 prompt）
@@ -647,21 +651,21 @@ async function runAgentLoop(s, apiKey) {
           Date.now() - _speedT0, completionTokens);
         if (txt) el.textContent = txt;
       };
-      const reasonHtml = (rr) => {
-        if (!rr) return '';
-        const t = String(rr);
-        const flat = t.replace(/\s+/g, ' ').trim();
-        const preview = flat.length > 48 ? flat.slice(0, 48) + '…' : flat;
-        return '<div class="think-line" data-role="think-toggle" title="点击展开/收起思考过程">' +
-            '<span class="tl-ic">◐</span><span class="tl-label">深度思考</span>' +
-            '<span class="tl-preview">' + escapeHtml(preview) + '</span>' +
-            '<span class="tl-caret">▸</span>' +
-          '</div>' +
-          '<div class="think-body" data-role="think-body">' + escapeHtml(t) + '</div>';
-      };
-      if (mdBody && !mdBody.__thinkBound) {
-        mdBody.__thinkBound = true;
-        mdBody.addEventListener('click', (e) => {
+      // ── S3 思考区：结构化首建 + 纯文本更新（R101 T03）──────────────────────
+      // 原缺陷（逐行核实，不是推测）：reasonHtml() 每帧把「思考摘要 + 思考正文」
+      // 并进 mdBody 的 innerHTML 一起重建（markdown.js 的 scheduleRender 结尾
+      // `el.innerHTML = pending.fn()`），而用户展开态是 DOM 上的 `.think-body.open`
+      // ⇒ 重建必然丢 class。CSS 救不了（节点被销毁重建，class 无从附着）。
+      //
+      // 修法：不再每帧重建思考区。首次 renderReason 时把结构建一次，之后只改
+      // textContent（预览行与正文各自更新）。这样：
+      //   ① `.open` 挂在从未被替换的节点上 ⇒ 流式 30 帧也不会掉；
+      //   ② 长流式下省掉每帧 escapeHtml(全量思考) 的字符串化与整块重建；
+      //   ③ 不需要「重建后按 dataset 恢复」的补丁式绕法（那会闪烁并产生状态竞争）。
+      // 结构上仍是 mdBody 的兄弟节点（.think-host + .md-body），正文重建碰不到思考区。
+      if (aiContent && !aiContent.__thinkBound) {
+        aiContent.__thinkBound = true;
+        aiContent.addEventListener('click', (e) => {
           const line = e.target.closest && e.target.closest('[data-role="think-toggle"]');
           if (!line) return;
           line.classList.toggle('open');
@@ -691,7 +695,8 @@ async function runAgentLoop(s, apiKey) {
           if (delta.reasoning_content || delta.content) {
             // R39（F3a/D24）：流式期走块级冻结——只重渲染尾部活动块，O(n²)→O(n)；
             // 轮末 onAssistant 仍 renderMd 全文权威渲染（跨块语义终帧纠正）
-            scheduleRender(mdBody, () => reasonHtml(fullReasoning) + renderMdStream(mdBody, fullContent));
+            renderReason(thinkHost, fullReasoning);
+            scheduleRender(mdBody, () => renderMdStream(mdBody, fullContent));
             if (agentRunVisible(run)) {
               const le = document.getElementById('liveTokenStat');
               const est = Math.ceil((fullContent.length + fullReasoning.length) / 1.8);
@@ -753,6 +758,7 @@ async function runAgentLoop(s, apiKey) {
 
       if (toolCalls.length === 0) {
         // 终帧复用同元素待渲染记录：同步绘制最新完整文本，随后旧 rAF/定时器不再重绘。
+        renderReason(thinkHost, fullReasoning);
         scheduleRender(mdBody, () => fullContent ? renderMd(fullContent) : '');
         flushRender(mdBody);
         if (usage) {
@@ -862,6 +868,7 @@ async function runAgentLoop(s, apiKey) {
         naturalDone = finishReason !== 'length';
         return { stop: true, finished: true, naturalDone, status: finishReason === 'length' ? 'length' : 'completed' };
       }
+      renderReason(thinkHost, fullReasoning);
       scheduleRender(mdBody, () => fullContent ? renderMd(fullContent) : '');
       flushRender(mdBody);
 
@@ -1370,4 +1377,40 @@ async function runAgentLoop(s, apiKey) {
       try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
     }
   }
+}
+
+/* R101 T03 · S3 思考区渲染（模块级，供运行时用例直接调用）
+ * 为什么提到模块级：T03 出口判据要求「展开后流式 30 帧不掉 open 态」有自动化用例，
+ * 闭包内的函数外部无法触达，只能靠「点开再跑真实流式」这条脆路径。
+ * 提出来后用例可以：建 host → 首帧 → 置 .open → 连打 30 帧 → 断言 class 仍在。
+ */
+function renderReason(host, rr) {
+
+    if (!host) return;
+    if (!host.__thinkBuilt) {
+      host.innerHTML =
+        '<div class="think-line" data-role="think-toggle" title="点击展开/收起思考过程">' +
+          '<span class="tl-ic">◐</span><span class="tl-label">深度思考</span>' +
+          '<span class="tl-preview"></span><span class="tl-caret">▸</span>' +
+        '</div>' +
+        '<div class="think-body" data-role="think-body"></div>';
+      host.__thinkBuilt = {
+        line: host.querySelector('.think-line'),
+        preview: host.querySelector('.tl-preview'),
+        body: host.querySelector('.think-body'),
+      };
+    }
+    const o = host.__thinkBuilt;
+    const t = String(rr || '');
+    if (!t) {
+      host.style.display = 'none';
+      if (o.preview.textContent) o.preview.textContent = '';
+      if (o.body.textContent) o.body.textContent = '';
+      return;
+    }
+    host.style.display = '';
+    const flat = t.replace(/\s+/g, ' ').trim();
+    const preview = flat.length > 48 ? flat.slice(0, 48) + '…' : flat;
+    if (o.preview.textContent !== preview) o.preview.textContent = preview;
+    if (o.body.textContent !== t) o.body.textContent = t;
 }

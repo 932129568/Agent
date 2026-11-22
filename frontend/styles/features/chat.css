@@ -575,3 +575,11 @@ body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
 .qb-cancel{flex-shrink:0;font:inherit;font-size:11px;color:var(--text-3);background:transparent;
   border:0;padding:1px 4px;cursor:pointer;border-radius:var(--radius-sm)}
 .qb-cancel:hover{color:var(--err);background:var(--err-bg)}
+
+/* ===== R101 T03 · S3 思考区独立宿主 =====
+   思考区从 .md-body 内部提升为兄弟节点（.think-host），正文重建不再触碰它。
+   这里补回原来由 .md-body 提供的左右内边距，避免「深度思考」行比正文左移。
+   注意 .think-body 的 display:none / .open{display:block} 仍在 legacy.css，
+   本文件只负责宿主盒子的位置与间距。 */
+.think-host{margin:0 0 4px;padding:0 2px}
+.think-host .think-line{padding-left:0}
