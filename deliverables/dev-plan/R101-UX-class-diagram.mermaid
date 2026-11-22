@@ -1,0 +1,106 @@
+classDiagram
+  class MotionTokens {
+    +string durFast = "120ms"
+    +string durBase = "180ms"
+    +string durSlow = "240ms"
+    +string durT1 = "100ms"
+    +string durT2 = "200ms"
+    +string durT3 = "280ms"
+    +string durAmb1 = "1.8s"
+    +string durAmb2 = "2.2s"
+    +string durAmb3 = "3.2s"
+    +readAllFromComputedStyle() MotionTokens
+  }
+
+  class AnalyticalSpring {
+    -number omega
+    -number zeta
+    +evaluate(x0, v0, dtSec) number
+  }
+
+  class RunStageId {
+    <<enumeration>>
+    tool_build
+    prompt_build
+    model_connect
+    reasoning
+    content
+    tool_running
+    done
+  }
+
+  class RunStageSignal {
+    +RunStageId stage
+    +number atMs
+    +string detail
+  }
+
+  class StageEmitter {
+    -RunStageId current
+    -number startedAtMs
+    +emit(stage, detail) void
+    +on(stage, cb) void
+    +reset() void
+  }
+
+  class TraceStep {
+    +string stepId
+    +string toolName
+    +ToolKind kind
+    +StepState state
+    +number startedAtMs
+    +number endedAtMs
+    +string argsDigest
+    +string resultDigest
+  }
+
+  class ExecutionTrace {
+    +string runId
+    +TraceStep[] steps
+    +boolean collapsed
+    +summarize() TraceSummary
+  }
+
+  class TrustState {
+    +TrustLevel level
+    +TrustScope scope
+    +normalize(legacy) TrustState
+  }
+
+  class QueuedMessage {
+    +string id
+    +string text
+    +number createdAtMs
+    +boolean editInPlace
+  }
+
+  class ContractBaseline {
+    +string source_line_multiset_sha256
+    +map function_defs
+    +HtmlFace html
+    +string golden_sha256
+    +string api_py_sha256
+  }
+
+  class HtmlFace {
+    +string[] dom_ids
+    +string[] onclick_fns
+    +string[] callapi_targets
+  }
+
+  class FrozenSurface {
+    +string API_VERSION
+    +string APP_VERSION
+    +string[] public_methods
+    +string[] hidden_methods
+    +map contract_baseline_r101
+    +discoverLatestAnchor() map
+  }
+
+  StageEmitter --> RunStageSignal : emits
+  RunStageSignal ..> RunStageId : typed by
+  ExecutionTrace "1" *-- "many" TraceStep
+  AnalyticalSpring ..> MotionTokens : reads durations
+  ExecutionTrace ..> MotionTokens : L1/L4 animation
+  ContractBaseline *-- HtmlFace
+  FrozenSurface --> ContractBaseline : anchors r101

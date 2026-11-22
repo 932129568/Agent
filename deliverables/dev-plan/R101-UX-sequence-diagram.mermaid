@@ -1,0 +1,40 @@
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant RC as agent/run-controller.js
+  participant BR as core/bridge.js
+  participant SV as server/registry.js
+  participant PV as services/provider.js
+  participant AI as 模型端点(SSE)
+  participant SP as agent/sse-parser.js
+  participant TR as ExecutionTrace
+
+  U->>RC: Enter / sendMessage
+  Note over RC: S1 意图起飞（纯视觉，无 await，可诚实播放）
+  RC->>SV: set_current_sid (:202)
+  RC->>SV: begin_task (:203)
+  RC->>RC: routeTools() 同步 :271
+  Note over RC: ⚠ 同步函数 <1ms，禁止发射 stage（否则即“假进度”）
+  RC->>SV: build_tools (:323)
+  SV-->>RC: 工具集
+  Note over RC: stage = tool_build ✅真实 await
+  RC->>SV: build_system_prompt (:537)
+  SV->>PV: buildSystemPrompt(query)
+  PV->>PV: memoryTail(query) :513
+  Note over PV: 内含 memoryRetrieve(query,2)，命中数 N 不回传 ⇒ 5.4 记忆溯源 blocked
+  PV-->>SV: prompt 字符串
+  SV-->>RC: prompt 字符串
+  Note over RC: stage = prompt_build ✅真实（但无法区分“检索记忆”与“构建提示”）
+  RC->>AI: fetch SSE
+  Note over RC: stage = model_connect ✅真实
+  AI-->>SP: data:{choices[0].delta.reasoning_content}
+  SP->>RC: result.reasoning 累积
+  Note over RC: stage = reasoning → S3 星轨 + 滑动尾行
+  RC->>TR: TraceStep(kind=tool) 追加
+  Note over TR: 终态折单行；字段须在 request-builder 净化层整体剥离
+  AI-->>SP: data:{choices[0].delta.content}
+  SP->>RC: result.content 累积
+  Note over RC: stage = content → S5 流式定格（思考容器与正文容器必须分区，修“展开弹关”Bug）
+  AI-->>SP: finish_reason
+  SP->>RC: result.finishReason
+  Note over RC: stage = done → 全轮收束，回落静息态
