@@ -10,7 +10,7 @@
       },
       "reactProduction": {
         "files": 16,
-        "lines": 2857
+        "lines": 2885
       },
       "normalizedApp": {
         "files": 46,
@@ -35,17 +35,17 @@
         "lines": 1182
       },
       "tools": {
-        "files": 60,
-        "lines": 10673
+        "files": 68,
+        "lines": 13431
       },
       "pytest": {
         "files": 88,
         "lines": 15968
       }
     },
-    "totalSourceLines": 47222,
+    "totalSourceLines": 47250,
     "readErrors": [],
-    "harborHtmlBytes": 3647963,
+    "harborHtmlBytes": 3650734,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {

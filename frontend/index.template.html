@@ -93,9 +93,21 @@
        ② 低频工具（分析/审计/会话搜索/沙箱）收进「工具箱」二级弹出菜单；
        ③ rail 收敛为 主链路(对话/历史/工作区/专家) + 工具箱 + 底部系统组。 -->
   <button class="rail-btn on" data-panel="chat" data-tip="对话" aria-label="对话" onclick="switchPanel('chat')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-chat"/></svg></button>
-  <button class="rail-btn" data-panel="sessions" data-tip="会话历史" aria-label="会话历史" onclick="switchPanel('sessions')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-list"/></svg></button>
-  <button class="rail-btn" data-panel="workspace" data-tip="工作区与工具权限" aria-label="工作区与工具权限" onclick="switchPanel('workspace')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-folder"/></svg></button>
-  <button class="rail-btn" id="expertCenterBtn" data-tip="功能市场" aria-label="功能市场"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-market"/></svg></button>
+  <button class="rail-btn" data-panel="workspace" data-tip="项目与文件" aria-label="项目与文件" onclick="switchPanel('workspace')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-folder"/></svg></button>
+  <!-- R101 T02 · Rail 9→5：新增「记忆与洞察」第 4 入口。
+       复用既有 #panelAnalytics 容器（panels.js:9 PANELS 含 analytics、
+       :15 白名单放行、:23 拼出 panelAnalytics、:45 切过去自动 renderAnalytics()）
+       ⇒ 不新增任何 DOM id，契约面零漂移。
+       **必须写 onclick**：data-panel 只负责高亮同步（panels.js:18-19 仅
+       classList.toggle，无任何点击委托），只写 data-panel 会变成点了不响应的假按钮。 -->
+  <button class="rail-btn" data-panel="analytics" data-tip="记忆与洞察" aria-label="记忆与洞察" onclick="switchPanel('analytics')"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-chart"/></svg></button>
+  <button class="rail-btn" id="expertCenterBtn" data-tip="能力中心" aria-label="能力中心"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-market"/></svg></button>
+  <!-- R101 T02：原「会话历史」rail 钮已移出主 Rail，改由侧栏置顶区的「会话」钮进入
+       #panelSessions（同一 switchPanel 前导名，故计数持平为 4，集合不变、零漂移）。
+       教训：只删 Rail 钮而不补入口，该面板会「id 与字面量都还在、门禁全绿、但点不出来」，
+       契约判定不出可达性。
+       下方工具箱子菜单 :114 内含一处 switchPanel('analytics')（前导名是 toolsHide），
+       C 方案新增的入口已直接指向同一面板，故该子项保留不动。 -->
   <div class="rail-sep"></div>
   <button class="rail-btn" id="toolsBoxBtn" data-tip="工具箱（分析 · 审计 · 搜索 · 沙箱）" aria-label="工具箱" aria-controls="toolsPop" aria-expanded="false" onclick="toolsToggle(event)"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-wrench"/></svg></button>
   <div class="notify-pop" id="toolsPop" role="menu" aria-label="工具箱" style="display:none;">
@@ -119,8 +131,15 @@
     <button type="button" class="mn-btn" id="notifyClearBtn" onclick="navClearNotify()">清空通知</button>
   </div>
   <button class="rail-btn" data-tip="余额" aria-label="余额" onclick="openBilling()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-coin"/></svg></button>
-  <button class="rail-btn" id="themeBtn" data-tip="切换深色/浅色" aria-label="切换深色/浅色" onclick="toggleTheme()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-moon"/></svg></button>
-  <button class="rail-btn" data-tip="设置" aria-label="设置" onclick="switchPanel('chat');toggleSettings()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-settings"/></svg></button>
+  <!-- R101 T02 · 外观组：主题从主 Rail 下沉到底部系统组。
+       themeBtn 的 id 与 toggleTheme 的 onclick 两个字面量原样保留（themeBtn 在
+       DOM_IDS 40 冻结名单内、toggleTheme 在前导名集合内；wrap 层刻意不带 id/onclick）。
+       注：本注释刻意不写 onclick= 字面量，否则会被 contract_diff 的 onclick 正则
+       当成真实绑定计入集合（注释在 harbor.html 里是保留的）。 -->
+  <div class="rail-appearance">
+    <button class="rail-btn" id="themeBtn" data-tip="切换深色/浅色" aria-label="切换深色/浅色" onclick="toggleTheme()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-moon"/></svg></button>
+  </div>
+  <button class="rail-btn" data-tip="设置" aria-label="设置" onclick="toggleSettings()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-settings"/></svg></button>
 </nav>
 
 <aside class="sidebar" id="sidebar">
@@ -136,6 +155,12 @@
     <button class="new-chat-btn" id="new-chat-btn" onclick="openNewChatScreen()"><svg class="ui-icon"><use href="#i-plus"/></svg>新建对话</button>
     <div class="side-actions">
       <button class="ghost-btn" onclick="openSessionSearch()" title="搜索全部会话"><svg class="ui-icon"><use href="#i-search"/></svg>搜索</button>
+      <!-- R101 T02 补：会话总览（#panelSessions）的唯一入口。
+           Rail 上的「会话历史」钮移除后，该面板一度变成不可达：id 还在、4 个
+           setSessionFilter 字面量还在，所以两道契约门都照样全绿，但用户再也
+           点不出会话筛选/搜索/概览。契约判「保留 id + 保留字面量」，判不出
+           「还有没有人能到达它」。此处补回可达链路。 -->
+      <button class="ghost-btn" onclick="switchPanel('sessions')" title="会话总览（筛选 · 搜索 · 概览）"><svg class="ui-icon"><use href="#i-list"/></svg>会话</button>
       <button class="ghost-btn" onclick="exportChat()"><svg class="ui-icon"><use href="#i-download"/></svg>导出</button>
     </div>
   </div>
@@ -166,7 +191,10 @@
       <button class="icon-btn" id="searchPanelBtn" title="浏览器搜索（Agent 受控检索）" onclick="spManualOpen()">
         <svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-search"/></svg>
       </button>
-      <button class="pill-btn" onclick="toggleSettings()"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-settings"/></svg>设置</button>
+      <!-- R101 T02：Header 设置药丸（原 pill-btn toggleSettings()）已删除。
+           设置入口收敛到左侧 Rail 5 号位；Rail 那颗的 onclick 已改为 toggleSettings()
+           （不再带 switchPanel 前导），故 toggleSettings 前导名计数持平为 2。
+           注意：:183 的 set-win-close 是「关闭设置窗」按钮，与设置入口无关，**不可删**。 -->
     </div>
   </header>
 

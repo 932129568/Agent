@@ -34,6 +34,17 @@ export default function Sidebar() {
             </svg>
             搜索
           </button>
+          {/* R101 T02 补：会话总览（#panelSessions）的唯一入口。
+           Rail 上的「会话历史」钮移除后，该面板一度变成不可达：id 还在、4 个
+           setSessionFilter 字面量还在，所以两道契约门都照样全绿，但用户再也
+           点不出会话筛选/搜索/概览。契约判「保留 id + 保留字面量」，判不出
+           「还有没有人能到达它」。此处补回可达链路。 */}
+          <button className="ghost-btn" title="会话总览（筛选 · 搜索 · 概览）" data-h-events={"[{\"type\":\"click\",\"code\":\"switchPanel('sessions')\"}]"}>
+            <svg className="ui-icon">
+              <use href="#i-list" />
+            </svg>
+            会话
+          </button>
           <button className="ghost-btn" data-h-events={"[{\"type\":\"click\",\"code\":\"exportChat()\"}]"}>
             <svg className="ui-icon">
               <use href="#i-download" />

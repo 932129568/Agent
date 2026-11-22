@@ -32,12 +32,10 @@ export default function MainShell() {
               <use href="#i-search" />
             </svg>
           </button>
-          <button className="pill-btn" data-h-events={"[{\"type\":\"click\",\"code\":\"toggleSettings()\"}]"}>
-            <svg className="ui-icon ui-icon-20" aria-hidden="true">
-              <use href="#i-settings" />
-            </svg>
-            设置
-          </button>
+          {/* R101 T02：Header 设置药丸（原 pill-btn toggleSettings()）已删除。
+           设置入口收敛到左侧 Rail 5 号位；Rail 那颗的 onclick 已改为 toggleSettings()
+           （不再带 switchPanel 前导），故 toggleSettings 前导名计数持平为 2。
+           注意：:183 的 set-win-close 是「关闭设置窗」按钮，与设置入口无关，**不可删**。 */}
         </div>
       </header>
       <div className="panels">

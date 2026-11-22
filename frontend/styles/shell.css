@@ -6,6 +6,11 @@
 .rail-btn.on{background:var(--primary-soft);color:var(--primary);border-color:transparent}
 .rail-btn.on::before{left:-8px;width:3px;height:24px;border-radius:0 2px 2px 0;background:var(--primary)}
 .rail-btn::after{background:var(--card-bg);color:var(--text);border:1px solid var(--border);box-shadow:var(--shadow-md)}
+/* R101 T02 · 外观组容器：主题按钮从主 Rail 下沉到此处。
+   必须 display:contents —— 若用 flex/block，会在 rail 的纵向排布里多出一层盒子，
+   改变 :108 的 .rail-spacer 与底部按钮的间距（视觉回归但不触发任何门禁）。
+   display:contents 让子按钮仍作为 rail 的直接布局项参与，排布与改动前逐像素一致。 */
+.rail-appearance{display:contents}
 .rail-btn:hover svg{transform:none}
 .sidebar{background:var(--sidebar-bg);border-right:1px solid var(--border);backdrop-filter:none;-webkit-backdrop-filter:none}
 .sidebar-brand{padding:16px 14px;border-bottom:1px solid var(--border)}

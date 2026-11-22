@@ -98,6 +98,16 @@
   --stagger-sm:60ms;
   --stagger-max:160ms;   /* 阶梯封顶（第 5 项起统一 160ms，防长列表尾部延迟堆积） */
 
+  /* ===== R101 T02 · 提示类时长令牌（L1 微 / L2 短 / L3 中 / L4 环境）=====
+     补这组的理由：toast / tip / msg 三类提示此前直接复用 --dur-comp，
+     语义上「提示的停留感」与「组件过渡」不是一回事，改一处会波及另一处。
+     拆分后 A5 把这三处从「裸值/借令牌」变成「专令牌」，属 tokenized。
+     现有消费者：.toast（入场/退场，见下方 v4ToastIn 段）。 */
+  --dur-tip:140ms;
+  --dur-toast:200ms;
+  --dur-toast-out:140ms;
+  --dur-msg:160ms;
+
   /* ===== v4 位移令牌 ===== */
   --shift-tip:4px;
   --shift-comp:6px;
@@ -967,14 +977,16 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
    ============================================================ */
 /* 修复 Bug B（2026-10-18）：toast 栈封顶 40vh + 纵向滚动，长明细 toast 不再长出视口不可达 */
 #toastBox{position:fixed;right:14px;bottom:14px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:min(420px,90vw);max-height:40vh;overflow-y:auto;}
-/* v4 toast：入场 200ms out-soft translateX(8px)；退场 .out 140ms in-soft 镜像 */
+/* v4 toast：入场 out-soft translateX(8px)；退场 .out in-soft 镜像
+   R101 T02：时长改走专令牌 --dur-toast / --dur-toast-out（原先借 --dur-comp 及其 -out，
+   语义上「提示停留感」与「组件过渡」不是一回事）。 */
 .toast{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:var(--radius-md);
   background:var(--card-bg);border:1px solid var(--border);box-shadow:var(--shadow-lg);
-  font-size:12.5px;color:var(--text);animation:v4ToastIn var(--dur-comp) var(--ease-out-soft);word-break:break-all;
+  font-size:12.5px;color:var(--text);animation:v4ToastIn var(--dur-toast) var(--ease-out-soft);word-break:break-all;
   max-height:40vh;overflow-y:auto;flex-shrink:0;}
 @keyframes v4ToastIn{from{opacity:0;transform:translateX(var(--shift-toast))}to{opacity:1;transform:none}}
 .toast.out{animation:none;opacity:0;transform:translateX(var(--shift-toast));
-  transition:opacity var(--dur-comp-out) var(--ease-in-soft),transform var(--dur-comp-out) var(--ease-in-soft);}
+  transition:opacity var(--dur-toast-out) var(--ease-in-soft),transform var(--dur-toast-out) var(--ease-in-soft);}
 .toast-ico{flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
 .toast-ok .toast-ico{background:var(--ok);} .toast-warn .toast-ico{background:var(--warn);} .toast-err .toast-ico{background:var(--err);} .toast-info .toast-ico{background:var(--primary);}
 .toast-msg{flex:1;min-width:0;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;}
@@ -984,7 +996,8 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
 #modalRoot{position:fixed;inset:0;z-index:10001;}
 .modal-mask{position:absolute;inset:0;background:rgba(16,18,28,.45);backdrop-filter:blur(2px);
   animation:v4MaskIn var(--dur-comp) var(--ease-out-soft);}
-@keyframes v4MaskIn{from{opacity:0}to{opacity:1}}
+/* v4MaskIn 定义在 legacy.css:454（本处原有一份逐字节相同的副本，R101 T02 去重删除）。
+   保留定义在首次使用点之前，级联顺序不变。 */
 .modal-card{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:min(440px,92vw);
   background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);
   box-shadow:var(--shadow-lg);padding:18px 18px 14px;animation:v4ModalIn var(--dur-comp) var(--ease-spring);}
@@ -1293,6 +1306,16 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
 .plan-acts.gone{opacity:0;pointer-events:none}
 .plan-summary{padding:11px 14px;font-size:12px;color:var(--text-2);border-top:1px solid var(--border);
   background:var(--surface-2);display:none}
+/* R101 T02 · v4LineIn 补真实定义。
+   背景：全仓 29 处引用本动画名，但 @keyframes v4LineIn 定义 **0 处**（A1 死引用）。
+   浏览器对这种死引用完全静默（无 console 报错、animationName 仍返回值、getAnimations() 为空），
+   所以只能靠静态判据发现。
+   形态取「行级入场」：轻微上移 + 淡入，位移量用既有 --shift-panel 令牌，
+   与同族 v4DevIn 量级一致（避免新造令牌）。
+   **刻意不带 infinite**：本动画是入场（用 animate-*, forwards/both），
+   不是循环；写成 infinite 会让 A6 的循环计数从 26 变 27，
+   并与「静置 GPU」红线直接冲突。 */
+@keyframes v4LineIn{from{opacity:0;transform:translateY(var(--shift-panel))}to{opacity:1;transform:none}}
 .plan-summary.show{display:block;animation:v4LineIn var(--dur-comp) var(--ease-out-soft)}
 .plan-rollback{color:var(--primary);cursor:pointer;text-decoration:none}
 .plan-rollback:hover{text-decoration:underline}
