@@ -242,13 +242,28 @@ function _modalRoot() {
     _bindOverlayKeyboard(m, _closeModal);
     return m;
   }
-  m = document.createElement('div');
+  // I27（v3.4）：模态根用原生 <dialog> + showModal()，进 **top layer**。
+  // 好处：不再靠 z-index 跟各种浮层抢层级（命令面板 500 / 引导 600 / 副屏 420 的排序不再是维护负担），
+  // ESC 语义由浏览器接管（我们仍保留自己的 Esc 绑定做业务收尾）。
+  // 布局兼容：dialog 被 CSS 撑成整视口（见 components.css 的 #modalRoot 规则），
+  // 内部的 .modal-mask / .modal-card 仍是绝对定位，行为不变。
+  m = document.createElement('dialog');
   m.id = 'modalRoot';
+  m.className = 'modal-root';
   document.body.appendChild(m);
+  if (typeof m.showModal === 'function') {
+    try { m.showModal(); } catch (e) { /* 已在 top layer / 不支持：退化为普通容器 */ }
+  }
   _bindOverlayKeyboard(m, _closeModal);
   return m;
 }
 function _closeModal() {
+  // I27：先把 dialog 关掉（释放 top layer），再做既有的收尾逻辑。
+  // 若跳过这一步，元素被移除后浏览器仍可能按"模态已开"记账，下一次 showModal 会抛错。
+  try {
+    const root = document.getElementById('modalRoot');
+    if (root && typeof root.close === 'function' && root.open) root.close();
+  } catch (e) {}
   const m = document.getElementById('modalRoot');
   // 修复 S22：模态 DOM 被移除而确认仍挂起时，兜底 resolve {ok:false}（防 Promise 永不 settle 卡死应用）。
   // v4：兜底逻辑保持同步（先 settle 再走退场动画拆 DOM）——S22/W22 测试依赖同步收尾。
