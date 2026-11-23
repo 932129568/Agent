@@ -3,6 +3,7 @@
  * 网络探测仅允许 http(s)，且带超时与响应大小上限。
  */
 import fs from 'node:fs'
+import { projectRulesSection } from './projectRules.mjs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -574,9 +575,12 @@ export async function buildSystemPrompt(query = '') {
   const rendered = renderPrompt(enabled ? 'system-base' : 'system-ws-off', { ws_root: root })
   // V4-H（C2）：灰度开启时追加轻量工具目录；关闭时恒为空串 → 下方三个分支逐字节不变。
   const catalog = await v4hToolCatalogSection()
-  if (rendered) return okJson(rendered + tail + catalog)
+  // I06：项目规则自动发现（L1.5）。无规则文件 ⇒ 空串 ⇒ 下面三个分支逐字节不变。
+  // 只在启用工作区时读（未启用工作区没有"项目"，读根目录会误把用户家目录的规则带进来）。
+  const rules = enabled ? projectRulesSection(root) : ''
+  if (rendered) return okJson(rendered + tail + rules + catalog)
   if (!enabled) return okJson('你是 Harbor 内置编程助手。当前**未启用工作区**：不要假设或猜测任何工作区路径，不要主动列出/创建/修改文件或文件夹；用户要求文件操作时，先请其启用工作区。\n始终用简体中文回复，除非用户明确要求其它语言。' + tail + catalog)
-  return okJson(`你是 Harbor 内置编程助手。当前工作区: ${root}\n始终用简体中文回复，除非用户明确要求其它语言。\n硬规则:\n1. 文件操作只用工具, 禁止用 Get-Content/Set-Content(后端已强制 UTF-8)。\n2. 写文件串行: 一次一个 write_file/append_file/search_replace, 等返回成功再写下一个。\n3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。${tail}${catalog}`)
+  return okJson(`你是 Harbor 内置编程助手。当前工作区: ${root}\n始终用简体中文回复，除非用户明确要求其它语言。\n硬规则:\n1. 文件操作只用工具, 禁止用 Get-Content/Set-Content(后端已强制 UTF-8)。\n2. 写文件串行: 一次一个 write_file/append_file/search_replace, 等返回成功再写下一个。\n3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。${tail}${rules}${catalog}`)
 }
 
 export async function promptGet(promptId) {
