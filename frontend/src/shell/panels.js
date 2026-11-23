@@ -19,6 +19,26 @@ function switchPanel(name) {
     btn.classList.toggle('on', btn.dataset.panel === name);
   });
   const dir = PANEL_ORDER.indexOf(name) > PANEL_ORDER.indexOf(prev) ? 'fwd' : 'back';
+  // P3-2 接线：切面板时给大外壳一次余震 + 让被点的那颗 rail 钮闪一下接触光纹。
+  // 为什么不调 closeWithCollision：它要求传"卡片元素"并自己播飞出动效，
+  // 会和 switchPanel 既有的转场打架（两套 transform 抢同一个元素）。
+  // 这里只取它的 applyImpulse，专门作用于 .main，不碰正在退场的面板。
+  try {
+    const rig = (typeof window !== 'undefined') ? window['Harbor' + 'KineticRig'] : null;
+    const fxOff = document.body && document.body.classList.contains('fx-off');
+    if (rig && typeof rig.applyImpulse === 'function' && !fxOff) {
+      const shell = document.querySelector('.main');
+      const btn = document.querySelector('.rail-btn[data-panel="' + name + '"]');
+      if (shell) {
+        rig.applyImpulse(shell, { vx: dir === 'fwd' ? 26 : -26, vy: 10, vsc: -0.12,
+          preset: { omega: 17, zeta: 0.46, maxPx: 5, maxSc: 0.012 } });
+      }
+      if (btn && btn.classList) {
+        btn.classList.add('kin-ring-hit');
+        setTimeout(function () { try { btn.classList.remove('kin-ring-hit'); } catch (e) {} }, 260);
+      }
+    }
+  } catch (e) { /* 余震失败绝不影响切面板 */ }
   const oldEl = document.getElementById('panel' + prev[0].toUpperCase() + prev.slice(1));
   const newEl = document.getElementById('panel' + name[0].toUpperCase() + name.slice(1));
   if (typeof closeAllCS === 'function') closeAllCS();
