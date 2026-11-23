@@ -14,6 +14,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { runPostWriteHook } from './postWriteHooks.mjs'
 import iconv from 'iconv-lite'
 import { resolveWs, shortPath } from './jail.js'
 import { withRootLock, ctxRoot } from '../session-context.js'
@@ -261,7 +262,16 @@ export async function writeFile(input, content) {
     fs.writeFileSync(tmp, String(content ?? ''), 'utf8')
     fs.renameSync(tmp, target)
     invalidate(target)
-    return okJson({ ok: true, path: shortPath(target), bytes: Buffer.byteLength(String(content ?? ''), 'utf8') })
+    const base = { ok: true, path: shortPath(target), bytes: Buffer.byteLength(String(content ?? ''), 'utf8') }
+    // I09：写后 hook（自动格式化等）。**没有 .harbor/hooks.json 时跑都不跑**，
+    // 返回值逐字节不变（没配置就不加 hook 字段）——这样 golden 与既有用例不受影响。
+    try {
+      const hook = await runPostWriteHook(ctxRoot(), shortPath(target))
+      if (hook && hook.ran) base.hook = { ok: !!hook.ok, code: hook.code, ms: hook.ms };
+      if (hook && hook.timedOut) base.hook = { ok: false, timedOut: true, ms: hook.ms };
+      if (hook && hook.error) base.hook = { ok: false, error: hook.error };
+    } catch (e) { /* hook 异常绝不影响写入结果 */ }
+    return okJson(base)
   } catch (error) { return errJson(error.message || String(error)) }
   })
 }
