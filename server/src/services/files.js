@@ -256,13 +256,20 @@ export async function writeFile(input, content) {
     if (fs.existsSync(target) && fs.statSync(target).size > 20000) {
       return errJson('目标文件已存在且 >20KB。请改用 search_replace 局部修改；确需整体重写，先 delete_path 删掉它再 write_file。')
     }
+    // P0-6：覆盖写入前捕获原文件内容（新建文件为空串），供前端 Myers Diff 审查后立即剥离（0 Token 膨胀）
+    const prevText = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : ''
     fs.mkdirSync(path.dirname(target), { recursive: true })
     // atomic_write_text：newline=''（无换行翻译）逐字节
     const tmp = `${target}.${process.pid}.tmp`
     fs.writeFileSync(tmp, String(content ?? ''), 'utf8')
     fs.renameSync(tmp, target)
     invalidate(target)
-    const base = { ok: true, path: shortPath(target), bytes: Buffer.byteLength(String(content ?? ''), 'utf8') }
+    const base = {
+      ok: true,
+      path: shortPath(target),
+      bytes: Buffer.byteLength(String(content ?? ''), 'utf8'),
+      diff: { before: prevText.slice(0, 20000), after: String(content ?? '').slice(0, 20000) },
+    }
     // I09：写后 hook（自动格式化等）。**没有 .harbor/hooks.json 时跑都不跑**，
     // 返回值逐字节不变（没配置就不加 hook 字段）——这样 golden 与既有用例不受影响。
     try {
@@ -362,7 +369,12 @@ export async function searchReplace(input, oldText, newText, replaceAll = false)
     fs.writeFileSync(tmp, written)
     fs.renameSync(tmp, target)
     invalidate(target)
-    return okJson({ ok: true, path: shortPath(target), replaced: replaceAll ? count : 1 })
+    return okJson({
+      ok: true,
+      path: shortPath(target),
+      replaced: replaceAll ? count : 1,
+      diff: { before: from.slice(0, 16000), after: String(newText ?? '').slice(0, 16000) },
+    })
   } catch (error) { return errJson(error.message || String(error)) }
   })
 }

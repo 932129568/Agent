@@ -951,6 +951,7 @@ async function runAgentLoop(s, apiKey) {
       // R37 修复（D8）：写类串行工具清单改用 tool-runtime 顶层单源（manifest
       // requires 已登记）——原模块内重复定义，两份口径可漂移。
       const toolResults = [];
+      const _roundDiffById = new Map();
       let batchPending = toolUis.slice();
       while (batchPending.length) {
         if (userStopped || !agentRunCurrent(run)) break;   // 暂停/切会话后不再执行剩余工具批次
@@ -1001,6 +1002,14 @@ async function runAgentLoop(s, apiKey) {
             // 修复 W1（三轮）：执行失败/被护栏拒绝（error/skipped）回滚登记，合法重试不被误拦
             try { const d0 = JSON.parse(result); if (d0 && (d0.error || d0.skipped)) cmdDeduper.unmark(cmdKey); } catch (e) {}
             try { const d = JSON.parse(result); if (d.output) { d.output = compressCliOutput(d.output); result = JSON.stringify(d); } } catch (e) {}
+            // P0-4：Shell 命令走此分支（不进下方 else），必须在此清空 readFileSet 与 listDirsSet 防读到陈旧文件/目录缓存
+            if (tc.name !== 'open_app') {
+              try {
+                invalidateReadCache(readFileSet, 'run_command', args, result);
+                listDirsSet.clear();
+                runWroteFiles = true;
+              } catch (e) {}
+            }
           }
         } else {
           result = await executeRunTool(tc.name, args);
@@ -1036,6 +1045,30 @@ async function runAgentLoop(s, apiKey) {
                 }
               }
               const _inv = invalidateReadCache(readFileSet, tc.name, args, result);
+              // P0-4：写类工具变更后同步清空 listDirsSet，保证紧接 list_dir 能立刻看到新建/删除的文件
+              if (READ_CACHE_WRITE_TOOLS.indexOf(tc.name) >= 0) {
+                listDirsSet.clear();
+              }
+              // P0-4：消费并立即剥离 parsed.diff（先暂存给副屏 + 派发 harbor:diff，再 delete 防进模型上下文膨胀 Token）
+              try {
+                const _pDiff = JSON.parse(result);
+                if (_pDiff && _pDiff.diff && typeof _pDiff.diff === 'object') {
+                  const _a = (args && typeof args === 'object') ? args : {};
+                  const _dp = String(_pDiff.path || _a.path || _a.src || _a.new_path || _a.dst || '');
+                  const _item = {
+                    tool: tc.name,
+                    path: _dp,
+                    before: String(_pDiff.diff.before ?? ''),
+                    after: String(_pDiff.diff.after ?? ''),
+                  };
+                  if (tc && tc.id) _roundDiffById.set(String(tc.id), _item);
+                  if (typeof document !== 'undefined' && document.dispatchEvent && typeof CustomEvent === 'function') {
+                    document.dispatchEvent(new CustomEvent('harbor:diff', { detail: Object.assign({ sid: s && s.id }, _item) }));
+                  }
+                  delete _pDiff.diff;
+                  result = JSON.stringify(_pDiff);
+                }
+              } catch (e) {}
               // I05：只要发生过写类工具（或命令），就认为「改过东西」，收尾前需要自检
               if (['write_file','append_file','search_replace','delete_path','move_path','copy_path','run_command'].indexOf(tc.name) >= 0) {
                 runWroteFiles = true;
@@ -1157,8 +1190,7 @@ async function runAgentLoop(s, apiKey) {
           categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
             ? toolCategoryOf(tc && tc.name) : 'other')),
         });
-        // I23：把本轮写操作广播给副屏（事件驱动，静止 0 轮询）。
-        // 只带 tool + path：前后内容当前没有采集点，不伪造 diff。
+        // I23 + P0-4：把本轮写操作（含 P0-6/P0-4 捕获的真实 before/after）广播给副屏「改动」页
         try {
           const writes = [];
           toolCalls.forEach((tc) => {
@@ -1166,7 +1198,11 @@ async function runAgentLoop(s, apiKey) {
             if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].indexOf(nm) < 0) return;
             let a = {};
             try { a = JSON.parse(tc.argsStr || '{}') || {}; } catch (e) { a = {}; }
-            writes.push({ tool: nm, path: a.path || a.src || a.new_path || a.dst || '' });
+            const wPath = a.path || a.src || a.new_path || a.dst || '';
+            const cap = (tc && tc.id && _roundDiffById.has(String(tc.id))) ? _roundDiffById.get(String(tc.id)) : null;
+            writes.push(cap
+              ? { tool: nm, path: cap.path || wPath, before: cap.before, after: cap.after }
+              : { tool: nm, path: wPath });
           });
           if (writes.length && typeof document !== 'undefined' && document.dispatchEvent) {
             document.dispatchEvent(new CustomEvent('harbor:trace', { detail: { sid: s && s.id, writes } }));
@@ -1555,7 +1591,7 @@ function invalidateReadCache(readFileSet, toolName, args, result) {
   if (!readFileSet || typeof readFileSet.clear !== 'function') return 0;
   const name = String(toolName || '');
   const isWrite = READ_CACHE_WRITE_TOOLS.indexOf(name) >= 0;
-  const isCmd = name === 'run_command';
+  const isCmd = name === 'run_command' || name === 'run_powershell' || name === 'run_admin_command';
   if (!isWrite && !isCmd) return 0;
   let ok = false;
   try {
@@ -1570,12 +1606,14 @@ function invalidateReadCache(readFileSet, toolName, args, result) {
   }
   if (!ok) return 0;
   const a = (args && typeof args === 'object') ? args : {};
+  // P0-4：路径键统一反斜杠为正斜杠，修复 Windows `a\b` 与 `a/b` 不命中缓存失效的漏洞
+  const normPath = x => String(x).replace(/\\/g, '/').toLowerCase();
   const pks = [a.path, a.src, a.dst, a.new_path]
-    .filter(Boolean).map(x => String(x).toLowerCase());
+    .filter(Boolean).map(normPath);
   if (!pks.length) return 0;
   let removed = 0;
   for (const k of [...readFileSet]) {
-    const key = String(k).toLowerCase();
+    const key = normPath(k);
     if (pks.some(pk => key.startsWith(pk + '@'))) { readFileSet.delete(k); removed++; }
   }
   return removed;
