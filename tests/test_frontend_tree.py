@@ -13,6 +13,7 @@ EXPECTED_ORDER = [
     'frontend/src/shell/composer-hub.js',
     'frontend/src/shell/hub-market.js',
     'frontend/src/core/motion.js',
+    'frontend/src/shell/kinetic-rig.js',
     'frontend/src/core/state.js',
     'frontend/src/core/tokens-est.js',
     'frontend/src/core/app-state.js',

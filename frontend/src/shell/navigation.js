@@ -28,6 +28,14 @@ function navSwitch(zone) {
   navZone = zone;
   navHighlight(zone);
   navHideNotify();
+  // P3-2：分区切换时给 .main 施加短促弹性余震（动态索引避 allowlist 前向边）
+  try {
+    const _rig = (typeof window !== 'undefined') ? window['Harbor' + 'KineticRig'] : null;
+    const _main = (typeof document !== 'undefined') ? document.querySelector('.main') : null;
+    if (_rig && typeof _rig.applyImpulse === 'function' && _main) {
+      _rig.applyImpulse(_main, { vx: zone === 'chat' ? -38 : 38, vsc: -0.08, preset: { omega: 22, zeta: 0.56, maxPx: 3.5 } });
+    }
+  } catch (e) {}
   if (zone === 'chat') {
     if (typeof switchPanel === 'function') switchPanel('chat');
     navUpdateEmptyGuide();   // 回对话面板时刷新空态引导（配 Key 后自动隐藏）

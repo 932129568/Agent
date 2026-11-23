@@ -139,6 +139,11 @@ function contextDockClose() {
   try { if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) el.hidePopover(); } catch (e) {}
   CONTEXT_DOCK.open = false;
   CONTEXT_DOCK.timer = 0;   // 已无定时器；字段保留仅为兼容既有探针
+  const rig = _dockFn('Harbor' + 'KineticRig');
+  if (rig && typeof rig.applyImpulse === 'function' && typeof document !== 'undefined') {
+    const mainEl = document.querySelector('.main');
+    if (mainEl) rig.applyImpulse(mainEl, { vx: 46, preset: { omega: 20, zeta: 0.52, maxPx: 4.0 } });
+  }
 }
 
 function contextDockToggle() {

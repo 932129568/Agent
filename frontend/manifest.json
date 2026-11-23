@@ -140,6 +140,16 @@
       "requires": []
     },
     {
+      "path": "frontend/src/shell/kinetic-rig.js",
+      "provides": [
+        "HarborKineticRig"
+      ],
+      "requires": [
+        "MOTION",
+        "createAnalyticalSpring"
+      ]
+    },
+    {
       "path": "frontend/src/core/state.js",
       "provides": [
         "clearExpertSelection",

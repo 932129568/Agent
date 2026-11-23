@@ -152,8 +152,16 @@ function hubOpenMarket(tab) {
 }
 function hubCloseMarket() {
   const box = document.getElementById('hubMarket');
-  if (box) box.hidden = true;
   HUB_MARKET_STATE.open = false;
+  if (!box) return;
+  const shell = box.querySelector ? box.querySelector('.hm-shell') : null;
+  const trigger = document.getElementById('expertCenterBtn');
+  const rig = (typeof window !== 'undefined') ? window['Harbor' + 'KineticRig'] : null;
+  if (shell && rig && typeof rig.closeWithCollision === 'function' && !box.hidden) {
+    rig.closeWithCollision(box, shell, trigger, () => { box.hidden = true; });
+    return;
+  }
+  box.hidden = true;
 }
 function hubSetMarketTab(tab) {
   HUB_MARKET_STATE.tab = tab;

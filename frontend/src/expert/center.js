@@ -172,9 +172,20 @@ async function openExpertCenter() {
 function closeExpertCenter() {
   const overlay = document.getElementById('expertCenter');
   if (!overlay) return;
-  overlay.hidden = true; overlay.setAttribute('aria-hidden', 'true'); expertCenterState.open = false;
-  const target = expertCenterState.lastFocus;
-  if (target && target.focus) target.focus();
+  expertCenterState.open = false;
+  const finish = () => {
+    overlay.hidden = true; overlay.setAttribute('aria-hidden', 'true');
+    const target = expertCenterState.lastFocus;
+    if (target && target.focus) target.focus();
+  };
+  const dialog = overlay.querySelector ? overlay.querySelector('.expert-dialog') : null;
+  const trigger = document.getElementById('expertCenterBtn');
+  const rig = (typeof window !== 'undefined') ? window['Harbor' + 'KineticRig'] : null;
+  if (dialog && rig && typeof rig.closeWithCollision === 'function' && !overlay.hidden) {
+    rig.closeWithCollision(overlay, dialog, trigger, finish);
+    return;
+  }
+  finish();
 }
 function openExpertPicker() { return openExpertCenter(); }
 function toggleExpertCenter() { return expertCenterState.open ? closeExpertCenter() : openExpertCenter(); }
