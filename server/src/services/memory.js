@@ -16,6 +16,24 @@ const MEMORY_FILE = process.env.HARBOR_MEMORY_FILE
   ? path.resolve(process.env.HARBOR_MEMORY_FILE)
   : path.join(CONFIG_DIR, 'memory.json')
 const MAX_FACTS = 200
+
+/** 项目根归一：去尾部分隔符、统一正斜杠；非字符串/空 ⇒ ''（全局）。 */
+function _normWs(v) {
+  const t = String(v == null ? '' : v).trim()
+  if (!t) return ''
+  return t.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+/**
+ * I14 · 跨项目隔离：只保留「全局记忆」与「本项目记忆」。
+ * legacy 条目没有 ws 字段 ⇒ 视为全局（向后兼容，不会因为升级而"看不见老记忆"）。
+ */
+function memoryFilterByProject(items, ws) {
+  const root = _normWs(ws)
+  const list = Array.isArray(items) ? items : []
+  if (!root) return list.filter(x => !_normWs(x && x.ws))   // 无项目上下文：只看全局
+  return list.filter(x => { const w = _normWs(x && x.ws); return !w || w === root })
+}
 // I14（v3.4）：单条上限 800 字。原实现完全不限长——一次工具结果/整段日志被当成
 // 一条"记忆"存进来，之后每次 memoryTail 都把它整段塞进系统提示，属慢性毒化。
 // 800 的依据：注入口径里事实条目本来就该是一句话；超过就会挤掉真正有用的近期条目。
@@ -63,7 +81,7 @@ function saveAll(list) {
   _listCache = null   // 写档即失效（下次 loadAll 按新指纹重读）
 }
 
-export { sanitizeMemoryText }
+export { sanitizeMemoryText, memoryFilterByProject, _normWs }
 
 export function classify(text) {
   const value = String(text || '')
@@ -131,14 +149,15 @@ export async function appendMemory(entry) {
   if (kind === 'rule' || kind === 'preference') {
     const existing = list.findIndex(item => normalize(item.text) === key)
     if (existing >= 0) {
-      list[existing] = { ...list[existing], text, kind, ...timeStamp() }
+      list[existing] = { ...list[existing], text, kind, ws: _normWs(input.ws) || list[existing].ws || '', ...timeStamp() }
       saveAll(list)
       return JSON.stringify({ ok: true, kind, total: list.length, deduped: true,
         ...(cleaned.truncated ? { truncated: true } : {}) })
     }
   }
 
-  list.push({ text, kind, ...timeStamp() })
+  // I14：落库带项目根（ws）。空串 = 全局记忆（跨项目可见），保持 legacy 语义。
+  list.push({ text, kind, ws: _normWs(input.ws), ...timeStamp() })
   const facts = list.filter(item => (item.kind || 'fact') === 'fact')
   if (facts.length > MAX_FACTS) {
     const overflow = facts.length - MAX_FACTS

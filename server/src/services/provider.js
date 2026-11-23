@@ -511,12 +511,19 @@ async function memoryTail(query) {
   let tail = ''
   try {
     const memory = await import('./memory.js')
-    const items = JSON.parse(await memory.getMemory())
+    const allItems = JSON.parse(await memory.getMemory())
+    // I14：跨项目隔离——只注入「本项目 + 全局」的记忆，别把别的项目的规则带进来。
+    const wsRoot = ctxRoot()
+    const items = (typeof memory.memoryFilterByProject === 'function')
+      ? memory.memoryFilterByProject(allItems, wsRoot) : allItems
     if (Array.isArray(items) && items.length) {
       const standing = items.filter(x => ['rule', 'preference'].includes(x.kind)).slice(-3)
       const picked = [...standing]
       if (query) {
-        const related = JSON.parse(await memory.memoryRetrieve(query, 2)).items || []
+        const relatedRaw = JSON.parse(await memory.memoryRetrieve(query, 2)).items || []
+        // 检索结果同样要按项目过滤：memoryRetrieve 是全局检索，不筛就会把别的项目的条目带进来
+        const related = (typeof memory.memoryFilterByProject === 'function')
+          ? memory.memoryFilterByProject(relatedRaw, wsRoot) : relatedRaw
         for (const item of related) if (!picked.some(x => x.text === item.text)) picked.push(item)
       }
       if (picked.length) tail = `\n\n用户长期记忆（仅作偏好与约束参考）：\n${picked.map(x => `- ${x.text}`).join('\n')}`

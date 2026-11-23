@@ -18,7 +18,7 @@
       },
       "nodeServer": {
         "files": 51,
-        "lines": 13316
+        "lines": 13342
       },
       "pythonContract": {
         "files": 0,
@@ -43,7 +43,7 @@
         "lines": 16149
       }
     },
-    "totalSourceLines": 52984,
+    "totalSourceLines": 53010,
     "readErrors": [],
     "harborHtmlBytes": 3787590,
     "normalizedAppBundleBytes": 851045
