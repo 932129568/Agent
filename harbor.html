@@ -2970,6 +2970,12 @@ border-color var(--dur-fast) var(--ease-out-soft)}
 @keyframes hwOdoRoll{from{transform:translateY(3px);opacity:.4}to{transform:none;opacity:1}}
 body.fx-off .hw-island{transition:none}
 body.fx-off .hw-odo.roll{animation:none}
+.set-nav-search{padding:0 0 8px}
+.set-nav-search input{width:100%;height:30px;padding:0 10px;font-size:12px;
+border:1px solid var(--border);border-radius:var(--radius-full);
+background:var(--surface-2);color:var(--text);outline:none}
+.set-nav-search input:focus{border-color:var(--primary)}
+.set-nav-search input::placeholder{color:var(--text-3)}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -12031,26 +12037,39 @@ poll();
 
 
 /* ===== frontend/src/settings/navigation.js ===== */
-const SET_GROUP_ORDER = ['模型与端点', '对话与生成', '工具与软件', '数据与历史', '安全与授权', '系统'];
+const SET_GROUP_ORDER = ['模型与对话', '外观与体验', '数据与安全', '工具与系统'];
+const SET_GROUP_LEGACY = {
+'模型与端点': '模型与对话', '对话与生成': '模型与对话',
+'数据与历史': '数据与安全', '安全与授权': '数据与安全',
+'工具与软件': '工具与系统', '系统': '外观与体验'
+};
 const SET_GROUP_MAP = {
-'连接与模型': '模型与端点', '混合路由': '模型与端点',
-'省 Token 策略': '对话与生成', '生成参数': '对话与生成', '角色与联网': '对话与生成',
-'外部软件': '工具与软件', 'MCP 服务器': '工具与软件', '命令沙箱': '工具与软件',
-'数据同步 · WebDAV': '数据与历史', '任务历史与回滚': '数据与历史', '记忆': '数据与历史',
-'任务授权与白名单': '安全与授权',
-'软件更新': '系统', '外观与特效': '系统', '免打扰': '系统'
+'连接与模型': '模型与对话', '混合路由': '模型与对话',
+'省 Token 策略': '模型与对话', '生成参数': '模型与对话', '角色与联网': '模型与对话',
+'外部软件': '工具与系统', 'MCP 服务器': '工具与系统', '命令沙箱': '工具与系统',
+'数据同步 · WebDAV': '数据与安全', '任务历史与回滚': '数据与安全', '记忆': '数据与安全',
+'任务授权与白名单': '数据与安全',
+'软件更新': '工具与系统', '外观与特效': '外观与体验', '免打扰': '外观与体验'
 };
 function _groupOf(blk, title) {
 const g = blk.dataset && blk.dataset.group;
-if (g) return g;
+if (g) {
+if (SET_GROUP_LEGACY[g]) return SET_GROUP_LEGACY[g];
+if (SET_GROUP_ORDER.indexOf(g) >= 0) return g;
+return _groupByKeyword(String(g)) || '工具与系统';
+}
 const t = title.replace(/\s+/g, ' ').trim();
 if (SET_GROUP_MAP[t]) return SET_GROUP_MAP[t];
 for (const k of Object.keys(SET_GROUP_MAP)) { if (t.indexOf(k) >= 0) return SET_GROUP_MAP[k]; }
-if (/授权|白名单/.test(t)) return '安全与授权';
-if (/Token|参数|角色|联网/.test(t)) return '对话与生成';
-if (/软件|MCP|沙箱/.test(t)) return '工具与软件';
-if (/同步|历史|记忆|数据/.test(t)) return '数据与历史';
-return '系统';
+const byKw = _groupByKeyword(t);
+if (byKw) return byKw;
+if (/Token|参数|角色|联网/.test(t)) return '模型与对话';
+if (/软件|MCP|沙箱/.test(t)) return '工具与系统';
+if (/外观|打扰|主题|动效/.test(t)) return '外观与体验';
+if (/生成|UI|界面|功能|浏览器|驱动|工具|插件/.test(t)) return '工具与系统';
+if (/模型|对话|生成参数|Token|联网|角色/.test(t)) return '模型与对话';
+if (/数据|同步|记忆|授权|安全|历史/.test(t)) return '数据与安全';
+return '工具与系统';
 }
 const SET_NAV_ICONS = {
 '连接': '<path d="M9 7H7a5 5 0 0 0 0 10h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>',
@@ -12097,6 +12116,7 @@ return true;
 function buildSetNav() {
 const nav = document.getElementById('setNav');
 if (!nav) return;
+_setNavWatch();
 const blocks = Array.from(document.querySelectorAll('#settingsPanel .set-block'));
 if (!blocks.length) return;
 nav.innerHTML = '';
@@ -12125,10 +12145,11 @@ btn.type = 'button';
 btn.title = label;
 btn.innerHTML = _iconOf(label) + '<span>' + label.replace(/（.*?）/g, '').trim() + '</span>';
 btn.dataset.target = blk.id;
-btn.onclick = () => _showSetBlock(blk.id);
+btn.onclick = () => setNavSwitchWithTransition(blk.id);
 nav.appendChild(btn);
 });
 });
+_setNavSearchMount(nav);
 const anyActive = nav.querySelector('.set-nav-btn.on');
 if (!anyActive && blocks[0]) _showSetBlock(blocks[0].id, { scroll: false });
 }
@@ -12138,6 +12159,83 @@ if (!nav) return;
 for (const b of nav.querySelectorAll('.set-nav-btn')) {
 b.classList.toggle('on', b.dataset.target === id);
 }
+}
+function _setNavSearchMount(nav) {
+if (!nav || typeof document === 'undefined') return null;
+let box = nav.querySelector('.set-nav-search');
+if (box) return box.querySelector('input');
+box = document.createElement('div');
+box.className = 'set-nav-search';
+const input = document.createElement('input');
+input.type = 'search';
+input.placeholder = '搜索设置项…';
+input.setAttribute('aria-label', '搜索设置项');
+input.autocomplete = 'off';
+box.appendChild(input);
+nav.insertBefore(box, nav.firstChild);
+const apply = () => {
+const q = String(input.value || '').trim().toLowerCase();
+const btns = Array.from(nav.querySelectorAll('.set-nav-btn'));
+for (const b of btns) {
+const hay = (b.textContent + ' ' + (b.title || '')).toLowerCase();
+const hit = !q || hay.indexOf(q) >= 0;
+b.style.display = hit ? '' : 'none';
+}
+for (const gh of Array.from(nav.querySelectorAll('.set-nav-group'))) {
+let sib = gh.nextElementSibling, any = false;
+while (sib && !sib.classList.contains('set-nav-group')) {
+if (sib.classList.contains('set-nav-btn') && sib.style.display !== 'none') { any = true; break; }
+sib = sib.nextElementSibling;
+}
+gh.style.display = any ? '' : 'none';
+}
+};
+input.addEventListener('input', apply);
+return input;
+}
+function setNavSwitchWithTransition(id) {
+const run = () => _showSetBlock(id);
+try {
+if (typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+document.startViewTransition(run);
+return true;
+}
+} catch (e) {  }
+run();
+return false;
+}
+function _setNavWatch() {
+if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+const box = document.querySelector('#settingsPanel .set-content');
+if (!box || box.__setNavWatched) return;
+box.__setNavWatched = true;
+let timer = 0;
+const obs = new MutationObserver(() => {
+if (timer) clearTimeout(timer);
+timer = setTimeout(() => { try { _setNavRebuild(); } catch (e) {} }, 60);
+});
+obs.observe(box, { childList: true });
+setTimeout(() => { try { _setNavRebuild(); } catch (e) {} }, 80);
+}
+function _groupByKeyword(text) {
+const t = String(text || '');
+if (/授权|白名单|同步|历史|记忆|数据|安全/.test(t)) return '数据与安全';
+if (/Token|参数|角色|联网|模型|对话/.test(t)) return '模型与对话';
+if (/软件|MCP|沙箱|生成|UI|界面|功能|浏览器|驱动|工具|插件/.test(t)) return '工具与系统';
+if (/外观|打扰|主题|动效|体验/.test(t)) return '外观与体验';
+return '';
+}
+if (typeof document !== 'undefined') {
+const _setNavBoot = () => { try { _setNavWatch(); } catch (e) {} };
+if (document.readyState === 'loading') {
+document.addEventListener('DOMContentLoaded', _setNavBoot);
+} else {
+setTimeout(_setNavBoot, 0);
+}
+}
+function _setNavRebuild() {
+const f = (typeof window !== 'undefined') ? window['build' + 'SetNav'] : null;
+if (typeof f === 'function') f();
 }
 
 

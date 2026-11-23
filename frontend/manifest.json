@@ -591,7 +591,13 @@
         "_highlightSetNav",
         "_iconOf",
         "_showSetBlock",
-        "buildSetNav"
+        "buildSetNav",
+        "SET_GROUP_LEGACY",
+        "_setNavSearchMount",
+        "setNavSwitchWithTransition",
+        "_setNavWatch",
+        "_groupByKeyword",
+        "_setNavRebuild"
       ],
       "requires": []
     },

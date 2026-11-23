@@ -145,3 +145,12 @@ html[data-glass-demo="1"] .glass-host{outline:1px dashed var(--primary);outline-
 @keyframes hwOdoRoll{from{transform:translateY(3px);opacity:.4}to{transform:none;opacity:1}}
 body.fx-off .hw-island{transition:none}
 body.fx-off .hw-odo.roll{animation:none}
+
+/* ===== I25 · 设置顶搜 =====
+   只过滤导航按钮，不增删块（清空搜索即回到原样，零副作用）。 */
+.set-nav-search{padding:0 0 8px}
+.set-nav-search input{width:100%;height:30px;padding:0 10px;font-size:12px;
+  border:1px solid var(--border);border-radius:var(--radius-full);
+  background:var(--surface-2);color:var(--text);outline:none}
+.set-nav-search input:focus{border-color:var(--primary)}
+.set-nav-search input::placeholder{color:var(--text-3)}

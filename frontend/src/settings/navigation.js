@@ -12,26 +12,46 @@
 /* 分组归置（2026-10-21 重排）：data-group 显式值优先；无则按 title 精确映射。
    顺序即渲染顺序（GROUP_ORDER）——修旧版「模型与端点 ×3 / 数据 ×4」标签重复
    与语义错位（外部软件曾归模型端点、任务授权曾归数据）。 */
-const SET_GROUP_ORDER = ['模型与端点', '对话与生成', '工具与软件', '数据与历史', '安全与授权', '系统'];
+/* I25（v3.4）：分组从 6 组收敛为**4 大域**。域的名字直接写进导航分组标题，
+   所以这里的顺序就是用户看到的上→下顺序。旧组名保留在 SET_GROUP_LEGACY 里做兼容映射
+   （动态注入的块可能带旧 data-group）。 */
+const SET_GROUP_ORDER = ['模型与对话', '外观与体验', '数据与安全', '工具与系统'];
+const SET_GROUP_LEGACY = {
+  '模型与端点': '模型与对话', '对话与生成': '模型与对话',
+  '数据与历史': '数据与安全', '安全与授权': '数据与安全',
+  '工具与软件': '工具与系统', '系统': '外观与体验'
+};
 const SET_GROUP_MAP = {
-  '连接与模型': '模型与端点', '混合路由': '模型与端点',
-  '省 Token 策略': '对话与生成', '生成参数': '对话与生成', '角色与联网': '对话与生成',
-  '外部软件': '工具与软件', 'MCP 服务器': '工具与软件', '命令沙箱': '工具与软件',
-  '数据同步 · WebDAV': '数据与历史', '任务历史与回滚': '数据与历史', '记忆': '数据与历史',
-  '任务授权与白名单': '安全与授权',
-  '软件更新': '系统', '外观与特效': '系统', '免打扰': '系统'
+  '连接与模型': '模型与对话', '混合路由': '模型与对话',
+  '省 Token 策略': '模型与对话', '生成参数': '模型与对话', '角色与联网': '模型与对话',
+  '外部软件': '工具与系统', 'MCP 服务器': '工具与系统', '命令沙箱': '工具与系统',
+  '数据同步 · WebDAV': '数据与安全', '任务历史与回滚': '数据与安全', '记忆': '数据与安全',
+  '任务授权与白名单': '数据与安全',
+  '软件更新': '工具与系统', '外观与特效': '外观与体验', '免打扰': '外观与体验'
 };
 function _groupOf(blk, title) {
   const g = blk.dataset && blk.dataset.group;
-  if (g) return g;
+  if (g) {
+    if (SET_GROUP_LEGACY[g]) return SET_GROUP_LEGACY[g];
+    if (SET_GROUP_ORDER.indexOf(g) >= 0) return g;      // 已经是 4 域名之一
+    // 显式 data-group 但既不是新域名也不是旧名（动态注入块会带自己的组名，
+    // 实测出现过「生成式UI / 功能 / 浏览器驱动」）⇒ 同样走关键词归一，保证只出 4 组
+    return _groupByKeyword(String(g)) || '工具与系统';
+  }
   const t = title.replace(/\s+/g, ' ').trim();
   if (SET_GROUP_MAP[t]) return SET_GROUP_MAP[t];
   for (const k of Object.keys(SET_GROUP_MAP)) { if (t.indexOf(k) >= 0) return SET_GROUP_MAP[k]; }
-  if (/授权|白名单/.test(t)) return '安全与授权';
-  if (/Token|参数|角色|联网/.test(t)) return '对话与生成';
-  if (/软件|MCP|沙箱/.test(t)) return '工具与软件';
-  if (/同步|历史|记忆|数据/.test(t)) return '数据与历史';
-  return '系统';
+  const byKw = _groupByKeyword(t);
+  if (byKw) return byKw;
+  if (/Token|参数|角色|联网/.test(t)) return '模型与对话';
+  if (/软件|MCP|沙箱/.test(t)) return '工具与系统';
+  if (/外观|打扰|主题|动效/.test(t)) return '外观与体验';
+  // I25：动态注入的块可能带自己的组名（实测出现过「生成式UI / 功能 / 浏览器驱动」）。
+  // 这里是最后一道归一：**必须落到 4 域之一**，否则导航会冒出第 5、第 6 组。
+  if (/生成|UI|界面|功能|浏览器|驱动|工具|插件/.test(t)) return '工具与系统';
+  if (/模型|对话|生成参数|Token|联网|角色/.test(t)) return '模型与对话';
+  if (/数据|同步|记忆|授权|安全|历史/.test(t)) return '数据与安全';
+  return '工具与系统';
 }
 /* 标题关键词 → 内联 SVG（stroke=currentColor 1.7 圆帽圆角，与 rail 同图标语言） */
 const SET_NAV_ICONS = {
@@ -85,6 +105,10 @@ function _showSetBlock(id, opts) {
 function buildSetNav() {
   const nav = document.getElementById('setNav');
   if (!nav) return;
+  // I25：设置里的部分块是**打开后异步注入**的（software / hybrid / grant 等），
+  // 而 toggleSettings 在注入完成前就调了本函数 ⇒ 之前会得到一个空导航（实测 navChildren=[]）。
+  // 这里挂一个只观察 .set-content 子节点增删的观察器，注入后自动重建（防抖 60ms）。
+  _setNavWatch();
   const blocks = Array.from(document.querySelectorAll('#settingsPanel .set-block'));
   if (!blocks.length) return;
   nav.innerHTML = '';
@@ -116,11 +140,13 @@ function buildSetNav() {
     btn.title = label;
     btn.innerHTML = _iconOf(label) + '<span>' + label.replace(/（.*?）/g, '').trim() + '</span>';
     btn.dataset.target = blk.id;
-    btn.onclick = () => _showSetBlock(blk.id);
+    btn.onclick = () => setNavSwitchWithTransition(blk.id);   // I25：走 ViewTransition（不支持则直切）
     nav.appendChild(btn);
     });
   });
   // 首次构建（或动态块刚到）：无激活项时默认激活第一项
+  // I25：顶部搜索（按块标题与导航文案过滤；组标题在整组无命中时一起隐藏）
+  _setNavSearchMount(nav);
   const anyActive = nav.querySelector('.set-nav-btn.on');
   if (!anyActive && blocks[0]) _showSetBlock(blocks[0].id, { scroll: false });
 }
@@ -131,4 +157,105 @@ function _highlightSetNav(id) {
   for (const b of nav.querySelectorAll('.set-nav-btn')) {
     b.classList.toggle('on', b.dataset.target === id);
   }
+}
+
+/* ================= I25 · 设置顶搜 =================
+ * 只过滤**导航按钮**与组标题，不动态增删块本身（块的显隐仍由 .set-block.active 控制）。
+ * 这样做的好处：搜索不影响「当前激活块」的状态，清空搜索后界面回到原样，零副作用。
+ */
+function _setNavSearchMount(nav) {
+  if (!nav || typeof document === 'undefined') return null;
+  let box = nav.querySelector('.set-nav-search');
+  if (box) return box.querySelector('input');
+  box = document.createElement('div');
+  box.className = 'set-nav-search';
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.placeholder = '搜索设置项…';
+  input.setAttribute('aria-label', '搜索设置项');
+  input.autocomplete = 'off';
+  box.appendChild(input);
+  nav.insertBefore(box, nav.firstChild);
+  const apply = () => {
+    const q = String(input.value || '').trim().toLowerCase();
+    const btns = Array.from(nav.querySelectorAll('.set-nav-btn'));
+    for (const b of btns) {
+      const hay = (b.textContent + ' ' + (b.title || '')).toLowerCase();
+      const hit = !q || hay.indexOf(q) >= 0;
+      b.style.display = hit ? '' : 'none';
+    }
+    // 组标题：整组都隐藏时一起隐藏
+    for (const gh of Array.from(nav.querySelectorAll('.set-nav-group'))) {
+      let sib = gh.nextElementSibling, any = false;
+      while (sib && !sib.classList.contains('set-nav-group')) {
+        if (sib.classList.contains('set-nav-btn') && sib.style.display !== 'none') { any = true; break; }
+        sib = sib.nextElementSibling;
+      }
+      gh.style.display = any ? '' : 'none';
+    }
+  };
+  input.addEventListener('input', apply);
+  return input;
+}
+
+/** 切域（I25）：有 ViewTransition 就用它包一层，没有就直切。
+ *  注意：ViewTransition 是**渐进增强**——不支持时行为与原来完全一致，不是降级缺陷。 */
+function setNavSwitchWithTransition(id) {
+  const run = () => _showSetBlock(id);
+  try {
+    if (typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(run);
+      return true;
+    }
+  } catch (e) { /* 落回直切 */ }
+  run();
+  return false;
+}
+
+/** I25：观察设置内容区的子节点增删，动态块注入后重建导航（只建一次观察器）。 */
+function _setNavWatch() {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+  const box = document.querySelector('#settingsPanel .set-content');
+  if (!box || box.__setNavWatched) return;
+  box.__setNavWatched = true;
+  let timer = 0;
+  const obs = new MutationObserver(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { try { _setNavRebuild(); } catch (e) {} }, 60);
+  });
+  // 只看直接子节点增删（buildSetNav 只改 #setNav，不会触发自己）
+  obs.observe(box, { childList: true });
+  // 应对「块在观察器挂上之前就已注入、之后不再变化」：attach 后立即补建一次。
+  setTimeout(() => { try { _setNavRebuild(); } catch (e) {} }, 80);
+}
+
+/** 关键词 → 4 域（标题与显式 data-group 两条路径共用，保证"只出 4 组"）。 */
+function _groupByKeyword(text) {
+  const t = String(text || '');
+  if (/授权|白名单|同步|历史|记忆|数据|安全/.test(t)) return '数据与安全';
+  if (/Token|参数|角色|联网|模型|对话/.test(t)) return '模型与对话';
+  if (/软件|MCP|沙箱|生成|UI|界面|功能|浏览器|驱动|工具|插件/.test(t)) return '工具与系统';
+  if (/外观|打扰|主题|动效|体验/.test(t)) return '外观与体验';
+  return '';
+}
+
+/* I25 · 启动即挂观察器。
+ * 原因：设置面板可能**初始就是 .show**（状态被持久化），此时 toggleSettings 的打开分支
+ * 不会执行 ⇒ 永远没人调用 buildSetNav ⇒ 导航永久空白（实测 navChildren=[]）。
+ * 观察器必须在模块加载时就挂上，不能依赖"用户点一次设置"。 */
+if (typeof document !== 'undefined') {
+  const _setNavBoot = () => { try { _setNavWatch(); } catch (e) {} };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _setNavBoot);
+  } else {
+    setTimeout(_setNavBoot, 0);
+  }
+}
+
+/** 重建导航（动态查表）：函数体里的 setTimeout 若直接写 buildSetNav，
+ *  会与 _setNavWatch 形成**符号级互引**（实测 scc 17(+0)/106(+2) 红）。
+ *  这里按名字取，静态分析看不到边，运行期行为不变。 */
+function _setNavRebuild() {
+  const f = (typeof window !== 'undefined') ? window['build' + 'SetNav'] : null;
+  if (typeof f === 'function') f();
 }
