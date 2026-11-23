@@ -100,7 +100,10 @@ const result = await page.evaluate((frames) => {
     sameNode: finalBody === bodyNode0,
     stillOpen: !!(finalBody && finalBody.classList.contains('open')),
     bodyTextUpdated: !!(finalBody && finalBody.textContent.indexOf('第 ' + frames + ' 段思考') === 0),
-    previewUpdated: !!(finalPreview && finalPreview.textContent.indexOf('第 ' + frames + ' 段思考') === 0),
+    // I26 起预览是**滑动尾行**（'…' + 尾部 48 字），不再以首句开头。
+    // 判据改为：预览必须反映第 30 帧的最新尾巴（尾部全是第 30 帧的 x），
+    // 而不是"以第一句开头"——后者是旧实现的行为，钉住它等于禁止改进。
+    previewUpdated: !!(finalPreview && /x{20,}$/.test(finalPreview.textContent)),
     bodyLen: finalBody ? finalBody.textContent.length : 0,
     reverse,
     frameLog,

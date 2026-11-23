@@ -688,3 +688,18 @@ body.drop-active #chatInputArea .input-inner{border-color:var(--primary);box-sha
   box-shadow:var(--shadow-md)}
 @keyframes dmBreathe{from{transform:scale(.92);opacity:.35}to{transform:scale(1.04);opacity:.75}}
 body.fx-off .dm-ring{animation:none;opacity:.6}
+
+/* ===== v3.4 I26 · 等待首字的双环光核（首字抵达即收束）=====
+   .s2-wait 存在时才跑；renderStage('') 会移除该 class ⇒ 动画与元素一起归零。
+   双环错相旋转 + 内芯呼吸，全部 transform/opacity，时长走令牌。 */
+.s2-stage.s2-wait{display:inline-flex;align-items:center;gap:8px;padding-left:2px}
+.s2-stage.s2-wait::before,
+.s2-stage.s2-wait::after{content:"";width:12px;height:12px;border-radius:var(--radius-full);
+  border:1.5px solid var(--primary);border-top-color:transparent;flex-shrink:0;
+  animation:s2Orbit var(--dur-comp) linear infinite}
+.s2-stage.s2-wait::after{width:6px;height:6px;margin-left:-10px;border-color:var(--primary);
+  border-bottom-color:transparent;animation-direction:reverse;
+  animation-duration:calc(var(--dur-comp) / 2)}
+@keyframes s2Orbit{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+body.fx-off .s2-stage.s2-wait::before,body.fx-off .s2-stage.s2-wait::after{animation:none}
+body.fx-off .s2-stage.s2-wait::before{border-top-color:var(--primary)}

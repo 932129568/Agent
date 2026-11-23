@@ -1498,7 +1498,10 @@ function renderReason(host, rr) {
     }
     host.style.display = '';
     const flat = t.replace(/\s+/g, ' ').trim();
-    const preview = flat.length > 48 ? flat.slice(0, 48) + '…' : flat;
+    // I26：预览改为**滑动尾行**（原为 flat.slice(0,48) 冻结头部）。
+    // 冻结头部的问题：思考越写越长时，预览永远停在第一句，看起来像"卡住不动"。
+    // 改成取尾部 ⇒ 每来一段新思考都能看到最新内容，配合 renderReason 只在文本变化时写入。
+    const preview = flat.length > 48 ? '…' + flat.slice(-48) : flat;
     if (o.preview.textContent !== preview) o.preview.textContent = preview;
     if (o.body.textContent !== t) o.body.textContent = t;
 }
@@ -1515,11 +1518,16 @@ function renderStage(el, text) {
     el.textContent = '';
     el.hidden = true;
     el.removeAttribute('data-stage');
+    // I26：收束——清 class 前先让 CSS 动画停掉，避免隐藏元素仍占一条 running 动画
+    try { el.classList.remove('s2-wait'); } catch (e) {}
     return '';
   }
   el.textContent = t;
   el.hidden = false;
   el.setAttribute('data-stage', t);
+  // I26：等待首字期间挂 s2-wait（双环光核 + 星轨）；首字抵达时调用方传空串 ⇒
+  // 下面分支移除该 class 并隐藏 ⇒ 动画元素连同 getAnimations() 一起归零（可测）。
+  try { el.classList.add('s2-wait'); } catch (e) {}
   return t;
 }
 
