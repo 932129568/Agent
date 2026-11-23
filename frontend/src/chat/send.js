@@ -285,6 +285,24 @@ async function sendMessage() {
   const input = document.getElementById('userInput');
   const text = input.value.trim();
   if (!text && appAttachments.length === 0) return;
+  // I08：/sub <任务> —— 派生子代理（运行期入口，不新增按钮/模板 id）。
+  // 只支持"纯文本任务、无附件"：带附件时应走普通发送，避免语义含糊。
+  if (/^\/sub\s+/.test(text) && appAttachments.length === 0) {
+    const spawn = (typeof window !== 'undefined') ? window['subagent' + 'Spawn'] : null;
+    const s0 = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+    if (typeof spawn === 'function' && s0) {
+      const task = text.replace(/^\/sub\s+/, '').trim();
+      const h = spawn(s0, task, {});
+      input.value = '';
+      if (h && h.ok) {
+        addMessage('system', '已派生子代理：' + task.slice(0, 40) + '（完成后回一条摘要到本会话）');
+        if (typeof updateCostEstimate === 'function') { try { updateCostEstimate() } catch (e) {} }
+        return;
+      }
+      addMessage('error', '子代理未能派生：' + ((h && h.reason) || 'unknown'));
+      return;
+    }
+  }
   const apiKey = effectiveApiKey();
   if (!apiKey && !localModeActive()) {   // 修复：本地模式无需 API Key（原误报）
     addMessage('error', '请先在「设置」中填入 API Key');

@@ -1818,7 +1818,8 @@
         "cpDynamicItems",
         "cpGlassOpacity",
         "cpJumpSession",
-        "cpSetModel"
+        "cpSetModel",
+        "cpSwitchBranch"
       ],
       "requires": [
         "_modalRoot"

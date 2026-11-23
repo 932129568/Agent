@@ -23831,6 +23831,18 @@ push('experts-open', '能力中心：已启用 ' + list.length + ' 个专家', '
 '专家 expert 能力中心 hub 已启用', 'openExpertCenter');
 }
 } catch (e) {  }
+try {
+const st = (typeof AppState !== 'undefined') ? AppState : null;
+const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+const cur = st ? st.currentSessionId : '';
+const sess = list.find(x => x && x.id === cur);
+const bl = (typeof branchList === 'function' && sess) ? branchList(sess) : [];
+const curBr = (sess && Array.isArray(sess.branchStack)) ? sess.branchStack[sess.branchStack.length - 1] : '';
+bl.filter(b => b.id !== curBr).slice(0, 6).forEach(b => {
+push('br-' + b.id, '分支：' + (b.name || b.id) + '（第 ' + b.depth + ' 层）', '切换',
+'分支 branch 切换 ' + (b.name || ''), 'cpSwitchBranch', [b.id]);
+});
+} catch (e) {  }
 push('glass-polarity', '切换文字极性（深/浅）', '', '极性 polarity 对比 glass 文字', 'glassPolarityToggle');
 push('glass-demo', '演示可见模式（玻璃轮廓）', 'Ctrl Alt P', '演示 demo 玻璃 glass 轮廓', 'glassDemoToggle');
 push('glass-opacity', '玻璃透明度设为 0.62', '', '透明度 opacity 玻璃 glass 档位', 'cpGlassOpacity', [0.62]);
@@ -23982,6 +23994,22 @@ e.preventDefault();
 scOpen();
 });
 return true;
+}
+function cpSwitchBranch(branchId) {
+const st = (typeof AppState !== 'undefined') ? AppState : null;
+const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+const cur = st ? st.currentSessionId : '';
+const sess = list.find(x => x && x.id === cur);
+const sw = window['branch' + 'Switch'];
+if (!sess || typeof sw !== 'function') return false;
+const r = sw(sess, String(branchId));
+if (r && r.ok) {
+const save = window['save' + 'Sessions'];
+if (typeof save === 'function') { try { save(); } catch (e) {} }
+const render = window['render' + 'ChatHistory'];
+if (typeof render === 'function') { try { render(sess); } catch (e) {} }
+}
+return !!(r && r.ok);
 }
 
 
@@ -27880,6 +27908,22 @@ return runExpertSelection({ token: _builtinToken, allTokens: _curTokens });
 const input = document.getElementById('userInput');
 const text = input.value.trim();
 if (!text && appAttachments.length === 0) return;
+if (/^\/sub\s+/.test(text) && appAttachments.length === 0) {
+const spawn = (typeof window !== 'undefined') ? window['subagent' + 'Spawn'] : null;
+const s0 = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
+if (typeof spawn === 'function' && s0) {
+const task = text.replace(/^\/sub\s+/, '').trim();
+const h = spawn(s0, task, {});
+input.value = '';
+if (h && h.ok) {
+addMessage('system', '已派生子代理：' + task.slice(0, 40) + '（完成后回一条摘要到本会话）');
+if (typeof updateCostEstimate === 'function') { try { updateCostEstimate() } catch (e) {} }
+return;
+}
+addMessage('error', '子代理未能派生：' + ((h && h.reason) || 'unknown'));
+return;
+}
+}
 const apiKey = effectiveApiKey();
 if (!apiKey && !localModeActive()) {
 addMessage('error', '请先在「设置」中填入 API Key');

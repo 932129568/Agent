@@ -174,7 +174,20 @@ function cpDynamicItems() {
         '专家 expert 能力中心 hub 已启用', 'openExpertCenter');
     }
   } catch (e) { /* 同上 */ }
-  // ④ 玻璃 / 光学档（三个真实开关，均在 theme.js / bridge.js 里）
+  // ④ I11：分支切换（只有真的存在分支时才出条目）
+  try {
+    const st = (typeof AppState !== 'undefined') ? AppState : null;
+    const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+    const cur = st ? st.currentSessionId : '';
+    const sess = list.find(x => x && x.id === cur);
+    const bl = (typeof branchList === 'function' && sess) ? branchList(sess) : [];
+    const curBr = (sess && Array.isArray(sess.branchStack)) ? sess.branchStack[sess.branchStack.length - 1] : '';
+    bl.filter(b => b.id !== curBr).slice(0, 6).forEach(b => {
+      push('br-' + b.id, '分支：' + (b.name || b.id) + '（第 ' + b.depth + ' 层）', '切换',
+        '分支 branch 切换 ' + (b.name || ''), 'cpSwitchBranch', [b.id]);
+    });
+  } catch (e) { /* 取不到就不出 */ }
+  // ⑤ 玻璃 / 光学档（三个真实开关，均在 theme.js / bridge.js 里）
   push('glass-polarity', '切换文字极性（深/浅）', '', '极性 polarity 对比 glass 文字', 'glassPolarityToggle');
   push('glass-demo', '演示可见模式（玻璃轮廓）', 'Ctrl Alt P', '演示 demo 玻璃 glass 轮廓', 'glassDemoToggle');
   push('glass-opacity', '玻璃透明度设为 0.62', '', '透明度 opacity 玻璃 glass 档位', 'cpGlassOpacity', [0.62]);
@@ -347,4 +360,22 @@ function shortcutsInit() {
     scOpen();
   });
   return true;
+}
+
+/** I11：切分支（动态索引 branchSwitch；切完重渲染对话）。 */
+function cpSwitchBranch(branchId) {
+  const st = (typeof AppState !== 'undefined') ? AppState : null;
+  const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+  const cur = st ? st.currentSessionId : '';
+  const sess = list.find(x => x && x.id === cur);
+  const sw = window['branch' + 'Switch'];
+  if (!sess || typeof sw !== 'function') return false;
+  const r = sw(sess, String(branchId));
+  if (r && r.ok) {
+    const save = window['save' + 'Sessions'];
+    if (typeof save === 'function') { try { save(); } catch (e) {} }
+    const render = window['render' + 'ChatHistory'];
+    if (typeof render === 'function') { try { render(sess); } catch (e) {} }
+  }
+  return !!(r && r.ok);
 }
