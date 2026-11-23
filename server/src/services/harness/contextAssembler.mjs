@@ -613,10 +613,11 @@ export class ContextAssembler {
       this.estimator
     );
 
-    // 3. 头部锚点（System Prompt）：L1 → L2 → Tool Index → Anchored Handoff
+    // 3. P1-1 头部前缀缓存重排：静态段（L1 宪章 + Tool Catalog）置顶冻结，
+    //    易变段（L2 Phase + Anchored Handoff）在后，避免切阶段击穿前方工具目录 5× 前缀缓存。
     const systemSections = [l1Clean];
-    if (l2Clean) systemSections.push(`## [CURRENT PHASE CONTRACT]\n${l2Clean}`);
     if (toolsClean) systemSections.push(`## [PROGRESSIVE TOOL CATALOG]\n${toolsClean}`);
+    if (l2Clean) systemSections.push(`## [CURRENT PHASE CONTRACT]\n${l2Clean}`);
     if (handoffClean) systemSections.push(handoffClean);
 
     const assembledMessages = [{ role: 'system', content: systemSections.join('\n\n') }];

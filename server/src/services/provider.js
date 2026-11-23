@@ -507,6 +507,46 @@ function renderPrompt(promptId, values = {}) {
   if (!loaded) return ''
   return loaded.text.replace(/\{(\w+)\}/g, (match, key) => Object.hasOwn(values, key) ? String(values[key]) : match)
 }
+// P1-1：按名排序加载工作区 prompts/*.md 与 phases/*.md（不存在返回空串，绝不伪造；按 mtime+size 缓存）
+const _wsPromptsCache = new Map()
+function workspacePromptsSection(wsDir) {
+  const root = String(wsDir || '').trim()
+  if (!root || !fs.existsSync(root)) return ''
+  const found = []
+  for (const sub of ['prompts', 'phases']) {
+    const dir = path.join(root, sub)
+    try {
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
+      for (const name of fs.readdirSync(dir).sort()) {
+        if (!/\.md$/i.test(name)) continue
+        if (/^(?:AGENTS|CLAUDE)\.md$/i.test(name)) continue
+        const abs = path.join(dir, name)
+        const st = fs.statSync(abs)
+        if (st.isFile() && st.size > 0 && st.size <= 16384) {
+          found.push({ rel: `${sub}/${name}`, abs, sig: `${sub}/${name}:${st.mtimeMs}:${st.size}` })
+        }
+      }
+    } catch {}
+  }
+  if (!found.length) return ''
+  const sig = found.map(x => x.sig).join('|')
+  const hit = _wsPromptsCache.get(root)
+  if (hit && hit.sig === sig) return hit.text
+  let total = 0
+  const blocks = []
+  for (const item of found) {
+    try {
+      const txt = fs.readFileSync(item.abs, 'utf8').replace(/\r\n/g, '\n').trim()
+      if (!txt) continue
+      if (total + txt.length > 24576) break
+      total += txt.length
+      blocks.push(`### [${item.rel}]\n${txt}`)
+    } catch {}
+  }
+  const out = blocks.length ? `\n\n工作区规范与阶段契约（L1.5）：\n${blocks.join('\n\n')}` : ''
+  _wsPromptsCache.set(root, { sig, text: out })
+  return out
+}
 async function memoryTail(query) {
   let tail = ''
   try {
@@ -582,12 +622,14 @@ export async function buildSystemPrompt(query = '') {
   const rendered = renderPrompt(enabled ? 'system-base' : 'system-ws-off', { ws_root: root })
   // V4-H（C2）：灰度开启时追加轻量工具目录；关闭时恒为空串 → 下方三个分支逐字节不变。
   const catalog = await v4hToolCatalogSection()
-  // I06：项目规则自动发现（L1.5）。无规则文件 ⇒ 空串 ⇒ 下面三个分支逐字节不变。
-  // 只在启用工作区时读（未启用工作区没有"项目"，读根目录会误把用户家目录的规则带进来）。
+  // I06 + P1-1：项目规则（L1.5）+ 工作区 prompts/*.md & phases/*.md（无文件时均为空串，逐字节不变）
   const rules = enabled ? projectRulesSection(root) : ''
-  if (rendered) return okJson(rendered + tail + rules + catalog)
-  if (!enabled) return okJson('你是 Harbor 内置编程助手。当前**未启用工作区**：不要假设或猜测任何工作区路径，不要主动列出/创建/修改文件或文件夹；用户要求文件操作时，先请其启用工作区。\n始终用简体中文回复，除非用户明确要求其它语言。' + tail + catalog)
-  return okJson(`你是 Harbor 内置编程助手。当前工作区: ${root}\n始终用简体中文回复，除非用户明确要求其它语言。\n硬规则:\n1. 文件操作只用工具, 禁止用 Get-Content/Set-Content(后端已强制 UTF-8)。\n2. 写文件串行: 一次一个 write_file/append_file/search_replace, 等返回成功再写下一个。\n3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。${tail}${rules}${catalog}`)
+  const wsPrompts = enabled ? workspacePromptsSection(root) : ''
+  // P1-1（5× 前缀缓存重排）：静态段（L1 宪章 → L1.5 项目规则/阶段规范 → Tool Catalog）焊死在头部，
+  // 随 query 检索变化的 memoryTail 压到最尾部，保住多轮对话前方公共前缀缓存。
+  if (rendered) return okJson(rendered + rules + wsPrompts + catalog + tail)
+  if (!enabled) return okJson('你是 Harbor 内置编程助手。当前**未启用工作区**：不要假设或猜测任何工作区路径，不要主动列出/创建/修改文件或文件夹；用户要求文件操作时，先请其启用工作区。\n始终用简体中文回复，除非用户明确要求其它语言。' + catalog + tail)
+  return okJson(`你是 Harbor 内置编程助手。当前工作区: ${root}\n始终用简体中文回复，除非用户明确要求其它语言。\n硬规则:\n1. 文件操作只用工具, 禁止用 Get-Content/Set-Content(后端已强制 UTF-8)。\n2. 写文件串行: 一次一个 write_file/append_file/search_replace, 等返回成功再写下一个。\n3. 超长命令输出会截断并给缓存 id, 需要全文用 read_more 分段取。${rules}${wsPrompts}${catalog}${tail}`)
 }
 
 export async function promptGet(promptId) {
