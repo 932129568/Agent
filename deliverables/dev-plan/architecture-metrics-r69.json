@@ -39,13 +39,13 @@
         "lines": 14334
       },
       "pytest": {
-        "files": 88,
-        "lines": 15974
+        "files": 89,
+        "lines": 16144
       }
     },
     "totalSourceLines": 50456,
     "readErrors": [],
-    "harborHtmlBytes": 3711400,
+    "harborHtmlBytes": 3711286,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {
@@ -161,8 +161,8 @@
     "goldenSha256": "ad7cfe30c06b2df189d4504a9d87f95b86f94969c323d2b6ce58555c72fa5999"
   },
   "tests": {
-    "pytestFiles": 88,
-    "pytestLines": 15974,
+    "pytestFiles": 89,
+    "pytestLines": 16144,
     "serverRunnableGates": 27,
     "frontendL1": 12,
     "frontendL2": 6,

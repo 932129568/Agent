@@ -249,15 +249,14 @@ html[data-anim-paused] body *{animation-play-state:paused!important}
    是纯文本正则，注释里写一遍就会被当成一条真实声明（已实测把 26 变 27）。 */
 
 /* ===== R101 T03 · 关键帧分层登记（L1–L4）=====
-本表由脚本按**数据**生成，不是手写归类：
+本表由脚本按**数据**生成，不是手写归类（改完关键帧请重新生成，别手改计数）：
   L3 = 被带 infinite 的 animation 引用；
-  L1 = 关键帧 from 有 opacity:0、to 没有；L2 反之；
-  其余归 L4（多为位移/描边/脉冲类反馈）。
-归并已完成：79 → 66 个 @keyframes（删掉 13 个 body 完全相同的别称块，
-引用全部改指向规范名，零悬空引用由 assert_motion 的 A1 守住）。
-每条动画属于哪一层，用它在这里的归属即可判断——新增动画时请归入下列四层之一：
+  L1 = 关键帧 from 有 opacity:0、to 没有；L2 反之；其余归 L4（位移/描边/脉冲类反馈）。
+归并已完成：79 → 65 个 @keyframes（删 13 个 body 完全相同的别称块 + 1 个无引用死帧 v4SetOut），
+引用全部改指规范名，零悬空引用由 assert_motion 的 A1 守住。
+每条动画属于哪一层看它在这里的归属即可——新增动画请归入下列四层之一：
   L1 入场（enter）（28 个）：gwIn, gwbOpen, lwL1In, v4AttachIn, v4AttachItemIn, v4BootInput, v4BootRail, v4CheckPop, v4ChipIn, v4CnPop, v4CsIn, v4CtxIn, v4DevIn, v4LineIn, v4MaskIn, v4McPop, v4ModalIn, v4MsgIn, v4PanelInBack, v4PanelInFwd, v4PlanStepIn, v4RailPop, v4SetBlockIn, v4SetWinIn, v4TipIn, v4ToastIn, v4WsqIn, w4aNavIn
-  L2 退出（exit）（10 个）：v4AttachOut, v4CsOut, v4CtxOut, v4EmptyOut, v4ModalOut, v4PanelOutBack, v4PanelOutFwd, v4SetOut, v4SetWinOut, v4WsqOut
+  L2 退出（exit）（9 个）：v4AttachOut, v4CsOut, v4CtxOut, v4EmptyOut, v4ModalOut, v4PanelOutBack, v4PanelOutFwd, v4SetWinOut, v4WsqOut
   L3 常驻循环（ambient/loop）（22 个）：bounce, gwbBounce, gwbPulse, i-pulse, polishBusy, s2Pulse, sessionStatusPulse, skLivePulse, spin, toolSheen, uiSkeletonPulse, v4AuroraA, v4AuroraB, v4BrandBreathe, v4EmptyBreathe, v4GlyphFloat, v4GrBreathe, v4LightPulse, v4SpSweep, v4Spin, v4Stream, w4aDot
   L4 反馈（feedback）（6 个）：polishBar, polishScan, searchHitFlash, v4CnFlash, v4DevFlash, v4ToolSettle
 */
@@ -506,7 +505,7 @@ body.dark .eff-tag-s{background:var(--ok-bg);color:var(--ok);}
 @keyframes v4MaskIn{from{opacity:0}to{opacity:1}}
 /* v4SetIn/v4SetOut 保留（v4 端口规则被测试钉住；设置窗口弹簧落入/淡出为叠加层） */
 
-@keyframes v4SetOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(calc(-1*var(--shift-comp)))}}
+
 .set-window{width:min(940px,94%);height:min(86%,780px);min-height:420px;
   background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-xl);
   box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden;
