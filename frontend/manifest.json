@@ -1514,6 +1514,19 @@
       ]
     },
     {
+      "path": "frontend/src/sessions/branches.js",
+      "provides": [
+        "BRANCH_MAX_DEPTH",
+        "_brOf",
+        "_brId",
+        "branchFork",
+        "branchSwitch",
+        "branchList",
+        "branchIntegrity"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/sessions/store-api.js",
       "provides": [
         "SessionStore"

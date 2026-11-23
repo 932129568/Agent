@@ -21171,6 +21171,89 @@ return removed;
 }
 
 
+/* ===== frontend/src/sessions/branches.js ===== */
+const BRANCH_MAX_DEPTH = 3;
+function _brOf(s) {
+if (!s) return null;
+if (!s.branches || typeof s.branches !== 'object') s.branches = {};
+if (!Array.isArray(s.branchStack)) s.branchStack = [];
+return s.branches;
+}
+function _brId(s, at) {
+const n = Object.keys(s.branches || {}).length + 1;
+return 'b' + n + '@' + at;
+}
+function branchFork(session, atIdx, name) {
+const br = _brOf(session);
+if (!br) return { ok: false, reason: 'no-session' };
+const idx = Number(atIdx);
+const msgs = session.messages;
+if (!Array.isArray(msgs)) return { ok: false, reason: 'no-messages' };
+if (!Number.isFinite(idx) || idx < 0 || idx >= msgs.length - 1) return { ok: false, reason: 'nothing-to-fork' };
+const depth = session.branchStack.length;
+if (depth + 1 > BRANCH_MAX_DEPTH) return { ok: false, reason: 'max-depth' };
+const id = _brId(session, idx);
+const tail = msgs.slice(idx + 1);
+br[id] = { id, parent: session.branchStack[session.branchStack.length - 1] || '', at: idx,
+forkLen: msgs.length,
+prefix: msgs.slice(0, idx + 1),
+name: String(name || '').slice(0, 40), tail };
+session.branchStack.push(id);
+msgs.splice(idx + 1);
+session.updatedAt = Date.now();
+return { ok: true, id, moved: tail.length };
+}
+function branchSwitch(session, branchId) {
+const br = _brOf(session);
+if (!br) return { ok: false, reason: 'no-session' };
+const target = br[branchId];
+if (!target) return { ok: false, reason: 'unknown-branch' };
+const curId = session.branchStack[session.branchStack.length - 1] || '';
+const msgs = session.messages;
+if (!Array.isArray(msgs)) return { ok: false, reason: 'no-messages' };
+if (branchId === curId) return { ok: true, from: curId, to: curId, restored: 0, noop: true };
+const cur = curId ? br[curId] : null;
+if (cur && cur.at >= 0 && cur.at < msgs.length) {
+cur.tail = msgs.slice(cur.at + 1);
+}
+const prefix = Array.isArray(target.prefix) ? target.prefix.slice() : null;
+if (!prefix) return { ok: false, reason: 'no-prefix-snapshot' };
+const restored = Array.isArray(target.tail) ? target.tail.slice() : [];
+msgs.length = 0;
+for (const m of prefix) msgs.push(m);
+for (const m of restored) msgs.push(m);
+target.tail = [];
+const pos = session.branchStack.indexOf(branchId);
+if (pos >= 0) session.branchStack.length = pos + 1;
+else session.branchStack.push(branchId);
+session.updatedAt = Date.now();
+return { ok: true, from: curId, to: branchId, restored: restored.length };
+}
+function branchList(session) {
+const br = _brOf(session);
+if (!br) return [];
+const depthOf = (id) => {
+let d = 1; let p = br[id] && br[id].parent;
+let guard = 0;
+while (p && br[p] && guard++ < 10) { d += 1; p = br[p].parent; }
+return d;
+};
+return Object.keys(br).map(id => ({
+id, name: br[id].name, parent: br[id].parent, at: br[id].at,
+tail: Array.isArray(br[id].tail) ? br[id].tail.length : 0, depth: depthOf(id),
+}));
+}
+function branchIntegrity(session) {
+const br = _brOf(session);
+if (!br) return { ok: false };
+const active = Array.isArray(session.messages) ? session.messages.length : 0;
+let tails = 0;
+Object.keys(br).forEach(id => { tails += Array.isArray(br[id].tail) ? br[id].tail.length : 0; });
+return { ok: true, active, tails, branches: Object.keys(br).length,
+note: 'prefix 副本跨分支重叠，total 不是丢失指标；零丢失看往返精确性' };
+}
+
+
 /* ===== frontend/src/sessions/store-api.js ===== */
 const SessionStore = Object.freeze({
 normalize: normalizeSessions,
