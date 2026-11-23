@@ -35,8 +35,8 @@
         "lines": 1182
       },
       "tools": {
-        "files": 78,
-        "lines": 14671
+        "files": 79,
+        "lines": 14943
       },
       "pytest": {
         "files": 89,
@@ -45,7 +45,7 @@
     },
     "totalSourceLines": 53479,
     "readErrors": [],
-    "harborHtmlBytes": 3805496,
+    "harborHtmlBytes": 3805597,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {

@@ -129,6 +129,10 @@ html[data-glass-demo="1"] .glass-host{outline:1px dashed var(--primary);outline-
              background var(--dur-fast) var(--ease-out-soft),
              border-color var(--dur-fast) var(--ease-out-soft)}
 .hw-island[data-busy="1"]{max-width:420px;background:var(--primary-soft);border-color:var(--primary)}
+/* 空态收缩成圆点；但 **busy 优先**——原两条同为 0,2,0 且空态写在后面，
+   会把 busy 的 420px 压掉（实测：空态下发消息，灵动岛不展开 = 真 bug）。
+   用双属性选择器提权，明确"忙碌 > 空态"。 */
+.hw-island[data-busy="1"][data-empty="1"]{max-width:420px;padding:0 10px;justify-content:flex-start}
 .hw-island[data-empty="1"]{max-width:26px;padding:0;justify-content:center}
 .hw-island[data-empty="1"] .hw-title,
 .hw-island[data-empty="1"] .hw-phase,
