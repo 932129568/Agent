@@ -1764,6 +1764,19 @@
       "requires": []
     },
     {
+      "path": "frontend/src/shell/header-island.js",
+      "provides": [
+        "HW_ISLAND_ID",
+        "_hwFn",
+        "_hwSession",
+        "headerIslandMount",
+        "_hwRoll",
+        "headerIslandRefresh",
+        "headerIslandSetBusy"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/chat/navigation.js",
       "provides": [
         "CN_MAX_ITEMS",

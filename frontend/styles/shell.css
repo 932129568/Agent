@@ -116,3 +116,32 @@ html[data-glass-engine="native"] .glass-host{
 }
 /* 演示可见模式：只加轮廓，不改颜色（截图比对要真实值） */
 html[data-glass-demo="1"] .glass-host{outline:1px dashed var(--primary);outline-offset:-1px}
+
+/* ===== v3.4 I21 · 顶栏灵动岛 =====
+   形态：默认一条窄胶囊（会话面包屑 + 阶段 + 里程表）；
+   data-busy=1 时弹性展开（宽 + 底色抬升），data-empty=1 时收成小圆点。
+   只用 transform/max-width/opacity，不碰布局属性；时长走 --dur-* 令牌。 */
+.hw-island{display:inline-flex;align-items:center;gap:6px;max-width:260px;height:26px;
+  padding:0 10px;border-radius:var(--radius-full);
+  background:var(--surface-2);border:1px solid var(--border);
+  font-size:11.5px;color:var(--text-2);overflow:hidden;white-space:nowrap;
+  transition:max-width var(--dur-panel) var(--ease-out-soft),
+             background var(--dur-fast) var(--ease-out-soft),
+             border-color var(--dur-fast) var(--ease-out-soft)}
+.hw-island[data-busy="1"]{max-width:420px;background:var(--primary-soft);border-color:var(--primary)}
+.hw-island[data-empty="1"]{max-width:26px;padding:0;justify-content:center}
+.hw-island[data-empty="1"] .hw-title,
+.hw-island[data-empty="1"] .hw-phase,
+.hw-island[data-empty="1"] .hw-odo,
+.hw-island[data-empty="1"] .hw-sep{display:none}
+.hw-dot{width:6px;height:6px;border-radius:var(--radius-full);background:var(--text-3);flex-shrink:0}
+.hw-island[data-busy="1"] .hw-dot{background:var(--primary)}
+.hw-island[data-fail="1"] .hw-dot{background:var(--err)}
+.hw-title{font-weight:600;color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.hw-phase{color:var(--text-3)}
+.hw-sep{color:var(--border-strong)}
+.hw-odo{font-variant-numeric:tabular-nums;color:var(--text-2);display:inline-block}
+.hw-odo.roll{animation:hwOdoRoll var(--dur-fast) var(--ease-out)}
+@keyframes hwOdoRoll{from{transform:translateY(3px);opacity:.4}to{transform:none;opacity:1}}
+body.fx-off .hw-island{transition:none}
+body.fx-off .hw-odo.roll{animation:none}

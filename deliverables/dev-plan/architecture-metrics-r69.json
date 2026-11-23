@@ -5,8 +5,8 @@
   "scale": {
     "layers": {
       "legacyFrontend": {
-        "files": 119,
-        "lines": 29346
+        "files": 120,
+        "lines": 29484
       },
       "reactProduction": {
         "files": 16,
@@ -18,7 +18,7 @@
       },
       "nodeServer": {
         "files": 49,
-        "lines": 12859
+        "lines": 13038
       },
       "pythonContract": {
         "files": 0,
@@ -43,15 +43,15 @@
         "lines": 16144
       }
     },
-    "totalSourceLines": 50582,
+    "totalSourceLines": 50899,
     "readErrors": [],
-    "harborHtmlBytes": 3714521,
+    "harborHtmlBytes": 3720041,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {
-    "modules": 119,
-    "symbols": 1412,
-    "edges": 3369,
+    "modules": 120,
+    "symbols": 1419,
+    "edges": 3382,
     "sccCycles": 16,
     "cyclicSymbols": 102,
     "largestScc": 34,
@@ -173,7 +173,7 @@
   "dualTrack": {
     "productionRenderer": "frontend/react/src (R67 React IIFE inlined into harbor.html)",
     "normalizedRenderer": "frontend/app/src (NOT wired into production)",
-    "legacyModules": 119,
+    "legacyModules": 120,
     "pythonContractLayer": "retired (R69 删除后审计；契约事实源=冻结快照)",
     "pythonContractFactSource": "deliverables/dev-plan/frozen-python-surface.json",
     "coupledPytestFiles": 74,

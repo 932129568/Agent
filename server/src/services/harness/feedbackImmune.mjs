@@ -349,3 +349,137 @@ export function getSharedAuditTraceRecorder() {
 export function __resetSharedAuditTraceRecorder() {
   _sharedAuditTraceRecorder = null;
 }
+
+/* ================= I04 · 值级数据免疫（JSON 字段级防注入） =================
+ * 为什么必须**逐字段**而不是对整串跑正则：
+ *   工具/外部服务的返回是 JSON 文本。裸串正则清洗（把 `ignore all previous
+ *   instructions` 之类直接 sub 掉）会连引号、花括号一起改动，产物不再能被
+ *   JSON.parse —— 这就是施工总册里「裸串清洗会破坏 JSON」的实证来源：
+ *     '{"ok":true,"content":"拒绝: <system>"}'  →  '<system>' 被替换时若正则
+ *     带贪婪/跨字段匹配，分号与引号一起被吃掉 → JSON.parse 抛错 → 上游拿到
+ *     半成品，工具结果整条报废。
+ *   正确做法：parse → 只对**字符串值**脱敏 → JSON.stringify 回去。结构（键名、
+ *   嵌套形状、数组长度、数字/布尔）一个字节都不动，所以产物必然仍是合法 JSON。
+ *
+ * 「绝不允许改写」的字段：`code`（含 error.code）与 `ok`。它们是**控制字段**，
+ * 被改写会让调用方把「已拒绝」读成「已成功」、把 CONFIRM_REQUIRED 读成别的码。
+ * 代价是：若某个 code 值本身含注入文本，我们不脱敏它（判据优先于彻底性）。
+ */
+/** 控制字段黑名单：任何层级上名字命中就不碰它的值。 */
+const IMMUNE_PROTECTED_KEYS = Object.freeze(['code', 'ok']);
+
+/** 遍历深度上限：JSON.parse 产物理论可以很深，显式栈 + 深度闸避免极端载荷拖时间。 */
+const IMMUNE_MAX_DEPTH = 64;
+
+/** 记录字段路径的上限（只影响诊断输出长度，不影响脱敏本身）。 */
+const IMMUNE_MAX_FIELDS = 32;
+
+/**
+ * 值级免疫：对外部返回的 JSON 文本做**字段级**注入脱敏。
+ *
+ * @param {string} raw 工具/外部服务返回的原始字符串
+ * @param {object} [opts]
+ * @param {string} [opts.source='tool'] 数据源名（进安全声明，便于溯源）
+ * @param {string[]} [opts.protected] 追加的受保护键名（默认已含 code / ok）
+ * @returns {{text: string, changed: boolean, healed: boolean, fields: string[],
+ *            reason?: string, self_heal?: boolean, note?: string}}
+ *   text     —— 返回值。**若输入是可解析 JSON，text 必可被 JSON.parse 解析**（硬判据）。
+ *   changed  —— 是否有字符串值被脱敏（false 时 text 与 raw 逐字节相同）
+ *   healed   —— 本次是否走了「降级自救」（脱敏过程抛错 → 回退原串）
+ *   fields   —— 被脱敏的字段路径（诊断用，如 'content' / 'items.0.text'）
+ *   reason   —— 未改动的原因（not-json / not-string / sanitize-failed: …）
+ */
+export function immuneJsonPayload(raw, opts = {}) {
+  const options = opts && typeof opts === 'object' ? opts : {};
+  const source = String(options.source || 'tool');
+  const protectedKeys = new Set(IMMUNE_PROTECTED_KEYS);
+  if (Array.isArray(options.protected)) {
+    for (const k of options.protected) protectedKeys.add(String(k));
+  }
+
+  // 非字符串（对象/undefined）：不猜、不改，原样交回（调用方拿到的东西不变）
+  if (typeof raw !== 'string') {
+    return { text: raw, changed: false, healed: false, fields: [], reason: 'not-string' };
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    // 不是 JSON：原样返回，**不试图修复**（半个 JSON 修好等于伪造数据）
+    return { text: raw, changed: false, healed: false, fields: [], reason: 'not-json' };
+  }
+
+  try {
+    const filter = new ContextPoisoningFilter();
+    const fields = [];
+    let root = parsed;
+
+    const sanitizeValue = (value, path) => {
+      if (fields.length >= IMMUNE_MAX_FIELDS) return value;
+      const [cleaned, detected] = filter.sanitizeExternalText(source, value);
+      if (!detected) return value;
+      fields.push(path);
+      return cleaned;
+    };
+
+    // 根节点就是字符串（JSON 里的裸串）——单独处理，因为它没有可写的父容器
+    if (typeof root === 'string') {
+      root = sanitizeValue(root, '$');
+    } else {
+      // 显式栈遍历：容器在栈上，字符串值就地改写（不改结构）
+      const stack = [{ node: root, depth: 0, path: '' }];
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        const node = cur.node;
+        if (!node || typeof node !== 'object') continue;
+        if (cur.depth > IMMUNE_MAX_DEPTH) continue;   // 超深：放过（不冒险，不改结构）
+        if (Array.isArray(node)) {
+          for (let i = 0; i < node.length; i++) {
+            const v = node[i];
+            const p = cur.path ? `${cur.path}.${i}` : String(i);
+            if (typeof v === 'string') node[i] = sanitizeValue(v, p);
+            else if (v && typeof v === 'object') stack.push({ node: v, depth: cur.depth + 1, path: p });
+          }
+        } else {
+          for (const key of Object.keys(node)) {
+            const v = node[key];
+            const p = cur.path ? `${cur.path}.${key}` : key;
+            if (typeof v === 'string') {
+              if (protectedKeys.has(key)) continue;      // code / ok 永不改写
+              node[key] = sanitizeValue(v, p);
+            } else if (v && typeof v === 'object') {
+              stack.push({ node: v, depth: cur.depth + 1, path: p });
+            }
+          }
+        }
+      }
+    }
+
+    if (fields.length === 0) {
+      // 无命中：逐字节返回原串（连空白/键序都不动），调用方可放心做等值比较
+      return { text: raw, changed: false, healed: false, fields: [] };
+    }
+
+    const text = typeof root === 'string' ? JSON.stringify(root) : JSON.stringify(parsed);
+    return {
+      text: text,
+      changed: true,
+      healed: false,
+      fields: fields,
+      // self_heal 放在**返回对象**上而不是塞进 payload：payload 是业务数据，
+      // 多一个业务里不存在的字段会让 Schema 严格的下游（additionalProperties:false）判红。
+      self_heal: true,
+      note: '注入内容已脱敏（值级）',
+    };
+  } catch (e) {
+    // 脱敏本身炸了（预期外）：回退原串 + healed 标记，**绝不交半成品**
+    return {
+      text: raw,
+      changed: false,
+      healed: true,
+      fields: [],
+      reason: 'sanitize-failed: ' + (e && e.message ? e.message : String(e)),
+    };
+  }
+}

@@ -2946,6 +2946,30 @@ html[data-glass-engine="native"] .glass-host{
 background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
 }
 html[data-glass-demo="1"] .glass-host{outline:1px dashed var(--primary);outline-offset:-1px}
+.hw-island{display:inline-flex;align-items:center;gap:6px;max-width:260px;height:26px;
+padding:0 10px;border-radius:var(--radius-full);
+background:var(--surface-2);border:1px solid var(--border);
+font-size:11.5px;color:var(--text-2);overflow:hidden;white-space:nowrap;
+transition:max-width var(--dur-panel) var(--ease-out-soft),
+background var(--dur-fast) var(--ease-out-soft),
+border-color var(--dur-fast) var(--ease-out-soft)}
+.hw-island[data-busy="1"]{max-width:420px;background:var(--primary-soft);border-color:var(--primary)}
+.hw-island[data-empty="1"]{max-width:26px;padding:0;justify-content:center}
+.hw-island[data-empty="1"] .hw-title,
+.hw-island[data-empty="1"] .hw-phase,
+.hw-island[data-empty="1"] .hw-odo,
+.hw-island[data-empty="1"] .hw-sep{display:none}
+.hw-dot{width:6px;height:6px;border-radius:var(--radius-full);background:var(--text-3);flex-shrink:0}
+.hw-island[data-busy="1"] .hw-dot{background:var(--primary)}
+.hw-island[data-fail="1"] .hw-dot{background:var(--err)}
+.hw-title{font-weight:600;color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.hw-phase{color:var(--text-3)}
+.hw-sep{color:var(--border-strong)}
+.hw-odo{font-variant-numeric:tabular-nums;color:var(--text-2);display:inline-block}
+.hw-odo.roll{animation:hwOdoRoll var(--dur-fast) var(--ease-out)}
+@keyframes hwOdoRoll{from{transform:translateY(3px);opacity:.4}to{transform:none;opacity:1}}
+body.fx-off .hw-island{transition:none}
+body.fx-off .hw-odo.roll{animation:none}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -23147,6 +23171,108 @@ else contextDockOpen();
 }
 
 
+/* ===== frontend/src/shell/header-island.js ===== */
+const HW_ISLAND_ID = 'hwIsland';
+function _hwFn(name) {
+try { return (typeof globalThis !== 'undefined' && globalThis[name]) || null; } catch (e) { return null; }
+}
+function _hwSession() {
+try {
+const st = (typeof AppState !== 'undefined') ? AppState : null;
+const list = st ? st.sessions : (typeof sessions !== 'undefined' ? sessions : null);
+const sid = st ? st.currentSessionId : (typeof currentSessionId !== 'undefined' ? currentSessionId : '');
+if (!Array.isArray(list)) return null;
+return list.find(s => s && s.id === sid) || null;
+} catch (e) { return null; }
+}
+function headerIslandMount() {
+if (typeof document === 'undefined') return null;
+const exist = document.getElementById(HW_ISLAND_ID);
+if (exist && exist.isConnected) return exist;
+const host = document.querySelector('#headerStatusZone') ||
+(document.getElementById('headerTitle') || {}).parentElement || null;
+if (!host) return null;
+const el = document.createElement('div');
+el.id = HW_ISLAND_ID;
+el.className = 'hw-island';
+el.setAttribute('role', 'status');
+el.setAttribute('aria-live', 'polite');
+el.innerHTML =
+'<span class="hw-dot" aria-hidden="true"></span>' +
+'<span class="hw-title"></span>' +
+'<span class="hw-sep" aria-hidden="true">·</span>' +
+'<span class="hw-phase"></span>' +
+'<span class="hw-sep hw-sep-odo" aria-hidden="true">·</span>' +
+'<span class="hw-odo" title="本轮工具步数 / 估算 token"></span>';
+host.appendChild(el);
+headerIslandRefresh();
+return el;
+}
+function _hwRoll(el, text) {
+if (!el) return;
+const t = String(text == null ? '' : text);
+if (el.textContent === t) return false;
+el.textContent = t;
+el.classList.remove('roll');
+void el.offsetWidth;
+el.classList.add('roll');
+setTimeout(() => { try { el.classList.remove('roll'); } catch (e) {} }, 240);
+return true;
+}
+function headerIslandRefresh() {
+if (typeof document === 'undefined') return null;
+const el = document.getElementById(HW_ISLAND_ID);
+if (!el) return null;
+const s = _hwSession();
+const sid = s ? s.id : '';
+let phase = 'idle';
+try {
+const pf = _hwFn('harnessPhaseNow');
+if (typeof pf === 'function') phase = pf();
+} catch (e) { phase = 'idle'; }
+let steps = 0;
+let fail = 0;
+try {
+const ts = _hwFn('traceSnapshot');
+if (typeof ts === 'function') {
+const snap = ts(sid);
+steps = snap && snap.total ? snap.total : 0;
+fail = snap && snap.fail ? snap.fail : 0;
+}
+} catch (e) {  }
+let chars = 0;
+const msgs = s && Array.isArray(s.messages) ? s.messages : [];
+for (let i = 0; i < msgs.length; i++) {
+const c = msgs[i] && msgs[i].content;
+if (typeof c === 'string') chars += c.length;
+}
+const tokens = Math.ceil(chars / 1.8);
+const busy = (el.getAttribute('data-busy') === '1') ||
+!!(typeof AppState !== 'undefined' && AppState.isStreaming);
+const titleEl = el.querySelector('.hw-title');
+const phaseEl = el.querySelector('.hw-phase');
+const odoEl = el.querySelector('.hw-odo');
+if (titleEl) titleEl.textContent = s ? (s.title || '未命名会话') : '无会话';
+if (phaseEl) phaseEl.textContent = busy ? '执行中' : (phase === 'plan' ? '待批准' : '就绪');
+if (odoEl) {
+const parts = [];
+if (steps > 0) parts.push(steps + ' 步' + (fail ? '（失败 ' + fail + '）' : ''));
+if (tokens > 0) parts.push('约 ' + tokens.toLocaleString() + ' tokens');
+_hwRoll(odoEl, parts.length ? parts.join(' · ') : '');
+}
+el.setAttribute('data-busy', busy ? '1' : '0');
+el.setAttribute('data-fail', fail > 0 ? '1' : '0');
+el.setAttribute('data-empty', (!s && !steps && !tokens) ? '1' : '0');
+return { title: titleEl ? titleEl.textContent : '', phase: busy ? 'busy' : phase, steps: steps, tokens: tokens };
+}
+function headerIslandSetBusy(on) {
+const el = (typeof document !== 'undefined') ? document.getElementById(HW_ISLAND_ID) : null;
+if (!el) return;
+el.setAttribute('data-busy', on ? '1' : '0');
+headerIslandRefresh();
+}
+
+
 /* ===== frontend/src/chat/navigation.js ===== */
 const CN_MAX_ITEMS = 12;
 const CN_SUMMARY_LEN = 42;
@@ -31445,6 +31571,10 @@ try { searchPanelInit(); } catch (e) { console.warn('搜索面板初始化失败
 try { checkpointMgrInit(); } catch (e) { console.warn('任务历史面板初始化失败', e); }
 try { shortcutsInit(); } catch (e) { console.warn('快捷键帮助初始化失败', e); }
 try { chatNavInit(); } catch (e) { console.warn('长对话导航初始化失败', e); }
+try {
+const him = (typeof window !== 'undefined') ? window['header' + 'IslandMount'] : null;
+if (typeof him === 'function') him();
+} catch (e) { console.warn('顶栏灵动岛初始化失败', e); }
 try { inputPlusInit(); } catch (e) { console.warn('输入区重构初始化失败', e); }
 try { if (typeof platformInit === 'function') platformInit(); } catch (e) { console.warn('平台适配初始化失败', e); }
 try { softwarePanelInit(); } catch (e) { console.warn('外部软件面板初始化失败', e); }

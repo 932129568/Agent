@@ -94,6 +94,11 @@ async function loadAll() {
   try { shortcutsInit(); } catch (e) { console.warn('快捷键帮助初始化失败', e); }
   /* v1.8.0：长对话导航（输入区把手 → 最近消息浮层） */
   try { chatNavInit(); } catch (e) { console.warn('长对话导航初始化失败', e); }
+  // v3.4 I21：顶栏灵动岛（动态取函数，避免 bootstrap → header-island 的静态边）
+  try {
+    const him = (typeof window !== 'undefined') ? window['header' + 'IslandMount'] : null;
+    if (typeof him === 'function') him();
+  } catch (e) { console.warn('顶栏灵动岛初始化失败', e); }
   /* v1.8.0：输入区重构（+ 附件菜单 + 模型选择 chip） */
   try { inputPlusInit(); } catch (e) { console.warn('输入区重构初始化失败', e); }
   /* v1.9.0：平台探测与 macOS 适配层（自带 readyState 兜底，双安全） */

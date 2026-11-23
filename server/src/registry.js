@@ -29,6 +29,7 @@ import * as experts from './services/experts.js'
 import * as mcp from './services/mcp.js'
 import * as browser from './services/browser.js'
 import * as pybridge from './services/pybridge.js'
+import { immuneJsonPayload } from './services/harness/feedbackImmune.mjs'
 
 const asDetail = value => {
   if (!value) return {}
@@ -92,7 +93,51 @@ export async function invoke(name, args = []) {
       `js_api 方法尚未迁移到 Node 后端: ${name}`,
       '该方法仍在 Python 后端；前端应按既有降级路径处理')
   }
-  return handler(...args)
+  const result = await handler(...args)
+  return immuneToolResult(result, name)
+}
+
+/* ================= I04 · 数据免疫接线（默认关闭） =================
+ * 为什么落在这里：`invoke()` 是**所有** js_api 处理器结果的唯一出口
+ * （routes/jsapi.js 两条返回路径都经由它；唯一的旁路是 V4-H 前置护栏的
+ * CONFIRM_REQUIRED 早退，那条根本不进 invoke，所以天然不受影响——这正是
+ * 「保留 error.code='CONFIRM_REQUIRED'」能成立的结构性原因）。
+ * 不逐个工具改：改一处出口，168 个方法一次性覆盖，新增方法自动继承。
+ *
+ * 为什么还要一张放行表：`get_sessions` / `save_sessions` 返回的是**本应用自己的
+ * 状态**，不是外部不可信输入。对它们做值级脱敏会把用户自己写的
+ * 「忽略之前的指令」替换成 [REDACTED…]，而且前端 loadAll → save_sessions 回写后
+ * 会把脱敏结果**永久写进用户会话**——这是数据损坏，不是安全加固。
+ */
+const IMMUNE_PASSTHROUGH_METHODS = Object.freeze(new Set([
+  'get_sessions', 'save_sessions', 'get_config', 'save_config',
+]))
+
+/**
+ * 数据免疫开关（默认关闭：未设 HARBOR_IMMUNE_V1=1 时行为逐字节不变）。
+ * 与 HARBOR_HARNESS_V2（上下文装配）分开，避免两个特性的灰度互相牵制。
+ */
+export function immuneV1Enabled() {
+  return process.env.HARBOR_IMMUNE_V1 === '1'
+}
+
+/**
+ * 工具结果免疫包装（唯一出口用；也可直接单测）。
+ *
+ * 关闭 / 放行方法 / 非字符串 / 非 JSON → **原样返回**（同一引用，零拷贝零改写）。
+ * 开启且可解析 → 走 feedbackImmune.immuneJsonPayload 的**值级**脱敏：
+ * 只改字符串值，结构不动，产物仍是合法 JSON；控制字段 code / ok 永不改写。
+ *
+ * @param {*} raw 处理器返回值
+ * @param {string} [method] js_api 方法名
+ * @returns {*} 包装后的返回值（关闭时恒等于入参）
+ */
+export function immuneToolResult(raw, method = '') {
+  if (!immuneV1Enabled()) return raw
+  if (IMMUNE_PASSTHROUGH_METHODS.has(String(method))) return raw
+  if (typeof raw !== 'string') return raw
+  const out = immuneJsonPayload(raw, { source: 'jsapi:' + String(method || 'unknown') })
+  return out && typeof out.text === 'string' ? out.text : raw
 }
 
 /* ---------------- 已迁移方法 ---------------- */
