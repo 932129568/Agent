@@ -44,7 +44,10 @@ function _queuePrune() {
   const total = s && Array.isArray(s.messages) ? s.messages.length : 0;
   for (let i = _sendQueue.length - 1; i >= 0; i--) {
     const q = _sendQueue[i];
-    if (q.sid !== _queueSid() || q.midx >= total) _sendQueue.splice(i, 1);
+    // P0-2 修复（数据丢失）：原条件 `q.sid !== _queueSid() || ...` 会把**别的会话**的排队项
+    // 也删掉，而本函数每次渲染都会跑 ⇒ 切个标签就把后台会话的排队清空了。
+    // 现在只清「属于当前会话且已越界」的条目。
+    if (q.sid === _queueSid() && q.midx >= total) _sendQueue.splice(i, 1);
   }
 }
 
@@ -54,7 +57,9 @@ function _queueRender() {
   const host = document.querySelector('#chatInputArea .input-inner');
   if (!host) return;
   let bar = document.getElementById('queueBar');
-  if (!_sendQueue.length) { if (bar) bar.remove(); return; }
+  // P0-2：只渲染当前会话的排队项（否则切到 A 会看到 B 的排队条）
+  const _mine = _sendQueue.filter(q => q && q.sid === _queueSid());
+  if (!_mine.length) { if (bar) bar.remove(); return; }
   if (!bar) {
     bar = document.createElement('div');
     bar.className = 'queue-bar';
@@ -64,9 +69,12 @@ function _queueRender() {
     if (anchor && anchor.parentNode === host) anchor.insertAdjacentElement('afterend', bar);
     else host.insertBefore(bar, host.firstChild);
   }
-  const head = '<span class="qb-count">' + _sendQueue.length + ' 条排队中</span>' +
+  const head = '<span class="qb-count">' + _mine.length + ' 条排队中</span>' +
     '<span class="qb-hint">当前步骤结束后按顺序发送</span>';
-  const rows = _sendQueue.map((q, i) =>
+  // 用原始下标：撤回要定位到 _sendQueue 里的真实位置（_mine 是过滤后的子集）
+  const _mineIdx = [];
+  _sendQueue.forEach((q, i) => { if (q && q.sid === _queueSid()) _mineIdx.push(i); });
+  const rows = _mineIdx.map((i) =>
     '<div class="qb-row"><span class="qb-text"></span>' +
     '<button type="button" class="qb-cancel" data-qb-act="one" data-i="' + i +
     '" title="撤回这条排队消息">撤回</button></div>').join('');
@@ -74,7 +82,7 @@ function _queueRender() {
     '<button type="button" class="qb-clear" data-qb-act="all" title="撤回全部排队消息">全部撤回</button></div>' + rows;
   // 文案用 textContent 写入，避免用户输入里的尖括号被当 HTML
   Array.prototype.forEach.call(bar.querySelectorAll('.qb-text'), (el, i) => {
-    el.textContent = (_sendQueue[i] && _sendQueue[i].text) || '（无文本）';
+    el.textContent = (_sendQueue[_mineIdx[i]] && _sendQueue[_mineIdx[i]].text) || '（无文本）';
   });
   // 不在这里绑 onclick：绑定会让 render → cancel* 形成符号级环。
   // 事件统一由文件末尾的 document 级委托处理（见 _queueBindDelegation）。
@@ -83,6 +91,8 @@ function _queueRender() {
 function _queueCancelOne(i) {
   const q = _sendQueue[i];
   if (!q) return;
+  // P0-2：只允许撤当前会话的排队项（防止 UI 下标错位时误删别的会话）
+  if (q.sid !== _queueSid()) return;
   const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
   if (!s || !Array.isArray(s.messages)) return;
   const last = s.messages.length - 1;
@@ -103,8 +113,12 @@ function _queueCancelOne(i) {
 }
 
 function _queueCancelAll() {
-  // 从后往前撤：每次都让被撤的那条成为「最后一条」，边界判据始终成立
-  for (let i = _sendQueue.length - 1; i >= 0; i--) _queueCancelOne(i);
+  // P0-2：只撤**当前会话**的排队项，并行后台会话的排队不受影响。
+  // 从后往前撤：每次都让被撤的那条成为「最后一条」，边界判据始终成立。
+  const cur = _queueSid();
+  for (let i = _sendQueue.length - 1; i >= 0; i--) {
+    if (_sendQueue[i] && _sendQueue[i].sid === cur) _queueCancelOne(i);
+  }
 }
 
 /* 队列条的点击统一在这里委托。

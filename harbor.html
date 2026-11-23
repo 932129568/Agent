@@ -27736,7 +27736,7 @@ const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null
 const total = s && Array.isArray(s.messages) ? s.messages.length : 0;
 for (let i = _sendQueue.length - 1; i >= 0; i--) {
 const q = _sendQueue[i];
-if (q.sid !== _queueSid() || q.midx >= total) _sendQueue.splice(i, 1);
+if (q.sid === _queueSid() && q.midx >= total) _sendQueue.splice(i, 1);
 }
 }
 function _queueRender() {
@@ -27745,7 +27745,8 @@ _queuePrune();
 const host = document.querySelector('#chatInputArea .input-inner');
 if (!host) return;
 let bar = document.getElementById('queueBar');
-if (!_sendQueue.length) { if (bar) bar.remove(); return; }
+const _mine = _sendQueue.filter(q => q && q.sid === _queueSid());
+if (!_mine.length) { if (bar) bar.remove(); return; }
 if (!bar) {
 bar = document.createElement('div');
 bar.className = 'queue-bar';
@@ -27755,21 +27756,24 @@ const anchor = document.getElementById('attachPreview');
 if (anchor && anchor.parentNode === host) anchor.insertAdjacentElement('afterend', bar);
 else host.insertBefore(bar, host.firstChild);
 }
-const head = '<span class="qb-count">' + _sendQueue.length + ' 条排队中</span>' +
+const head = '<span class="qb-count">' + _mine.length + ' 条排队中</span>' +
 '<span class="qb-hint">当前步骤结束后按顺序发送</span>';
-const rows = _sendQueue.map((q, i) =>
+const _mineIdx = [];
+_sendQueue.forEach((q, i) => { if (q && q.sid === _queueSid()) _mineIdx.push(i); });
+const rows = _mineIdx.map((i) =>
 '<div class="qb-row"><span class="qb-text"></span>' +
 '<button type="button" class="qb-cancel" data-qb-act="one" data-i="' + i +
 '" title="撤回这条排队消息">撤回</button></div>').join('');
 bar.innerHTML = '<div class="qb-head">' + head +
 '<button type="button" class="qb-clear" data-qb-act="all" title="撤回全部排队消息">全部撤回</button></div>' + rows;
 Array.prototype.forEach.call(bar.querySelectorAll('.qb-text'), (el, i) => {
-el.textContent = (_sendQueue[i] && _sendQueue[i].text) || '（无文本）';
+el.textContent = (_sendQueue[_mineIdx[i]] && _sendQueue[_mineIdx[i]].text) || '（无文本）';
 });
 }
 function _queueCancelOne(i) {
 const q = _sendQueue[i];
 if (!q) return;
+if (q.sid !== _queueSid()) return;
 const s = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
 if (!s || !Array.isArray(s.messages)) return;
 const last = s.messages.length - 1;
@@ -27788,7 +27792,10 @@ _queueRender();
 if (typeof toast === 'function') toast('已撤回排队消息', 'ok');
 }
 function _queueCancelAll() {
-for (let i = _sendQueue.length - 1; i >= 0; i--) _queueCancelOne(i);
+const cur = _queueSid();
+for (let i = _sendQueue.length - 1; i >= 0; i--) {
+if (_sendQueue[i] && _sendQueue[i].sid === cur) _queueCancelOne(i);
+}
 }
 if (typeof document !== 'undefined' && document.addEventListener) {
 document.addEventListener('click', (e) => {
