@@ -717,14 +717,8 @@ function rbTwice(btn, taskId, box) {
         }, i * 120));
         setTimeout(() => {
           box.remove();
-          if (d.ok !== true) {
-            pcToast('回滚未完全成功：' + pcEsc(
-              (d.error && (d.error.message || d.error)) || '部分文件恢复失败'), 'err');
-          } else if (failed.length) {
-            pcToast('部分恢复成功（' + failed.length + ' 个失败，当前版已备份 .rollback-bak）', 'warn');
-          } else {
-            pcToast('回滚完成 · 已恢复到任务开始前状态', 'ok');
-          }
+          const v = ckptRollbackVerdict(d);
+          pcToast(v.text, v.level);
         }, rows.length * 120 + 400);
       })
       .catch(e => {
@@ -750,4 +744,34 @@ function rbTwice(btn, taskId, box) {
  */
 function harnessPhaseNow() {
   return planResolveApprove ? 'plan' : 'execute';
+}
+
+/* R101 T03 · 回滚结果的诚实判定（模块级，便于用例直接断言）
+ * 起因：锚点检查点（manifest.files 为空、只有 git_head）回滚时，后端返回
+ * {ok:true, mode:'git', restored:[], failed:[], deleted:[]} —— 它**什么都没恢复**，
+ * 只表示「这个锚点存在」。而前端原来的 else 分支会弹「回滚完成 · 已恢复到任务开始前状态」，
+ * 用户会以为文件回来了。这类假成功比报错更危险。
+ * 判定顺序：失败 → 有失败项 → 有恢复项 → **零恢复项（锚点/空快照）** → 正常完成。
+ */
+function ckptRollbackVerdict(d) {
+  const res = d || {};
+  const restored = Array.isArray(res.restored) ? res.restored : [];
+  const failed = Array.isArray(res.failed) ? res.failed : [];
+  const deleted = Array.isArray(res.deleted) ? res.deleted : [];
+  if (res.ok !== true) {
+    return { level: 'err', kind: 'fail',
+      text: '回滚未完全成功：' + ((res.error && (res.error.message || res.error)) || '部分文件恢复失败') };
+  }
+  if (failed.length) {
+    return { level: 'warn', kind: 'partial',
+      text: '部分恢复成功（' + failed.length + ' 个失败，当前版已备份 .rollback-bak）' };
+  }
+  if (restored.length || deleted.length) {
+    return { level: 'ok', kind: 'restored',
+      text: '回滚完成 · 已恢复 ' + restored.length + ' 个文件' + (deleted.length ? '、移除 ' + deleted.length + ' 个' : '') };
+  }
+  // 零恢复：明确说"没动文件"，不要写成"已完成"
+  const modeTxt = res.mode === 'git' ? 'git 锚点' : (res.mode === 'snapshot' ? '空快照' : '仅清单');
+  return { level: 'warn', kind: 'noop',
+    text: '该检查点只记录了' + modeTxt + '，没有备份文件内容 —— 本次回滚**未改动任何文件**' };
 }

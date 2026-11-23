@@ -21392,14 +21392,8 @@ else if (badHit) { r.classList.add('failed'); r.querySelector('.s').textContent 
 }, i * 120));
 setTimeout(() => {
 box.remove();
-if (d.ok !== true) {
-pcToast('回滚未完全成功：' + pcEsc(
-(d.error && (d.error.message || d.error)) || '部分文件恢复失败'), 'err');
-} else if (failed.length) {
-pcToast('部分恢复成功（' + failed.length + ' 个失败，当前版已备份 .rollback-bak）', 'warn');
-} else {
-pcToast('回滚完成 · 已恢复到任务开始前状态', 'ok');
-}
+const v = ckptRollbackVerdict(d);
+pcToast(v.text, v.level);
 }, rows.length * 120 + 400);
 })
 .catch(e => {
@@ -21417,6 +21411,27 @@ if (btn.dataset.armed) { btn.dataset.armed = ''; btn.textContent = '确认回滚
 }
 function harnessPhaseNow() {
 return planResolveApprove ? 'plan' : 'execute';
+}
+function ckptRollbackVerdict(d) {
+const res = d || {};
+const restored = Array.isArray(res.restored) ? res.restored : [];
+const failed = Array.isArray(res.failed) ? res.failed : [];
+const deleted = Array.isArray(res.deleted) ? res.deleted : [];
+if (res.ok !== true) {
+return { level: 'err', kind: 'fail',
+text: '回滚未完全成功：' + ((res.error && (res.error.message || res.error)) || '部分文件恢复失败') };
+}
+if (failed.length) {
+return { level: 'warn', kind: 'partial',
+text: '部分恢复成功（' + failed.length + ' 个失败，当前版已备份 .rollback-bak）' };
+}
+if (restored.length || deleted.length) {
+return { level: 'ok', kind: 'restored',
+text: '回滚完成 · 已恢复 ' + restored.length + ' 个文件' + (deleted.length ? '、移除 ' + deleted.length + ' 个' : '') };
+}
+const modeTxt = res.mode === 'git' ? 'git 锚点' : (res.mode === 'snapshot' ? '空快照' : '仅清单');
+return { level: 'warn', kind: 'noop',
+text: '该检查点只记录了' + modeTxt + '，没有备份文件内容 —— 本次回滚**未改动任何文件**' };
 }
 
 

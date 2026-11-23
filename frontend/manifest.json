@@ -1556,7 +1556,8 @@
         "planGenerativeShow",
         "planGenerativeHide",
         "planGenerativeRefresh",
-        "harnessPhaseNow"
+        "harnessPhaseNow",
+        "ckptRollbackVerdict"
       ],
       "requires": [
         "callApi",
