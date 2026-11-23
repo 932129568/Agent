@@ -31,7 +31,7 @@
   "missingGates": [],
   "ciRunCommands": 55,
   "structuralCheck": {
-    "parsedGates": 14,
+    "parsedGates": 15,
     "requiredTrue": 13,
     "checkedPaths": [
       "tools/gate_coverage.py",
@@ -47,6 +47,7 @@
       "deliverables/dev-plan/contract-baseline-r109.json",
       "tools/uiaudit/assert_motion.py",
       "tools/uiaudit/assert_dead_controls.py",
+      "tools/audit-apca-r101.mjs",
       "tools/type_annotation_audit.py",
       "tools/arch_assessment.py",
       "deliverables/design/check_contract.py"

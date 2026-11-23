@@ -79,6 +79,12 @@ GATES = [
      '动效静态判据 A1–A5a（死引用/重复关键帧/合成器直通/transition all/新增裸时长）'),
     ('ui-audit-controls', [PY, 'tools/uiaudit/assert_dead_controls.py'], True,
      '死控件与调试残余 A6–A9'),
+    # Q10：新门禁一律先 required=False + 豁免登记，翻 True 必须满足「曾红 → 修绿 → 常数未改」。
+    # APCA 这条从未红过（它是对现状的度量，不是修 bug 后的回归守卫），所以保持 optional：
+    # 它失败时**必须显式出现在 failed 列表里**让人看见，但不阻塞整体门禁 —— 一旦阻塞，
+    # 有人会为了过门禁去改阈值，而阈值（正文 |Lc|>=75）是设计契约，不该被门禁便利性绑架。
+    ('ui-audit-apca', [NODE, 'tools/audit-apca-r101.mjs'], False,
+     'APCA 正文对比度 |Lc|>=75（浏览器实测，非静态扫描；未红过故 optional）'),
     ('type-annotation', [PY, 'tools/type_annotation_audit.py'], True,
      'JSDoc 类型契约覆盖率（非静态类型检查）'),
     ('arch-assessment', [PY, 'tools/arch_assessment.py'], True,
