@@ -726,9 +726,13 @@ function groupFullHandoffCard(fullEl, text) {
   if (!rows.length) return;
   const card = document.createElement('div');
   card.className = 'gwb-handoff';
+  // I17：交付瞬间的「光包」——一个从标题滑到卡片右端的光带，只播一次。
+  // 它必须是**真实元素**（探针要能 getAnimations 到），不是纯装饰背景。
   card.innerHTML = '<div class="gwb-handoff-title">📋 交接文档</div>' +
+    '<span class="gwb-packet" aria-hidden="true"></span>' +
     rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k"></span>' +
-      '<span class="gh-v"></span></div>').join('');
+      '<span class="gh-v"></span></div>').join('') +
+    '<button type="button" class="gwb-preview" title="在右侧副屏预览这份交付">在副屏预览</button>';
   const vs = card.querySelectorAll('.gh-v');
   const ks = card.querySelectorAll('.gh-k');
   rows.forEach((r, i) => {
@@ -737,6 +741,16 @@ function groupFullHandoffCard(fullEl, text) {
     el.textContent = r.v;
     if (ks[i]) ks[i].textContent = r.k;   // R20 扫描修复：键名来自模型正文，textContent 装配
   });
+  const pv = card.querySelector('.gwb-preview');
+  if (pv) {
+    pv.onclick = () => {
+      // 动态索引：group → context-dock 的静态边会加环（SCC 零余量）
+      const set = (typeof window !== 'undefined') ? window['context' + 'DockSetPreview'] : null;
+      if (typeof set !== 'function') return;
+      const body = rows.map(r => r.k + '：' + r.v).join('\n');
+      set(body, '交接文档');
+    };
+  }
   fullEl.appendChild(card);
 }
 

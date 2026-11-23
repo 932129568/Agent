@@ -154,3 +154,16 @@ body.fx-off .session-exp,body.fx-off .session-del,body.fx-off .mm-del{transition
 #modalRoot.modal-root{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;
   margin:0;padding:0;border:0;background:transparent;overflow:visible}
 #modalRoot.modal-root::backdrop{background:transparent}
+
+/* ===== v3.4 I17 · 交付光包 + 产物预览按钮 ===== */
+.gwb-handoff{position:relative;overflow:hidden}
+.gwb-packet{position:absolute;top:6px;left:-30%;width:30%;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--primary),transparent);
+  opacity:.9;animation:gwbPacket var(--dur-panel-lg) var(--ease-out-soft) 1 both}
+@keyframes gwbPacket{from{transform:translateX(0);opacity:0}
+  20%{opacity:.95}
+  to{transform:translateX(430%);opacity:0}}
+.gwb-preview{margin-top:8px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius-full);
+  background:var(--surface-2);color:var(--text-2);font-size:11.5px;cursor:pointer}
+.gwb-preview:hover{border-color:var(--primary);color:var(--text)}
+body.fx-off .gwb-packet{animation:none;opacity:0}

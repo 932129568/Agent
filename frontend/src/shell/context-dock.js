@@ -242,6 +242,11 @@ function contextDockRenderPanes() {
   // 预览：当前会话最后一条 assistant 摘要
   const prevBox = root.querySelector('.cd-prev');
   if (prevBox) {
+    // I17：外部注入的产物预览优先（群聊交接卡/产物卡用）；没有注入才回落到最后一条 AI 回复。
+    if (CONTEXT_DOCK.previewText) {
+      prevBox.textContent = CONTEXT_DOCK.previewText;
+      return;
+    }
     const s = _dockSession();
     const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
     let last = null;
@@ -250,4 +255,23 @@ function contextDockRenderPanes() {
     }
     prevBox.textContent = last ? last.content.slice(0, 400) : '（本会话还没有 AI 回复）';
   }
+}
+
+/* ================= I17 · 产物卡 → 副屏预览 =================
+ * 判据「产物卡一键副屏预览」：点一下就把产物内容放到副屏的「预览」页并切过去，
+ * 不是"打开副屏让你自己去找"。
+ */
+function contextDockSetPreview(text, title) {
+  if (typeof document === 'undefined') return false;
+  CONTEXT_DOCK.previewText = String(text == null ? '' : text).slice(0, 4000);
+  if (title) CONTEXT_DOCK.previewTitle = String(title);
+  contextDockOpen();
+  contextDockTab('preview');
+  contextDockRenderPanes();
+  return true;
+}
+
+function contextDockClearPreview() {
+  CONTEXT_DOCK.previewText = '';
+  contextDockRenderPanes();
 }

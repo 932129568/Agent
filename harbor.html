@@ -2848,6 +2848,17 @@ body.fx-off .session-exp,body.fx-off .session-del,body.fx-off .mm-del{transition
 #modalRoot.modal-root{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;
 margin:0;padding:0;border:0;background:transparent;overflow:visible}
 #modalRoot.modal-root::backdrop{background:transparent}
+.gwb-handoff{position:relative;overflow:hidden}
+.gwb-packet{position:absolute;top:6px;left:-30%;width:30%;height:2px;border-radius:2px;
+background:linear-gradient(90deg,transparent,var(--primary),transparent);
+opacity:.9;animation:gwbPacket var(--dur-panel-lg) var(--ease-out-soft) 1 both}
+@keyframes gwbPacket{from{transform:translateX(0);opacity:0}
+20%{opacity:.95}
+to{transform:translateX(430%);opacity:0}}
+.gwb-preview{margin-top:8px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius-full);
+background:var(--surface-2);color:var(--text-2);font-size:11.5px;cursor:pointer}
+.gwb-preview:hover{border-color:var(--primary);color:var(--text)}
+body.fx-off .gwb-packet{animation:none;opacity:0}
 
 
 /* ===== frontend/styles/shell.css ===== */
@@ -23999,6 +24010,10 @@ diffBox.appendChild(item);
 }
 const prevBox = root.querySelector('.cd-prev');
 if (prevBox) {
+if (CONTEXT_DOCK.previewText) {
+prevBox.textContent = CONTEXT_DOCK.previewText;
+return;
+}
 const s = _dockSession();
 const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
 let last = null;
@@ -24007,6 +24022,19 @@ if (msgs[i] && msgs[i].role === 'assistant' && typeof msgs[i].content === 'strin
 }
 prevBox.textContent = last ? last.content.slice(0, 400) : '（本会话还没有 AI 回复）';
 }
+}
+function contextDockSetPreview(text, title) {
+if (typeof document === 'undefined') return false;
+CONTEXT_DOCK.previewText = String(text == null ? '' : text).slice(0, 4000);
+if (title) CONTEXT_DOCK.previewTitle = String(title);
+contextDockOpen();
+contextDockTab('preview');
+contextDockRenderPanes();
+return true;
+}
+function contextDockClearPreview() {
+CONTEXT_DOCK.previewText = '';
+contextDockRenderPanes();
 }
 
 
@@ -28704,8 +28732,10 @@ if (!rows.length) return;
 const card = document.createElement('div');
 card.className = 'gwb-handoff';
 card.innerHTML = '<div class="gwb-handoff-title">📋 交接文档</div>' +
+'<span class="gwb-packet" aria-hidden="true"></span>' +
 rows.map(r => '<div class="gwb-handoff-row"><span class="gh-k"></span>' +
-'<span class="gh-v"></span></div>').join('');
+'<span class="gh-v"></span></div>').join('') +
+'<button type="button" class="gwb-preview" title="在右侧副屏预览这份交付">在副屏预览</button>';
 const vs = card.querySelectorAll('.gh-v');
 const ks = card.querySelectorAll('.gh-k');
 rows.forEach((r, i) => {
@@ -28714,6 +28744,15 @@ if (/^(前端|后端|UI设计|测试|主持人)$/.test(r.v) || r.k === '交接�
 el.textContent = r.v;
 if (ks[i]) ks[i].textContent = r.k;
 });
+const pv = card.querySelector('.gwb-preview');
+if (pv) {
+pv.onclick = () => {
+const set = (typeof window !== 'undefined') ? window['context' + 'DockSetPreview'] : null;
+if (typeof set !== 'function') return;
+const body = rows.map(r => r.k + '：' + r.v).join('\n');
+set(body, '交接文档');
+};
+}
 fullEl.appendChild(card);
 }
 function groupDetailOpenLive(el, member) {

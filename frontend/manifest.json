@@ -1809,7 +1809,9 @@
         "CONTEXT_DOCK_WRITES",
         "contextDockBindEvents",
         "contextDockRenderPanes",
-        "contextDockTab"
+        "contextDockTab",
+        "contextDockClearPreview",
+        "contextDockSetPreview"
       ],
       "requires": []
     },
