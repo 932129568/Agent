@@ -979,6 +979,18 @@
       "requires": []
     },
     {
+      "path": "frontend/src/agent/self-check.js",
+      "provides": [
+        "SELF_CHECK_MAX_ATTEMPTS",
+        "SELF_CHECK_TIMEOUT_MS",
+        "selfCheckPickNpmScript",
+        "selfCheckResolveCmd",
+        "selfCheckRun",
+        "selfCheckAfterWrites"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/agent/tool-runtime.js",
       "provides": [
         "WRITE_SEQ_TOOLS",

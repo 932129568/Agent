@@ -418,6 +418,7 @@ async function runAgentLoop(s, apiKey) {
     let finished = false;
     let naturalDone = false;   // 仅「AI 回复无工具调用」正常终结置位（熔断/暂停/截断续跑/60轮上限均保持 false）——计划收尾的专用判据
     const readFileSet = new Set(s._readKeys || []);   // 会话级持久化已读记录
+    let runWroteFiles = false;   // I05：本轮是否发生过写操作（决定收尾前是否跑自检）
     const listDirsSet = new Set();
     const cmdDeduper = (() => {
       // 修复 W4（三轮）：WRITE 动词表与后端 RunDeduper.WRITE_VERBS 全量对齐
@@ -1025,7 +1026,13 @@ async function runAgentLoop(s, apiKey) {
               }
             } catch (e) {}
             // I01（v3.4）：写后精确失效 + 写命令清脏缓存（逻辑抽成模块级函数，便于用例断言）。
-            try { invalidateReadCache(readFileSet, tc.name, args, result); } catch (e) {}
+            try {
+              const _inv = invalidateReadCache(readFileSet, tc.name, args, result);
+              // I05：只要发生过写类工具（或命令），就认为「改过东西」，收尾前需要自检
+              if (['write_file','append_file','search_replace','delete_path','move_path','copy_path','run_command'].indexOf(tc.name) >= 0) {
+                runWroteFiles = true;
+              }
+            } catch (e) {}
           }
         }
         const sp = toolDiv.querySelector('.tool-spinner');
@@ -1144,6 +1151,28 @@ async function runAgentLoop(s, apiKey) {
         });
         // I02：每轮把摘要写进 session.meta.trace（重开/重启后可复原）
         if (typeof traceAttachTo === 'function') traceAttachTo(s, s && s.id);
+        // I05 自检闭环：含写操作 + 配了 verifyCmd 时，本轮后跑一次轻自检；
+        // 失败把输出回灌成一条 system（只回灌一次），模型下一轮据此自己修。
+        if (runWroteFiles && !userStopped && typeof selfCheckAfterWrites === 'function') {
+          try {
+            const _sc = await selfCheckAfterWrites({
+              session: s,
+              run: run,
+              readFile: (p2) => callApi('read_file', [String(p2)]).catch(() => null),
+              runCommand: (cmd, t) => callApi('run_command', [String(cmd), Number(t) || 120000], 660000),
+              pushSystem: (sess, text) => {
+                // 带标记，便于后续清理与排查；随 run 结束一并摘除（与 I03 同一套净化）
+                sess.messages.push({ role: 'system', content: text, __selfCheck: true });
+              },
+            });
+            if (_sc && _sc.ran && !_sc.ok && !_sc.injected) {
+              // 未注入 = 命令不可用/被护栏拦下：记录但不假装通过
+              if (typeof toast === 'function' && agentRunVisible(run)) {
+                toast('自动验收未能执行：' + (_sc.reason || 'unknown'), 'warn');
+              }
+            }
+          } catch (e) { /* 自检异常绝不影响主流程 */ }
+        }
         if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8, s && s.id);
       }
       s._readKeys = [...readFileSet];   // 跨任务持久化已读记录

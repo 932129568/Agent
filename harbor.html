@@ -15063,6 +15063,83 @@ return result;
 }
 
 
+/* ===== frontend/src/agent/self-check.js ===== */
+const SELF_CHECK_MAX_ATTEMPTS = 2;
+const SELF_CHECK_TIMEOUT_MS = 120000;
+function selfCheckPickNpmScript(pkgText) {
+let pkg = null;
+try { pkg = JSON.parse(String(pkgText || '{}')); } catch (e) { return null; }
+const scripts = (pkg && pkg.scripts) || {};
+for (const key of ['test', 'lint', 'build']) {
+const v = scripts[key];
+if (typeof v === 'string' && v.trim()) return { cmd: 'npm run ' + key, script: key };
+}
+return null;
+}
+async function selfCheckResolveCmd(opts) {
+const o = opts || {};
+const sess = o.session || null;
+if (sess && typeof sess.__verifyCmd === 'string' && sess.__verifyCmd.trim()) {
+return { cmd: sess.__verifyCmd.trim(), source: 'session' };
+}
+const readFile = (typeof o.readFile === 'function') ? o.readFile : null;
+if (!readFile) return null;
+try {
+const raw = await readFile('.harbor/verify');
+if (typeof raw === 'string' && raw.trim()) {
+const first = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s && s[0] !== '#')[0];
+if (first) return { cmd: first, source: '.harbor/verify' };
+}
+} catch (e) {  }
+try {
+const raw = await readFile('package.json');
+const picked = selfCheckPickNpmScript(raw);
+if (picked) return { cmd: picked.cmd, source: 'package.json:' + picked.script };
+} catch (e) {  }
+return null;
+}
+async function selfCheckRun(runCommand, cmd, timeoutMs) {
+if (typeof runCommand !== 'function' || !cmd) return { ok: false, ran: false, code: null, output: '' };
+let raw = '';
+try {
+raw = await runCommand(cmd, timeoutMs || SELF_CHECK_TIMEOUT_MS);
+} catch (e) {
+return { ok: false, ran: true, code: null, output: '验收命令执行异常: ' + ((e && e.message) || String(e)) };
+}
+let parsed = null;
+try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+const code = parsed && (parsed.code != null ? parsed.code : parsed.exit_code);
+const ok = !!(parsed && parsed.ok === true && (code == null || code === 0));
+const output = parsed
+? [parsed.stdout, parsed.stderr].filter(x => typeof x === 'string' && x).join('\n')
+: String(raw || '');
+return { ok: ok, ran: true, code: code == null ? null : code, output: output.slice(0, 4000) };
+}
+async function selfCheckAfterWrites(opts) {
+const o = opts || {};
+const session = o.session || null;
+const run = o.run || null;
+if (!session) return { ran: false, ok: false, injected: false, reason: 'no-session' };
+const attempts = (run && run.verifyAttempts) || 0;
+if (attempts >= SELF_CHECK_MAX_ATTEMPTS) return { ran: false, ok: false, injected: false, reason: 'attempts-exhausted' };
+const resolved = await selfCheckResolveCmd({ readFile: o.readFile, session });
+if (!resolved) return { ran: false, ok: false, injected: false, reason: 'no-verify-cmd' };
+const res = await selfCheckRun(o.runCommand, resolved.cmd, o.timeoutMs);
+if (run) run.verifyAttempts = attempts + 1;
+if (res.ok) {
+session.__verifyLast = { ok: true, cmd: resolved.cmd, source: resolved.source, at: Date.now() };
+return { ran: true, ok: true, injected: false, cmd: resolved.cmd, source: resolved.source };
+}
+if (Array.isArray(session.messages) && typeof o.pushSystem === 'function') {
+o.pushSystem(session, '【自动验收未通过】命令：`' + resolved.cmd + '`（来源：' + resolved.source +
+'）\n输出（截断）：\n' + (res.output || '(无输出)') +
+'\n请修复上面报告的问题后重新完成；若判定该验收命令不适用，请说明原因而不要反复重试。');
+}
+session.__verifyLast = { ok: false, cmd: resolved.cmd, source: resolved.source, at: Date.now() };
+return { ran: true, ok: false, injected: true, cmd: resolved.cmd, source: resolved.source, output: res.output };
+}
+
+
 /* ===== frontend/src/agent/tool-runtime.js ===== */
 const WRITE_SEQ_TOOLS = ['write_file', 'append_file', 'search_replace',
 'move_path', 'copy_path', 'delete_path'];
@@ -17632,6 +17709,7 @@ else if (!isGlmEndpoint()) addSysTip(currentEndpointName() + ' / ' + currentMode
 let finished = false;
 let naturalDone = false;
 const readFileSet = new Set(s._readKeys || []);
+let runWroteFiles = false;
 const listDirsSet = new Set();
 const cmdDeduper = (() => {
 const WRITE_VERBS = new Set(['del', 'erase', 'rmdir', 'rd', 'remove-item', 'ri', 'mkdir', 'md',
@@ -18138,7 +18216,12 @@ delete_path: `删除 ${args.path}`
 callApi('append_worklog', [desc]).catch(() => {});
 }
 } catch (e) {}
-try { invalidateReadCache(readFileSet, tc.name, args, result); } catch (e) {}
+try {
+const _inv = invalidateReadCache(readFileSet, tc.name, args, result);
+if (['write_file','append_file','search_replace','delete_path','move_path','copy_path','run_command'].indexOf(tc.name) >= 0) {
+runWroteFiles = true;
+}
+} catch (e) {}
 }
 }
 const sp = toolDiv.querySelector('.tool-spinner');
@@ -18245,6 +18328,24 @@ categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
 ? toolCategoryOf(tc && tc.name) : 'other')),
 });
 if (typeof traceAttachTo === 'function') traceAttachTo(s, s && s.id);
+if (runWroteFiles && !userStopped && typeof selfCheckAfterWrites === 'function') {
+try {
+const _sc = await selfCheckAfterWrites({
+session: s,
+run: run,
+readFile: (p2) => callApi('read_file', [String(p2)]).catch(() => null),
+runCommand: (cmd, t) => callApi('run_command', [String(cmd), Number(t) || 120000], 660000),
+pushSystem: (sess, text) => {
+sess.messages.push({ role: 'system', content: text, __selfCheck: true });
+},
+});
+if (_sc && _sc.ran && !_sc.ok && !_sc.injected) {
+if (typeof toast === 'function' && agentRunVisible(run)) {
+toast('自动验收未能执行：' + (_sc.reason || 'unknown'), 'warn');
+}
+}
+} catch (e) {  }
+}
 if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8, s && s.id);
 }
 s._readKeys = [...readFileSet];
