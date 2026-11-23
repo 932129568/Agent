@@ -84,6 +84,7 @@ EXPECTED_ORDER = [
     'frontend/src/planning/checkpoints.js',
     'frontend/src/shell/shortcuts.js',
     'frontend/src/shell/context-dock.js',
+    'frontend/src/shell/header-island.js',
     'frontend/src/chat/navigation.js',
     'frontend/src/chat/composer.js',
     'frontend/src/analytics/tokens.js',

@@ -289,13 +289,13 @@
         "file": "tests/test_r68_arch_contract.py",
         "kind": "exact-deleted-path",
         "target": "tests/test_api_contract.py",
-        "line": 172
+        "line": 175
       },
       {
         "file": "tests/test_r68_arch_contract.py",
         "kind": "exact-deleted-path",
         "target": "tests/test_v19_paths.py",
-        "line": 234
+        "line": 237
       },
       {
         "file": "KNOWN_ISSUES.md",
@@ -327,7 +327,7 @@
     "apiVersion": "v1.0.0"
   },
   "serverGates": {
-    "count": 44,
+    "count": 45,
     "missing": []
   },
   "retiredStubs": [

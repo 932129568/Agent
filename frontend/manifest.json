@@ -354,6 +354,7 @@
         "_trustPersistently",
         "guardCheckTool",
         "guardInlineAsk",
+        "guardLineDiff",
         "loadGuardConfig",
         "maybeBudgetInvite",
         "renderGrantBudgetBar",

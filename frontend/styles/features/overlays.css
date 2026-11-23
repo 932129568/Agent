@@ -119,3 +119,32 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
 .gi-ok:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
 .guard-inline.danger .gi-ok{background:var(--err);border-color:var(--err)}
 .guard-inline.danger .gi-ok:hover{filter:brightness(.94);border-color:var(--err)}
+
+/* ===== I13 · 内联审批的行级 Diff 与拒绝理由 =====
+   红绿只染行背景与左侧细边，不染整块：审批卡是"看结构"的地方，大面积饱和色
+   会让人读不出是哪几行变了。等宽字体是diff 的硬要求（缩进/对齐本身就是信息）。
+   所有颜色走既有令牌；无动画（diff 是静态内容，淡入只会拖慢判断）。 */
+.gi-diff{margin-top:6px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-2);overflow:hidden}
+.gi-diff-head{font-size:11.5px;color:var(--text-2);padding:5px 9px;border-bottom:1px solid var(--border);
+  background:var(--card-bg);font-variant-numeric:tabular-nums}
+.gi-diff-body{max-height:220px;overflow:auto;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Consolas,monospace);
+  font-size:11.5px;line-height:1.55;color:var(--text)}
+.gi-diff-line{padding:0 9px;white-space:pre-wrap;word-break:break-word;border-left:3px solid transparent}
+.gi-diff-line.gi-add{background:var(--ok-bg);border-left-color:var(--ok)}
+.gi-diff-line.gi-del{background:var(--err-bg);border-left-color:var(--err)}
+.gi-diff-line.gi-same{color:var(--text-3)}
+.gi-diff-more{padding:4px 9px;font-size:11px;color:var(--text-3);border-top:1px dashed var(--border)}
+.gi-reason-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin-top:7px}
+.gi-reason-toggle{font:inherit;font-size:11.5px;line-height:1.4;padding:2px 9px;cursor:pointer;
+  color:var(--text-2);background:transparent;border:1px dashed var(--border);
+  border-radius:var(--radius-full)}
+.gi-reason-toggle:hover{color:var(--primary);border-color:var(--primary)}
+.gi-reason-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.gi-reason[hidden]{display:none}
+.gi-reason{width:100%;box-sizing:border-box;font:inherit;font-size:12px;line-height:1.5;
+  padding:6px 9px;resize:vertical;color:var(--text);background:var(--card-bg);
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  transition:border-color var(--dur-fast) var(--ease-out)}
+.gi-reason:focus{outline:none;border-color:var(--primary)}
+.gi-reason::placeholder{color:var(--text-3)}

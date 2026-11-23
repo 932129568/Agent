@@ -82,7 +82,10 @@ def test_spec_is_review_gated_and_not_wired_into_production():
     build_js = _read(ROOT / 'frontend' / 'build.js')
     assert 'harbor-app.iife.js' not in build_js
     manifest = json.loads(_read(ROOT / 'frontend' / 'manifest.json'))
-    assert len(manifest['scripts']) == 117, '评审前不得删除 legacy manifest 条目'
+    # 原断言是 == 117。117 是**当时**的条目数，不是意图；意图是「评审前不得删除 legacy 条目」。
+    # 每新增一个模块就红一次（本轮 I21 加 header-island 后变 120），属于假精度常数。
+    # 改为「不得少于 117」：删条目仍会红，新增不再误报。
+    assert len(manifest['scripts']) >= 117, '评审前不得删除 legacy manifest 条目'
 
 
 def test_migration_ledger_covers_every_legacy_domain():
@@ -623,7 +626,8 @@ def test_r69_architecture_assessment_is_reproducible():
                                'architecture-metrics-r69.json'))
     assert metrics['version'] == 1
     assert metrics['generatedBy'] == 'tools/arch_assessment.py'
-    assert metrics['dependencyGraph']['modules'] == 117
+    # 同上：模块数应与 manifest 实时一致，而不是钉死 117
+    assert metrics['dependencyGraph']['modules'] == len(manifest['scripts'])
     assert metrics['dependencyGraph']['sccCycles'] >= 1
     assert metrics['dependencyGraph']['cyclicSymbols'] >= 1
     assert metrics['typeSafety']['handWrittenTsFiles'] == 0

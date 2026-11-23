@@ -3719,6 +3719,30 @@ background:var(--surface-2);color:var(--text)}
 .gi-ok:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
 .guard-inline.danger .gi-ok{background:var(--err);border-color:var(--err)}
 .guard-inline.danger .gi-ok:hover{filter:brightness(.94);border-color:var(--err)}
+.gi-diff{margin-top:6px;border:1px solid var(--border);border-radius:var(--radius-sm);
+background:var(--surface-2);overflow:hidden}
+.gi-diff-head{font-size:11.5px;color:var(--text-2);padding:5px 9px;border-bottom:1px solid var(--border);
+background:var(--card-bg);font-variant-numeric:tabular-nums}
+.gi-diff-body{max-height:220px;overflow:auto;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Consolas,monospace);
+font-size:11.5px;line-height:1.55;color:var(--text)}
+.gi-diff-line{padding:0 9px;white-space:pre-wrap;word-break:break-word;border-left:3px solid transparent}
+.gi-diff-line.gi-add{background:var(--ok-bg);border-left-color:var(--ok)}
+.gi-diff-line.gi-del{background:var(--err-bg);border-left-color:var(--err)}
+.gi-diff-line.gi-same{color:var(--text-3)}
+.gi-diff-more{padding:4px 9px;font-size:11px;color:var(--text-3);border-top:1px dashed var(--border)}
+.gi-reason-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin-top:7px}
+.gi-reason-toggle{font:inherit;font-size:11.5px;line-height:1.4;padding:2px 9px;cursor:pointer;
+color:var(--text-2);background:transparent;border:1px dashed var(--border);
+border-radius:var(--radius-full)}
+.gi-reason-toggle:hover{color:var(--primary);border-color:var(--primary)}
+.gi-reason-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.gi-reason[hidden]{display:none}
+.gi-reason{width:100%;box-sizing:border-box;font:inherit;font-size:12px;line-height:1.5;
+padding:6px 9px;resize:vertical;color:var(--text);background:var(--card-bg);
+border:1px solid var(--border);border-radius:var(--radius-sm);
+transition:border-color var(--dur-fast) var(--ease-out)}
+.gi-reason:focus{outline:none;border-color:var(--primary)}
+.gi-reason::placeholder{color:var(--text-3)}
 
 
 /* ===== frontend/styles/features/generative.css ===== */
@@ -9233,6 +9257,50 @@ web_search: '浏览器搜索', software_call: '外部软件调用'
 };
 const GUARD_RUN_OPS = ['run_command', 'run_powershell', 'run_admin_command'];
 let _guardInlineQueue = Promise.resolve();
+function guardLineDiff(oldText, newText) {
+const MAX_CHARS = 20000;
+const MAX_LINES = 800;
+const splitLines = (t) => {
+const s = String(t == null ? '' : t);
+if (s === '') return [];
+return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+};
+const a = splitLines(oldText);
+const b = splitLines(newText);
+const totalChars = String(oldText == null ? '' : oldText).length
++ String(newText == null ? '' : newText).length;
+const degraded = totalChars > MAX_CHARS || a.length > MAX_LINES || b.length > MAX_LINES;
+const rows = [];
+if (degraded) {
+for (const line of a) rows.push({ type: 'del', text: line });
+for (const line of b) rows.push({ type: 'add', text: line });
+rows.degraded = true;
+rows.reason = 'too-large';
+return rows;
+}
+const n = a.length;
+const m = b.length;
+const width = m + 1;
+const dp = new Uint32Array((n + 1) * width);
+for (let i = n - 1; i >= 0; i--) {
+for (let j = m - 1; j >= 0; j--) {
+dp[i * width + j] = (a[i] === b[j])
+? dp[(i + 1) * width + (j + 1)] + 1
+: Math.max(dp[(i + 1) * width + j], dp[i * width + (j + 1)]);
+}
+}
+let i = 0;
+let j = 0;
+while (i < n && j < m) {
+if (a[i] === b[j]) { rows.push({ type: 'same', text: a[i] }); i++; j++; }
+else if (dp[(i + 1) * width + j] >= dp[i * width + (j + 1)]) { rows.push({ type: 'del', text: a[i] }); i++; }
+else { rows.push({ type: 'add', text: b[j] }); j++; }
+}
+while (i < n) { rows.push({ type: 'del', text: a[i] }); i++; }
+while (j < m) { rows.push({ type: 'add', text: b[j] }); j++; }
+rows.degraded = false;
+return rows;
+}
 function guardInlineAsk(opts) {
 opts = opts || {};
 const fallback = () => {
@@ -9269,6 +9337,40 @@ const body = document.createElement('div');
 body.className = 'gi-body';
 body.textContent = String(opts.body == null ? '' : opts.body);
 card.appendChild(body);
+if (opts.diff && typeof opts.diff === 'object') {
+try {
+const rows = guardLineDiff(opts.diff.before, opts.diff.after);
+const box = document.createElement('div');
+box.className = 'gi-diff';
+const head = document.createElement('div');
+head.className = 'gi-diff-head';
+const nAdd = rows.filter(r => r.type === 'add').length;
+const nDel = rows.filter(r => r.type === 'del').length;
+head.textContent = rows.degraded
+? '变更对比（差异过大，已退化为整段对比）'
+: ('变更对比  +' + nAdd + ' / -' + nDel);
+box.appendChild(head);
+const MAX_ROWS = 200;
+const shown = rows.slice(0, MAX_ROWS);
+const pre = document.createElement('div');
+pre.className = 'gi-diff-body';
+shown.forEach((r) => {
+const line = document.createElement('div');
+line.className = 'gi-diff-line gi-' + r.type;
+const mark = r.type === 'add' ? '+' : (r.type === 'del' ? '-' : ' ');
+line.textContent = mark + ' ' + r.text;
+pre.appendChild(line);
+});
+box.appendChild(pre);
+if (rows.length > MAX_ROWS) {
+const more = document.createElement('div');
+more.className = 'gi-diff-more';
+more.textContent = '…已省略 ' + (rows.length - MAX_ROWS) + ' 行';
+box.appendChild(more);
+}
+card.appendChild(box);
+} catch (e) {  }
+}
 const mkCheck = (label, warn) => {
 const wrap = document.createElement('label');
 wrap.className = 'gi-check' + (warn ? ' gi-check-warn' : '');
@@ -9283,6 +9385,34 @@ return box;
 };
 const chk = opts.checkboxLabel ? mkCheck(opts.checkboxLabel, false) : null;
 const chk2 = opts.checkboxLabel2 ? mkCheck(opts.checkboxLabel2, true) : null;
+const reasonWrap = document.createElement('div');
+reasonWrap.className = 'gi-reason-wrap';
+const reasonToggle = document.createElement('button');
+reasonToggle.type = 'button';
+reasonToggle.className = 'gi-reason-toggle';
+reasonToggle.textContent = '说明原因';
+if (reasonToggle.setAttribute) reasonToggle.setAttribute('aria-expanded', 'false');
+const reasonTa = document.createElement('textarea');
+reasonTa.className = 'gi-reason';
+reasonTa.hidden = true;
+reasonTa.placeholder = '例如：不要删这个目录，改成移动到备份目录';
+if (reasonTa.setAttribute) { reasonTa.setAttribute('rows', '2'); reasonTa.setAttribute('aria-label', '拒绝理由'); }
+reasonToggle.onclick = () => {
+const open = !!reasonTa.hidden;
+reasonTa.hidden = !open;
+if (reasonToggle.setAttribute) reasonToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+reasonToggle.textContent = open ? '收起原因' : '说明原因';
+if (open) { try { if (typeof reasonTa.focus === 'function') reasonTa.focus(); } catch (e) {} }
+};
+reasonWrap.appendChild(reasonToggle);
+reasonWrap.appendChild(reasonTa);
+card.appendChild(reasonWrap);
+const readReason = () => {
+try {
+if (!reasonTa || reasonTa.hidden) return '';
+return String(reasonTa.value == null ? '' : reasonTa.value).trim().slice(0, 300);
+} catch (e) { return ''; }
+};
 const btns = document.createElement('div');
 btns.className = 'gi-btns';
 const mkBtn = (cls, label) => {
@@ -9304,12 +9434,13 @@ done(false);
 const done = (ok) => {
 const checked = (ok && chk) ? !!chk.checked : false;
 const checked2 = (ok && chk2) ? !!chk2.checked : false;
+const reason = ok ? '' : readReason();
 try {
 if (typeof document.removeEventListener === 'function')
 document.removeEventListener('keydown', onKey, true);
 } catch (e) {}
 try { if (typeof card.remove === 'function') card.remove(); } catch (e) {}
-resolve({ ok: !!ok, checked: checked, checked2: checked2 });
+resolve({ ok: !!ok, checked: checked, checked2: checked2, reason: reason });
 };
 okBtn.onclick = () => done(true);
 cancelBtn.onclick = () => done(false);
@@ -9412,7 +9543,9 @@ callApi('guard_audit', [op, JSON.stringify(detail),
 r.ok ? (r.checked2 ? 'trust-persistent' : (r.checked ? 'session-trust' : 'allow')) : 'deny']).catch(() => {});
 } catch (e) {}
 if (!r.ok) {
-const msg = '用户拒绝了本次' + GUARD_OP_LABEL[op] + '操作。请调整方案或询问用户意图，不要原样重试。';
+let msg = '用户拒绝了本次' + GUARD_OP_LABEL[op] + '操作。请调整方案或询问用户意图，不要原样重试。';
+const _reason = String((r && r.reason) || '').trim().slice(0, 300);
+if (_reason) msg += '｜用户理由：' + _reason;
 toast('已拒绝 AI 的' + GUARD_OP_LABEL[op] + '请求', 'ok');
 return { blocked: JSON.stringify({ info: msg, skipped: true }), token: null };
 }

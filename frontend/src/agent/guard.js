@@ -54,6 +54,77 @@ const GUARD_RUN_OPS = ['run_command', 'run_powershell', 'run_admin_command'];
  */
 let _guardInlineQueue = Promise.resolve();
 
+/* ================= I13 · 内联真 LCS 行级 Diff =================
+ * 为什么审批卡需要 diff：删除一个文件、覆盖一段配置，正文是「一句话描述」，
+ * 用户真正要判断的是「改了什么」。纯文本审批只能让人凭描述猜，于是要么盲点
+ * 允许，要么无脑拒绝——两种都不安全。
+ *
+ * 为什么是**行级 LCS** 而不是字符级：审批场景关心「哪几行被换掉了」，字符级
+ * diff 会把一行小改碎成一片红绿噪声，反而看不出意图。
+ *
+ * 正确性硬判据（测试就断言这一条）：same+del 的行拼回去 == 旧文本，
+ * same+add 的行拼回去 == 新文本。任何「看起来像 diff」的实现都过不了这条。
+ *
+ * 降级（必须显式，不许静默）：DP 是 O(n·m) 内存，超大文本会把审批卡做成砖。
+ * 两侧合计 > 20000 字符或任一侧 > 800 行 → 退化为「整段替换」（全 del + 全 add），
+ * 并在返回值上标 `degraded:true` + `reason`，调用方可据此在 UI 上提示「差异过大，
+ * 已退化为整段对比」。800 行 × 800 行 = 64 万格 ≈ 2.6MB DP，仍可控。
+ *
+ * @param {string} oldText
+ * @param {string} newText
+ * @returns {Array<{type:'same'|'add'|'del', text:string}> & {degraded:boolean, reason?:string}}
+ */
+function guardLineDiff(oldText, newText) {
+  const MAX_CHARS = 20000;
+  const MAX_LINES = 800;
+  const splitLines = (t) => {
+    const s = String(t == null ? '' : t);
+    if (s === '') return [];                       // 空串 = 0 行（不是 1 个空行）
+    // CRLF / CR / LF 统一成 LF 再切：Windows 上 search_replace 的 old/new 常带 \r\n，
+    // 不归一会把每一行都算成「改过」，diff 全红全绿毫无意义。
+    return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  };
+  const a = splitLines(oldText);
+  const b = splitLines(newText);
+
+  const totalChars = String(oldText == null ? '' : oldText).length
+    + String(newText == null ? '' : newText).length;
+  const degraded = totalChars > MAX_CHARS || a.length > MAX_LINES || b.length > MAX_LINES;
+
+  const rows = [];
+  if (degraded) {
+    for (const line of a) rows.push({ type: 'del', text: line });
+    for (const line of b) rows.push({ type: 'add', text: line });
+    rows.degraded = true;
+    rows.reason = 'too-large';
+    return rows;
+  }
+
+  // 后缀式 LCS 长度表：dp[i][j] = a[i..] 与 b[j..] 的 LCS 长度
+  const n = a.length;
+  const m = b.length;
+  const width = m + 1;
+  const dp = new Uint32Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * width + j] = (a[i] === b[j])
+        ? dp[(i + 1) * width + (j + 1)] + 1
+        : Math.max(dp[(i + 1) * width + j], dp[i * width + (j + 1)]);
+    }
+  }
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { rows.push({ type: 'same', text: a[i] }); i++; j++; }
+    else if (dp[(i + 1) * width + j] >= dp[i * width + (j + 1)]) { rows.push({ type: 'del', text: a[i] }); i++; }
+    else { rows.push({ type: 'add', text: b[j] }); j++; }
+  }
+  while (i < n) { rows.push({ type: 'del', text: a[i] }); i++; }
+  while (j < m) { rows.push({ type: 'add', text: b[j] }); j++; }
+  rows.degraded = false;
+  return rows;
+}
+
 /**
  * guardInlineAsk({title, body, danger, okText, cancelText, checkboxLabel,
  *                 checkboxLabel2, sessionLabel}) → Promise<{ok, checked, checked2}>
@@ -108,6 +179,43 @@ function guardInlineAsk(opts) {
     body.textContent = String(opts.body == null ? '' : opts.body);
     card.appendChild(body);
 
+    // I13：有 before/after 才渲染 diff 区块（无 diff 时**零渲染**，不留空占位）。
+    // 行文案一律 textContent：被改的文件内容属不可信输入。
+    if (opts.diff && typeof opts.diff === 'object') {
+      try {
+        const rows = guardLineDiff(opts.diff.before, opts.diff.after);
+        const box = document.createElement('div');
+        box.className = 'gi-diff';
+        const head = document.createElement('div');
+        head.className = 'gi-diff-head';
+        const nAdd = rows.filter(r => r.type === 'add').length;
+        const nDel = rows.filter(r => r.type === 'del').length;
+        head.textContent = rows.degraded
+          ? '变更对比（差异过大，已退化为整段对比）'
+          : ('变更对比  +' + nAdd + ' / -' + nDel);
+        box.appendChild(head);
+        const MAX_ROWS = 200;   // 卡片不是代码评审器：超过就截断并明示省略行数
+        const shown = rows.slice(0, MAX_ROWS);
+        const pre = document.createElement('div');
+        pre.className = 'gi-diff-body';
+        shown.forEach((r) => {
+          const line = document.createElement('div');
+          line.className = 'gi-diff-line gi-' + r.type;
+          const mark = r.type === 'add' ? '+' : (r.type === 'del' ? '-' : ' ');
+          line.textContent = mark + ' ' + r.text;
+          pre.appendChild(line);
+        });
+        box.appendChild(pre);
+        if (rows.length > MAX_ROWS) {
+          const more = document.createElement('div');
+          more.className = 'gi-diff-more';
+          more.textContent = '…已省略 ' + (rows.length - MAX_ROWS) + ' 行';
+          box.appendChild(more);
+        }
+        card.appendChild(box);
+      } catch (e) { /* diff 渲染失败不能拖垮审批本身 */ }
+    }
+
     const mkCheck = (label, warn) => {
       const wrap = document.createElement('label');
       wrap.className = 'gi-check' + (warn ? ' gi-check-warn' : '');
@@ -122,6 +230,41 @@ function guardInlineAsk(opts) {
     };
     const chk = opts.checkboxLabel ? mkCheck(opts.checkboxLabel, false) : null;
     const chk2 = opts.checkboxLabel2 ? mkCheck(opts.checkboxLabel2, true) : null;
+
+    /* I13：拒绝理由（默认收起）。
+     * 为什么要有它：拒绝只回一句「用户拒绝了」，模型只能瞎猜——换的方案大概率
+     * 还是错的，于是反复确认、反复被拒。让用户一句话说清「别删这个目录，改用
+     * 移动」，下一轮就能直接照着改（这就是「拒绝理由直导换方案」）。
+     * 允许时**不发送**任何理由（避免把用户的抱怨当指令混进正常流程）。 */
+    const reasonWrap = document.createElement('div');
+    reasonWrap.className = 'gi-reason-wrap';
+    const reasonToggle = document.createElement('button');
+    reasonToggle.type = 'button';
+    reasonToggle.className = 'gi-reason-toggle';
+    reasonToggle.textContent = '说明原因';
+    if (reasonToggle.setAttribute) reasonToggle.setAttribute('aria-expanded', 'false');
+    const reasonTa = document.createElement('textarea');
+    reasonTa.className = 'gi-reason';
+    reasonTa.hidden = true;
+    reasonTa.placeholder = '例如：不要删这个目录，改成移动到备份目录';
+    if (reasonTa.setAttribute) { reasonTa.setAttribute('rows', '2'); reasonTa.setAttribute('aria-label', '拒绝理由'); }
+    reasonToggle.onclick = () => {
+      const open = !!reasonTa.hidden;
+      reasonTa.hidden = !open;
+      if (reasonToggle.setAttribute) reasonToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      reasonToggle.textContent = open ? '收起原因' : '说明原因';
+      if (open) { try { if (typeof reasonTa.focus === 'function') reasonTa.focus(); } catch (e) {} }
+    };
+    reasonWrap.appendChild(reasonToggle);
+    reasonWrap.appendChild(reasonTa);
+    card.appendChild(reasonWrap);
+
+    const readReason = () => {
+      try {
+        if (!reasonTa || reasonTa.hidden) return '';     // 收起态不读（不把 placeholder 当值）
+        return String(reasonTa.value == null ? '' : reasonTa.value).trim().slice(0, 300);
+      } catch (e) { return ''; }
+    };
 
     const btns = document.createElement('div');
     btns.className = 'gi-btns';
@@ -146,12 +289,16 @@ function guardInlineAsk(opts) {
     const done = (ok) => {
       const checked = (ok && chk) ? !!chk.checked : false;
       const checked2 = (ok && chk2) ? !!chk2.checked : false;
+      // I13：拒绝时带上理由（允许时恒为 ''，不发送）
+      const reason = ok ? '' : readReason();
       try {
         if (typeof document.removeEventListener === 'function')
           document.removeEventListener('keydown', onKey, true);
       } catch (e) {}
       try { if (typeof card.remove === 'function') card.remove(); } catch (e) {}
-      resolve({ ok: !!ok, checked: checked, checked2: checked2 });
+      // 返回结构仍是 {ok, checked, checked2}，只多一个可选 reason——
+      // 旧调用方按位置/解构取前三个字段，行为不变。
+      resolve({ ok: !!ok, checked: checked, checked2: checked2, reason: reason });
     };
     okBtn.onclick = () => done(true);
     cancelBtn.onclick = () => done(false);
@@ -289,7 +436,11 @@ async function guardCheckTool(name, args, runSid) {
       r.ok ? (r.checked2 ? 'trust-persistent' : (r.checked ? 'session-trust' : 'allow')) : 'deny']).catch(() => {});
   } catch (e) {}
   if (!r.ok) {
-    const msg = '用户拒绝了本次' + GUARD_OP_LABEL[op] + '操作。请调整方案或询问用户意图，不要原样重试。';
+    let msg = '用户拒绝了本次' + GUARD_OP_LABEL[op] + '操作。请调整方案或询问用户意图，不要原样重试。';
+    // I13：把用户填的拒绝理由拼进 info（**不改 blocked 的 JSON 形状**，仍是
+    // {info, skipped:true}）。理由直接进模型下一轮的上下文，换方案有据可依。
+    const _reason = String((r && r.reason) || '').trim().slice(0, 300);
+    if (_reason) msg += '｜用户理由：' + _reason;
     toast('已拒绝 AI 的' + GUARD_OP_LABEL[op] + '请求', 'ok');
     return { blocked: JSON.stringify({ info: msg, skipped: true }), token: null };
   }
