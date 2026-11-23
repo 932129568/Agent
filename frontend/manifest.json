@@ -126,7 +126,8 @@
         "hubSetMarketSub",
         "hubSetMarketTab",
         "hubToggleEnabled",
-        "hubToggleMine"
+        "hubToggleMine",
+        "harnessSkillsNow"
       ],
       "requires": []
     },

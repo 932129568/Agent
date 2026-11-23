@@ -428,3 +428,41 @@ function hubInitMarket() {
     if (e.key === 'Escape' && HUB_MARKET_STATE.open) hubCloseMarket();
   });
 }
+
+/* R101 T05 · Harness V2 的 L3 探针（技能锚）
+ * 数据来源就是目录里已有的 item.directive（hubCatalogPrompt 已在用它拼注入文本），
+ * 不是新造字段：条目若有更精确的 skills[].prompt 则优先用它，没有就回落 directive。
+ * 连接器不进 L3 —— 那是工具面（mcp__），塞进提示词只会污染上下文。
+ * 长度上限 2000 字符：L3 分区预算 1800 token，中文按 ~1.5 字符/token 估算，
+ * 2000 字符约 1300 token，留出余量给装配器自己的段头。
+ * 为什么要单独一个函数而不是在 run-controller 里就地算：启用态与目录都在本模块，
+ * run-controller 经 uiSeamCall('harnessSkillsNow') 取，不产生静态依赖边。
+ */
+function harnessSkillsNow() {
+  const out = [];
+  try {
+    const set = hubEnabledLoad();
+    Object.keys(set).forEach(kind => {
+      if (kind === 'connectors') return;
+      (set[kind] || []).forEach(id => {
+        const it = (typeof hubCatalogById === 'function') ? hubCatalogById(kind, id) : null;
+        if (!it) return;
+        // skills[].prompt 优先（本次新增的可选字段，回填后自动生效），否则用 directive
+        let frag = '';
+        if (Array.isArray(it.skills)) {
+          const parts = it.skills
+            .map(sk => (sk && typeof sk === 'object' && typeof sk.prompt === 'string') ? sk.prompt : '')
+            .filter(Boolean);
+          if (parts.length) frag = parts.join('\n');
+        }
+        if (!frag) {
+          const fn = (typeof globalThis !== 'undefined') ? globalThis['hubCatalog' + 'Prompt'] : null;
+          frag = (typeof fn === 'function') ? fn(it) : String(it.directive || '');
+        }
+        if (frag) out.push(frag);
+      });
+    });
+  } catch (e) { /* 取不到就返回空串：L3 会退化为 no-source，不编造 */ }
+  const text = out.join('\n\n');
+  return text.length > 2000 ? text.slice(0, 2000) : text;
+}

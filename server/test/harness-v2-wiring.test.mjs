@@ -143,3 +143,24 @@ test('负控：缺 read_more 必须 fail-closed（不许装配出不完整的工
   assert.match(r.reason, /GHOST_ALWAYS_ACTIVE|assemble-threw/);
   assert.equal(r.body, raw);
 });
+
+test('harnessMeta.skills 有内容时 L3 落地（不再是无来源）', () => {
+  const r = rewriteChatBodyWithHarnessV2(chatBody(), {
+    env: ON,
+    harnessMeta: { v: 2, phase: 'execute', skills: '【已启用「代码审查」】逐行审查并给风险等级' },
+  });
+  assert.equal(r.applied, true);
+  assert.ok(!r.dropped.includes('l3:no-source'), 'L3 已由请求头提供');
+  assert.ok(r.dropped.includes('handoff:no-source'), 'handoff 仍无来源');
+  assert.ok(r.body.includes('逐行审查并给风险等级'), 'L3 正文没进装配结果');
+});
+
+test('harnessMeta.skills 为空串/非字符串时回落 l3:no-source（不塞空段）', () => {
+  for (const bad of ['', null, 123, [], undefined]) {
+    const r = rewriteChatBodyWithHarnessV2(chatBody(), {
+      env: ON, harnessMeta: { v: 2, phase: 'execute', skills: bad },
+    });
+    assert.equal(r.applied, true);
+    assert.ok(r.dropped.includes('l3:no-source'), JSON.stringify(bad) + ' 应回落为无来源');
+  }
+});

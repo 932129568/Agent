@@ -288,7 +288,7 @@ export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assem
       //   body 里没有这个信息，只有渲染进程知道；头由代理读取后作为 harnessMeta 传入。
       // L3/handoff：仍无来源，显式留空而不是去猜。
       l2PhasePrompt: (harnessMeta && typeof harnessMeta.phase === 'string') ? ('当前阶段：' + harnessMeta.phase) : '',
-      l3ActiveSkills: '',
+      l3ActiveSkills: (harnessMeta && typeof harnessMeta.skills === 'string') ? harnessMeta.skills : '',
       handoffState: null,
       workingTurns: turns,
       env,
@@ -304,7 +304,8 @@ export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assem
   const dropped = []
   if (!l1Charter) dropped.push('l1:no-system-message')
   if (!(harnessMeta && typeof harnessMeta.phase === 'string')) dropped.push('l2:no-source')
-  dropped.push('l3:no-source', 'handoff:no-source')
+  if (!(harnessMeta && typeof harnessMeta.skills === 'string' && harnessMeta.skills)) dropped.push('l3:no-source')
+  dropped.push('handoff:no-source')
 
   const out = Object.assign({}, json, { messages: envelope.messages })
   if (Array.isArray(envelope.surface && envelope.surface.activeTools)) {
