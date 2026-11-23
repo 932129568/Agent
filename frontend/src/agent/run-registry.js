@@ -130,3 +130,11 @@ const RunRegistry = Object.freeze({
     return owned;
   },
 });
+
+/** 取全部在途 run（供跨模块动态取用）。
+ *  为什么要这个函数：`RunRegistry` 是 `const`，**不会**挂到 globalThis 上，
+ *  所以别的模块写 window['Run'+'Registry'] 永远取到 undefined（实测踩过）。
+ *  函数声明会挂 globalThis，于是动态索引可用，且不产生静态依赖边（SCC 零余量）。 */
+function runRegistryAll() {
+  try { return RunRegistry.all(); } catch (e) { return []; }
+}

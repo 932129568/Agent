@@ -1271,7 +1271,8 @@
         "_setActiveRun",
         "_nextRunId",
         "_getLastRun",
-        "_setLastRun"
+        "_setLastRun",
+        "runRegistryAll"
       ],
       "requires": [
         "AppState",
@@ -1796,6 +1797,18 @@
         "_hwRoll",
         "headerIslandRefresh",
         "headerIslandSetBusy"
+      ],
+      "requires": []
+    },
+    {
+      "path": "frontend/src/shell/run-pinboard.js",
+      "provides": [
+        "RUN_PINBOARD_ID",
+        "_runPinboardTimer",
+        "_rpFn",
+        "runPinboardMount",
+        "_rpStatusText",
+        "runPinboardRefresh"
       ],
       "requires": []
     },

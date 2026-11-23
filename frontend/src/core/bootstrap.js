@@ -94,6 +94,11 @@ async function loadAll() {
   try { shortcutsInit(); } catch (e) { console.warn('快捷键帮助初始化失败', e); }
   /* v1.8.0：长对话导航（输入区把手 → 最近消息浮层） */
   try { chatNavInit(); } catch (e) { console.warn('长对话导航初始化失败', e); }
+  // v3.4 I15：并行置顶区（动态取函数，同上）
+  try {
+    const rp = (typeof window !== 'undefined') ? window['run' + 'PinboardMount'] : null;
+    if (typeof rp === 'function') rp();
+  } catch (e) { console.warn('并行置顶区初始化失败', e); }
   // v3.4 I21：顶栏灵动岛（动态取函数，避免 bootstrap → header-island 的静态边）
   try {
     const him = (typeof window !== 'undefined') ? window['header' + 'IslandMount'] : null;

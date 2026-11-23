@@ -154,3 +154,40 @@ body.fx-off .hw-odo.roll{animation:none}
   background:var(--surface-2);color:var(--text);outline:none}
 .set-nav-search input:focus{border-color:var(--primary)}
 .set-nav-search input::placeholder{color:var(--text-3)}
+
+/* ===== v3.4 I15 · 并行置顶区 =====
+   侧栏顶部一条活体区：双层雷达点（两圈错相呼吸）+ 流光条（横向平移的光带）。
+   全部用 transform/opacity，时长走 --dur-* 令牌；fx-off 下停动画只留静态点。 */
+.run-pinboard{margin:6px 8px 8px;padding:6px;border-radius:var(--radius-md);
+  background:var(--surface-2);border:1px solid var(--border)}
+.run-pinboard[hidden]{display:none}
+.rp-head{font-size:10.5px;color:var(--text-3);padding:2px 6px 6px;letter-spacing:.02em}
+.rp-row{position:relative;display:flex;align-items:center;gap:7px;width:100%;
+  padding:6px 8px;margin-bottom:4px;border:0;border-radius:var(--radius-sm);
+  background:transparent;color:var(--text);font-size:12px;text-align:left;cursor:pointer;overflow:hidden}
+.rp-row:last-child{margin-bottom:0}
+.rp-row:hover{background:var(--hover)}
+.rp-row.on{background:var(--active)}
+.rp-radar{position:relative;width:8px;height:8px;flex-shrink:0;border-radius:var(--radius-full);
+  background:var(--primary)}
+.rp-radar::before,.rp-radar::after{content:"";position:absolute;inset:-3px;border-radius:var(--radius-full);
+  border:1px solid var(--primary);opacity:.5;animation:rpPing var(--dur-ambient) var(--ease-out-soft) infinite}
+.rp-radar::after{animation-delay:calc(var(--dur-ambient) / 2)}
+.rp-row[data-state="wait"] .rp-radar{background:var(--warn)}
+.rp-row[data-state="wait"] .rp-radar::before,
+.rp-row[data-state="wait"] .rp-radar::after{border-color:var(--warn)}
+.rp-row[data-state="bad"] .rp-radar{background:var(--err)}
+.rp-row[data-state="bad"] .rp-radar::before,
+.rp-row[data-state="bad"] .rp-radar::after{border-color:var(--err)}
+.rp-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-state{flex-shrink:0;font-size:10.5px;color:var(--text-3)}
+.rp-row[data-state="wait"] .rp-state{color:var(--warn)}
+.rp-row[data-state="bad"] .rp-state{color:var(--err)}
+.rp-flow{position:absolute;left:0;bottom:0;height:1.5px;width:38%;
+  background:linear-gradient(90deg,transparent,var(--primary),transparent);opacity:.7;
+  transform:translateX(-100%);animation:rpFlow var(--dur-stream) linear infinite}
+.rp-row[data-state="wait"] .rp-flow{background:linear-gradient(90deg,transparent,var(--warn),transparent)}
+@keyframes rpPing{from{transform:scale(.75);opacity:.55}to{transform:scale(1.35);opacity:0}}
+@keyframes rpFlow{from{transform:translateX(-100%)}to{transform:translateX(360%)}}
+body.fx-off .rp-radar::before,body.fx-off .rp-radar::after{animation:none;opacity:.35}
+body.fx-off .rp-flow{animation:none;opacity:.25;transform:none}

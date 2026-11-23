@@ -2976,6 +2976,39 @@ border:1px solid var(--border);border-radius:var(--radius-full);
 background:var(--surface-2);color:var(--text);outline:none}
 .set-nav-search input:focus{border-color:var(--primary)}
 .set-nav-search input::placeholder{color:var(--text-3)}
+.run-pinboard{margin:6px 8px 8px;padding:6px;border-radius:var(--radius-md);
+background:var(--surface-2);border:1px solid var(--border)}
+.run-pinboard[hidden]{display:none}
+.rp-head{font-size:10.5px;color:var(--text-3);padding:2px 6px 6px;letter-spacing:.02em}
+.rp-row{position:relative;display:flex;align-items:center;gap:7px;width:100%;
+padding:6px 8px;margin-bottom:4px;border:0;border-radius:var(--radius-sm);
+background:transparent;color:var(--text);font-size:12px;text-align:left;cursor:pointer;overflow:hidden}
+.rp-row:last-child{margin-bottom:0}
+.rp-row:hover{background:var(--hover)}
+.rp-row.on{background:var(--active)}
+.rp-radar{position:relative;width:8px;height:8px;flex-shrink:0;border-radius:var(--radius-full);
+background:var(--primary)}
+.rp-radar::before,.rp-radar::after{content:"";position:absolute;inset:-3px;border-radius:var(--radius-full);
+border:1px solid var(--primary);opacity:.5;animation:rpPing var(--dur-ambient) var(--ease-out-soft) infinite}
+.rp-radar::after{animation-delay:calc(var(--dur-ambient) / 2)}
+.rp-row[data-state="wait"] .rp-radar{background:var(--warn)}
+.rp-row[data-state="wait"] .rp-radar::before,
+.rp-row[data-state="wait"] .rp-radar::after{border-color:var(--warn)}
+.rp-row[data-state="bad"] .rp-radar{background:var(--err)}
+.rp-row[data-state="bad"] .rp-radar::before,
+.rp-row[data-state="bad"] .rp-radar::after{border-color:var(--err)}
+.rp-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-state{flex-shrink:0;font-size:10.5px;color:var(--text-3)}
+.rp-row[data-state="wait"] .rp-state{color:var(--warn)}
+.rp-row[data-state="bad"] .rp-state{color:var(--err)}
+.rp-flow{position:absolute;left:0;bottom:0;height:1.5px;width:38%;
+background:linear-gradient(90deg,transparent,var(--primary),transparent);opacity:.7;
+transform:translateX(-100%);animation:rpFlow var(--dur-stream) linear infinite}
+.rp-row[data-state="wait"] .rp-flow{background:linear-gradient(90deg,transparent,var(--warn),transparent)}
+@keyframes rpPing{from{transform:scale(.75);opacity:.55}to{transform:scale(1.35);opacity:0}}
+@keyframes rpFlow{from{transform:translateX(-100%)}to{transform:translateX(360%)}}
+body.fx-off .rp-radar::before,body.fx-off .rp-radar::after{animation:none;opacity:.35}
+body.fx-off .rp-flow{animation:none;opacity:.25;transform:none}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -19080,6 +19113,9 @@ if (_getActiveRun() === run) _setActiveRun(null);
 return owned;
 },
 });
+function runRegistryAll() {
+try { return RunRegistry.all(); } catch (e) { return []; }
+}
 
 
 /* ===== frontend/src/integrations/mcp-exec.js ===== */
@@ -23669,6 +23705,95 @@ const el = (typeof document !== 'undefined') ? document.getElementById(HW_ISLAND
 if (!el) return;
 el.setAttribute('data-busy', on ? '1' : '0');
 headerIslandRefresh();
+}
+
+
+/* ===== frontend/src/shell/run-pinboard.js ===== */
+const RUN_PINBOARD_ID = 'runPinboard';
+let _runPinboardTimer = 0;
+function _rpFn(name) {
+try { return (typeof globalThis !== 'undefined' && globalThis[name]) || null; } catch (e) { return null; }
+}
+function runPinboardMount() {
+if (typeof document === 'undefined') return null;
+const host = document.getElementById('sidebarHistory') ||
+document.querySelector('.sidebar');
+if (!host || !host.parentNode) return null;
+let el = document.getElementById(RUN_PINBOARD_ID);
+if (!el || !el.isConnected) {
+el = document.createElement('div');
+el.id = RUN_PINBOARD_ID;
+el.className = 'run-pinboard';
+el.setAttribute('role', 'region');
+el.setAttribute('aria-label', '正在运行的会话');
+el.hidden = true;
+host.parentNode.insertBefore(el, host);
+}
+runPinboardRefresh();
+if (!_runPinboardTimer) {
+_runPinboardTimer = setInterval(() => {
+const allFn = _rpFn('runRegistryAll');
+const n = (typeof allFn === 'function') ? (allFn() || []).length : 0;
+if (n > 0) runPinboardRefresh();
+else if (Date.now() % 4 === 0) runPinboardRefresh();
+}, 1000);
+}
+return el;
+}
+function _rpStatusText(run) {
+const st = String((run && run.status) || '');
+if (st === 'paused' || st === 'waiting') return '待接管';
+if (st === 'blocked' || st === 'failed') return '异常';
+return '执行中';
+}
+function runPinboardRefresh() {
+if (typeof document === 'undefined') return 0;
+const el = document.getElementById(RUN_PINBOARD_ID);
+if (!el) return 0;
+const allFn = _rpFn('runRegistryAll');
+const runs = (typeof allFn === 'function') ? (allFn() || []) : [];
+if (!runs.length) {
+el.hidden = true;
+el.textContent = '';
+return 0;
+}
+el.hidden = false;
+const cur = (typeof AppState !== 'undefined') ? AppState.currentSessionId : '';
+runs.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+el.innerHTML = '';
+const head = document.createElement('div');
+head.className = 'rp-head';
+head.textContent = '进行中 · ' + runs.length;
+el.appendChild(head);
+runs.forEach((run) => {
+const sess = run.session || {};
+const row = document.createElement('button');
+row.type = 'button';
+row.className = 'rp-row' + (run.sessionId === cur ? ' on' : '');
+row.dataset.sid = String(run.sessionId || '');
+const active = _rpStatusText(run);
+row.setAttribute('data-state', active === '待接管' ? 'wait' : (active === '异常' ? 'bad' : 'run'));
+row.title = '切到「' + (sess.title || run.sessionId) + '」接管';
+row.innerHTML =
+'<span class="rp-radar" aria-hidden="true"></span>' +
+'<span class="rp-title"></span>' +
+'<span class="rp-state"></span>' +
+'<span class="rp-flow" aria-hidden="true"></span>';
+const titleEl = row.querySelector('.rp-title');
+const stateEl = row.querySelector('.rp-state');
+if (titleEl) titleEl.textContent = sess.title || '会话 ' + String(run.sessionId || '').slice(0, 6);
+if (stateEl) stateEl.textContent = active;
+row.onclick = () => {
+const sw = _rpFn('switchSession');
+if (typeof sw === 'function') { try { sw(run.sessionId, true); } catch (e) {} }
+try {
+const ts = _rpFn('toggle' + 'Sidebar');
+if (document.body.classList.contains('sidebar-open') && typeof ts === 'function') ts();
+} catch (e) {}
+};
+el.appendChild(row);
+});
+return runs.length;
 }
 
 
@@ -32015,6 +32140,10 @@ try { searchPanelInit(); } catch (e) { console.warn('搜索面板初始化失败
 try { checkpointMgrInit(); } catch (e) { console.warn('任务历史面板初始化失败', e); }
 try { shortcutsInit(); } catch (e) { console.warn('快捷键帮助初始化失败', e); }
 try { chatNavInit(); } catch (e) { console.warn('长对话导航初始化失败', e); }
+try {
+const rp = (typeof window !== 'undefined') ? window['run' + 'PinboardMount'] : null;
+if (typeof rp === 'function') rp();
+} catch (e) { console.warn('并行置顶区初始化失败', e); }
 try {
 const him = (typeof window !== 'undefined') ? window['header' + 'IslandMount'] : null;
 if (typeof him === 'function') him();
