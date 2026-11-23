@@ -181,3 +181,54 @@ html.sp-dock-mode .main{padding-right:calc(min(380px,40vw) + 12px)!important}
 html.sp-dock-mode .sp-mask{display:none}
 .sp-dock{border:0;background:transparent;color:var(--text-3);cursor:pointer;font-size:13px;padding:0 4px}
 .sp-dock:hover{color:var(--text)}
+
+/* ===== P3-1 · 2026 活体光影、.tl-orbit 思考星轨、Top-Layer 弹窗与碰撞边缘光纹 ===== */
+.spotlight-card{position:relative;overflow:hidden;box-shadow:var(--elev-1);transition:box-shadow var(--dur-base) var(--ease-out)}
+.spotlight-card::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:radial-gradient(200px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,var(--spot-alpha)),transparent 68%);
+  transition:opacity var(--dur-base) var(--ease-out)}
+.spotlight-card:hover::before{opacity:1}
+.composer-living-ring{position:relative;overflow:hidden;border-radius:var(--radius-lg);padding:1.5px}
+.composer-living-ring::before{content:"";position:absolute;inset:-80%;pointer-events:none;opacity:0;
+  background:conic-gradient(from 0deg,transparent 0deg,rgba(217,119,87,.75) 65deg,rgba(56,189,248,.55) 140deg,transparent 210deg,transparent 360deg);
+  transition:opacity var(--dur-base) var(--ease-out);animation:harborRingOrbit var(--dur-sheen-sweep) linear infinite}
+.composer-living-ring:focus-within::before,.composer-living-ring.is-streaming::before{opacity:1}
+@keyframes harborRingOrbit{to{transform:rotate(360deg)}}
+.tl-orbit{width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center}
+.tl-orbit-svg{width:18px;height:18px;overflow:visible}
+.tl-ring-outer{fill:none;stroke:var(--primary);stroke-width:1.4;stroke-dasharray:26 20;transform-origin:10px 10px;opacity:.85}
+.tl-ring-inner{fill:none;stroke:var(--text-2);stroke-width:1.2;stroke-dasharray:14 12;transform-origin:10px 10px;opacity:.65}
+.tl-core{fill:var(--primary);transform-origin:10px 10px}
+.think-line.is-active .tl-ring-outer{animation:harborOrbitCw var(--dur-sheen-sweep) linear infinite}
+.think-line.is-active .tl-ring-inner{animation:harborOrbitCcw calc(var(--dur-sheen-sweep) * .65) linear infinite}
+.think-line.is-active .tl-core{animation:harborCorePulse calc(var(--dur-sheen-sweep) * .35) ease-in-out infinite}
+.think-line.is-done .tl-ring-outer,.think-line.is-done .tl-ring-inner{opacity:.28;animation:none}
+.tl-shimmer{background:linear-gradient(110deg,var(--text) 32%,var(--primary) 50%,var(--text) 68%);background-size:220% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:harborTextShimmer calc(var(--dur-sheen-sweep) * .45) ease-in-out infinite}
+@keyframes harborOrbitCw{to{transform:rotate(360deg)}}
+@keyframes harborOrbitCcw{to{transform:rotate(-360deg)}}
+@keyframes harborCorePulse{0%,100%{transform:scale(.85);opacity:.65}50%{transform:scale(1.22);opacity:1}}
+@keyframes harborTextShimmer{0%{background-position:120% 0}100%{background-position:-100% 0}}
+dialog.harbor-dialog,[popover].harbor-pop{
+  transition:opacity var(--dur-spring-exit) var(--ease-exit-2026),transform var(--dur-spring-pop) var(--ease-spring-2026),
+             overlay var(--dur-spring-exit) allow-discrete,display var(--dur-spring-exit) allow-discrete;
+  opacity:0;transform:translate3d(0,8px,0) scale(.94)}
+dialog.harbor-dialog[open],[popover].harbor-pop:popover-open{opacity:1;transform:translate3d(0,0,0) scale(1)}
+@starting-style{dialog.harbor-dialog[open],[popover].harbor-pop:popover-open{opacity:0;transform:translate3d(0,12px,0) scale(.93)}}
+.ov-collapse-wrap{display:grid;grid-template-rows:1fr;
+  transition:grid-template-rows var(--dur-comp) var(--ease-out),opacity var(--dur-comp-out) var(--ease-out),margin var(--dur-comp) var(--ease-out)}
+.ov-collapse-wrap > .ov-collapse-inner{overflow:hidden;min-height:0}
+.ov-collapse-wrap.is-collapsing{grid-template-rows:0fr;opacity:0;margin-top:0!important;margin-bottom:0!important}
+@starting-style{.ov-collapse-wrap{grid-template-rows:0fr;opacity:0}}
+.kin-ring-hit{position:relative}
+.kin-ring-hit::after{content:"";position:absolute;inset:-4px;border-radius:inherit;border:1.5px solid var(--primary);
+  pointer-events:none;animation:kinRingBurst var(--dur-base) var(--ease-out) forwards}
+@keyframes kinRingBurst{from{opacity:.85;transform:scale(.86)}to{opacity:0;transform:scale(1.42)}}
+.main::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;border-radius:inherit;z-index:25}
+.main.kin-impact-left::after{background:linear-gradient(90deg,rgba(217,119,87,.32),transparent 26px);animation:kinEdgeFlash var(--dur-panel) var(--ease-out) forwards}
+.main.kin-impact-right::after{background:linear-gradient(270deg,rgba(217,119,87,.32),transparent 26px);animation:kinEdgeFlash var(--dur-panel) var(--ease-out) forwards}
+.main.kin-impact-top::after{background:linear-gradient(180deg,rgba(56,189,248,.28),transparent 24px);animation:kinEdgeFlash var(--dur-panel) var(--ease-out) forwards}
+.main.kin-impact-bottom::after{background:linear-gradient(0deg,rgba(217,119,87,.28),transparent 24px);animation:kinEdgeFlash var(--dur-panel) var(--ease-out) forwards}
+@keyframes kinEdgeFlash{0%{opacity:0}22%{opacity:1}100%{opacity:0}}
+body.fx-off dialog.harbor-dialog,body.fx-off [popover].harbor-pop,body.fx-off .ov-collapse-wrap{
+  transition-duration:.01ms!important;animation-duration:.01ms!important}

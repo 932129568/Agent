@@ -264,6 +264,18 @@ export async function ensureLocalProxyRunning() {
         res.end()
         return
       }
+      if (req.method === 'GET' && String(req.url || '').startsWith('/ollama/ps')) {
+        applyCors(req, res)
+        const target = String(req.headers['x-harbor-target'] || 'http://127.0.0.1:11434')
+        probeOllamaPs(target).then(info => {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify(info))
+        }).catch(() => {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, source: 'ollama/api/ps', reason: 'unreachable' }))
+        })
+        return
+      }
       if (req.method === 'POST' || req.method === 'GET') {
         relay(req, res).catch(e => jsonError(req, res, 502, '转发内部错误: ' + ((e && e.message) || e)))
         return
@@ -300,4 +312,35 @@ export function shutdownLocalProxy() {
 /** 测试与诊断用：当前是否已监听。 */
 export function localProxyInfo() {
   return { listening: !!(_server && _server.listening), ...currentInfo() }
+}
+
+/**
+ * P2-4 · I19 诚实版：纯 HTTP 查询 Ollama 原生 GET /api/ps 获取真实 size_vram。
+ * 绝不编造 GPU 显存数字——连不上或非 Ollama 返回 { ok: false, source: 'ollama/api/ps', reason: 'unreachable' }。
+ */
+export async function probeOllamaPs(baseUrl = 'http://127.0.0.1:11434') {
+  const raw = String(baseUrl || '').trim() || 'http://127.0.0.1:11434'
+  const root = raw.replace(/\/v1\/?$/, '').replace(/\/+$/, '')
+  try {
+    const resp = await fetch(`${root}/api/ps`, { signal: AbortSignal.timeout(2000) })
+    if (!resp.ok) return { ok: false, source: 'ollama/api/ps', reason: `http_${resp.status}` }
+    const data = await resp.json()
+    const list = (data && Array.isArray(data.models)) ? data.models : []
+    const models = list.map(m => ({
+      name: String((m && (m.name || m.model)) || ''),
+      size_vram: Number(m && m.size_vram) || 0,
+      size: Number(m && m.size) || 0,
+      expires_at: String((m && m.expires_at) || ''),
+    }))
+    const totalVram = models.reduce((acc, m) => acc + (m.size_vram > 0 ? m.size_vram : 0), 0)
+    return {
+      ok: true,
+      source: 'ollama/api/ps',
+      total_vram_bytes: totalVram,
+      total_vram_mb: Math.round(totalVram / 1048576),
+      models,
+    }
+  } catch {
+    return { ok: false, source: 'ollama/api/ps', reason: 'unreachable' }
+  }
 }

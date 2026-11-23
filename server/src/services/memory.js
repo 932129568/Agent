@@ -81,7 +81,21 @@ function saveAll(list) {
   _listCache = null   // 写档即失效（下次 loadAll 按新指纹重读）
 }
 
-export { sanitizeMemoryText, memoryFilterByProject, _normWs }
+/**
+ * P2-4 · 记忆一句原子提炼：剔除围栏代码块与列表噪声，将多段长文本压缩为首句核心事实（≤180 字）。
+ * 保持 sanitizeMemoryText 原 800 字硬截断契约不变（完全兼容 memory-atomic-i14.test.mjs）。
+ */
+function distillMemoryOneSentence(raw) {
+  let t = String(raw == null ? '' : raw).trim()
+  if (!t) return ''
+  t = t.replace(/```[\s\S]*?```/g, ' ').replace(/^[\s>*#-]+/gm, '').replace(/\s+/g, ' ').trim()
+  if (t.length <= 180) return t
+  const m = t.match(/^(.{12,180}?[。！？.!?;；])(?:\s|$)/)
+  if (m && m[1]) return m[1].trim()
+  return t.slice(0, 179).trim() + '…'
+}
+
+export { sanitizeMemoryText, distillMemoryOneSentence, memoryFilterByProject, _normWs }
 
 export function classify(text) {
   const value = String(text || '')
@@ -134,7 +148,11 @@ export async function appendMemory(entry) {
   // R38 修复（K2 双端对齐）：空 text 条目与 Python legacy 契约同口径**允许入库**
   // （{'k':'v'} 无 text 形态也入；检索/注入层自然跳过空条目）——原 Node 单端拒绝。
   const rawText = String(input.text ?? '')
-  const cleaned = sanitizeMemoryText(rawText)
+  // P2-4：显式 distill=true，或检测到含围栏代码块/多行长段落时自动压成一句原子事实；
+  // 单行纯连续字符串（如 memory-atomic-i14 的 1000 字符截断用例）保持原 800 字截断契约零回退。
+  const shouldDistill = input.distill === true || rawText.includes('```') || (rawText.includes('\n') && rawText.length > 240)
+  const candidate = shouldDistill ? distillMemoryOneSentence(rawText) : rawText
+  const cleaned = sanitizeMemoryText(candidate)
   const text = cleaned.text
   // 纯垃圾（原文非空但清洗后为空，例如只有控制字符）⇒ **不入库**，明确回报。
   // 原文本来就空的情况保持 legacy 口径（允许入库，检索层跳过）。
@@ -172,6 +190,7 @@ export async function appendMemory(entry) {
 
   saveAll(list)
   return JSON.stringify({ ok: true, kind, total: list.length,
+    ...(shouldDistill && candidate !== rawText.trim() ? { distilled: true } : {}),
     ...(cleaned.dirty ? { cleaned: true } : {}),
     ...(cleaned.truncated ? { truncated: true } : {}) })
 }

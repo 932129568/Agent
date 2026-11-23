@@ -114,3 +114,26 @@ html[data-polarity="dark"]{
   --text-body:#EDEDF0;
   --text-subtle:#B4B4BA;
 }
+
+/* ===== P3-1 · 2026 物理弹簧令牌、四阶海拔光影与光斑基准 ===== */
+:root{
+  interpolate-size:allow-keywords;
+  --dur-spring-pop:240ms;
+  --dur-spring-exit:135ms;
+  --dur-sheen-sweep:6s;
+  --ease-spring-2026:linear(
+    0,0.088 4%,0.312 10%,0.584 17%,0.818 25%,0.976 34%,
+    1.045 43%,1.051 52%,1.031 62%,1.012 72%,1.002 82%,0.999 91%,1
+  );
+  --ease-exit-2026:cubic-bezier(.32,0,.67,0);
+  --elev-1:0 1px 2px rgba(20,20,19,.04),0 2px 6px rgba(20,20,19,.03);
+  --elev-2:0 2px 6px rgba(20,20,19,.05),0 10px 28px -6px rgba(20,20,19,.08);
+  --elev-3:0 4px 12px rgba(20,20,19,.08),0 22px 48px -12px rgba(20,20,19,.15);
+  --spot-alpha:.14;
+}
+body.dark{
+  --elev-1:0 1px 2px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.05);
+  --elev-2:0 4px 14px rgba(0,0,0,.38),0 14px 36px -8px rgba(0,0,0,.46);
+  --elev-3:0 8px 22px rgba(0,0,0,.48),0 26px 60px -12px rgba(0,0,0,.62);
+  --spot-alpha:.075;
+}
