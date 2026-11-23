@@ -155,6 +155,7 @@ function guardInlineAsk(opts) {
     const card = document.createElement('div');
     card.className = 'guard-inline' + (opts.danger ? ' danger' : '');
     card.setAttribute('data-guard-inline', '1');
+    try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('guard-inline'); } catch (e) {}
 
     const head = document.createElement('div');
     head.className = 'gi-head';

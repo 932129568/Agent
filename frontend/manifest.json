@@ -142,7 +142,10 @@
     {
       "path": "frontend/src/shell/kinetic-rig.js",
       "provides": [
-        "HarborKineticRig"
+        "HarborKineticRig",
+        "COUPLINGS",
+        "kineticFire",
+        "kineticCouplings"
       ],
       "requires": [
         "MOTION",

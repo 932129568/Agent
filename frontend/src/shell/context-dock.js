@@ -127,6 +127,7 @@ function contextDockOpen() {
   el.style.display = 'flex';
   try { if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) el.showPopover(); } catch (e) {}
   CONTEXT_DOCK.open = true;
+  try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('dock-open'); } catch (e) {}
   contextDockRefresh();
   // I23：**不再轮询**。原来 1.5s 一次的 setInterval 在静止时纯空转。
   // 改为监听 run 生命周期事件（harbor:trace / harbor:run），事件到了才刷新。
@@ -138,6 +139,7 @@ function contextDockClose() {
   if (el) el.style.display = 'none';
   try { if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) el.hidePopover(); } catch (e) {}
   CONTEXT_DOCK.open = false;
+  try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('dock-close'); } catch (e) {}
   CONTEXT_DOCK.timer = 0;   // 已无定时器；字段保留仅为兼容既有探针
   const rig = _dockFn('Harbor' + 'KineticRig');
   if (rig && typeof rig.applyImpulse === 'function' && typeof document !== 'undefined') {

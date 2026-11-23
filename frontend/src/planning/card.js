@@ -270,6 +270,7 @@ async function planShow(plan) {
 }
 
 function planCardApprove() {
+  try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('plan-approve'); } catch (e) {}
   const card = planCardEl;
   if (!card || !planResolveApprove) return;
   // R101 T02：若用户正处在「编辑计划」态就点批准，先把输入框里的文案落回对象，

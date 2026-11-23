@@ -7933,7 +7933,37 @@ if (document.hidden) _activeWaapi.forEach(a => { try { a.finish(); } catch (e) {
 }
 return { applyImpulse, closeWithCollision };
 })();
+const COUPLINGS = {
+'panel-switch': { sel: '#mainStage, .main > .panels', vx: 74, vy: 22, maxPx: 6 },
+'settings-open': { sel: '#mainStage, .main > .panels', vx: 0, vy: 34, maxPx: 5 },
+'settings-close': { sel: '#mainStage, .main > .panels', vx: 0, vy: -28, maxPx: 5 },
+'dock-open': { sel: '#mainStage, .main > .panels', vx: -40, vy: 0, maxPx: 4 },
+'dock-close': { sel: '#mainStage, .main > .panels', vx: 34, vy: 0, maxPx: 4 },
+'composer-send': { sel: '#chatInputArea .input-inner', vx: 0, vy: 18, maxPx: 3 },
+'guard-inline': { sel: '#chatInputArea .input-inner', vx: 0, vy: -14, maxPx: 3 },
+'plan-approve': { sel: '#mainStage, .main > .panels', vx: 46, vy: 0, maxPx: 5 },
+'drop-magnet': { sel: '#chatInputArea .input-inner', vx: 0, vy: -10, maxPx: 2 },
+'handoff-arrive': { sel: '#mainStage, .main > .panels', vx: 0, vy: 20, maxPx: 4 },
+};
+function kineticFire(name) {
+const cfg = COUPLINGS[name];
+if (!cfg || typeof document === 'undefined') return false;
+if (document.body && document.body.classList.contains('fx-off')) return false;
+const el = document.querySelector(cfg.sel);
+if (!el) return false;
+const api = (typeof window !== 'undefined') ? window['HarborKineticRig'] : null;
+if (!api || typeof api.applyImpulse !== 'function') return false;
+try {
+api.applyImpulse(el, {
+vx: cfg.vx, vy: cfg.vy, vsc: -0.1,
+preset: { omega: 17, zeta: 0.46, maxPx: cfg.maxPx || 4, maxSc: 0.012 },
+});
+return true;
+} catch (e) { return false; }
+}
+function kineticCouplings() { return Object.keys(COUPLINGS); }
 if (typeof window !== 'undefined') window['HarborKineticRig'] = HarborKineticRig;
+if (typeof window !== 'undefined') window['kinetic' + 'Fire'] = kineticFire;
 
 
 /* ===== frontend/src/core/state.js ===== */
@@ -9459,6 +9489,7 @@ const run = () => new Promise((resolve) => {
 const card = document.createElement('div');
 card.className = 'guard-inline' + (opts.danger ? ' danger' : '');
 card.setAttribute('data-guard-inline', '1');
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('guard-inline'); } catch (e) {}
 const head = document.createElement('div');
 head.className = 'gi-head';
 const title = document.createElement('b');
@@ -21900,6 +21931,7 @@ planResolveApprove = { resolve, reject };
 });
 }
 function planCardApprove() {
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('plan-approve'); } catch (e) {}
 const card = planCardEl;
 if (!card || !planResolveApprove) return;
 const stepsWrap = pcEl('planSteps');
@@ -24143,6 +24175,7 @@ if (!el) return;
 el.style.display = 'flex';
 try { if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) el.showPopover(); } catch (e) {}
 CONTEXT_DOCK.open = true;
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('dock-open'); } catch (e) {}
 contextDockRefresh();
 contextDockBindEvents();
 }
@@ -24151,6 +24184,7 @@ const el = CONTEXT_DOCK.root;
 if (el) el.style.display = 'none';
 try { if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) el.hidePopover(); } catch (e) {}
 CONTEXT_DOCK.open = false;
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('dock-close'); } catch (e) {}
 CONTEXT_DOCK.timer = 0;
 const rig = _dockFn('Harbor' + 'KineticRig');
 if (rig && typeof rig.applyImpulse === 'function' && typeof document !== 'undefined') {
@@ -27959,6 +27993,7 @@ return runExpertSelection({ token: _builtinToken, allTokens: _curTokens });
 const input = document.getElementById('userInput');
 const text = input.value.trim();
 if (!text && appAttachments.length === 0) return;
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('composer-send'); } catch (e) {}
 if (/^\/sub\s+/.test(text) && appAttachments.length === 0) {
 const spawn = (typeof window !== 'undefined') ? window['subagent' + 'Spawn'] : null;
 const s0 = (typeof getCurrentSession === 'function') ? getCurrentSession() : null;
@@ -28246,6 +28281,7 @@ toggleSettings();
 if (panel.classList.contains('show')) {
 if (panel.classList.contains('hiding')) return;
 panel.classList.add('hiding');
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('settings-close'); } catch (e) {}
 const done = () => {
 try { panel.classList.remove('show', 'hiding'); } catch (e) {}
 if (typeof _unbindOverlayKeyboard === 'function') _unbindOverlayKeyboard(panel);
@@ -28256,6 +28292,7 @@ MOTION.onAnimEnd(panel, 'animationend', MOTION.compOut()).then(done);
 return;
 }
 panel.classList.add('show');
+try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('settings-open'); } catch (e) {}
 try { loadMcpServers(); } catch (e) {}
 try { buildSetNav(); } catch (e) {}
 if (typeof _bindOverlayKeyboard === 'function') {

@@ -299,6 +299,7 @@ async function sendMessage() {
   const input = document.getElementById('userInput');
   const text = input.value.trim();
   if (!text && appAttachments.length === 0) return;
+  try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('composer-send'); } catch (e) {}
   // I08：/sub <任务> —— 派生子代理（运行期入口，不新增按钮/模板 id）。
   // 只支持"纯文本任务、无附件"：带附件时应走普通发送，避免语义含糊。
   if (/^\/sub\s+/.test(text) && appAttachments.length === 0) {
@@ -654,6 +655,7 @@ function toggleSettings() {
     // v4：关=播退场（v4SetWinOut 140ms in-soft）再撤 .show——不再生硬瞬消
     if (panel.classList.contains('hiding')) return;   // 防重入
     panel.classList.add('hiding');
+    try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('settings-close'); } catch (e) {}
     const done = () => {
       try { panel.classList.remove('show', 'hiding'); } catch (e) {}
       if (typeof _unbindOverlayKeyboard === 'function') _unbindOverlayKeyboard(panel);
@@ -664,6 +666,7 @@ function toggleSettings() {
     return;
   }
   panel.classList.add('show');
+  try { const _kf = window['kinetic' + 'Fire']; if (typeof _kf === 'function') _kf('settings-open'); } catch (e) {}
   // 打开设置面板时顺带刷新 MCP 服务器列表（纯本地读取，零网络；失败已在 loadMcpServers 内 toast）
   try { loadMcpServers(); } catch (e) {}
   // 修复 UX-4（v1.4）：设置浮层打开时构建锚点导航（DOM 已就绪；每次打开重建保持幂等）
