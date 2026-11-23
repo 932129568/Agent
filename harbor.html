@@ -3475,6 +3475,10 @@ border-radius:var(--radius-md)}
 .edit-flag{margin-bottom:6px;font-size:10.5px;line-height:1.5;color:var(--primary);
 background:var(--primary-soft);border-radius:var(--radius-full);padding:2px 9px;
 display:inline-block}
+.s2-stage{margin:2px 2px 6px;font-size:11.5px;color:var(--text-3);
+animation:s2Pulse var(--dur-ambient) var(--ease-out-soft) infinite alternate}
+@keyframes s2Pulse{from{opacity:.62}to{opacity:1}}
+body.fx-off .s2-stage{animation:none;opacity:1}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -17223,9 +17227,12 @@ if (_sp0) _sp0.textContent = '';
 if (!agentRunCurrent(run)) return;
 aiContent = runAddMessage(run, 'assistant', '');
 aiContent.innerHTML = '<div class="think-host" style="display:none"></div>' +
+'<div class="s2-stage" hidden></div>' +
 '<div class="md-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
 const thinkHost = aiContent.querySelector('.think-host');
+const s2El = aiContent.querySelector('.s2-stage');
 const mdBody = aiContent.querySelector('.md-body');
+const _s2 = (t) => { if (typeof renderStage === 'function') renderStage(s2El, t); };
 if (typeof traceReset === 'function') traceReset(s && s.id);
 let traceHost = aiContent.querySelector('.exec-trace');
 if (!traceHost) {
@@ -17289,6 +17296,7 @@ if (__buildToolsCache.tools && __buildToolsCache.key === _cacheKey
 && (_nowMs - __buildToolsCache.at) < __BUILD_TOOLS_TTL_MS) {
 return __buildToolsCache.tools.slice();
 }
+_s2('正在准备工具…');
 const beTools = await callApi('build_tools',
 [role, mode === 'full' && featMcp, includeAgent, _glm]);
 const parsed = beTools ? JSON.parse(beTools) : null;
@@ -17462,6 +17470,7 @@ applyShrinkMarkers(s.messages);
 let sysContent = EFFICIENCY_PROMPT + (sysPrompt ? '\n\n' + sysPrompt : '');
 let effTools = effectiveTools;
 try {
+_s2('正在准备上下文…');
 const beSys = await callApi('build_system_prompt', [String(routeText || '').slice(0, 400)]);
 if (typeof featNotesEnabled === 'undefined' || featNotesEnabled()) {
 try {
@@ -17571,6 +17580,7 @@ const streamObserver = {
 onChunk() {
 if (_firstChunk) {
 _firstChunk = false;
+_s2('');
 _clearWaitTimer();
 _speedT0 = Date.now();
 }
@@ -18008,6 +18018,7 @@ memFlushed = Math.min(memFlushed + 20, taskFacts.length);
 uiSeamCall('renderSessionList');
 return { stop: false };
 };
+_s2('连接模型中…');
 const execution = await ModelExecutor.execute({
 context: { messages: s.messages, runId: run.id, sessionId: s.id, generation: run.id },
 endpoint: {
@@ -18221,6 +18232,20 @@ const flat = t.replace(/\s+/g, ' ').trim();
 const preview = flat.length > 48 ? flat.slice(0, 48) + '…' : flat;
 if (o.preview.textContent !== preview) o.preview.textContent = preview;
 if (o.body.textContent !== t) o.body.textContent = t;
+}
+function renderStage(el, text) {
+if (!el || typeof document === 'undefined') return '';
+const t = String(text == null ? '' : text).trim();
+if (!t) {
+el.textContent = '';
+el.hidden = true;
+el.removeAttribute('data-stage');
+return '';
+}
+el.textContent = t;
+el.hidden = false;
+el.setAttribute('data-stage', t);
+return t;
 }
 
 

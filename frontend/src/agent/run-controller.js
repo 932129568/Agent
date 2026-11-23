@@ -244,9 +244,15 @@ async function runAgentLoop(s, apiKey) {
     // R101 T03 · S3：思考区独立成 .think-host（mdBody 的兄弟节点）。
     // 正文只重建 .md-body；思考区首建后只改 textContent ⇒ 展开态不丢。
     aiContent.innerHTML = '<div class="think-host" style="display:none"></div>' +
+      '<div class="s2-stage" hidden></div>' +
       '<div class="md-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
     const thinkHost = aiContent.querySelector('.think-host');
+    const s2El = aiContent.querySelector('.s2-stage');
     const mdBody = aiContent.querySelector('.md-body');
+    // R101 T03 · S2：三段**真实可观测**阶段文案。计划明确禁止造假进度——
+    // 「正在路由工具域」是同步函数（<1ms）物理上不可观测，所以没有这一段。
+    // 只在三个真实 await 前后切换：build_tools / build_system_prompt / SSE 首字节。
+    const _s2 = (t) => { if (typeof renderStage === 'function') renderStage(s2El, t); };
     // R101 T03 · Execution Trace：每轮 run 重置并按工具结果聚合步骤。
     // 单向依赖：此处调用 execution-trace，反之不成立（trace 不认识 run）。
     if (typeof traceReset === 'function') traceReset(s && s.id);
@@ -333,6 +339,7 @@ async function runAgentLoop(s, apiKey) {
         return __buildToolsCache.tools.slice();
       }
       // v1.3 R4：full 档才带 MCP 工具（Q3 裁决：MCP 仅进 full 角色）；R57 G6：MCP 总闸
+      _s2('正在准备工具…');
       const beTools = await callApi('build_tools',
         [role, mode === 'full' && featMcp, includeAgent, _glm]);
       const parsed = beTools ? JSON.parse(beTools) : null;
@@ -547,6 +554,7 @@ async function runAgentLoop(s, apiKey) {
         // R39（P0-2b）：传当前任务文本作 query → 记忆注入按相关度补充（W11 语义
         // 自此激活：常驻 rule/preference 依旧恒注入，query 相关 top2 + 扩展库
         // 排序生效）。纯 legacy/无记忆用户输出逐字节不变（_memory_inject 空段回退）。
+        _s2('正在准备上下文…');
         const beSys = await callApi('build_system_prompt', [String(routeText || '').slice(0, 400)]);
         // R42（结构化笔记）：会话 NOTES 注入（压缩纪要跨压缩持久；恢复/继续任务
         // 场景由 compact 落盘的 notes/<sid>.md 供给）。尾部 4000 字，空文件零注入。
@@ -686,6 +694,7 @@ async function runAgentLoop(s, apiKey) {
         onChunk() {
           if (_firstChunk) {
             _firstChunk = false;
+            _s2('');
             _clearWaitTimer();
             _speedT0 = Date.now();
           }
@@ -1184,6 +1193,7 @@ async function runAgentLoop(s, apiKey) {
       return { stop: false };
       };
 
+      _s2('连接模型中…');
       const execution = await ModelExecutor.execute({
       context: { messages: s.messages, runId: run.id, sessionId: s.id, generation: run.id },
       endpoint: {
@@ -1447,4 +1457,24 @@ function renderReason(host, rr) {
     const preview = flat.length > 48 ? flat.slice(0, 48) + '…' : flat;
     if (o.preview.textContent !== preview) o.preview.textContent = preview;
     if (o.body.textContent !== t) o.body.textContent = t;
+}
+
+/* R101 T03 · S2 阶段条渲染（模块级，便于运行时用例直接调用）
+ * text 为空 ⇒ 隐藏并清空（不发空 div 占位，避免正文上方留一条空白）。
+ * 为什么单独成函数而不是内联：出口判据要能自动化验证"三段文案按序出现、首字节后消失"，
+ * 闭包内的更新逻辑外部触达不到。
+ */
+function renderStage(el, text) {
+  if (!el || typeof document === 'undefined') return '';
+  const t = String(text == null ? '' : text).trim();
+  if (!t) {
+    el.textContent = '';
+    el.hidden = true;
+    el.removeAttribute('data-stage');
+    return '';
+  }
+  el.textContent = t;
+  el.hidden = false;
+  el.setAttribute('data-stage', t);
+  return t;
 }

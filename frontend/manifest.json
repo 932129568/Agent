@@ -1178,7 +1178,8 @@
         "harborMaybeAwaitTakeover",
         "planFinishIfNatural",
         "runAgentLoop",
-        "renderReason"
+        "renderReason",
+        "renderStage"
       ],
       "requires": [
         "isStreaming",

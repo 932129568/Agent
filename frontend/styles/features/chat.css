@@ -631,3 +631,12 @@ body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
 .edit-flag{margin-bottom:6px;font-size:10.5px;line-height:1.5;color:var(--primary);
   background:var(--primary-soft);border-radius:var(--radius-full);padding:2px 9px;
   display:inline-block}
+
+/* ===== R101 T03 · S2 阶段条 =====
+   只显示三个**真实可观测**的阶段：准备工具 / 准备上下文 / 连接模型。
+   计划明确禁止「正在路由工具域」这类假进度（同步函数 <1ms，物理不可观测）。
+   用 --dur-* 令牌，禁止裸时长。 */
+.s2-stage{margin:2px 2px 6px;font-size:11.5px;color:var(--text-3);
+  animation:s2Pulse var(--dur-ambient) var(--ease-out-soft) infinite alternate}
+@keyframes s2Pulse{from{opacity:.62}to{opacity:1}}
+body.fx-off .s2-stage{animation:none;opacity:1}
