@@ -27,3 +27,60 @@ function toggleTheme() {
   // 修复 建议㉗（三轮）：MOTION 未定义（模块未加载/降级路径）时兜底 240ms，不再 ReferenceError
   setTimeout(() => document.body.classList.remove('theming'), (typeof MOTION !== 'undefined' && MOTION.theme ? MOTION.theme() : 240) + 60);
 }
+
+/* ================= R101 T04 · 极性与玻璃透明度 =================
+ * 极性用**新增属性** data-polarity，不改任何既有变量名（计划要求：极性问题用新增变量）。
+ * 透明度写 --glass-opacity（新增），旧变量一律不动 ⇒ ui-contract 的 22 个必需变量零影响。
+ * 持久化用独立 key，不混进主题 key：两者是不同维度的偏好（主题=明暗皮肤，极性=文字极性）。
+ */
+const GLASS_OPACITY_KEY = 'harbor.glass.opacity';
+const GLASS_POLARITY_KEY = 'harbor.glass.polarity';
+
+function glassPolarityApply(polarity) {
+  if (typeof document === 'undefined') return 'light';
+  const p = (String(polarity) === 'dark') ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-polarity', p);
+  try { localStorage.setItem(GLASS_POLARITY_KEY, p); } catch (e) {}
+  return p;
+}
+
+function glassPolarityToggle() {
+  const cur = (typeof document !== 'undefined')
+    ? (document.documentElement.getAttribute('data-polarity') || 'light') : 'light';
+  return glassPolarityApply(cur === 'dark' ? 'light' : 'dark');
+}
+
+/** 透明度 0..1；越界夹取。返回最终生效值。 */
+function glassOpacitySet(v) {
+  const n = Number(v);
+  const clamped = isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.62;
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--glass-opacity', String(clamped));
+  }
+  try { localStorage.setItem(GLASS_OPACITY_KEY, String(clamped)); } catch (e) {}
+  return clamped;
+}
+
+/** 启动恢复：读本地偏好并套用（读不到就用默认值，不报错）。 */
+function glassStateRestore() {
+  let p = 'light';
+  let op = 0.62;
+  try {
+    p = localStorage.getItem(GLASS_POLARITY_KEY) || 'light';
+    const raw = localStorage.getItem(GLASS_OPACITY_KEY);
+    if (raw !== null) { const n = Number(raw); if (isFinite(n)) op = Math.max(0, Math.min(1, n)); }
+  } catch (e) {}
+  glassPolarityApply(p);
+  return { polarity: p, opacity: glassOpacitySet(op) };
+}
+
+/** 演示可见模式：给玻璃宿主加虚线轮廓并抬透明度，便于演示/截图比对。
+ *  只加属性不改颜色 —— 截图比对时颜色必须是真实值，否则比的是演示态而不是产品态。 */
+function glassDemoToggle() {
+  if (typeof document === 'undefined') return false;
+  const root = document.documentElement;
+  const on = root.getAttribute('data-glass-demo') === '1';
+  if (on) root.removeAttribute('data-glass-demo');
+  else root.setAttribute('data-glass-demo', '1');
+  return !on;
+}

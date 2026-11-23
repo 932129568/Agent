@@ -228,7 +228,10 @@
         "callApi",
         "harborApiBase",
         "harborHttpAvailable",
-        "callApiHttp"
+        "callApiHttp",
+        "applyGlassEngine",
+        "applyGlassFeedback",
+        "glassFeedbackSnapshot"
       ],
       "requires": [
         "backendWarning"
@@ -249,7 +252,14 @@
         "THEME_ICON_MOON",
         "THEME_ICON_SUN",
         "applyTheme",
-        "toggleTheme"
+        "toggleTheme",
+        "GLASS_OPACITY_KEY",
+        "GLASS_POLARITY_KEY",
+        "glassDemoToggle",
+        "glassOpacitySet",
+        "glassPolarityApply",
+        "glassPolarityToggle",
+        "glassStateRestore"
       ],
       "requires": []
     },

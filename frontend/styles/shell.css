@@ -100,3 +100,16 @@ body.fx-off .rail,body.fx-off .sidebar,body.fx-off .main,body.fx-off .input-area
     background:color-mix(in srgb,var(--bg) 55%,transparent)}
   body.fx-off .sidebar{transition:none}
 }
+
+/* ===== R101 T04 · 玻璃宿主分层 =====
+   原生引擎（M3 起由原生侧写 data-glass-engine="native"）接管模糊与壁纸后，
+   CSS 侧必须让位：这里**只做层级与隔离**，不加任何 backdrop-filter
+   —— 皮肤门禁（lightwell-skin-gate）要求四宿主模糊归零，加滤镜会让门禁红、
+   也会与原生 HLSL 叠成二次模糊。
+   contain:paint 让宿主内部重绘不外溢，isolation 防止混合模式串层。 */
+.glass-host{position:relative;isolation:isolate;contain:paint}
+html[data-glass-engine="native"] .glass-host{
+  background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+/* 演示可见模式：只加轮廓，不改颜色（截图比对要真实值） */
+html[data-glass-demo="1"] .glass-host{outline:1px dashed var(--primary);outline-offset:-1px}

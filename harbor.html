@@ -105,6 +105,26 @@ button:disabled,input:disabled,textarea:disabled,select:disabled{
 opacity:1;color:GrayText;border-color:GrayText}
 .ui-stat-tile:focus,.ui-card:focus{outline:var(--focus-ring-w) solid Highlight}
 }
+:root{
+--text-strong:var(--text);
+--text-body:var(--text);
+--text-subtle:var(--text-3);
+--glass-lstar:50;
+--glass-lc:75;
+--glass-bg-lstar:50;
+--glass-alpha:.62;
+--glass-opacity:.62;
+}
+html[data-polarity="light"]{
+--text-strong:#0B0B0C;
+--text-body:#1D1D1F;
+--text-subtle:#5A5A5F;
+}
+html[data-polarity="dark"]{
+--text-strong:#FFFFFF;
+--text-body:#EDEDF0;
+--text-subtle:#B4B4BA;
+}
 
 
 /* ===== frontend/styles/base.css ===== */
@@ -2931,6 +2951,11 @@ body.sidebar-open .sidebar{transform:translateX(0);margin-left:0}
 background:color-mix(in srgb,var(--bg) 55%,transparent)}
 body.fx-off .sidebar{transition:none}
 }
+.glass-host{position:relative;isolation:isolate;contain:paint}
+html[data-glass-engine="native"] .glass-host{
+background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+html[data-glass-demo="1"] .glass-host{outline:1px dashed var(--primary);outline-offset:-1px}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -8115,6 +8140,42 @@ new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('调用�
 if (timer) clearTimeout(timer);
 }
 }
+function applyGlassFeedback(feedback) {
+if (typeof document === 'undefined' || !feedback) return null;
+const root = document.documentElement;
+const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+const lstar = num(feedback.lstar);
+const contrast = num(feedback.contrast);
+const bgLstar = num(feedback.bgLstar);
+const alpha = num(feedback.alpha);
+if (lstar !== null) root.style.setProperty('--glass-lstar', String(lstar));
+if (contrast !== null) root.style.setProperty('--glass-lc', String(contrast));
+if (bgLstar !== null) root.style.setProperty('--glass-bg-lstar', String(bgLstar));
+if (alpha !== null) root.style.setProperty('--glass-alpha', String(Math.max(0, Math.min(1, alpha))));
+return glassFeedbackSnapshot();
+}
+function applyGlassEngine(engine) {
+if (typeof document === 'undefined') return '';
+const root = document.documentElement;
+if (String(engine || '') === 'native') root.setAttribute('data-glass-engine', 'native');
+else root.removeAttribute('data-glass-engine');
+return root.getAttribute('data-glass-engine') || '';
+}
+function glassFeedbackSnapshot() {
+if (typeof document === 'undefined') return null;
+const cs = getComputedStyle(document.documentElement);
+const read = (n) => {
+const v = (cs.getPropertyValue(n) || '').trim();
+return v === '' ? null : Number(v);
+};
+return {
+lstar: read('--glass-lstar'),
+lc: read('--glass-lc'),
+bgLstar: read('--glass-bg-lstar'),
+alpha: read('--glass-alpha'),
+engine: document.documentElement.getAttribute('data-glass-engine') || '',
+};
+}
 
 
 /* ===== frontend/src/components/select.js ===== */
@@ -8249,6 +8310,48 @@ return;
 document.body.classList.add('theming');
 apply();
 setTimeout(() => document.body.classList.remove('theming'), (typeof MOTION !== 'undefined' && MOTION.theme ? MOTION.theme() : 240) + 60);
+}
+const GLASS_OPACITY_KEY = 'harbor.glass.opacity';
+const GLASS_POLARITY_KEY = 'harbor.glass.polarity';
+function glassPolarityApply(polarity) {
+if (typeof document === 'undefined') return 'light';
+const p = (String(polarity) === 'dark') ? 'dark' : 'light';
+document.documentElement.setAttribute('data-polarity', p);
+try { localStorage.setItem(GLASS_POLARITY_KEY, p); } catch (e) {}
+return p;
+}
+function glassPolarityToggle() {
+const cur = (typeof document !== 'undefined')
+? (document.documentElement.getAttribute('data-polarity') || 'light') : 'light';
+return glassPolarityApply(cur === 'dark' ? 'light' : 'dark');
+}
+function glassOpacitySet(v) {
+const n = Number(v);
+const clamped = isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.62;
+if (typeof document !== 'undefined') {
+document.documentElement.style.setProperty('--glass-opacity', String(clamped));
+}
+try { localStorage.setItem(GLASS_OPACITY_KEY, String(clamped)); } catch (e) {}
+return clamped;
+}
+function glassStateRestore() {
+let p = 'light';
+let op = 0.62;
+try {
+p = localStorage.getItem(GLASS_POLARITY_KEY) || 'light';
+const raw = localStorage.getItem(GLASS_OPACITY_KEY);
+if (raw !== null) { const n = Number(raw); if (isFinite(n)) op = Math.max(0, Math.min(1, n)); }
+} catch (e) {}
+glassPolarityApply(p);
+return { polarity: p, opacity: glassOpacitySet(op) };
+}
+function glassDemoToggle() {
+if (typeof document === 'undefined') return false;
+const root = document.documentElement;
+const on = root.getAttribute('data-glass-demo') === '1';
+if (on) root.removeAttribute('data-glass-demo');
+else root.setAttribute('data-glass-demo', '1');
+return !on;
 }
 
 
@@ -22654,6 +22757,12 @@ if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'd' || e.key === 'D')) {
 e.preventDefault();
 const toggle = (typeof window !== 'undefined') ? window['context' + 'DockToggle'] : null;
 if (typeof toggle === 'function') toggle();
+return;
+}
+if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'p' || e.key === 'P')) {
+e.preventDefault();
+const toggleDemo = (typeof window !== 'undefined') ? window['glass' + 'DemoToggle'] : null;
+if (typeof toggleDemo === 'function') toggleDemo();
 return;
 }
 if (e.key !== '?') return;

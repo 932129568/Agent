@@ -87,3 +87,30 @@ body.dark{
     opacity:1;color:GrayText;border-color:GrayText}
   .ui-stat-tile:focus,.ui-card:focus{outline:var(--focus-ring-w) solid Highlight}
 }
+
+/* ===== R101 T04 · 极性变量与玻璃标量（全部为**新增**变量，不改任何既有名）=====
+   计划要求：极性问题用新增变量、不改旧名 ⇒ ui-contract 的 22 个必需变量零影响。
+   极性由 html[data-polarity] 驱动（theme.js 的 glassPolarityToggle 写入），
+   与主题（明暗皮肤）是两个维度：深色皮肤 + 浅极性、浅色皮肤 + 深极性都合法。
+   玻璃标量 --glass-* 由 bridge.applyGlassFeedback 从原生 HarborApcaFeedback 回填；
+   未接原生时这里的默认值就是设计基准值，不会出现"变量不存在"的空洞。 */
+:root{
+  --text-strong:var(--text);
+  --text-body:var(--text);
+  --text-subtle:var(--text-3);
+  --glass-lstar:50;
+  --glass-lc:75;
+  --glass-bg-lstar:50;
+  --glass-alpha:.62;
+  --glass-opacity:.62;
+}
+html[data-polarity="light"]{
+  --text-strong:#0B0B0C;
+  --text-body:#1D1D1F;
+  --text-subtle:#5A5A5F;
+}
+html[data-polarity="dark"]{
+  --text-strong:#FFFFFF;
+  --text-body:#EDEDF0;
+  --text-subtle:#B4B4BA;
+}

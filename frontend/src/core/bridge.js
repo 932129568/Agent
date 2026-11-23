@@ -91,3 +91,53 @@ async function callApi(name, argsArray, timeoutMs, sid, confirmed) {
   }
 }
 /* 修复 ㉞：backendErrorMsg 为死代码（全项目无调用点）——已删除 */
+
+/* ================= R101 T04 · 原生玻璃标量接收 =================
+ * 原生侧结构（native/harbor-glass/include/glass_shm.h:25）：
+ *   struct alignas(16) HarborApcaFeedback { float lstar, contrast, bgLstar, alpha; };
+ * 这里只接收**标量**并写成 CSS 变量，不做任何颜色决策 —— 决策留在样式层，
+ * 这样调参不用重编原生。
+ *
+ * 为什么 data-glass-engine 只在 engine==='native' 时写：
+ * 皮肤门禁（server/test/lightwell-skin-gate.mjs:40）规定「属性挂上时 CSS 必须已让位」
+ * （模糊归零 + 静态壁纸隐藏）。若前端无条件写这个属性，会把正常模糊也一起关掉。
+ * 全仓此前 0 处写它（原生侧负责），这里保持「只在原生明确声明时跟随」。
+ */
+function applyGlassFeedback(feedback) {
+  if (typeof document === 'undefined' || !feedback) return null;
+  const root = document.documentElement;
+  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+  const lstar = num(feedback.lstar);
+  const contrast = num(feedback.contrast);
+  const bgLstar = num(feedback.bgLstar);
+  const alpha = num(feedback.alpha);
+  if (lstar !== null) root.style.setProperty('--glass-lstar', String(lstar));
+  if (contrast !== null) root.style.setProperty('--glass-lc', String(contrast));
+  if (bgLstar !== null) root.style.setProperty('--glass-bg-lstar', String(bgLstar));
+  if (alpha !== null) root.style.setProperty('--glass-alpha', String(Math.max(0, Math.min(1, alpha))));
+  return glassFeedbackSnapshot();
+}
+
+function applyGlassEngine(engine) {
+  if (typeof document === 'undefined') return '';
+  const root = document.documentElement;
+  if (String(engine || '') === 'native') root.setAttribute('data-glass-engine', 'native');
+  else root.removeAttribute('data-glass-engine');
+  return root.getAttribute('data-glass-engine') || '';
+}
+
+function glassFeedbackSnapshot() {
+  if (typeof document === 'undefined') return null;
+  const cs = getComputedStyle(document.documentElement);
+  const read = (n) => {
+    const v = (cs.getPropertyValue(n) || '').trim();
+    return v === '' ? null : Number(v);
+  };
+  return {
+    lstar: read('--glass-lstar'),
+    lc: read('--glass-lc'),
+    bgLstar: read('--glass-bg-lstar'),
+    alpha: read('--glass-alpha'),
+    engine: document.documentElement.getAttribute('data-glass-engine') || '',
+  };
+}

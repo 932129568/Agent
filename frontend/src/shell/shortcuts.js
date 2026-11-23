@@ -247,6 +247,13 @@ function shortcutsInit() {
       if (typeof toggle === 'function') toggle();
       return;
     }
+    // Ctrl/⌘ + Alt + P：演示可见模式（把玻璃层调到可见，便于演示与截图比对）
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      const toggleDemo = (typeof window !== 'undefined') ? window['glass' + 'DemoToggle'] : null;
+      if (typeof toggleDemo === 'function') toggleDemo();
+      return;
+    }
     if (e.key !== '?') return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
