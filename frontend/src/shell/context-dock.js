@@ -37,19 +37,33 @@ function _dockBuild() {
       '<span class="cd-title">上下文</span>' +
       '<button type="button" class="cd-close" data-cd="close" title="关闭（Esc）">×</button>' +
     '</div>' +
-    '<div class="cd-body">' +
-      '<div class="cd-sec"><div class="cd-k">会话</div><div class="cd-v" data-cd="session"></div></div>' +
-      '<div class="cd-sec"><div class="cd-k">消息</div><div class="cd-v" data-cd="messages"></div></div>' +
-      '<div class="cd-sec"><div class="cd-k">估算 token</div><div class="cd-v" data-cd="tokens"></div></div>' +
-      '<div class="cd-sec"><div class="cd-k">工具调用</div><div class="cd-v" data-cd="tools"></div></div>' +
-      '<div class="cd-sec"><div class="cd-k">信任</div><div class="cd-v" data-cd="trust"></div></div>' +
-      '<div class="cd-sec"><div class="cd-k">面板 / 皮肤</div><div class="cd-v" data-cd="view"></div></div>' +
+    // I23：4 标签工作台（概览 / 改动 / Trace / 预览）
+    '<div class="cd-tabs" role="tablist">' +
+      '<button type="button" class="cd-tab on" data-tab="overview" role="tab">概览</button>' +
+      '<button type="button" class="cd-tab" data-tab="diff" role="tab">改动</button>' +
+      '<button type="button" class="cd-tab" data-tab="trace" role="tab">Trace</button>' +
+      '<button type="button" class="cd-tab" data-tab="preview" role="tab">预览</button>' +
     '</div>' +
-    '<div class="cd-foot">Ctrl+Alt+D 开关 · 数据每 1.5s 刷新</div>';
+    '<div class="cd-body">' +
+      '<div class="cd-pane on" data-pane="overview">' +
+        '<div class="cd-sec"><div class="cd-k">会话</div><div class="cd-v" data-cd="session"></div></div>' +
+        '<div class="cd-sec"><div class="cd-k">消息</div><div class="cd-v" data-cd="messages"></div></div>' +
+        '<div class="cd-sec"><div class="cd-k">估算 token</div><div class="cd-v" data-cd="tokens"></div></div>' +
+        '<div class="cd-sec"><div class="cd-k">工具调用</div><div class="cd-v" data-cd="tools"></div></div>' +
+        '<div class="cd-sec"><div class="cd-k">信任</div><div class="cd-v" data-cd="trust"></div></div>' +
+        '<div class="cd-sec"><div class="cd-k">面板 / 皮肤</div><div class="cd-v" data-cd="view"></div></div>' +
+      '</div>' +
+      '<div class="cd-pane" data-pane="diff"><div class="cd-diff"></div></div>' +
+      '<div class="cd-pane" data-pane="trace"><div class="cd-trace"></div></div>' +
+      '<div class="cd-pane" data-pane="preview"><div class="cd-prev"></div></div>' +
+    '</div>' +
+    '<div class="cd-foot">Ctrl+Alt+D 开关 · 事件驱动（静止不轮询）</div>';
   document.body.appendChild(el);
   el.addEventListener('click', (e) => {
     const t = e.target && e.target.closest ? e.target.closest('[data-cd]') : null;
-    if (t && t.getAttribute('data-cd') === 'close') contextDockClose();
+    if (t && t.getAttribute('data-cd') === 'close') { contextDockClose(); return; }
+    const tab = e.target && e.target.closest ? e.target.closest('.cd-tab') : null;
+    if (tab) contextDockTab(tab.getAttribute('data-tab'));
   });
   CONTEXT_DOCK.root = el;
   return el;
@@ -110,22 +124,125 @@ function contextDockOpen() {
   el.style.display = 'flex';
   CONTEXT_DOCK.open = true;
   contextDockRefresh();
-  if (!CONTEXT_DOCK.timer) {
-    CONTEXT_DOCK.timer = setInterval(() => {
-      if (!CONTEXT_DOCK.open) return;
-      contextDockRefresh();
-    }, 1500);
-  }
+  // I23：**不再轮询**。原来 1.5s 一次的 setInterval 在静止时纯空转。
+  // 改为监听 run 生命周期事件（harbor:trace / harbor:run），事件到了才刷新。
+  contextDockBindEvents();
 }
 
 function contextDockClose() {
   const el = CONTEXT_DOCK.root;
   if (el) el.style.display = 'none';
   CONTEXT_DOCK.open = false;
-  if (CONTEXT_DOCK.timer) { clearInterval(CONTEXT_DOCK.timer); CONTEXT_DOCK.timer = 0; }
+  CONTEXT_DOCK.timer = 0;   // 已无定时器；字段保留仅为兼容既有探针
 }
 
 function contextDockToggle() {
   if (CONTEXT_DOCK.open) contextDockClose();
   else contextDockOpen();
+}
+
+/* ================= I23 · 事件驱动 + 4 标签渲染 =================
+ * 判据：改代码即时推红绿 Hunk Diff；静止 0 轮询。
+ * 驱动源：run-controller 在工具轮落定/run 起止时 dispatch CustomEvent——
+ *   harbor:trace  { sid, writes: [{tool, path, before?, after?}] }
+ *   harbor:run    { sid, phase: 'start'|'end' }
+ * dock 只在这些事件到达时刷新；没有事件时**一个定时器都不挂**。
+ */
+const CONTEXT_DOCK_WRITES = [];   // 最近的写操作（含可选的 before/after），上限 20
+
+function contextDockBindEvents() {
+  if (typeof document === 'undefined' || CONTEXT_DOCK.boundEvents) return;
+  CONTEXT_DOCK.boundEvents = true;
+  const onTrace = (e) => {
+    const d = (e && e.detail) || {};
+    if (Array.isArray(d.writes) && d.writes.length) {
+      for (const w of d.writes) {
+        CONTEXT_DOCK_WRITES.push(w);
+        if (CONTEXT_DOCK_WRITES.length > 20) CONTEXT_DOCK_WRITES.shift();
+      }
+    }
+    if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); }
+  };
+  const onRun = () => { if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); } };
+  document.addEventListener('harbor:trace', onTrace);
+  document.addEventListener('harbor:run', onRun);
+}
+
+/** 切标签（幂等；只改 class，不重建 DOM）。 */
+function contextDockTab(name) {
+  const root = CONTEXT_DOCK.root;
+  if (!root) return '';
+  const target = String(name || 'overview');
+  root.querySelectorAll('.cd-tab').forEach((b) => {
+    b.classList.toggle('on', b.getAttribute('data-tab') === target);
+  });
+  root.querySelectorAll('.cd-pane').forEach((p) => {
+    p.classList.toggle('on', p.getAttribute('data-pane') === target);
+  });
+  contextDockRenderPanes();
+  return target;
+}
+
+/** 渲染三个非概览面板（Trace / 改动 / 预览）。 */
+function contextDockRenderPanes() {
+  const root = CONTEXT_DOCK.root;
+  if (!root) return;
+  // Trace：复用 execution-trace 的渲染（动态索引，不产生静态边）
+  const traceBox = root.querySelector('.cd-trace');
+  if (traceBox) {
+    const render = _dockFn('traceRenderInto');
+    const s = _dockSession();
+    if (typeof render === 'function') render(traceBox, 8, s && s.id);
+    else traceBox.textContent = '轨迹模块未装载';
+  }
+  // 改动：只列真实发生过的写操作；有 before/after 才画红绿行
+  const diffBox = root.querySelector('.cd-diff');
+  if (diffBox) {
+    diffBox.innerHTML = '';
+    if (!CONTEXT_DOCK_WRITES.length) {
+      const em = document.createElement('div');
+      em.className = 'cd-empty';
+      em.textContent = '还没有写操作。写入文件后这里会出现改动记录。';
+      diffBox.appendChild(em);
+    } else {
+      const lineDiff = _dockFn('guardLineDiff');
+      CONTEXT_DOCK_WRITES.slice(-8).reverse().forEach((w) => {
+        const item = document.createElement('div');
+        item.className = 'cd-hunk';
+        const head = document.createElement('div');
+        head.className = 'cd-hunk-head';
+        head.textContent = String(w.tool || 'write') + ' · ' + String(w.path || '(未知路径)');
+        item.appendChild(head);
+        if (typeof w.before === 'string' && typeof w.after === 'string' && typeof lineDiff === 'function') {
+          const rows = lineDiff(w.before, w.after);
+          const body = document.createElement('div');
+          body.className = 'cd-hunk-body';
+          rows.slice(0, 40).forEach((r) => {
+            const ln = document.createElement('div');
+            ln.className = 'cd-ln ' + (r.type === 'add' ? 'add' : (r.type === 'del' ? 'del' : 'same'));
+            ln.textContent = (r.type === 'add' ? '+ ' : (r.type === 'del' ? '- ' : '  ')) + r.text;
+            body.appendChild(ln);
+          });
+          item.appendChild(body);
+        } else {
+          const note = document.createElement('div');
+          note.className = 'cd-hunk-note';
+          note.textContent = '（本次未提供前后内容，只有操作记录）';
+          item.appendChild(note);
+        }
+        diffBox.appendChild(item);
+      });
+    }
+  }
+  // 预览：当前会话最后一条 assistant 摘要
+  const prevBox = root.querySelector('.cd-prev');
+  if (prevBox) {
+    const s = _dockSession();
+    const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+    let last = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i] && msgs[i].role === 'assistant' && typeof msgs[i].content === 'string') { last = msgs[i]; break; }
+    }
+    prevBox.textContent = last ? last.content.slice(0, 400) : '（本会话还没有 AI 回复）';
+  }
 }

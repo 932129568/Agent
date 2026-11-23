@@ -1149,6 +1149,21 @@ async function runAgentLoop(s, apiKey) {
           categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
             ? toolCategoryOf(tc && tc.name) : 'other')),
         });
+        // I23：把本轮写操作广播给副屏（事件驱动，静止 0 轮询）。
+        // 只带 tool + path：前后内容当前没有采集点，不伪造 diff。
+        try {
+          const writes = [];
+          toolCalls.forEach((tc) => {
+            const nm = String((tc && tc.name) || '');
+            if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].indexOf(nm) < 0) return;
+            let a = {};
+            try { a = JSON.parse(tc.argsStr || '{}') || {}; } catch (e) { a = {}; }
+            writes.push({ tool: nm, path: a.path || a.src || a.new_path || a.dst || '' });
+          });
+          if (writes.length && typeof document !== 'undefined' && document.dispatchEvent) {
+            document.dispatchEvent(new CustomEvent('harbor:trace', { detail: { sid: s && s.id, writes } }));
+          }
+        } catch (e) {}
         // I02：每轮把摘要写进 session.meta.trace（重开/重启后可复原）
         if (typeof traceAttachTo === 'function') traceAttachTo(s, s && s.id);
         // I05 自检闭环：含写操作 + 配了 verifyCmd 时，本轮后跑一次轻自检；

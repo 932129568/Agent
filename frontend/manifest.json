@@ -1783,7 +1783,11 @@
         "contextDockRefresh",
         "contextDockOpen",
         "contextDockClose",
-        "contextDockToggle"
+        "contextDockToggle",
+        "CONTEXT_DOCK_WRITES",
+        "contextDockBindEvents",
+        "contextDockRenderPanes",
+        "contextDockTab"
       ],
       "requires": []
     },

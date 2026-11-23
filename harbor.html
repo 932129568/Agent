@@ -3792,6 +3792,25 @@ border:1px solid var(--border);border-radius:var(--radius-sm);
 transition:border-color var(--dur-fast) var(--ease-out)}
 .gi-reason:focus{outline:none;border-color:var(--primary)}
 .gi-reason::placeholder{color:var(--text-3)}
+.cd-tabs{display:flex;gap:4px;padding:6px 8px 0;border-bottom:1px solid var(--border)}
+.cd-tab{flex:1;padding:5px 0;border:0;background:transparent;color:var(--text-3);
+font-size:11px;border-radius:var(--radius-sm) var(--radius-sm) 0 0;cursor:pointer}
+.cd-tab:hover{color:var(--text-2);background:var(--hover)}
+.cd-tab.on{color:var(--text);background:var(--surface-2);box-shadow:inset 0 -1px 0 var(--primary)}
+.cd-pane{display:none;padding:8px 12px;overflow-y:auto}
+.cd-pane.on{display:flex;flex-direction:column;gap:8px}
+.cd-diff,.cd-trace,.cd-prev{font-size:11.5px;color:var(--text-2)}
+.cd-empty{color:var(--text-3);font-size:11.5px}
+.cd-hunk{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:6px}
+.cd-hunk-head{padding:4px 8px;background:var(--surface-2);color:var(--text);font-size:11px;
+font-variant-numeric:tabular-nums}
+.cd-hunk-body{max-height:180px;overflow:auto;font-family:var(--font-mono,monospace)}
+.cd-ln{padding:1px 8px;white-space:pre-wrap;word-break:break-all;font-size:11px}
+.cd-ln.add{background:var(--ok-bg);color:var(--ok)}
+.cd-ln.del{background:var(--err-bg);color:var(--err)}
+.cd-ln.same{color:var(--text-3)}
+.cd-hunk-note{padding:4px 8px;color:var(--text-3);font-size:11px}
+.cd-prev{white-space:pre-wrap;line-height:1.5}
 
 
 /* ===== frontend/styles/features/generative.css ===== */
@@ -18468,6 +18487,19 @@ results: results,
 categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
 ? toolCategoryOf(tc && tc.name) : 'other')),
 });
+try {
+const writes = [];
+toolCalls.forEach((tc) => {
+const nm = String((tc && tc.name) || '');
+if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].indexOf(nm) < 0) return;
+let a = {};
+try { a = JSON.parse(tc.argsStr || '{}') || {}; } catch (e) { a = {}; }
+writes.push({ tool: nm, path: a.path || a.src || a.new_path || a.dst || '' });
+});
+if (writes.length && typeof document !== 'undefined' && document.dispatchEvent) {
+document.dispatchEvent(new CustomEvent('harbor:trace', { detail: { sid: s && s.id, writes } }));
+}
+} catch (e) {}
 if (typeof traceAttachTo === 'function') traceAttachTo(s, s && s.id);
 if (runWroteFiles && !userStopped && typeof selfCheckAfterWrites === 'function') {
 try {
@@ -23520,7 +23552,14 @@ el.innerHTML =
 '<span class="cd-title">上下文</span>' +
 '<button type="button" class="cd-close" data-cd="close" title="关闭（Esc）">×</button>' +
 '</div>' +
+'<div class="cd-tabs" role="tablist">' +
+'<button type="button" class="cd-tab on" data-tab="overview" role="tab">概览</button>' +
+'<button type="button" class="cd-tab" data-tab="diff" role="tab">改动</button>' +
+'<button type="button" class="cd-tab" data-tab="trace" role="tab">Trace</button>' +
+'<button type="button" class="cd-tab" data-tab="preview" role="tab">预览</button>' +
+'</div>' +
 '<div class="cd-body">' +
+'<div class="cd-pane on" data-pane="overview">' +
 '<div class="cd-sec"><div class="cd-k">会话</div><div class="cd-v" data-cd="session"></div></div>' +
 '<div class="cd-sec"><div class="cd-k">消息</div><div class="cd-v" data-cd="messages"></div></div>' +
 '<div class="cd-sec"><div class="cd-k">估算 token</div><div class="cd-v" data-cd="tokens"></div></div>' +
@@ -23528,11 +23567,17 @@ el.innerHTML =
 '<div class="cd-sec"><div class="cd-k">信任</div><div class="cd-v" data-cd="trust"></div></div>' +
 '<div class="cd-sec"><div class="cd-k">面板 / 皮肤</div><div class="cd-v" data-cd="view"></div></div>' +
 '</div>' +
-'<div class="cd-foot">Ctrl+Alt+D 开关 · 数据每 1.5s 刷新</div>';
+'<div class="cd-pane" data-pane="diff"><div class="cd-diff"></div></div>' +
+'<div class="cd-pane" data-pane="trace"><div class="cd-trace"></div></div>' +
+'<div class="cd-pane" data-pane="preview"><div class="cd-prev"></div></div>' +
+'</div>' +
+'<div class="cd-foot">Ctrl+Alt+D 开关 · 事件驱动（静止不轮询）</div>';
 document.body.appendChild(el);
 el.addEventListener('click', (e) => {
 const t = e.target && e.target.closest ? e.target.closest('[data-cd]') : null;
-if (t && t.getAttribute('data-cd') === 'close') contextDockClose();
+if (t && t.getAttribute('data-cd') === 'close') { contextDockClose(); return; }
+const tab = e.target && e.target.closest ? e.target.closest('.cd-tab') : null;
+if (tab) contextDockTab(tab.getAttribute('data-tab'));
 });
 CONTEXT_DOCK.root = el;
 return el;
@@ -23587,22 +23632,107 @@ if (!el) return;
 el.style.display = 'flex';
 CONTEXT_DOCK.open = true;
 contextDockRefresh();
-if (!CONTEXT_DOCK.timer) {
-CONTEXT_DOCK.timer = setInterval(() => {
-if (!CONTEXT_DOCK.open) return;
-contextDockRefresh();
-}, 1500);
-}
+contextDockBindEvents();
 }
 function contextDockClose() {
 const el = CONTEXT_DOCK.root;
 if (el) el.style.display = 'none';
 CONTEXT_DOCK.open = false;
-if (CONTEXT_DOCK.timer) { clearInterval(CONTEXT_DOCK.timer); CONTEXT_DOCK.timer = 0; }
+CONTEXT_DOCK.timer = 0;
 }
 function contextDockToggle() {
 if (CONTEXT_DOCK.open) contextDockClose();
 else contextDockOpen();
+}
+const CONTEXT_DOCK_WRITES = [];
+function contextDockBindEvents() {
+if (typeof document === 'undefined' || CONTEXT_DOCK.boundEvents) return;
+CONTEXT_DOCK.boundEvents = true;
+const onTrace = (e) => {
+const d = (e && e.detail) || {};
+if (Array.isArray(d.writes) && d.writes.length) {
+for (const w of d.writes) {
+CONTEXT_DOCK_WRITES.push(w);
+if (CONTEXT_DOCK_WRITES.length > 20) CONTEXT_DOCK_WRITES.shift();
+}
+}
+if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); }
+};
+const onRun = () => { if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); } };
+document.addEventListener('harbor:trace', onTrace);
+document.addEventListener('harbor:run', onRun);
+}
+function contextDockTab(name) {
+const root = CONTEXT_DOCK.root;
+if (!root) return '';
+const target = String(name || 'overview');
+root.querySelectorAll('.cd-tab').forEach((b) => {
+b.classList.toggle('on', b.getAttribute('data-tab') === target);
+});
+root.querySelectorAll('.cd-pane').forEach((p) => {
+p.classList.toggle('on', p.getAttribute('data-pane') === target);
+});
+contextDockRenderPanes();
+return target;
+}
+function contextDockRenderPanes() {
+const root = CONTEXT_DOCK.root;
+if (!root) return;
+const traceBox = root.querySelector('.cd-trace');
+if (traceBox) {
+const render = _dockFn('traceRenderInto');
+const s = _dockSession();
+if (typeof render === 'function') render(traceBox, 8, s && s.id);
+else traceBox.textContent = '轨迹模块未装载';
+}
+const diffBox = root.querySelector('.cd-diff');
+if (diffBox) {
+diffBox.innerHTML = '';
+if (!CONTEXT_DOCK_WRITES.length) {
+const em = document.createElement('div');
+em.className = 'cd-empty';
+em.textContent = '还没有写操作。写入文件后这里会出现改动记录。';
+diffBox.appendChild(em);
+} else {
+const lineDiff = _dockFn('guardLineDiff');
+CONTEXT_DOCK_WRITES.slice(-8).reverse().forEach((w) => {
+const item = document.createElement('div');
+item.className = 'cd-hunk';
+const head = document.createElement('div');
+head.className = 'cd-hunk-head';
+head.textContent = String(w.tool || 'write') + ' · ' + String(w.path || '(未知路径)');
+item.appendChild(head);
+if (typeof w.before === 'string' && typeof w.after === 'string' && typeof lineDiff === 'function') {
+const rows = lineDiff(w.before, w.after);
+const body = document.createElement('div');
+body.className = 'cd-hunk-body';
+rows.slice(0, 40).forEach((r) => {
+const ln = document.createElement('div');
+ln.className = 'cd-ln ' + (r.type === 'add' ? 'add' : (r.type === 'del' ? 'del' : 'same'));
+ln.textContent = (r.type === 'add' ? '+ ' : (r.type === 'del' ? '- ' : '  ')) + r.text;
+body.appendChild(ln);
+});
+item.appendChild(body);
+} else {
+const note = document.createElement('div');
+note.className = 'cd-hunk-note';
+note.textContent = '（本次未提供前后内容，只有操作记录）';
+item.appendChild(note);
+}
+diffBox.appendChild(item);
+});
+}
+}
+const prevBox = root.querySelector('.cd-prev');
+if (prevBox) {
+const s = _dockSession();
+const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+let last = null;
+for (let i = msgs.length - 1; i >= 0; i--) {
+if (msgs[i] && msgs[i].role === 'assistant' && typeof msgs[i].content === 'string') { last = msgs[i]; break; }
+}
+prevBox.textContent = last ? last.content.slice(0, 400) : '（本会话还没有 AI 回复）';
+}
 }
 
 
