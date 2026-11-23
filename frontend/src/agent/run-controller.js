@@ -1519,6 +1519,20 @@ async function runAgentLoop(s, apiKey) {
 function renderReason(host, rr) {
 
     if (!host) return;
+    // I26：用**真实 chunk 间隔**采样出字速度，驱动星轨转速（不拍固定映射）。
+    // 采样点在 renderReason 入口：它每来一段增量就被调用一次，天然是 chunk 节奏。
+    try {
+      const t = String(rr == null ? '' : rr);
+      const now = Date.now();
+      const prev = host.__ratePrev || null;
+      if (prev) {
+        const sample = (typeof window !== 'undefined') ? window['stream' + 'RateSample'] : null;
+        const apply = (typeof window !== 'undefined') ? window['stream' + 'RateApply'] : null;
+        if (typeof sample === 'function') sample(now - prev.at, t.length - prev.len);
+        if (typeof apply === 'function') apply();
+      }
+      host.__ratePrev = { at: now, len: t.length };
+    } catch (e) { /* 采样失败绝不影响渲染 */ }
     if (!host.__thinkBuilt) {
       host.innerHTML =
         '<div class="think-line" data-role="think-toggle" title="点击展开/收起思考过程">' +

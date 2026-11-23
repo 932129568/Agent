@@ -696,7 +696,9 @@ body.fx-off .dm-ring{animation:none;opacity:.6}
 .s2-stage.s2-wait::before,
 .s2-stage.s2-wait::after{content:"";width:12px;height:12px;border-radius:var(--radius-full);
   border:1.5px solid var(--primary);border-top-color:transparent;flex-shrink:0;
-  animation:s2Orbit var(--dur-comp) linear infinite}
+  /* I26 速率调速：--dur-stream-orbit 由 streamRateApply() 按真实 cps 写入；
+     没有采样时回落到 --dur-comp（不假装知道速度） */
+  animation:s2Orbit var(--dur-stream-orbit, var(--dur-comp)) linear infinite}
 .s2-stage.s2-wait::after{width:6px;height:6px;margin-left:-10px;border-color:var(--primary);
   border-bottom-color:transparent;animation-direction:reverse;
   animation-duration:calc(var(--dur-comp) / 2)}

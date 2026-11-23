@@ -29,9 +29,9 @@
       5,
       3
     ],
-    "modules": 127,
-    "symbols": 1496,
-    "edges": 3493
+    "modules": 128,
+    "symbols": 1507,
+    "edges": 3505
   },
   "delta": {
     "sccCycles": -1,

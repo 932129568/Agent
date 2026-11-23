@@ -327,7 +327,7 @@
     "apiVersion": "v1.0.0"
   },
   "serverGates": {
-    "count": 49,
+    "count": 50,
     "missing": []
   },
   "retiredStubs": [

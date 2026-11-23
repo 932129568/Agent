@@ -1011,6 +1011,23 @@
       "requires": []
     },
     {
+      "path": "frontend/src/agent/stream-rate.js",
+      "provides": [
+        "STREAM_RATE_WINDOW",
+        "STREAM_DUR_MIN",
+        "STREAM_DUR_MAX",
+        "STREAM_CPS_FAST",
+        "STREAM_CPS_SLOW",
+        "_samples",
+        "streamRateSample",
+        "streamRateOf",
+        "streamRateDuration",
+        "streamRateApply",
+        "streamRateReset"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/agent/tool-runtime.js",
       "provides": [
         "WRITE_SEQ_TOOLS",

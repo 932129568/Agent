@@ -3649,7 +3649,7 @@ body.fx-off .dm-ring{animation:none;opacity:.6}
 .s2-stage.s2-wait::before,
 .s2-stage.s2-wait::after{content:"";width:12px;height:12px;border-radius:var(--radius-full);
 border:1.5px solid var(--primary);border-top-color:transparent;flex-shrink:0;
-animation:s2Orbit var(--dur-comp) linear infinite}
+animation:s2Orbit var(--dur-stream-orbit, var(--dur-comp)) linear infinite}
 .s2-stage.s2-wait::after{width:6px;height:6px;margin-left:-10px;border-color:var(--primary);
 border-bottom-color:transparent;animation-direction:reverse;
 animation-duration:calc(var(--dur-comp) / 2)}
@@ -15730,6 +15730,49 @@ return { ran: true, ok: false, injected: true, cmd: resolved.cmd, source: resolv
 }
 
 
+/* ===== frontend/src/agent/stream-rate.js ===== */
+const STREAM_RATE_WINDOW = 8;
+const STREAM_DUR_MIN = 320;
+const STREAM_DUR_MAX = 2600;
+const STREAM_CPS_FAST = 90;
+const STREAM_CPS_SLOW = 4;
+const _samples = [];
+function streamRateSample(ms, chars) {
+const gap = Number(ms);
+if (!Number.isFinite(gap) || gap < 0 || gap > 10000) return null;
+const n = Math.max(0, Number(chars) || 0);
+if (!n && gap < 1) return null;
+_samples.push({ ms: Math.max(1, gap), chars: n });
+while (_samples.length > STREAM_RATE_WINDOW) _samples.shift();
+return streamRateOf();
+}
+function streamRateOf() {
+if (!_samples.length) return null;
+let chars = 0, ms = 0;
+for (const s of _samples) { chars += s.chars; ms += s.ms; }
+if (ms <= 0) return null;
+return Math.round((chars / ms) * 1000 * 10) / 10;
+}
+function streamRateDuration(cps) {
+const v = Number(cps);
+if (!Number.isFinite(v) || v <= 0) return STREAM_DUR_MAX;
+const t = (v - STREAM_CPS_SLOW) / (STREAM_CPS_FAST - STREAM_CPS_SLOW);
+const clamped = Math.max(0, Math.min(1, t));
+const dur = STREAM_DUR_MAX - clamped * (STREAM_DUR_MAX - STREAM_DUR_MIN);
+return Math.round(dur);
+}
+function streamRateApply() {
+if (typeof document === 'undefined') return { cps: null, dur: STREAM_DUR_MAX };
+const cps = streamRateOf();
+const dur = streamRateDuration(cps);
+try {
+document.documentElement.style.setProperty('--dur-stream-orbit', dur + 'ms');
+} catch (e) {}
+return { cps, dur };
+}
+function streamRateReset() { _samples.length = 0; }
+
+
 /* ===== frontend/src/agent/tool-runtime.js ===== */
 const WRITE_SEQ_TOOLS = ['write_file', 'append_file', 'search_replace',
 'move_path', 'copy_path', 'delete_path'];
@@ -19226,6 +19269,18 @@ try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
 }
 function renderReason(host, rr) {
 if (!host) return;
+try {
+const t = String(rr == null ? '' : rr);
+const now = Date.now();
+const prev = host.__ratePrev || null;
+if (prev) {
+const sample = (typeof window !== 'undefined') ? window['stream' + 'RateSample'] : null;
+const apply = (typeof window !== 'undefined') ? window['stream' + 'RateApply'] : null;
+if (typeof sample === 'function') sample(now - prev.at, t.length - prev.len);
+if (typeof apply === 'function') apply();
+}
+host.__ratePrev = { at: now, len: t.length };
+} catch (e) {  }
 if (!host.__thinkBuilt) {
 host.innerHTML =
 '<div class="think-line" data-role="think-toggle" title="点击展开/收起思考过程">' +
