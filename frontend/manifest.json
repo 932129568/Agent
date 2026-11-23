@@ -1267,6 +1267,23 @@
       "requires": []
     },
     {
+      "path": "frontend/src/agent/subagent.js",
+      "provides": [
+        "SUB_MAX",
+        "SUB_SUMMARY_CAP",
+        "_subs",
+        "_subSeq",
+        "_subFn",
+        "_subBag",
+        "subagentMakeSession",
+        "subagentSpawn",
+        "_subSummarize",
+        "subagentCancelAll",
+        "subagentCount"
+      ],
+      "requires": []
+    },
+    {
       "path": "frontend/src/agent/run-registry.js",
       "provides": [
         "RunRegistry",

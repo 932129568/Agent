@@ -19239,6 +19239,96 @@ return mount(own ? [own] : fallback);
 }
 
 
+/* ===== frontend/src/agent/subagent.js ===== */
+const SUB_MAX = 4;
+const SUB_SUMMARY_CAP = 200;
+const _subs = new Map();
+let _subSeq = 0;
+function _subFn(name) {
+try { return (typeof globalThis !== 'undefined' && globalThis[name]) || null; } catch (e) { return null; }
+}
+function _subBag(parentSid) {
+const key = String(parentSid == null ? '' : parentSid);
+let bag = _subs.get(key);
+if (!bag) { bag = new Map(); _subs.set(key, bag); }
+return bag;
+}
+function subagentMakeSession(parent, task) {
+_subSeq += 1;
+const pid = String((parent && parent.id) || '');
+const sid = (pid || 'anon') + '#sub' + _subSeq;
+return {
+id: sid,
+title: '子代理 · ' + String(task || '').slice(0, 16),
+updatedAt: Date.now(),
+messages: [{ role: 'user', content: String(task == null ? '' : task) }],
+meta: { sub: true, parent: pid },
+};
+}
+function subagentSpawn(parent, task, opts = {}) {
+const pid = String((parent && parent.id) || '');
+const bag = _subBag(pid);
+if (bag.size >= SUB_MAX) return { ok: false, reason: 'max-subagents' };
+const sess = subagentMakeSession(parent, task);
+const runner = (typeof opts.runner === 'function')
+? opts.runner
+: ((s, k) => { const f = _subFn('runAgentLoop'); return (typeof f === 'function') ? f(s, k) : Promise.resolve(''); });
+const apiKey = opts.apiKey;
+let resolveDone;
+const done = new Promise((res) => { resolveDone = res; });
+const handle = { id: sess.id, session: sess, aborted: false, done,
+abort() { handle.aborted = true; resolveDone(''); } };
+bag.set(sess.id, handle);
+handle.promise = Promise.resolve()
+.then(() => runner(sess, apiKey))
+.then((result) => {
+const summary = _subSummarize(result, sess);
+if (typeof opts.onSummary === 'function') {
+try { opts.onSummary(summary, sess); } catch (e) {}
+} else if (parent && Array.isArray(parent.messages)) {
+parent.messages.push({
+role: 'assistant',
+content: '【子代理·' + sess.id.slice(-4) + '】' + summary,
+__subSummary: true,
+});
+}
+bag.delete(sess.id);
+resolveDone(summary);
+return summary;
+})
+.catch((err) => {
+bag.delete(sess.id);
+const msg = '子代理失败：' + String((err && err.message) || err).slice(0, SUB_SUMMARY_CAP);
+resolveDone(msg);
+return msg;
+});
+return { ok: true, id: sess.id, session: sess, promise: handle.promise, abort: handle.abort };
+}
+function _subSummarize(result, sess) {
+const text = (typeof result === 'string') ? result
+: (result && typeof result.content === 'string' ? result.content : '');
+const trimmed = String(text || '').replace(/\s+/g, ' ').trim();
+if (trimmed) return trimmed.slice(0, SUB_SUMMARY_CAP);
+const msgs = (sess && Array.isArray(sess.messages)) ? sess.messages : [];
+for (let i = msgs.length - 1; i >= 0; i--) {
+if (msgs[i] && msgs[i].role === 'assistant' && typeof msgs[i].content === 'string') {
+return msgs[i].content.replace(/\s+/g, ' ').trim().slice(0, SUB_SUMMARY_CAP);
+}
+}
+return '(子代理无输出)';
+}
+function subagentCancelAll(parentSid) {
+const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+const bag = _subBag(parentSid);
+let count = 0;
+bag.forEach((h) => { try { h.abort(); count += 1; } catch (e) {} });
+bag.clear();
+const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+return { count, ms: Math.round((t1 - t0) * 100) / 100 };
+}
+function subagentCount(parentSid) { return _subBag(parentSid).size; }
+
+
 /* ===== frontend/src/agent/run-registry.js ===== */
 function _runStore() {
 if (typeof __agentRuns !== 'undefined' && __agentRuns &&
