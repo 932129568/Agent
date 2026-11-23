@@ -27,11 +27,17 @@ function switchPanel(name) {
     const rig = (typeof window !== 'undefined') ? window['Harbor' + 'KineticRig'] : null;
     const fxOff = document.body && document.body.classList.contains('fx-off');
     if (rig && typeof rig.applyImpulse === 'function' && !fxOff) {
-      const shell = document.querySelector('.main');
+      // 目标是 #mainStage 而不是 .main：.main 上挂着 v4ChipIn（fill: both），
+      // **CSS 动画优先级高于内联样式** ⇒ 写在 .main 上的 transform 会被动画覆盖，
+      // 实测 computed 恒为 identity（视觉上余震从未发生），而 inline 里却有值。
+      // #mainStage 没有动画，且它本就是这个大外壳的内容舞台。
+      const shell = document.getElementById('mainStage') || document.querySelector('.main > .panels');
       const btn = document.querySelector('.rail-btn[data-panel="' + name + '"]');
       if (shell) {
-        rig.applyImpulse(shell, { vx: dir === 'fwd' ? 26 : -26, vy: 10, vsc: -0.12,
-          preset: { omega: 17, zeta: 0.46, maxPx: 5, maxSc: 0.012 } });
+        // 幅度按**物理量**调过：vx 26 时实测峰值仅 0.81px（亚像素，肉眼不可见）；
+        // 提到 74 后峰值落在 2~3px 区间（可见但不晕），收敛仍 < 400ms。
+        rig.applyImpulse(shell, { vx: dir === 'fwd' ? 74 : -74, vy: 22, vsc: -0.16,
+          preset: { omega: 17, zeta: 0.46, maxPx: 6, maxSc: 0.014 } });
       }
       if (btn && btn.classList) {
         btn.classList.add('kin-ring-hit');

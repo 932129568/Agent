@@ -8890,11 +8890,11 @@ try {
 const rig = (typeof window !== 'undefined') ? window['Harbor' + 'KineticRig'] : null;
 const fxOff = document.body && document.body.classList.contains('fx-off');
 if (rig && typeof rig.applyImpulse === 'function' && !fxOff) {
-const shell = document.querySelector('.main');
+const shell = document.getElementById('mainStage') || document.querySelector('.main > .panels');
 const btn = document.querySelector('.rail-btn[data-panel="' + name + '"]');
 if (shell) {
-rig.applyImpulse(shell, { vx: dir === 'fwd' ? 26 : -26, vy: 10, vsc: -0.12,
-preset: { omega: 17, zeta: 0.46, maxPx: 5, maxSc: 0.012 } });
+rig.applyImpulse(shell, { vx: dir === 'fwd' ? 74 : -74, vy: 22, vsc: -0.16,
+preset: { omega: 17, zeta: 0.46, maxPx: 6, maxSc: 0.014 } });
 }
 if (btn && btn.classList) {
 btn.classList.add('kin-ring-hit');
