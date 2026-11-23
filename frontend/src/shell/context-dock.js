@@ -176,6 +176,21 @@ function contextDockBindEvents() {
   const onRun = () => { if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); } };
   document.addEventListener('harbor:trace', onTrace);
   document.addEventListener('harbor:run', onRun);
+  // I13 收口：run-controller 在 P0-4 里派发 harbor:diff（带 before/after），
+  // 但此前**没有任何监听者**——真实 diff 到不了「改动」页，等于内联 Diff 没有供给方。
+  // 这里接上：写进 _WRITES（带前后文），改动页就能画真红绿行。
+  const onDiff = (e) => {
+    const d = (e && e.detail) || {};
+    if (!d || !d.path) return;
+    CONTEXT_DOCK_WRITES.push({
+      tool: d.tool || 'edit', path: String(d.path),
+      before: typeof d.before === 'string' ? d.before : undefined,
+      after: typeof d.after === 'string' ? d.after : undefined,
+    });
+    if (CONTEXT_DOCK_WRITES.length > 20) CONTEXT_DOCK_WRITES.shift();
+    if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); }
+  };
+  document.addEventListener('harbor:diff', onDiff);
 }
 
 /** 切标签（幂等；只改 class，不重建 DOM）。 */

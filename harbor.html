@@ -24179,6 +24179,18 @@ if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); }
 const onRun = () => { if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); } };
 document.addEventListener('harbor:trace', onTrace);
 document.addEventListener('harbor:run', onRun);
+const onDiff = (e) => {
+const d = (e && e.detail) || {};
+if (!d || !d.path) return;
+CONTEXT_DOCK_WRITES.push({
+tool: d.tool || 'edit', path: String(d.path),
+before: typeof d.before === 'string' ? d.before : undefined,
+after: typeof d.after === 'string' ? d.after : undefined,
+});
+if (CONTEXT_DOCK_WRITES.length > 20) CONTEXT_DOCK_WRITES.shift();
+if (CONTEXT_DOCK.open) { contextDockRefresh(); contextDockRenderPanes(); }
+};
+document.addEventListener('harbor:diff', onDiff);
 }
 function contextDockTab(name) {
 const root = CONTEXT_DOCK.root;
