@@ -31,6 +31,14 @@ function _scEsc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/* R101 T05 · 消环：scClose ↔ scEsc
+ * 原实现 scClose() 里 removeEventListener('keydown', scEsc)、scEsc() 里又调 scClose()，
+ * 两条互相调用 ⇒ 符号级环（SCC 17 环之一）。改成「模块级 handler 变量」后方向单一：
+ * handler → scClose，scClose 只是把同一个函数引用摘掉，不再构成调用边。
+ * 行为不变：Esc 仍关闭帮助浮层，且仍不 stopPropagation（Esc 要继续冒泡给其他浮层）。
+ */
+let _scEscHandler = null;
+
 function scOpen() {
   if (typeof document === 'undefined') return;
   scClose();
@@ -59,20 +67,22 @@ function scOpen() {
   document.body.appendChild(mask);
   mask.addEventListener('click', e => { if (e.target === mask) scClose(); });
   card.querySelector('.sc-ok').onclick = scClose;
-  document.addEventListener('keydown', scEsc);
+  if (!_scEscHandler) {
+    _scEscHandler = (e) => {
+      // 不 stopPropagation：Esc 应继续冒泡给其他浮层（设置/搜索面板/图片查看）各自收尾
+      if (e.key === 'Escape') scClose();
+    };
+  }
+  document.addEventListener('keydown', _scEscHandler);
   // 修复（建议14 残余）：60ms 硬编码 focus 延时改 MOTION 令牌（staggerSm=60ms，
   // 值与原一致；fx-off 下 0ms）。typeof 守卫保 vm 沙箱可测。
   const _scFocusMs = (typeof MOTION !== 'undefined' && MOTION.staggerSm) ? MOTION.staggerSm() : 60;
   setTimeout(() => { const b = card.querySelector('.sc-ok'); if (b) b.focus(); }, _scFocusMs);
 }
-function scEsc(e) {
-  // 不 stopPropagation：Esc 应继续冒泡给其他浮层（设置/搜索面板/图片查看）各自收尾
-  if (e.key === 'Escape') scClose();
-}
 function scClose() {
   const mask = document.querySelector('.sc-mask');
   if (mask) mask.remove();
-  document.removeEventListener('keydown', scEsc);
+  if (_scEscHandler) document.removeEventListener('keydown', _scEscHandler);
 }
 
 /** ? 键打开（输入框/文本区聚焦时不抢键；与 Ctrl+N 不冲突）。 */

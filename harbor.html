@@ -22435,6 +22435,7 @@ if (typeof escapeHtml === 'function') return escapeHtml(t);
 return t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+let _scEscHandler = null;
 function scOpen() {
 if (typeof document === 'undefined') return;
 scClose();
@@ -22463,17 +22464,19 @@ mask.appendChild(card);
 document.body.appendChild(mask);
 mask.addEventListener('click', e => { if (e.target === mask) scClose(); });
 card.querySelector('.sc-ok').onclick = scClose;
-document.addEventListener('keydown', scEsc);
+if (!_scEscHandler) {
+_scEscHandler = (e) => {
+if (e.key === 'Escape') scClose();
+};
+}
+document.addEventListener('keydown', _scEscHandler);
 const _scFocusMs = (typeof MOTION !== 'undefined' && MOTION.staggerSm) ? MOTION.staggerSm() : 60;
 setTimeout(() => { const b = card.querySelector('.sc-ok'); if (b) b.focus(); }, _scFocusMs);
-}
-function scEsc(e) {
-if (e.key === 'Escape') scClose();
 }
 function scClose() {
 const mask = document.querySelector('.sc-mask');
 if (mask) mask.remove();
-document.removeEventListener('keydown', scEsc);
+if (_scEscHandler) document.removeEventListener('keydown', _scEscHandler);
 }
 let _scBound = false;
 function _cpCommands() {

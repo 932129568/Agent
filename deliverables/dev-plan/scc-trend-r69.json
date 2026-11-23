@@ -18,8 +18,8 @@
     "edges": 3197
   },
   "current": {
-    "sccCycles": 17,
-    "cyclicSymbols": 104,
+    "sccCycles": 16,
+    "cyclicSymbols": 102,
     "largestScc": 34,
     "topSccSizes": [
       34,
@@ -31,11 +31,11 @@
     ],
     "modules": 119,
     "symbols": 1381,
-    "edges": 3335
+    "edges": 3334
   },
   "delta": {
-    "sccCycles": 0,
-    "cyclicSymbols": 0,
+    "sccCycles": -1,
+    "cyclicSymbols": -2,
     "largestScc": 0
   },
   "regressions": [],

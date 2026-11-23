@@ -1702,7 +1702,6 @@
         "_scBound",
         "_scEsc",
         "scClose",
-        "scEsc",
         "scOpen",
         "shortcutsInit",
         "_cpCommands",
@@ -1712,7 +1711,8 @@
         "_cpRender",
         "cpPaletteClose",
         "cpPaletteOpen",
-        "cpPaletteRun"
+        "cpPaletteRun",
+        "_scEscHandler"
       ],
       "requires": [
         "_modalRoot"
