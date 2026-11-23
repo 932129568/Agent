@@ -3489,6 +3489,20 @@ background:var(--surface-2);color:var(--text-3)}
 .et-cat[data-cat="web"]{color:var(--ok)}
 .et-cat[data-cat="mcp"]{color:var(--primary-hover)}
 .et-row.fail .et-cat{background:var(--err-bg);color:var(--err)}
+.rb-directive-wrap,.prc-directive-wrap{flex:1 0 100%;display:flex;flex-direction:column;
+align-items:flex-start;gap:6px;margin-top:6px;width:100%}
+.rb-directive-toggle,.prc-directive-toggle{font:inherit;font-size:12px;line-height:1.4;
+padding:3px 10px;cursor:pointer;color:var(--text-2);background:transparent;
+border:1px dashed var(--border);border-radius:var(--radius-full)}
+.rb-directive-toggle:hover,.prc-directive-toggle:hover{color:var(--primary);border-color:var(--primary)}
+.rb-directive-toggle:focus-visible,.prc-directive-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.rb-directive[hidden],.prc-directive[hidden]{display:none}
+.rb-directive,.prc-directive{width:100%;box-sizing:border-box;font:inherit;font-size:12.5px;
+line-height:1.5;padding:7px 10px;resize:vertical;color:var(--text);
+background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+transition:border-color var(--dur-fast) var(--ease-out)}
+.rb-directive:focus,.prc-directive:focus{outline:none;border-color:var(--primary)}
+.rb-directive::placeholder,.prc-directive::placeholder{color:var(--text-3)}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -3544,6 +3558,7 @@ border-left:3px solid var(--warn);border-radius:8px;background:var(--card-bg);fl
 border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer}
 .plan-resume-card .prc-continue{border-color:var(--primary);color:var(--primary)}
 .plan-resume-card button:disabled{opacity:.5;cursor:not-allowed}
+.plan-resume-card{flex-wrap:wrap}
 
 
 /* ===== frontend/styles/features/mcp.css ===== */
@@ -18300,6 +18315,67 @@ const last = s.messages[s.messages.length - 1];
 if (!last) return false;
 return last.role === 'assistant' || last.role === 'tool';
 }
+function resumeDirectivePlaceholder(s) {
+const generic = '补充一句纠偏说明（可选）';
+const hints = {
+file: '先确认路径存在再读写',
+shell: '先看退出码与权限',
+web: '先确认端点与网络',
+memory: '先确认记忆条目是否过期',
+mcp: '先确认连接器鉴权',
+};
+try {
+const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+for (let i = msgs.length - 1; i >= 0; i--) {
+const m = msgs[i];
+if (!m || m.role !== 'assistant' || !Array.isArray(m.tool_calls) || m.tool_calls.length === 0) continue;
+const tc = m.tool_calls[0] || {};
+const name = (tc.function && tc.function.name) || tc.name || '';
+const catFn = (typeof window !== 'undefined') ? window['tool' + 'CategoryOf'] : null;
+const cat = (typeof catFn === 'function') ? String(catFn(name) || 'other') : 'other';
+return hints[cat] || generic;
+}
+} catch (e) {  }
+return generic;
+}
+function resumeDirectiveBlock(host, s, ns) {
+if (!host || typeof host.appendChild !== 'function' || typeof document === 'undefined'
+|| typeof document.createElement !== 'function') return null;
+const p = String(ns || 'rb');
+const wrap = document.createElement('div');
+wrap.className = p + '-directive-wrap';
+const toggle = document.createElement('button');
+toggle.type = 'button';
+toggle.className = p + '-directive-toggle';
+toggle.textContent = '加一句纠偏';
+if (toggle.setAttribute) toggle.setAttribute('aria-expanded', 'false');
+const ta = document.createElement('textarea');
+ta.className = p + '-directive';
+ta.hidden = true;
+ta.placeholder = resumeDirectivePlaceholder(s);
+if (ta.setAttribute) { ta.setAttribute('rows', '2'); ta.setAttribute('aria-label', '续跑纠偏指令'); }
+toggle.onclick = () => {
+const open = !!ta.hidden;
+ta.hidden = !open;
+if (toggle.setAttribute) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+toggle.textContent = open ? '收起纠偏' : '加一句纠偏';
+if (open) { try { if (typeof ta.focus === 'function') ta.focus(); } catch (e) {} }
+};
+wrap.appendChild(toggle);
+wrap.appendChild(ta);
+try { host.appendChild(wrap); } catch (e) { return null; }
+return { wrap: wrap, toggle: toggle, textarea: ta };
+}
+function resumeDirectiveValue(holder) {
+try {
+let ta = (holder && holder.textarea) ? holder.textarea : null;
+if (!ta && holder && typeof holder.querySelector === 'function') {
+ta = holder.querySelector('.rb-directive') || holder.querySelector('.prc-directive');
+}
+if (!ta || ta.hidden) return '';
+return String(ta.value == null ? '' : ta.value).trim();
+} catch (e) { return ''; }
+}
 function resumeBannerMount(box, s, actions) {
 if (!box || !box.appendChild || !shouldOfferResume(s)) return null;
 const round = (s._resumeRound != null) ? s._resumeRound
@@ -18318,14 +18394,18 @@ const textEl = el.querySelector('.rb-text');
 textEl.textContent =
 '上次任务在第 ' + round + ' 轮被中断，已输出内容与工具状态均已保留';
 el.__textEl = textEl;
+try { el.__directive = resumeDirectiveBlock(el, s, 'rb'); } catch (e) { el.__directive = null; }
 const dismiss = () => {
 if (el.parentNode) el.parentNode.removeChild(el);
 persistResumeState(s, false);
 if (actions && typeof actions.onDismiss === 'function') { try { actions.onDismiss(); } catch (e) {} }
 };
 const onContinue = () => {
+const directive = resumeDirectiveValue(el.__directive);
 if (el.parentNode) el.parentNode.removeChild(el);
-if (actions && typeof actions.onContinue === 'function') { try { actions.onContinue(); } catch (e) {} }
+if (actions && typeof actions.onContinue === 'function') {
+try { actions.onContinue(directive); } catch (e) {}
+}
 };
 el.querySelector('.rb-continue').onclick = onContinue;
 el.querySelector('.rb-dismiss').onclick = dismiss;
@@ -18390,6 +18470,9 @@ if (metaEl) metaEl.textContent = '执行至第 ' + at + '/' + (steps.length || 1
 ' 步被中断 · 续跑将回填该计划草稿（步骤/状态），检查点仍可回滚';
 card.__titleEl = titleEl;
 card.__metaEl = metaEl;
+let directiveBlock = null;
+try { directiveBlock = resumeDirectiveBlock(card, s, 'prc'); } catch (e) { directiveBlock = null; }
+card.__directive = directiveBlock;
 const cleanup = () => {
 if (card.parentNode) card.parentNode.removeChild(card);
 if (wrap.children && !wrap.children.length && wrap.parentNode) {
@@ -18397,6 +18480,7 @@ wrap.parentNode.removeChild(wrap);
 }
 };
 const go = () => {
+const directive = resumeDirectiveValue(directiveBlock);
 cleanup();
 if (s && p && p.task_id) {
 try {
@@ -18411,7 +18495,7 @@ if (typeof saveSessions === 'function') { try { saveSessions(); } catch (e2) {} 
 } catch (e3) {  }
 }
 if (actions && typeof actions.onContinue === 'function') {
-try { actions.onContinue(p); } catch (e) {}
+try { actions.onContinue(p, directive); } catch (e) {}
 }
 };
 const drop = () => {
@@ -25068,16 +25152,18 @@ try { box.scrollTop = box.scrollHeight; } catch (e) {}
 try { upgradeInView(); } catch (e) {}
 box.__upgradeInView = upgradeInView;
 if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {
-const doResume = () => {
+const resumeNow = (directive) => {
 const apiKey = (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '';
-uiSeamCall('continueLastGeneration', s, apiKey);
+uiSeamCall('continueLastGeneration', s, apiKey, String(directive == null ? '' : directive));
 };
+const doResume = (directive) => resumeNow(directive);
+const doResumePlan = (_plan, directive) => resumeNow(directive);
 try {
 resumeBannerMount(box, s, { onContinue: doResume });
 } catch (e) {}
 try {
 if (typeof planResumeCardsMount === 'function') {
-planResumeCardsMount(box, s, { onContinue: doResume });
+planResumeCardsMount(box, s, { onContinue: doResumePlan });
 }
 } catch (e) {}
 }
@@ -26225,9 +26311,37 @@ _sendRefreshStreaming();
 toast('发送失败: ' + (e && e.message ? e.message : e), 'err');
 }
 }
-async function continueLastGeneration(s, apiKey) {
+async function continueLastGeneration(s, apiKey, directive) {
 if (_sendSessionBusy(s && s.id)) return;
-runAgentLoop(s, apiKey);
+const d = String(directive == null ? '' : directive).trim();
+let injected = null;
+if (d && s && Array.isArray(s.messages)) {
+injected = {
+role: 'system',
+content: '【用户纠偏指令（本次续跑专用）】\n' + d +
+'\n（请据此调整方案；若与更早的历史指令冲突，以本条为准）',
+__resumeDirective: true,
+};
+s.messages.push(injected);
+}
+const dropInjected = () => {
+if (!injected) return;
+try {
+const idx = Array.isArray(s.messages) ? s.messages.indexOf(injected) : -1;
+if (idx >= 0) s.messages.splice(idx, 1);
+if (typeof saveSessions === 'function') saveSessions();
+} catch (e) {}
+injected = null;
+};
+let runPromise = null;
+try { runPromise = runAgentLoop(s, apiKey); } catch (e) { dropInjected(); throw e; }
+if (injected) {
+if (runPromise && typeof runPromise.then === 'function') {
+runPromise.then(dropInjected, dropInjected);
+} else {
+dropInjected();
+}
+}
 }
 async function regenerate(midx) {
 const s = getCurrentSession();

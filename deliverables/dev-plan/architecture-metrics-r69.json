@@ -6,7 +6,7 @@
     "layers": {
       "legacyFrontend": {
         "files": 119,
-        "lines": 28964
+        "lines": 29134
       },
       "reactProduction": {
         "files": 16,
@@ -43,15 +43,15 @@
         "lines": 15974
       }
     },
-    "totalSourceLines": 50200,
+    "totalSourceLines": 50370,
     "readErrors": [],
-    "harborHtmlBytes": 3705024,
+    "harborHtmlBytes": 3710154,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {
     "modules": 119,
-    "symbols": 1398,
-    "edges": 3349,
+    "symbols": 1401,
+    "edges": 3355,
     "sccCycles": 16,
     "cyclicSymbols": 102,
     "largestScc": 34,

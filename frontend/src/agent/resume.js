@@ -42,7 +42,111 @@ function shouldOfferResume(s) {
   return last.role === 'assistant' || last.role === 'tool';
 }
 
-/** 恢复横幅。actions = { onContinue, onDismiss }；DOM 桩安全（全部 typeof 守卫）。 */
+/* ================= R101 T03 · 纠偏指令（续跑前的「补一句」） =================
+ * 为什么需要它：续跑（resume）此前是**无条件重放**——用户看到横幅只能选「继续」
+ * 或「放弃」。但任务被中断往往不是随机的：上次 create_file 报了 EEXIST、上次
+ * run_powershell 权限不足……用户脑子里有这条信息，界面上却没有地方说。结果是
+ * 「继续」把同一个失败再撞一遍，白烧一轮 token。
+ *
+ * 边界（刻意收窄，不做成聊天框）：
+ *   · 默认收起，点「加一句纠偏」才展开——续跑是低频动作，不该让一个空输入框
+ *     常年占版面；
+ *   · 建议只用 **placeholder** 承载，绝不写进 value：预填成 value 等于替用户
+ *     决定了他没确认过的内容，一点发送就把它当指令发出去；
+ *   · 收起态一律视为「没有纠偏」（不把 placeholder 当值）。
+ *
+ * 建议文案按**工具类别**给：上次失败的工具类别不同，用户该补的信息也不同
+ * （文件类要确认路径、命令类要确认退出码/权限、MCP 类多半是鉴权）。类别判定
+ * 复用 agent/tool-runtime.js 的 toolCategoryOf，不在这里另造一套名称模式。
+ */
+
+/**
+ * 纠偏建议文案（写进 placeholder）。无工具调用 → 通用文案。
+ * @param {object} s 会话对象（只读 s.messages）
+ * @returns {string}
+ */
+function resumeDirectivePlaceholder(s) {
+  const generic = '补充一句纠偏说明（可选）';
+  // 类别 → 建议（与 tool-runtime.js 的 toolCategoryOf 返回值一一对应）
+  const hints = {
+    file: '先确认路径存在再读写',
+    shell: '先看退出码与权限',
+    web: '先确认端点与网络',
+    memory: '先确认记忆条目是否过期',
+    mcp: '先确认连接器鉴权',
+  };
+  try {
+    const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (!m || m.role !== 'assistant' || !Array.isArray(m.tool_calls) || m.tool_calls.length === 0) continue;
+      const tc = m.tool_calls[0] || {};
+      const name = (tc.function && tc.function.name) || tc.name || '';
+      // 跨模块只走动态索引：裸写 toolCategoryOf 会被静态分析记成
+      // resume.js → tool-runtime.js 的新边（SCC 零余量，加边即红）。
+      const catFn = (typeof window !== 'undefined') ? window['tool' + 'CategoryOf'] : null;
+      const cat = (typeof catFn === 'function') ? String(catFn(name) || 'other') : 'other';
+      // 只认已知类别；other 与取不到一律通用文案（不编造针对性建议）
+      return hints[cat] || generic;
+    }
+  } catch (e) { /* 会话结构异常 → 通用文案，不阻断接管 UI */ }
+  return generic;
+}
+
+/**
+ * 挂载「加一句纠偏」折叠块（横幅与计划卡共用实现，命名空间由 ns 决定）。
+ * @param {Element} host 挂载点（横幅/卡片本体）
+ * @param {object} s 会话对象
+ * @param {'rb'|'prc'} ns 类名前缀（保持两处各自命名空间）
+ * @returns {{wrap: Element, toggle: Element, textarea: Element}|null}
+ */
+function resumeDirectiveBlock(host, s, ns) {
+  if (!host || typeof host.appendChild !== 'function' || typeof document === 'undefined'
+      || typeof document.createElement !== 'function') return null;
+  const p = String(ns || 'rb');
+  const wrap = document.createElement('div');
+  wrap.className = p + '-directive-wrap';
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = p + '-directive-toggle';
+  toggle.textContent = '加一句纠偏';
+  if (toggle.setAttribute) toggle.setAttribute('aria-expanded', 'false');
+  const ta = document.createElement('textarea');
+  ta.className = p + '-directive';
+  ta.hidden = true;                      // 默认收起
+  ta.placeholder = resumeDirectivePlaceholder(s);
+  if (ta.setAttribute) { ta.setAttribute('rows', '2'); ta.setAttribute('aria-label', '续跑纠偏指令'); }
+  // 折叠/展开：只是显示态切换，绝不把 placeholder 提升成 value
+  toggle.onclick = () => {
+    const open = !!ta.hidden;
+    ta.hidden = !open;
+    if (toggle.setAttribute) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.textContent = open ? '收起纠偏' : '加一句纠偏';
+    if (open) { try { if (typeof ta.focus === 'function') ta.focus(); } catch (e) {} }
+  };
+  wrap.appendChild(toggle);
+  wrap.appendChild(ta);
+  try { host.appendChild(wrap); } catch (e) { return null; }
+  return { wrap: wrap, toggle: toggle, textarea: ta };
+}
+
+/**
+ * 读取纠偏指令（trim 后；收起态一律返回 ''）。
+ * @param {{textarea?: Element}|Element|null} holder block 句柄或容器元素
+ * @returns {string}
+ */
+function resumeDirectiveValue(holder) {
+  try {
+    let ta = (holder && holder.textarea) ? holder.textarea : null;
+    if (!ta && holder && typeof holder.querySelector === 'function') {
+      ta = holder.querySelector('.rb-directive') || holder.querySelector('.prc-directive');
+    }
+    if (!ta || ta.hidden) return '';     // 收起态 / 找不到 → 无纠偏
+    return String(ta.value == null ? '' : ta.value).trim();
+  } catch (e) { return ''; }
+}
+
+/** 恢复横幅。actions = { onContinue(directive), onDismiss }；DOM 桩安全（全部 typeof 守卫）。 */
 function resumeBannerMount(box, s, actions) {
   if (!box || !box.appendChild || !shouldOfferResume(s)) return null;
   const round = (s._resumeRound != null) ? s._resumeRound
@@ -61,6 +165,8 @@ function resumeBannerMount(box, s, actions) {
   textEl.textContent =
     '上次任务在第 ' + round + ' 轮被中断，已输出内容与工具状态均已保留';
   el.__textEl = textEl;   // 桩的 querySelector 每次返回新元素——测试读侧通道
+  // R101 T03：纠偏折叠块（默认收起）。句柄挂 __directive，点击续跑时再读值。
+  try { el.__directive = resumeDirectiveBlock(el, s, 'rb'); } catch (e) { el.__directive = null; }
   const dismiss = () => {
     if (el.parentNode) el.parentNode.removeChild(el);
     persistResumeState(s, false);
@@ -70,8 +176,12 @@ function resumeBannerMount(box, s, actions) {
   // __continue/__dismiss（__ 前缀约定，同 bubble.__finish）——DOM 桩的
   // querySelector 每次返回新元素，程序化触发/测试走侧通道
   const onContinue = () => {
+    const directive = resumeDirectiveValue(el.__directive);   // 收起态 → ''
     if (el.parentNode) el.parentNode.removeChild(el);
-    if (actions && typeof actions.onContinue === 'function') { try { actions.onContinue(); } catch (e) {} }
+    // R101 T03：纠偏指令作为第 1 个实参交给调用方（旧写法 () => {} 忽略实参，行为不变）
+    if (actions && typeof actions.onContinue === 'function') {
+      try { actions.onContinue(directive); } catch (e) {}
+    }
   };
   el.querySelector('.rb-continue').onclick = onContinue;
   el.querySelector('.rb-dismiss').onclick = dismiss;
@@ -154,6 +264,10 @@ function planResumeCardsMount(box, s, actions) {
       // 桩的 querySelector 每次返回新元素——测试读侧通道（同 el.__textEl）
       card.__titleEl = titleEl;
       card.__metaEl = metaEl;
+      // R101 T03：纠偏折叠块（与横幅同一实现，命名空间 prc- 独立）
+      let directiveBlock = null;
+      try { directiveBlock = resumeDirectiveBlock(card, s, 'prc'); } catch (e) { directiveBlock = null; }
+      card.__directive = directiveBlock;
       const cleanup = () => {
         if (card.parentNode) card.parentNode.removeChild(card);
         if (wrap.children && !wrap.children.length && wrap.parentNode) {
@@ -161,6 +275,7 @@ function planResumeCardsMount(box, s, actions) {
         }
       };
       const go = () => {
+        const directive = resumeDirectiveValue(directiveBlock);   // 收起态 → ''
         cleanup();
         // FE-5 重设计：原实现把 p 丢弃（卡片「从断点续跑」为假——重载后 s.plan
         // 缺失，续跑不携带计划草稿，模型无从知道步骤进度）。现在把 plan_list
@@ -178,7 +293,8 @@ function planResumeCardsMount(box, s, actions) {
           } catch (e3) { /* 回填失败不阻断续跑（行为回到旧版） */ }
         }
         if (actions && typeof actions.onContinue === 'function') {
-          try { actions.onContinue(p); } catch (e) {}
+          // R101 T03：第 2 个实参是纠偏指令；第 1 个仍是计划对象（旧写法不受影响）
+          try { actions.onContinue(p, directive); } catch (e) {}
         }
       };
       const drop = () => {

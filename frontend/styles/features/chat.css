@@ -652,3 +652,25 @@ body.fx-off .s2-stage{animation:none;opacity:1}
 .et-cat[data-cat="web"]{color:var(--ok)}
 .et-cat[data-cat="mcp"]{color:var(--primary-hover)}
 .et-row.fail .et-cat{background:var(--err-bg);color:var(--err)}
+
+/* ===== R101 T03 · 续跑纠偏指令（接管卡内的折叠输入）=====
+   横幅 .resume-banner 此前没有任何样式（靠浏览器默认块级流），所以这里只补
+   纠偏块自身，不改横幅既有观感：块是块级元素 → 自然换到第二行。
+   计划卡 .plan-resume-card 是 flex 行，靠 flex-basis:100% 占满一行（父级
+   flex-wrap 在 plan.css 里补）。
+   收起态用 [hidden] 显式关掉：本文件的 display 声明会盖掉浏览器 UA 的
+   [hidden]{display:none}（作者样式优先），漏了这条就会出现「收起却看得见」。 */
+.rb-directive-wrap,.prc-directive-wrap{flex:1 0 100%;display:flex;flex-direction:column;
+  align-items:flex-start;gap:6px;margin-top:6px;width:100%}
+.rb-directive-toggle,.prc-directive-toggle{font:inherit;font-size:12px;line-height:1.4;
+  padding:3px 10px;cursor:pointer;color:var(--text-2);background:transparent;
+  border:1px dashed var(--border);border-radius:var(--radius-full)}
+.rb-directive-toggle:hover,.prc-directive-toggle:hover{color:var(--primary);border-color:var(--primary)}
+.rb-directive-toggle:focus-visible,.prc-directive-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.rb-directive[hidden],.prc-directive[hidden]{display:none}
+.rb-directive,.prc-directive{width:100%;box-sizing:border-box;font:inherit;font-size:12.5px;
+  line-height:1.5;padding:7px 10px;resize:vertical;color:var(--text);
+  background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+  transition:border-color var(--dur-fast) var(--ease-out)}
+.rb-directive:focus,.prc-directive:focus{outline:none;border-color:var(--primary)}
+.rb-directive::placeholder,.prc-directive::placeholder{color:var(--text-3)}

@@ -69,7 +69,7 @@ GATES = [
     # 新增 18 个顶层符号、function_defs 1317→1335，故入库新基线 r100 并改比最新锚点；
     # 旧 r68/r89/r98/r99 原样保留（只增不删）。DOM id 三类锚点与 r99 逐项相等（479/54/124）。
     ('contract-diff', [PY, 'tools/contract_diff.py', '--compare',
-                       'deliverables/dev-plan/contract-baseline-r112.json'], True,
+                       'deliverables/dev-plan/contract-baseline-r113.json'], True,
      'r100 锚点零漂移（锚点链最新项）'),
     # R101 Q10 晋升：这两门在 T01 期间**曾经真红**（A1 死引用 30 条、A6 钩子 0 处），
     # 修复后转绿且判据常数未放宽（A5 拆成 A5a/A5b 是"存量走棘轮"，新增债务仍 required），

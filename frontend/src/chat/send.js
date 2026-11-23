@@ -492,9 +492,58 @@ async function sendMessage() {
     toast('发送失败: ' + (e && e.message ? e.message : e), 'err');
   }
 }
-async function continueLastGeneration(s, apiKey) {
+/* ================= R101 T03 · 续跑纠偏指令 =================
+ * 落点选择（重要，说明为什么这么做）：
+ *   `continueLastGeneration` 是续跑的最终入口，它此前只做一件事——runAgentLoop
+ *   重入。**不存在**既有的「续跑提示注入点」可供拼接（没有往输入框或请求里塞
+ *   提示的代码），所以没有现成的地方可复用。
+ *   两条可行路径：
+ *     A. 在 runAgentLoop 之前临时追加一条 system 消息，run 结束后移除（本实现）；
+ *     B. 改 run-controller 的 beforeRound，把指令拼进每轮 sysContent。
+ *   选 A 的理由：B 要动 run-controller 里刚修好的 S2/S3 段落与 sysContent 装配
+ *   逻辑（零余量的高风险区），而 A 完全落在 send.js 内。且 A 的效果与 B 等价——
+ *   请求装配处 `normalizeSystemMessages([{system:sysContent}, ...slimMsgs])` 会把
+ *   历史里的所有 system 按顺序合并进唯一那条 system，所以临时 system 最终落在
+ *   **系统提示词**里而不是 user turns 里，不污染对话历史语义。
+ *
+ * 生命周期：
+ *   · 追加：只在 directive 非空时；带 __resumeDirective 标记便于排查；
+ *   · 移除：run 的 promise 落定（成功或失败）后按**对象身份**摘除；run 期间若发生
+ *     压缩换掉整个 messages 数组，对象已不存在 → 什么都不做（幂等）；
+ *   · 收尾再 saveSessions 一次：run 期间可能已经落盘过带指令的历史，不补这一次
+ *     会把「已摘除」的内存态和磁盘态分叉，重开会话时陈旧指令又冒出来。
+ */
+async function continueLastGeneration(s, apiKey, directive) {
   if (_sendSessionBusy(s && s.id)) return;   // R31：只拦本会话
-  runAgentLoop(s, apiKey);
+  const d = String(directive == null ? '' : directive).trim();
+  let injected = null;
+  if (d && s && Array.isArray(s.messages)) {
+    injected = {
+      role: 'system',
+      content: '【用户纠偏指令（本次续跑专用）】\n' + d +
+        '\n（请据此调整方案；若与更早的历史指令冲突，以本条为准）',
+      __resumeDirective: true,
+    };
+    s.messages.push(injected);
+  }
+  const dropInjected = () => {
+    if (!injected) return;
+    try {
+      const idx = Array.isArray(s.messages) ? s.messages.indexOf(injected) : -1;
+      if (idx >= 0) s.messages.splice(idx, 1);   // 只摘自己那条，不动 run 期间新增的消息
+      if (typeof saveSessions === 'function') saveSessions();
+    } catch (e) {}
+    injected = null;
+  };
+  let runPromise = null;
+  try { runPromise = runAgentLoop(s, apiKey); } catch (e) { dropInjected(); throw e; }
+  if (injected) {
+    if (runPromise && typeof runPromise.then === 'function') {
+      runPromise.then(dropInjected, dropInjected);   // 成功/失败都要摘，别留残迹
+    } else {
+      dropInjected();   // 同步桩（vm harness）：没有真 run 在跑，立即收尾
+    }
+  }
 }
 async function regenerate(midx) {
   const s = getCurrentSession();

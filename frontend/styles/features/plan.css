@@ -57,3 +57,7 @@
   border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer}
 .plan-resume-card .prc-continue{border-color:var(--primary);color:var(--primary)}
 .plan-resume-card button:disabled{opacity:.5;cursor:not-allowed}
+
+/* R101 T03 · 纠偏块要能占满卡片第二行：卡片是 flex 行且默认 nowrap，
+   不改这一条的话 .prc-directive-wrap 的 flex-basis:100% 只会把它挤扁。 */
+.plan-resume-card{flex-wrap:wrap}

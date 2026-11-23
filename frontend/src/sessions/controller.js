@@ -555,10 +555,15 @@ function renderChatHistory(s) {
   // Round 16 resume：任务中断恢复横幅（runStatus=paused 且停在 assistant/tool）。
   // 继续 = runAgentLoop 重入（历史已配平，模型从挂起点续写）；放弃 = 收敛 completed。
   if (typeof shouldOfferResume === 'function' && shouldOfferResume(s)) {
-    const doResume = () => {
+    // R101 T03：纠偏指令（用户补的那一句）随续跑一起带走。两个接管 UI 的回调
+    // 形状不同——横幅 onContinue(directive)，计划卡 onContinue(plan, directive)
+    // ——所以分两个具名回调，不做「按类型猜第几个参数」的运行时嗅探。
+    const resumeNow = (directive) => {
       const apiKey = (typeof effectiveApiKey === 'function') ? effectiveApiKey() : '';
-      uiSeamCall('continueLastGeneration', s, apiKey);
+      uiSeamCall('continueLastGeneration', s, apiKey, String(directive == null ? '' : directive));
     };
+    const doResume = (directive) => resumeNow(directive);
+    const doResumePlan = (_plan, directive) => resumeNow(directive);
     try {
       resumeBannerMount(box, s, { onContinue: doResume });
     } catch (e) {}
@@ -566,7 +571,7 @@ function renderChatHistory(s) {
     // 独立的断点进度与续跑入口；步进级回滚仍走 checkpoint_rollback 既有链路。
     try {
       if (typeof planResumeCardsMount === 'function') {
-        planResumeCardsMount(box, s, { onContinue: doResume });
+        planResumeCardsMount(box, s, { onContinue: doResumePlan });
       }
     } catch (e) {}
   }
