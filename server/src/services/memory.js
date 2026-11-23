@@ -10,8 +10,28 @@ import { CONFIG_DIR, atomicWriteJson, readJsonIfExists } from '../paths.js'
 import path from 'node:path'
 import fs from 'node:fs'
 
-const MEMORY_FILE = path.join(CONFIG_DIR, 'memory.json')
+// I14：允许用环境变量指向另一份文件——否则这块逻辑无法在测试里隔离，
+// 任何"记忆入库"用例都会污染真实 memory.json。
+const MEMORY_FILE = process.env.HARBOR_MEMORY_FILE
+  ? path.resolve(process.env.HARBOR_MEMORY_FILE)
+  : path.join(CONFIG_DIR, 'memory.json')
 const MAX_FACTS = 200
+// I14（v3.4）：单条上限 800 字。原实现完全不限长——一次工具结果/整段日志被当成
+// 一条"记忆"存进来，之后每次 memoryTail 都把它整段塞进系统提示，属慢性毒化。
+// 800 的依据：注入口径里事实条目本来就该是一句话；超过就会挤掉真正有用的近期条目。
+const MAX_ENTRY_CHARS = 800
+
+/** 清洗单条记忆文本（零脏段落）：去 C0 控制符（保留换行/制表）→ 压空行 → 截断。
+ *  只做"能证明是垃圾"的处理，不改写语义；返回 { text, dirty, truncated }。 */
+function sanitizeMemoryText(raw) {
+  const src = String(raw == null ? '' : raw)
+  // eslint-disable-next-line no-control-regex
+  let t = src.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+  t = t.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  const truncated = t.length > MAX_ENTRY_CHARS
+  if (truncated) t = t.slice(0, MAX_ENTRY_CHARS) + '…(已截断)'
+  return { text: t, dirty: t !== src.trim(), truncated }
+}
 
 /* R59 性能：list 缓存（mtime+size 指纹失效）。build_system_prompt 每轮调
  * getMemory()（记忆注入），原实现每轮读盘+JSON 解析整个 memory.json。指纹未变
@@ -42,6 +62,8 @@ function saveAll(list) {
   atomicWriteJson(MEMORY_FILE, list)
   _listCache = null   // 写档即失效（下次 loadAll 按新指纹重读）
 }
+
+export { sanitizeMemoryText }
 
 export function classify(text) {
   const value = String(text || '')
@@ -93,7 +115,14 @@ export async function appendMemory(entry) {
 
   // R38 修复（K2 双端对齐）：空 text 条目与 Python legacy 契约同口径**允许入库**
   // （{'k':'v'} 无 text 形态也入；检索/注入层自然跳过空条目）——原 Node 单端拒绝。
-  const text = String(input.text ?? '').trim()
+  const rawText = String(input.text ?? '')
+  const cleaned = sanitizeMemoryText(rawText)
+  const text = cleaned.text
+  // 纯垃圾（原文非空但清洗后为空，例如只有控制字符）⇒ **不入库**，明确回报。
+  // 原文本来就空的情况保持 legacy 口径（允许入库，检索层跳过）。
+  if (rawText.trim() && !text) {
+    return JSON.stringify({ ok: true, skipped: true, reason: 'dirty', total: loadAll().length })
+  }
 
   const kind = input.kind || classify(text)
   const key = normalize(text)
@@ -104,7 +133,8 @@ export async function appendMemory(entry) {
     if (existing >= 0) {
       list[existing] = { ...list[existing], text, kind, ...timeStamp() }
       saveAll(list)
-      return JSON.stringify({ ok: true, kind, total: list.length, deduped: true })
+      return JSON.stringify({ ok: true, kind, total: list.length, deduped: true,
+        ...(cleaned.truncated ? { truncated: true } : {}) })
     }
   }
 
@@ -122,7 +152,9 @@ export async function appendMemory(entry) {
   }
 
   saveAll(list)
-  return JSON.stringify({ ok: true, kind, total: list.length })
+  return JSON.stringify({ ok: true, kind, total: list.length,
+    ...(cleaned.dirty ? { cleaned: true } : {}),
+    ...(cleaned.truncated ? { truncated: true } : {}) })
 }
 
 /** Python %r 语义（str repr 单引号口径，与 system.js pyRepr 同规则）。 */
