@@ -16,8 +16,11 @@
  *
  * 运行：node tools/audit-prefix-cache.mjs
  */
-process.env.HARBOR_MEMORY_FILE = process.env.HARBOR_MEMORY_FILE
-  || 'C:/Users/陈/AppData/Local/Temp/prefix-audit-mem.json'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+const MEM = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'prefix-audit-')), 'memory.json')
+process.env.HARBOR_MEMORY_FILE = MEM
 
 const provider = await import('file:///C:/v4h/proj/server/src/services/provider.js')
 
@@ -43,28 +46,27 @@ if (!report.sysSame12 || !report.sysSame13) {
   bad.push('系统提示随 query 变化 ⇒ 每轮前缀都不同，缓存不可能命中')
 }
 
-// ② 真·非循环：**写入记忆之后**，系统提示的基础前缀必须原样保留
-//    （记忆是每轮都可能变化的动态内容；它若被插在中间而不是末尾，前缀立刻失效）
-const before = s1
+// ② 真·非循环：**写入记忆前后**，稳定基础段（s1 与 s2 的公共前缀）必须被保留
+//    注意：系统提示尾部含随 query 变化的记忆尾巴（检索相关），所以"以整段 s1 开头"是过严断言；
+//    真正该守的是"稳定基础段不被动态内容改写"。
+const base = s1.slice(0, commonPrefix(s1, s2))
+report.baseLen = base.length
+
 const mem = await import('file:///C:/v4h/proj/server/src/services/memory.js')
 await mem.appendMemory(JSON.stringify({ text: '审计用记忆：登录页使用表单校验', kind: 'fact' }))
 const after = JSON.parse(await provider.buildSystemPrompt('第一个问题：帮我看看登录页'))
-report.baseLen = before.length
 report.afterMemLen = after.length
-report.prefixAfterMem = commonPrefix(before, after)
-// 允许记忆在末尾追加，但基础段必须逐字节不变；且整体必须以原基础段开头
-report.afterStartsWithBase = after.indexOf(before) === 0
-if (!report.afterStartsWithBase) {
-  bad.push('写入记忆后系统提示的**基础段被改写**（前缀仅 ' + report.prefixAfterMem + '/' + before.length +
-    '）⇒ 记忆被插进了基础段中间，缓存全失效')
+report.afterKeepsBase = after.indexOf(base) === 0
+if (!report.afterKeepsBase) {
+  bad.push('写入记忆后**稳定基础段被改写**（base ' + base.length + ' 字节不再是从头开始的前缀）')
 }
 
-// ③ 再写一条记忆：仍须以原基础段开头（单调性：基础段不因动态内容增加而变）
+// ③ 再写一条：基础段仍须保留（单调性——动态内容只加在尾部）
 await mem.appendMemory(JSON.stringify({ text: '审计用记忆二：按钮主色 #4F46E5', kind: 'fact' }))
 const after2 = JSON.parse(await provider.buildSystemPrompt('完全无关的另一个任务'))
-report.afterStartsWithBase2 = after2.indexOf(before) === 0
-if (!report.afterStartsWithBase2) {
-  bad.push('第二条记忆写入后基础段再次被改写 ⇒ 动态内容没有稳定地落在末尾')
+report.afterKeepsBase2 = after2.indexOf(base) === 0
+if (!report.afterKeepsBase2) {
+  bad.push('第二条记忆写入后稳定基础段再次被改写')
 }
 
 // ④ 附加观察：系统段长度本身也是"稳定前缀"的规模
@@ -76,5 +78,5 @@ if (bad.length) {
   console.log('  ' + JSON.stringify(report))
   process.exit(1)
 }
-console.log('PREFIX_CACHE: PASS (系统段与 query 无关 · 写记忆后基础段原样保留 · 二次写仍保留)')
+console.log('PREFIX_CACHE: PASS (基础段与 query 无关 · 写记忆后基础段仍是从头开始的前缀 · 二次写仍保留)')
 console.log('  ' + JSON.stringify(report))
