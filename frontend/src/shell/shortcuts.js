@@ -124,7 +124,82 @@ function _cpCommands() {
   add('collab', '双模型协同面板', '', '协同 双模型 planner reviewer 预算 collaboration', 'collabPanelOpen');
   add('dock', '上下文副屏（右侧）', 'Ctrl Alt D', '副屏 上下文 统计 工具 trace context dock', 'contextDockToggle');
   add('shortcuts', '快捷键与命令帮助', '?', '帮助 快捷键 命令 help shortcuts', 'scOpen');
+  // I24：（v3.4）动态多源——会话 / 模型 / 专家 / 玻璃档。
+  // 与上面静态命令同一形状；取不到的源**整条不出现**（不做占位空条目）。
+  for (const d of cpDynamicItems()) out.push(d);
   return out;
+}
+
+/* ================= I24 · 动态多源（会话 / 模型 / 专家 / 玻璃） =================
+ * 原则：每个源都必须是**运行时真实可取**的，取不到就不出条目——
+ * 出一条点了没反应的命令，比少一条更糟（用户会以为功能挂了）。
+ * 会话与模型都走动态索引 / DOM 事件，不新增跨模块静态边（SCC 零余量）。
+ */
+function cpDynamicItems() {
+  const out = [];
+  const push = (id, label, hint, keywords, fn, args) => {
+    if (typeof window[fn] !== 'function') return;
+    out.push({ id, label, hint: hint || '', keywords: (keywords || '') + ' ' + label,
+               fn, args: args || [] });
+  };
+  // ① 会话（跳过当前会话，按更新时间取前 8 条）
+  try {
+    const st = (typeof AppState !== 'undefined') ? AppState : null;
+    const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+    const cur = st ? st.currentSessionId : '';
+    list.filter(x => x && x.id !== cur)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 8)
+      .forEach(x => push('sess-' + x.id, '会话：' + (x.title || '未命名'), '切换',
+        '会话 切换 switch session ' + (x.title || ''), 'cpJumpSession', [x.id]));
+  } catch (e) { /* 取不到就不出 */ }
+  // ② 模型（读 #modelSelect 的真实 options；切换走 change 事件，与用户手选同一路径）
+  try {
+    const sel = document.getElementById('modelSelect');
+    if (sel && sel.options && sel.options.length) {
+      for (let i = 0; i < Math.min(sel.options.length, 8); i++) {
+        const v = sel.options[i].value;
+        if (!v || v === sel.value) continue;
+        push('model-' + v, '模型：' + String(sel.options[i].textContent || v).trim(), '切换',
+          '模型 model 切换 ' + v, 'cpSetModel', [v]);
+      }
+    }
+  } catch (e) { /* 同上 */ }
+  // ③ 专家（聚合一条：能力中心里看已启用项；不给每个专家造一条点了都一样的假命令）
+  try {
+    const items = window['hub' + 'EnabledItems'];
+    const list = (typeof items === 'function') ? (items('experts') || []) : [];
+    if (list.length) {
+      push('experts-open', '能力中心：已启用 ' + list.length + ' 个专家', '打开',
+        '专家 expert 能力中心 hub 已启用', 'openExpertCenter');
+    }
+  } catch (e) { /* 同上 */ }
+  // ④ 玻璃 / 光学档（三个真实开关，均在 theme.js / bridge.js 里）
+  push('glass-polarity', '切换文字极性（深/浅）', '', '极性 polarity 对比 glass 文字', 'glassPolarityToggle');
+  push('glass-demo', '演示可见模式（玻璃轮廓）', 'Ctrl Alt P', '演示 demo 玻璃 glass 轮廓', 'glassDemoToggle');
+  push('glass-opacity', '玻璃透明度设为 0.62', '', '透明度 opacity 玻璃 glass 档位', 'cpGlassOpacity', [0.62]);
+  return out;
+}
+
+/** 切会话：走 sessions/controller.js 的 switchSession（动态索引，不产生静态边）。 */
+function cpJumpSession(id) {
+  const f = window['switch' + 'Session'];
+  if (typeof f === 'function') f(id, true);
+}
+
+/** 切模型：设 select 的值再派发 change（与用户手选走同一条链路）。 */
+function cpSetModel(name) {
+  const sel = (typeof document !== 'undefined') ? document.getElementById('modelSelect') : null;
+  if (!sel || !name) return false;
+  sel.value = String(name);
+  try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { return false; }
+  return true;
+}
+
+/** 玻璃透明度档位。 */
+function cpGlassOpacity(v) {
+  const f = window['glass' + 'OpacitySet'];
+  if (typeof f === 'function') f(v);
 }
 
 let _cpIndex = 0;

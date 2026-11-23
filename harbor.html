@@ -23068,7 +23068,64 @@ add('search-panel', '浏览器搜索面板', '', '搜索 网页 browser search',
 add('collab', '双模型协同面板', '', '协同 双模型 planner reviewer 预算 collaboration', 'collabPanelOpen');
 add('dock', '上下文副屏（右侧）', 'Ctrl Alt D', '副屏 上下文 统计 工具 trace context dock', 'contextDockToggle');
 add('shortcuts', '快捷键与命令帮助', '?', '帮助 快捷键 命令 help shortcuts', 'scOpen');
+for (const d of cpDynamicItems()) out.push(d);
 return out;
+}
+function cpDynamicItems() {
+const out = [];
+const push = (id, label, hint, keywords, fn, args) => {
+if (typeof window[fn] !== 'function') return;
+out.push({ id, label, hint: hint || '', keywords: (keywords || '') + ' ' + label,
+fn, args: args || [] });
+};
+try {
+const st = (typeof AppState !== 'undefined') ? AppState : null;
+const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+const cur = st ? st.currentSessionId : '';
+list.filter(x => x && x.id !== cur)
+.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+.slice(0, 8)
+.forEach(x => push('sess-' + x.id, '会话：' + (x.title || '未命名'), '切换',
+'会话 切换 switch session ' + (x.title || ''), 'cpJumpSession', [x.id]));
+} catch (e) {  }
+try {
+const sel = document.getElementById('modelSelect');
+if (sel && sel.options && sel.options.length) {
+for (let i = 0; i < Math.min(sel.options.length, 8); i++) {
+const v = sel.options[i].value;
+if (!v || v === sel.value) continue;
+push('model-' + v, '模型：' + String(sel.options[i].textContent || v).trim(), '切换',
+'模型 model 切换 ' + v, 'cpSetModel', [v]);
+}
+}
+} catch (e) {  }
+try {
+const items = window['hub' + 'EnabledItems'];
+const list = (typeof items === 'function') ? (items('experts') || []) : [];
+if (list.length) {
+push('experts-open', '能力中心：已启用 ' + list.length + ' 个专家', '打开',
+'专家 expert 能力中心 hub 已启用', 'openExpertCenter');
+}
+} catch (e) {  }
+push('glass-polarity', '切换文字极性（深/浅）', '', '极性 polarity 对比 glass 文字', 'glassPolarityToggle');
+push('glass-demo', '演示可见模式（玻璃轮廓）', 'Ctrl Alt P', '演示 demo 玻璃 glass 轮廓', 'glassDemoToggle');
+push('glass-opacity', '玻璃透明度设为 0.62', '', '透明度 opacity 玻璃 glass 档位', 'cpGlassOpacity', [0.62]);
+return out;
+}
+function cpJumpSession(id) {
+const f = window['switch' + 'Session'];
+if (typeof f === 'function') f(id, true);
+}
+function cpSetModel(name) {
+const sel = (typeof document !== 'undefined') ? document.getElementById('modelSelect') : null;
+if (!sel || !name) return false;
+sel.value = String(name);
+try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { return false; }
+return true;
+}
+function cpGlassOpacity(v) {
+const f = window['glass' + 'OpacitySet'];
+if (typeof f === 'function') f(v);
 }
 let _cpIndex = 0;
 let _cpItems = [];

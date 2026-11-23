@@ -1743,7 +1743,11 @@
         "cpPaletteClose",
         "cpPaletteOpen",
         "cpPaletteRun",
-        "_scEscHandler"
+        "_scEscHandler",
+        "cpDynamicItems",
+        "cpGlassOpacity",
+        "cpJumpSession",
+        "cpSetModel"
       ],
       "requires": [
         "_modalRoot"
