@@ -32,6 +32,8 @@ function searchPanelInit() {
   const panel = document.createElement('div');
   panel.id = 'searchPanel';
   panel.className = 'sp-root';
+  // I27 续：搜索面板进 top layer（popover manual）；CSS 已复位 inset，保持原有浮层/停靠定位。
+  try { if (typeof panel.showPopover === 'function') panel.setAttribute('popover', 'manual'); } catch (e) {}
   panel.setAttribute('data-state', 'idle');
   panel.innerHTML =
     '<div class="sp-head">' +
@@ -141,6 +143,7 @@ function searchPanelOpen() {
     panel.classList.remove('hiding');   // 退场中途重开：直接落位
   }
   panel.classList.add('show');
+  try { if (typeof panel.showPopover === 'function' && !panel.matches(':popover-open')) panel.showPopover(); } catch (e) {}
   searchPanelRefreshStats();
   searchPanelStartPolling();
 }
@@ -157,6 +160,8 @@ function searchPanelClose() {
   panel.classList.add('hiding');
   const done = () => {
     try { panel.classList.remove('show', 'hiding'); } catch (e) {}
+    // I27 续：退场结束才真正隐藏 ⇒ top layer 也在这里释放（提前 hide 会中断退场动画）
+    try { if (typeof panel.hidePopover === 'function' && panel.matches(':popover-open')) panel.hidePopover(); } catch (e) {}
   };
   if (typeof MOTION !== 'undefined' && !MOTION.instant()) {
     MOTION.onAnimEnd(panel, 'animationend', MOTION.compOut()).then(done);

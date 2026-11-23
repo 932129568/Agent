@@ -31,6 +31,9 @@ function _dockBuild() {
   el.className = 'ctx-dock';
   el.id = 'contextDock';
   el.style.display = 'none';
+  // I27 续：副屏也进 top layer（popover manual）。CSS 里已做 inset:auto 复位，
+  // 否则 popover 的 UA 样式（position:fixed;inset:0;margin:auto）会把右下角定位顶掉。
+  try { if (typeof el.showPopover === 'function') el.setAttribute('popover', 'manual'); } catch (e) {}
   el.setAttribute('aria-label', '上下文副屏');
   el.innerHTML =
     '<div class="cd-head">' +
@@ -122,6 +125,7 @@ function contextDockOpen() {
   const el = _dockBuild();
   if (!el) return;
   el.style.display = 'flex';
+  try { if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) el.showPopover(); } catch (e) {}
   CONTEXT_DOCK.open = true;
   contextDockRefresh();
   // I23：**不再轮询**。原来 1.5s 一次的 setInterval 在静止时纯空转。
@@ -132,6 +136,7 @@ function contextDockOpen() {
 function contextDockClose() {
   const el = CONTEXT_DOCK.root;
   if (el) el.style.display = 'none';
+  try { if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) el.hidePopover(); } catch (e) {}
   CONTEXT_DOCK.open = false;
   CONTEXT_DOCK.timer = 0;   // 已无定时器；字段保留仅为兼容既有探针
 }

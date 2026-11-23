@@ -246,3 +246,15 @@ body.fx-lite .ap-row{--fx-scale:0.6}
 .rp-fix-send:disabled{opacity:.6;cursor:default}
 .rp-fix-send:hover:not(:disabled){background:var(--primary-soft)}
 .rp-fix-cancel:hover{color:var(--text);background:var(--hover)}
+
+/* ===== v3.4 I27 续 · 浮层进 top-layer 的定位复位 =====
+   popover 的 UA 样式是 position:fixed;inset:0;margin:auto，会把原来的
+   右下角/浮层定位顶掉。这里只复位"盒模型与定位"，视觉样式一律不动。 */
+/* 不能写 inset:auto —— 那会把 .ctx-dock / .sp-root 自己的 right/top 一起清掉，
+   实测两块浮层会跑到 (0,0)。这里显式还原它们原来的定位，只清 UA 的 margin/边框/尺寸限制。 */
+#contextDock[popover]{position:fixed;top:56px;right:12px;bottom:auto;left:auto;margin:0;padding:0;
+  border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
+.sp-root[popover]{position:fixed;top:60px;right:12px;bottom:auto;left:auto;margin:0;padding:0;
+  border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
+/* 停靠态（I20）优先：右列铺满高度 */
+.sp-root.sp-docked[popover]{top:56px;bottom:12px;right:12px;left:auto}

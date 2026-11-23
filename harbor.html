@@ -3054,6 +3054,11 @@ border-radius:var(--radius-full);border:1px solid var(--border);background:trans
 .rp-fix-send:disabled{opacity:.6;cursor:default}
 .rp-fix-send:hover:not(:disabled){background:var(--primary-soft)}
 .rp-fix-cancel:hover{color:var(--text);background:var(--hover)}
+#contextDock[popover]{position:fixed;top:56px;right:12px;bottom:auto;left:auto;margin:0;padding:0;
+border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
+.sp-root[popover]{position:fixed;top:60px;right:12px;bottom:auto;left:auto;margin:0;padding:0;
+border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
+.sp-root.sp-docked[popover]{top:56px;bottom:12px;right:12px;left:auto}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -19465,6 +19470,7 @@ if (typeof document === 'undefined') return false;
 const panel = document.createElement('div');
 panel.id = 'searchPanel';
 panel.className = 'sp-root';
+try { if (typeof panel.showPopover === 'function') panel.setAttribute('popover', 'manual'); } catch (e) {}
 panel.setAttribute('data-state', 'idle');
 panel.innerHTML =
 '<div class="sp-head">' +
@@ -19567,6 +19573,7 @@ if (panel.classList.contains('hiding')) {
 panel.classList.remove('hiding');
 }
 panel.classList.add('show');
+try { if (typeof panel.showPopover === 'function' && !panel.matches(':popover-open')) panel.showPopover(); } catch (e) {}
 searchPanelRefreshStats();
 searchPanelStartPolling();
 }
@@ -19581,6 +19588,7 @@ if (!panel || !panel.classList.contains('show')) return;
 panel.classList.add('hiding');
 const done = () => {
 try { panel.classList.remove('show', 'hiding'); } catch (e) {}
+try { if (typeof panel.hidePopover === 'function' && panel.matches(':popover-open')) panel.hidePopover(); } catch (e) {}
 };
 if (typeof MOTION !== 'undefined' && !MOTION.instant()) {
 MOTION.onAnimEnd(panel, 'animationend', MOTION.compOut()).then(done);
@@ -23753,6 +23761,7 @@ const el = document.createElement('aside');
 el.className = 'ctx-dock';
 el.id = 'contextDock';
 el.style.display = 'none';
+try { if (typeof el.showPopover === 'function') el.setAttribute('popover', 'manual'); } catch (e) {}
 el.setAttribute('aria-label', '上下文副屏');
 el.innerHTML =
 '<div class="cd-head">' +
@@ -23837,6 +23846,7 @@ if (typeof document === 'undefined') return;
 const el = _dockBuild();
 if (!el) return;
 el.style.display = 'flex';
+try { if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) el.showPopover(); } catch (e) {}
 CONTEXT_DOCK.open = true;
 contextDockRefresh();
 contextDockBindEvents();
@@ -23844,6 +23854,7 @@ contextDockBindEvents();
 function contextDockClose() {
 const el = CONTEXT_DOCK.root;
 if (el) el.style.display = 'none';
+try { if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) el.hidePopover(); } catch (e) {}
 CONTEXT_DOCK.open = false;
 CONTEXT_DOCK.timer = 0;
 }
