@@ -133,16 +133,13 @@ body.dark{
 
 /* ---- 4. 编排式面板入场：标题 → 内容块 5 组错峰，只动 transform/opacity ---- */
 @media (prefers-reduced-motion:no-preference){
-  .panel.on > .panel-head{position:relative;animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s1) both}
-  .panel.on > .panel-scroll > *:nth-child(1){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s1) both}
-  .panel.on > .panel-scroll > *:nth-child(2){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s2) both}
-  .panel.on > .panel-scroll > *:nth-child(3){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s3) both}
-  .panel.on > .panel-scroll > *:nth-child(4){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s4) both}
-  .panel.on > .panel-scroll > *:nth-child(n+5){animation:polishReveal var(--polish-dur-reveal) var(--polish-ease) var(--polish-s5) both}
-  @keyframes polishReveal{
-    from{opacity:0;transform:translateY(8px)}
-    to{opacity:1;transform:none}
-  }
+  .panel.on > .panel-head{position:relative;animation:lwL1In var(--polish-dur-reveal) var(--polish-ease) var(--polish-s1) both}
+  .panel.on > .panel-scroll > *:nth-child(1){animation:lwL1In var(--polish-dur-reveal) var(--polish-ease) var(--polish-s1) both}
+  .panel.on > .panel-scroll > *:nth-child(2){animation:lwL1In var(--polish-dur-reveal) var(--polish-ease) var(--polish-s2) both}
+  .panel.on > .panel-scroll > *:nth-child(3){animation:lwL1In var(--polish-dur-reveal) var(--polish-ease) var(--polish-s3) both}
+  .panel.on > .panel-scroll > *:nth-child(4){animation:lwL1In var(--polish-dur-reveal) var(--polish-ease) var(--polish-s4) both}
+  .panel.on > .panel-scroll > *:nth-child(n+5){animation:lwL1In var(--polish-dur-reveal) var(--polish-ease) var(--polish-s5) both}
+  
   /* 记忆点：标题下发丝扫描线，一次场景过渡，不占布局 */
   .panel.on > .panel-head::after{
     content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;

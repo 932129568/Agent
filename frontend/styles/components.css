@@ -96,8 +96,8 @@ select{max-width:100%;padding:6px 30px 6px 10px}
   border-left-width:3px;border-radius:var(--radius-sm);color:var(--text)}
 .loading,.is-loading{cursor:progress;opacity:.72}
 .loading::after,.is-loading::after{content:"";display:inline-block;width:12px;height:12px;margin-left:8px;
-  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:w4aSpin 700ms linear infinite}
-@keyframes w4aSpin{to{transform:rotate(360deg)}}
+  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 700ms linear infinite}
+
 .empty-state{max-width:520px;color:var(--text-2)}
 .empty-state h2{color:var(--text);font-size:24px;font-weight:500;letter-spacing:-.02em}
 .empty-state .empty-icon,.empty-icon{width:56px;height:56px;border-radius:var(--radius-lg);

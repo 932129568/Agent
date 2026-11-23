@@ -68,11 +68,11 @@
   border:1px solid var(--border)}
 .hint{max-width:var(--content-w);margin:8px auto 0;font-size:var(--fs-micro);color:var(--text-2);line-height:1.5}
 .rail,.sidebar{animation:w4aNavIn 240ms var(--ease-out) both}
-.main{animation:w4aMainIn 240ms var(--ease-out) 50ms both}
-.input-area{animation:w4aInputIn 240ms var(--ease-out) 100ms both}
+.main{animation:v4ChipIn 240ms var(--ease-out) 50ms both}
+.input-area{animation:lwL1In 240ms var(--ease-out) 100ms both}
 @keyframes w4aNavIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
-@keyframes w4aMainIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@keyframes w4aInputIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+
 body.fx-off .rail,body.fx-off .sidebar,body.fx-off .main,body.fx-off .input-area{animation:none}
 @media (max-width:768px){
   :root{--panel-pad:16px}

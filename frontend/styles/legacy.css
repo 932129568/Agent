@@ -247,6 +247,20 @@ html[data-anim-paused] body *{animation-play-state:paused!important}
    覆盖优先级没有副作用。
    ⚠ 本注释刻意不写出「animation 冒号 + 循环关键字」的连写形式：A6 的循环计数
    是纯文本正则，注释里写一遍就会被当成一条真实声明（已实测把 26 变 27）。 */
+
+/* ===== R101 T03 · 关键帧分层登记（L1–L4）=====
+本表由脚本按**数据**生成，不是手写归类：
+  L3 = 被带 infinite 的 animation 引用；
+  L1 = 关键帧 from 有 opacity:0、to 没有；L2 反之；
+  其余归 L4（多为位移/描边/脉冲类反馈）。
+归并已完成：79 → 66 个 @keyframes（删掉 13 个 body 完全相同的别称块，
+引用全部改指向规范名，零悬空引用由 assert_motion 的 A1 守住）。
+每条动画属于哪一层，用它在这里的归属即可判断——新增动画时请归入下列四层之一：
+  L1 入场（enter）（28 个）：gwIn, gwbOpen, lwL1In, v4AttachIn, v4AttachItemIn, v4BootInput, v4BootRail, v4CheckPop, v4ChipIn, v4CnPop, v4CsIn, v4CtxIn, v4DevIn, v4LineIn, v4MaskIn, v4McPop, v4ModalIn, v4MsgIn, v4PanelInBack, v4PanelInFwd, v4PlanStepIn, v4RailPop, v4SetBlockIn, v4SetWinIn, v4TipIn, v4ToastIn, v4WsqIn, w4aNavIn
+  L2 退出（exit）（10 个）：v4AttachOut, v4CsOut, v4CtxOut, v4EmptyOut, v4ModalOut, v4PanelOutBack, v4PanelOutFwd, v4SetOut, v4SetWinOut, v4WsqOut
+  L3 常驻循环（ambient/loop）（22 个）：bounce, gwbBounce, gwbPulse, i-pulse, polishBusy, s2Pulse, sessionStatusPulse, skLivePulse, spin, toolSheen, uiSkeletonPulse, v4AuroraA, v4AuroraB, v4BrandBreathe, v4EmptyBreathe, v4GlyphFloat, v4GrBreathe, v4LightPulse, v4SpSweep, v4Spin, v4Stream, w4aDot
+  L4 反馈（feedback）（6 个）：polishBar, polishScan, searchHitFlash, v4CnFlash, v4DevFlash, v4ToolSettle
+*/
 /* ===== v4 E10 · 流式进度条（功能条，z-index:10000 不被任何层盖住；transform 版禁布局属性）===== */
 .stream-bar{position:fixed;top:0;left:0;height:2px;width:32%;z-index:10000;
   background:var(--primary);border-radius:0 var(--radius-full) var(--radius-full) 0;
@@ -491,7 +505,7 @@ body.dark .eff-tag-s{background:var(--ok-bg);color:var(--ok);}
 @keyframes v4SetWinOut{from{opacity:1}to{opacity:0}}
 @keyframes v4MaskIn{from{opacity:0}to{opacity:1}}
 /* v4SetIn/v4SetOut 保留（v4 端口规则被测试钉住；设置窗口弹簧落入/淡出为叠加层） */
-@keyframes v4SetIn{from{opacity:0;transform:translateY(calc(-1*var(--shift-comp)))}to{opacity:1;transform:none}}
+
 @keyframes v4SetOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(calc(-1*var(--shift-comp)))}}
 .set-window{width:min(940px,94%);height:min(86%,780px);min-height:420px;
   background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-xl);
@@ -779,8 +793,8 @@ body.fx-off .msg-actions{transition:none}
   transition:border-color var(--dur-comp) var(--ease-out-soft),
              background-color var(--dur-comp) var(--ease-out-soft),
              color var(--dur-comp) var(--ease-out-soft);
-  animation:v4ToolBreathe var(--dur-breathe) ease-in-out infinite;}
-@keyframes v4ToolBreathe{0%,100%{opacity:.88}50%{opacity:1}}
+  animation:v4GrBreathe var(--dur-breathe) ease-in-out infinite;}
+
 /* 修复 Bug B（2026-10-18）：flex 子项标签补 min-width:0+ellipsis，长命令/长路径不再被 overflow:hidden 无声裁切 */
 /* 修复 M1（四轮）：选择器收窄到「最后一个子 span」（标签）——原 .tool-call-item>span
    对所有直接子 span 施加 flex:1（basis:0），7px 圆点/spinner 被拉成半宽「胶囊」
@@ -824,11 +838,11 @@ body:not(.fx-off) .tool-call-item:not(.done):not(.fail)::after{content:"";positi
 @keyframes v4CtxIn{from{opacity:0;transform:scale(.97) translateY(calc(-1*var(--shift-comp)))}to{opacity:1;transform:none}}
 .ctx-menu.show.hiding{animation:v4CtxOut var(--dur-comp-out) var(--ease-in-soft) forwards;}
 @keyframes v4CtxOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(.97) translateY(calc(-1*var(--shift-comp)))}}
-.ctx-menu.show .ctx-menu-item{animation:v4CtxItemIn var(--dur-comp) var(--ease-out-soft) backwards;}
+.ctx-menu.show .ctx-menu-item{animation:v4PlanStepIn var(--dur-comp) var(--ease-out-soft) backwards;}
 .ctx-menu.show .ctx-menu-item:nth-child(2){animation-delay:var(--stagger-xs)}
 .ctx-menu.show .ctx-menu-item:nth-child(3){animation-delay:calc(var(--stagger-xs)*2)}
 .ctx-menu.show .ctx-menu-item:nth-child(4){animation-delay:calc(var(--stagger-xs)*3)}
-@keyframes v4CtxItemIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
+
 .ctx-menu-item{padding:7px 12px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text);}
 .ctx-menu-item:hover{background:var(--hover);}
 /* ===== 输入区 ===== */
@@ -1196,10 +1210,10 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
   background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);
   box-shadow:var(--shadow-lg);overflow:hidden;
   font-family:var(--font-sans);color:var(--text);}
-.sp-root.show{display:flex;animation:v4SpRootIn var(--dur-comp) var(--ease-out-soft)}
-@keyframes v4SpRootIn{from{opacity:0;transform:translateY(calc(-1*var(--shift-comp))) scale(.98)}to{opacity:1;transform:none}}
-.sp-root.hiding{animation:v4SpRootOut var(--dur-comp-out) var(--ease-in-soft) forwards}
-@keyframes v4SpRootOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(calc(-1*var(--shift-comp))) scale(.98)}}
+.sp-root.show{display:flex;animation:v4CsIn var(--dur-comp) var(--ease-out-soft)}
+
+.sp-root.hiding{animation:v4CsOut var(--dur-comp-out) var(--ease-in-soft) forwards}
+
 /* 头部：标题 + 状态 pill + 折叠钮 + 关闭钮 */
 .sp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-shrink:0;
   border-bottom:1px solid var(--border);background:var(--surface-2);}
@@ -1256,8 +1270,8 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
 /* 人工接管（琥珀 callout） */
 .sp-takeover{margin:0 12px 8px;padding:11px 12px;border-radius:var(--radius-md);flex-shrink:0;
   background:var(--warn-bg);border:1px solid var(--warn);
-  animation:v4SpTakeIn var(--dur-comp) var(--ease-out-soft)}
-@keyframes v4SpTakeIn{from{opacity:0;transform:translateY(calc(-1*var(--shift-comp)))}to{opacity:1;transform:none}}
+  animation:v4TipIn var(--dur-comp) var(--ease-out-soft)}
+
 .sp-takeover-title{font-size:12.5px;font-weight:700;color:var(--warn)}
 .sp-takeover-desc{font-size:11.5px;color:var(--text-2);margin-top:3px;line-height:1.55}
 .sp-takeover-timer{font-size:11px;color:var(--text-3);font-family:var(--font-mono);margin-top:5px}
@@ -1388,8 +1402,8 @@ body.fx-off .set-window,body.fx-off .modal-card{animation:none}   /* v4 设置�
 .ckpt-bar{flex:1;height:4px;border-radius:var(--radius-full);background:var(--border);overflow:hidden}
 .ckpt-fill{height:100%;background:var(--primary);transform:scaleX(0);transform-origin:left;
   transition:transform var(--dur-comp) var(--ease-out-soft),background-color var(--dur-comp) var(--ease-out-soft)}
-.ckpt-prog.indet .ckpt-fill{animation:v4CkptSweep var(--dur-stream) var(--ease-out-soft) infinite}
-@keyframes v4CkptSweep{0%{transform:scaleX(.15) translateX(-30%)}50%{transform:scaleX(.55) translateX(30%)}100%{transform:scaleX(.15) translateX(110%)}}
+.ckpt-prog.indet .ckpt-fill{animation:v4SpSweep var(--dur-stream) var(--ease-out-soft) infinite}
+
 .ckpt-prog.done .ckpt-fill{background:var(--ok);transform:scaleX(1)}
 .ckpt-count{font-size:11px;color:var(--text-3);font-family:var(--font-mono);white-space:nowrap}
 .ckpt-list{display:flex;flex-direction:column;gap:4px;margin-top:10px}
@@ -2001,12 +2015,12 @@ body.fx-off #emptyState.leaving{animation:none;opacity:0}
    内容层（消息/会话项）不参与——避免与既有入场叠加。fx-off 停列。
    ============================================================ */
 .sidebar{animation:v4BootRail var(--dur-panel-lg) var(--ease-emphasized) both}
-.main{animation:v4BootMain var(--dur-panel-lg) var(--ease-emphasized) both;
+.main{animation:lwL1In var(--dur-panel-lg) var(--ease-emphasized) both;
   animation-delay:var(--stagger-sm)}
 .input-area{animation:v4BootInput var(--dur-panel-lg) var(--ease-emphasized) both;
   animation-delay:var(--stagger-max)}
 @keyframes v4BootRail{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
-@keyframes v4BootMain{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
 @keyframes v4BootInput{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 /* fx-off / reduced-motion：骨架直显（首屏内容优先于演出） */
 @media (prefers-reduced-motion: reduce){
@@ -2147,8 +2161,8 @@ body.theming .cn-pop,body.theming .cn-row,body.theming .cn-handle{
   background:var(--glass-bg-2);border:1px solid var(--glass-border);
   backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
   border-radius:var(--radius-md);box-shadow:var(--shadow-lg),var(--edge-hi);z-index:200}
-.at-pop.on{display:flex;animation:v4AtPop var(--dur-panel-lg) var(--ease-emphasized)}
-@keyframes v4AtPop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+.at-pop.on{display:flex;animation:v4SetWinIn var(--dur-panel-lg) var(--ease-emphasized)}
+
 body.fx-off .at-pop.on{animation:none}
 .at-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;background:transparent;
   border-radius:var(--radius-sm);cursor:pointer;font-size:var(--fs-caption);color:var(--text);
@@ -2682,7 +2696,7 @@ select{max-width:100%;padding:6px 30px 6px 10px}
 .set-window,.modal-card,.ob-win{animation-duration:200ms;animation-timing-function:var(--ease-out)}
 .rail{animation:v4BootRail 180ms var(--ease-out) both}
 .sidebar{animation:v4BootRail 180ms var(--ease-out) 60ms both}
-.main{animation:v4BootMain 180ms var(--ease-out) 120ms both}
+.main{animation:lwL1In 180ms var(--ease-out) 120ms both}
 .input-area{animation:v4BootInput 180ms var(--ease-out) 180ms both}
 body.fx-off #auroraBg .au,body.fx-off .brand-logo,body.fx-off .empty-icon,
 body.fx-off .empty-icon .glyph,body.fx-off .gg-light{animation:none}
