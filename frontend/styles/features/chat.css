@@ -728,3 +728,10 @@ body.fx-off .input-inner.is-typing::after{animation:none;opacity:.5}
 
 .cmx-empty{color:var(--text-3);cursor:default}
 .cmx-empty:hover{background:transparent;color:var(--text-3)}
+
+/* ===== I12 · 步骤级回滚按钮：只有已完成步骤才显示 ===== */
+.plan-step-rb{display:none;margin-left:6px;padding:0 6px;height:18px;line-height:16px;
+  border:1px solid var(--border);border-radius:var(--radius-full);background:transparent;
+  color:var(--text-3);font-size:11px;cursor:pointer}
+.plan-step-rb:hover{border-color:var(--primary);color:var(--text)}
+.plan-step.done .plan-step-rb{display:inline-block}

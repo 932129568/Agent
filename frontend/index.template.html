@@ -211,410 +211,7 @@
   <div class="panels">
     <!-- 面板 1 · 对话（默认）：设置浮层 + 消息流 + 输入区 -->
     <section class="panel on" id="panelChat">
-      <div class="settings-panel" id="settingsPanel">
-        <!-- v4 设置窗口化：遮罩 + 居中窗口 + 左分组导航/右内容单列（WorkBuddy 设置同款布局；
-             开=遮罩淡入+窗口弹簧落入，Esc/点遮罩/× 关闭） -->
-        <div class="set-window">
-          <div class="set-win-head">
-            <span class="set-win-t">设置</span>
-            <span class="set-win-sub">Harbor 首选项 · 改动即生效</span>
-            <button class="set-win-close" onclick="toggleSettings()" title="关闭设置（Esc）" aria-label="关闭设置"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-close"/></svg></button>
-          </div>
-          <div class="set-win-body">
-            <!-- 修复 UX-4（v1.4）：设置锚点导航（左竖排分组；按钮与 set-block 一一对应，滚动高亮） -->
-            <nav class="set-nav" id="setNav" aria-label="设置分区导航"></nav>
-            <div class="set-content" id="setContent">
-              <div class="set-grid">
-          <!-- v4「连接与模型」完全单端点（设计书 v4/connect-merge-design.md）：
-               原「连接与模型」「模型服务商（OpenAI 兼容端点）」「本地模型（v1.5）」三块合并为一块。
-               预设下拉 = 唯一端点开关（GLM 官方只是 name='glm' 的预设，不再有独立模式）；
-               单一 Base URL / Key / 模型流；GLM 专属（推理力度）与本地专属（工具调用 / 窗口覆盖）
-               控件进「高级 ▾」折叠并按预设条件显隐（36-connect.js connectUpdateAdvanced）。
-               契约钉住 id：apiKey / modelSelect / reasoningEffort 三者全部保留。 -->
-          <div class="set-block cm-block" id="cmBlock" data-group="模型与端点">
-            <div class="cm-head">
-              <div class="set-title">连接与模型</div>
-              <div class="cm-sub">一个 Key，连所有端点：选预设 → 填 Key → 识别模型，即填即用</div>
-            </div>
 
-            <div class="cm-flow" id="cmFlow">
-              <label for="providerPreset">预设</label>
-              <div class="cm-preset-slot">
-                <select id="providerPreset" onchange="onProviderPresetChange(this.value)">
-                  <option value="glm" selected>智谱 GLM</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="moonshot">Moonshot</option>
-                  <option value="qwen">通义千问</option>
-                  <option value="nemotron">Nemotron 3 Ultra 550B</option>
-                  <option value="github-models">GitHub Models（免费层）</option>
-                  <option value="ollama">Ollama</option>
-                  <option value="lmstudio">LM Studio</option>
-                  <option value="vllm">vLLM</option>
-                  <option value="llamacpp">llama.cpp</option>
-                  <option value="localai">LocalAI</option>
-                  <option value="freetoken">FreeToken Desktop</option>
-                  <option value="custom">自定义</option>
-                </select>
-              </div>
-
-              <label for="providerBase">Base URL</label>
-              <input type="text" id="providerBase" placeholder="https://open.bigmodel.cn/api/paas/v4" autocomplete="off" spellcheck="false">
-
-              <div id="cmKeyRow">
-                <label for="apiKey" id="cmKeyLabel">API Key（仅保存在本机）</label>
-                <input type="password" id="apiKey" placeholder="粘贴你的智谱 API Key">
-                <!-- 实现 v1.6 T1：GitHub PAT 获取指引（仅 GitHub Models 预设显示） -->
-                <div class="set-hint" id="cmKeyHelp" style="display:none;margin:4px 0 0;">
-                  在 <a href="https://github.com/settings/tokens" target="_blank">GitHub 设置 → 开发者设置 → Tokens</a>
-                  创建 PAT（classic 或 fine-grained 勾选 <code>models:read</code> scope）后粘贴即可。
-                </div>
-              </div>
-              <div class="local-badge cm-chip" id="cmNoKey" style="display:none;">ℹ 本地服务器通常无需 Key（免 Key · 零费用）</div>
-              <!-- 实现 v1.6 T1：免费层常驻声明（用户裁决①：个人自用算支持范围，明示限制） -->
-              <div class="local-badge cm-chip" id="cmFreeTier" style="display:none;">免费层仅限个人非商业使用，禁止生产使用；高频使用请切换 DeepSeek/GLM 付费层</div>
-
-              <label for="modelSelect">模型</label>
-              <div class="cm-row">
-                <div class="cm-pick" id="cmPick">
-                  <select id="modelSelect">
-                    <option value="auto" selected>智能档（按任务自动调节，最省）</option>
-                    <option value="glm-4.5-flash">glm-4.5-flash（免费 · 日常够用）</option>
-                    <option value="glm-4-flash">glm-4-flash（免费 · 更省）</option>
-                    <option value="glm-4.5">glm-4.5（需余额/额度 · 更强推理）</option>
-                  </select>
-                  <div class="cm-manual" id="cmManual">
-                    <input type="text" id="cmManualInput" placeholder="输入模型名，如 deepseek-v4.1" autocomplete="off" spellcheck="false">
-                    <button type="button" class="cm-back" id="cmManualBack" title="切回下拉选择" aria-label="切回下拉选择"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-chevron"/></svg></button>
-                  </div>
-                </div>
-                <span class="local-badge" id="cmCtxBadge" style="display:none;">元数据待获取</span>
-                <button type="button" class="modal-btn cm-identify" id="cmIdentifyBtn" onclick="connectIdentifyNow(true)">↻ 识别模型</button>
-              </div>
-              <!-- 本地系预设：并行端口探测结果（local_probe） -->
-              <div class="local-probe-result" id="localProbeResult"></div>
-
-              <div class="cm-row">
-                <button type="button" class="modal-btn primary" id="providerTestBtn" onclick="connectTestNow()">测试连接</button>
-                <span class="cm-status" id="providerTestStatus"></span>
-              </div>
-            </div>
-
-            <!-- v1.8.0：保存并测试（保存=写入 config 并供对话使用；测试=顺手跑通连接） -->
-            <div class="cm-save-row">
-              <button type="button" class="cm-save-btn" id="cmSaveBtn" onclick="connectSaveAndTest()">保存并测试连接</button>
-              <span class="cm-hint">保存后对话立即使用该模型</span>
-            </div>
-
-            <!-- 高级 ▾：原 GLM 专属 / 云端自定义专属 / 本地专属控件，按预设条件显隐 -->
-            <details class="cm-details" id="cmAdv">
-              <summary><span class="caret">▶</span>高级</summary>
-              <div class="cm-details-body">
-                <div id="advReasoning">
-                  <label for="reasoningEffort">推理力度</label>
-                  <div style="width:220px;max-width:100%;">
-                    <select id="reasoningEffort">
-                      <option value="auto" selected>auto（智能档联动，推荐）</option>
-                      <option value="off">off（关闭思考 · 最省输出）</option>
-                      <option value="low">low（快速省钱）</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                      <option value="max">max（最深思考，最贵）</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="adv-off" id="advReasoningOff">推理力度 — 仅智谱 GLM 预设可用</div>
-
-                <div id="advBilling">
-                  <label>计费三价（¥ / 百万 tokens，留 0 不计费）</label>
-                  <div class="cm-price">
-                    <input type="number" id="providerPriceIn" step="0.1" min="0" title="输入价 ¥/百万 tokens" placeholder="输入价">
-                    <input type="number" id="providerPriceOut" step="0.1" min="0" title="输出价 ¥/百万 tokens" placeholder="输出价">
-                    <input type="number" id="providerPriceCache" step="0.1" min="0" title="缓存命中价 ¥/百万 tokens" placeholder="缓存价">
-                  </div>
-                </div>
-                <div class="adv-off" id="advBillingOff">计费三价 — 仅第三方服务商预设可用（GLM 按内置价格表，本地零费用）</div>
-
-                <div id="advLocal">
-                  <label for="localToolCapable">工具调用</label>
-                  <div style="width:220px;max-width:100%;">
-                    <select id="localToolCapable">
-                      <option value="auto" selected>自动识别</option>
-                      <option value="on">开</option>
-                      <option value="off">关</option>
-                    </select>
-                  </div>
-                  <label for="localCtxWindow" style="margin-top:10px;">上下文窗口覆盖（tokens，0 = 按模型元数据自动）</label>
-                  <input type="number" id="localCtxWindow" min="0" max="2000000" step="1024" placeholder="0 = 自动">
-                </div>
-                <div class="adv-off" id="advLocalOff">工具调用与上下文覆盖 — 仅本地服务器预设可用</div>
-              </div>
-            </details>
-
-            <div class="set-hint cm-bottom-hint">
-              预设切换后立即生效；GLM 专属能力（智能档 / 推理力度 / 联网搜索）仅智谱预设可用；<br>
-              本地预设零费用，上下文按模型窗口自适应压缩；识别失败自动切手动输入，不影响保存与发送。<br>
-              在 <a href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys" target="_blank">智谱开放平台</a> 创建 Key 后粘贴即可。
-            </div>
-          </div>
-
-          <div class="set-block" data-group="对话与生成">
-            <div class="set-title">省 Token 策略</div>
-            <label>截图质量</label>
-            <select id="shotQuality">
-              <option value="low" selected>省流（512px · 默认）</option>
-              <option value="std">标准（640px）</option>
-              <option value="full">完整（768px · 细节多）</option>
-            </select>
-            <div class="field">
-              <label>历史压缩档位</label>
-              <select id="saverLevel">
-                <option value="aggressive">激进（4.5 万 tokens 即压缩）</option>
-                <option value="std" selected>标准（9 万 tokens）</option>
-                <option value="relaxed">宽松（14 万 tokens）</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="sessionBudget">单会话预算（¥，0 = 不提醒）</label>
-              <input type="number" id="sessionBudget" value="5" min="0" step="0.1">
-            </div>
-            <div class="set-hint">
-              智能档会自动为轻任务关闭思考（思考 token 按输出计价，最贵）；<br>
-              截图会先裁掉纯色边缘再压缩；缓存命中率低时状态栏会提示。
-            </div>
-          </div>
-
-          <div class="set-block" data-group="对话与生成">
-            <div class="set-title">生成参数</div>
-            <label for="maxTokens">最大输出 tokens</label>
-            <input type="number" id="maxTokens" value="16384" min="256" max="128000" step="256">
-            <div class="field">
-              <label for="temperature">Temperature: <b id="tempVal">1.0</b></label>
-              <input type="range" id="temperature" min="0" max="2" step="0.1" value="1">
-            </div>
-            <div class="field">
-              <label for="topP">Top P: <b id="topPVal">0.95</b></label>
-              <input type="range" id="topP" min="0" max="1" step="0.05" value="0.95">
-            </div>
-          </div>
-
-          <div class="set-block" data-group="对话与生成">
-            <div class="set-title">角色与联网</div>
-            <label for="systemPrompt">系统设定（角色 Prompt，长指令写在这里更省）</label>
-            <textarea id="systemPrompt" rows="3" placeholder="例如: 你是一名专业的软件开发工程师，认真负责，不随口胡说。"></textarea>
-            <label class="check-row" style="margin-top:12px;">
-              <input type="checkbox" id="enableSearch"> 联网搜索
-            </label>
-            <div id="searchEngineWrap" style="display:none;align-items:center;gap:8px;">
-              <span style="font-size:12px;color:var(--text-2);flex-shrink:0;">搜索引擎</span>
-              <div style="width:170px;"><select id="searchEngine">
-                <option value="search_std">基础版</option>
-                <option value="search_pro" selected>Pro 版</option>
-                <option value="search_pro_quark">夸克</option>
-              </select></div>
-            </div>
-            <div class="set-hint">
-              系统设定在缓存前缀内，后续轮按约 0.3 折计费。Key 与端点统一在「连接与模型」配置。
-            </div>
-          </div>
-
-          <!-- WebDAV 数据主权：支持导出、恢复与冲突策略。 -->
-          <div class="set-block" data-group="数据与历史">
-            <div class="set-title">数据同步 · WebDAV</div>
-            <div class="set-hint" style="margin:2px 0 8px;">
-              支持将配置、会话与审计日志导出到 WebDAV（https），也可从备份恢复。<br>
-              本地、云端与备份冲突可选择每次询问、本地优先、云端优先或两边保留。
-            </div>
-            <div class="provider-row">
-              <input type="text" id="webdavUrl" placeholder="https://dav.example.com" style="flex:1;min-width:160px;">
-              <input type="text" id="webdavUser" placeholder="账号" style="width:110px;">
-              <input type="password" id="webdavPass" placeholder="密码" style="width:110px;">
-            </div>
-            <div class="provider-row">
-              <input type="text" id="webdavPath" placeholder="/glm-chat-backup" style="flex:1;min-width:120px;">
-              <div style="width:170px;">
-                <select id="webdavConflict">
-                  <option value="ask" selected>冲突：每次询问</option>
-                  <option value="local_wins">冲突：本地优先</option>
-                  <option value="remote_wins">冲突：云端优先</option>
-                  <option value="keep_both">冲突：两边保留</option>
-                </select>
-              </div>
-            </div>
-            <div class="provider-row">
-              <button class="modal-btn primary" id="webdavSaveBtn" onclick="saveWebdavConfigNow()">保存配置</button>
-              <button class="modal-btn" id="webdavTestBtn" onclick="webdavTestNow()">测试连接</button>
-              <button class="modal-btn" id="webdavExportBtn" onclick="webdavExportNow()">导出备份</button>
-              <button class="modal-btn" id="webdavRestoreBtn" onclick="webdavRestoreNow()">从备份恢复</button>
-              <span id="webdavStatus" style="font-size:12px;color:var(--text-2)"></span>
-            </div>
-          </div>
-
-          <div class="set-block" data-group="系统">
-            <div class="set-title">软件更新</div>
-            <label for="updateManifestUrl">更新清单地址（留空使用默认源）</label>
-            <div class="provider-row">
-              <input type="text" id="updateManifestUrl" placeholder="https://…/update-manifest.json">
-              <button class="modal-btn primary" onclick="checkForUpdate(true)">检查更新</button>
-            </div>
-            <div class="set-hint">
-              有新版本时右上角会出现更新提示；下载经 SHA256 校验，失败不影响当前版本，重启时自动替换并备份旧版。<br>
-              未配置更新源时，检查更新将不可用；有新版本时右上角会出现提示。
-            </div>
-          </div>
-
-          <div class="set-block" data-group="系统">
-            <div class="set-title">外观与特效</div>
-            <label class="check-row" for="fxToggle" style="margin-bottom:4px;">
-              <input type="checkbox" id="fxToggle" onchange="toggleFx()"> 特效全开（极光背景 / 发光 / 数字滚动）
-            </label>
-            <div class="set-hint" style="margin-top:6px;">
-              关闭后保留玻璃质感与必要的状态反馈，动效改为瞬时呈现；<br>
-              系统开启「减弱动态效果」时，所有装饰动效自动停用。
-            </div>
-          </div>
-
-          <!-- 实现 v1.6 T13：免打扰（DND）设置项（独立开关，localStorage 持久，不污染 config.json） -->
-          <div class="set-block" id="dndBlock" data-group="系统">
-            <div class="set-title">免打扰（DND）</div>
-            <label class="check-row" for="dndEnabled" style="margin-bottom:4px;">
-              <input type="checkbox" id="dndEnabled" onchange="saveDndSetting()"> 窗口失焦时免打扰
-            </label>
-            <div class="set-hint" style="margin-top:6px;">
-              开启后，窗口失焦或最小化时抑制非关键提示（成功 / 信息类）；警告与错误仍会弹出。<br>
-              被抑制的提示进入左侧导航「🔔 通知」中心（带红点数）；窗口重新聚焦时红点自动清零。
-            </div>
-          </div>
-
-          <div class="set-block" data-group="工具与软件">
-            <div class="set-title">MCP 服务器</div>
-            <div class="set-hint" style="margin:2px 0 8px;">
-              接入 Model Context Protocol 工具生态：stdio 本地服务器 / Streamable HTTP 远程服务器。<br>
-              新服务器默认停用（opt-in）；启用前会测试连接；调用按档位确认，全程留审计。配置存于
-              <code>~/.glm-chat/mcp_servers.json</code>（Claude 兼容结构），密钥字段经 DPAPI 加密。
-            </div>
-            <div class="provider-row">
-              <button class="modal-btn primary" id="mcpAddBtn" onclick="mcpOpenEditor(null)"><svg class="ui-icon"><use href="#i-plus"/></svg>添加服务器</button>
-              <button class="modal-btn" id="mcpImportBtn" onclick="mcpOpenImport()">导入 Claude 配置</button>
-              <button class="modal-btn" id="mcpRefreshBtn" onclick="loadMcpServers()">↻ 刷新</button>
-            </div>
-            <div class="mcp-list" id="mcpServerList"></div>
-          </div>
-
-          <!-- 实现 v1.6 T6：命令沙箱设置面板 + 状态灯（纯新增区块；新 id 全部唯一，
-               接线既有 js_api sandbox_get_config/sandbox_save_config/sandbox_status） -->
-          <div class="set-block" id="sandboxBlock" data-group="系统">
-            <div class="set-title">命令沙箱</div>
-            <div class="set-hint" style="margin:2px 0 8px;">
-              Windows Job Object 进程隔离：每次命令一个独立 Job，收编整棵进程树，句柄关闭即清剿（防孤儿）。<br>
-              诚实边界：<b>网络不隔离、文件系统仅应用层校验</b>——沙箱不是绝对安全，敏感操作仍会先确认。
-            </div>
-            <label class="check-row" for="sandboxEnabled" style="margin-bottom:10px;">
-              <input type="checkbox" id="sandboxEnabled"> 启用命令沙箱（关闭后全部命令直接执行）
-            </label>
-            <div class="provider-row" style="align-items:center;gap:8px;">
-              <span class="sb-light" id="sandboxStatusLight"></span>
-              <span id="sandboxStatusText" style="font-size:12px;color:var(--text-2);">读取状态中…</span>
-              <button type="button" class="modal-btn" id="sandboxRefreshBtn" onclick="refreshSandboxStatus()">↻ 刷新状态</button>
-            </div>
-            <div class="set-hint" id="sandboxUnavailable" style="display:none;color:var(--warn);">
-              当前系统不支持 Job Object（非 Windows 或句柄创建失败）：沙箱不可用，命令将直接执行。
-            </div>
-            <div class="set-hint" id="sandboxStats" style="margin:2px 0 10px;"></div>
-
-            <label>命令类别档位</label>
-            <div class="provider-row">
-              <span style="width:150px;font-size:12px;color:var(--text-2);flex-shrink:0;">run_command</span>
-              <div style="width:170px;">
-                <select id="sandboxProfilerun_command">
-                  <option value="off">off（不沙箱）</option>
-                  <option value="standard" selected>standard（1024MB · 16 进程）</option>
-                  <option value="strict">strict（512MB · 8 进程）</option>
-                </select>
-              </div>
-            </div>
-            <div class="provider-row">
-              <span style="width:150px;font-size:12px;color:var(--text-2);flex-shrink:0;">run_powershell</span>
-              <div style="width:170px;">
-                <select id="sandboxProfilerun_powershell">
-                  <option value="off">off（不沙箱）</option>
-                  <option value="standard" selected>standard（1024MB · 16 进程）</option>
-                  <option value="strict">strict（512MB · 8 进程）</option>
-                </select>
-              </div>
-            </div>
-            <div class="provider-row">
-              <span style="width:150px;font-size:12px;color:var(--text-2);flex-shrink:0;">run_admin_command</span>
-              <div style="width:170px;">
-                <select id="sandboxProfilerun_admin_command">
-                  <option value="off" selected>off（恒不沙箱：提权子进程无法收编）</option>
-                  <option value="standard">standard（1024MB · 16 进程）</option>
-                  <option value="strict">strict（512MB · 8 进程）</option>
-                </select>
-              </div>
-            </div>
-
-            <label style="margin-top:12px;">standard 档限制</label>
-            <div class="provider-row">
-              <input type="number" id="sandboxLimitstandardMemory" min="64" max="100000" step="64" title="内存上限（MB）" style="width:110px;">
-              <input type="number" id="sandboxLimitstandardProcesses" min="1" max="100" title="活跃进程数上限" style="width:110px;">
-              <input type="number" id="sandboxLimitstandardCpu" min="1" max="100000" title="CPU 时间上限（秒）" style="width:110px;">
-              <div style="width:130px;">
-                <select id="sandboxLimitstandardUi" title="UI 限制级别">
-                  <option value="none">UI：不限制</option>
-                  <option value="basic" selected>UI：basic（桌面/关机）</option>
-                  <option value="strict">UI：strict（+全局原子/句柄）</option>
-                </select>
-              </div>
-            </div>
-            <label style="margin-top:10px;">strict 档限制</label>
-            <div class="provider-row">
-              <input type="number" id="sandboxLimitstrictMemory" min="64" max="100000" step="64" title="内存上限（MB）" style="width:110px;">
-              <input type="number" id="sandboxLimitstrictProcesses" min="1" max="100" title="活跃进程数上限" style="width:110px;">
-              <input type="number" id="sandboxLimitstrictCpu" min="1" max="100000" title="CPU 时间上限（秒）" style="width:110px;">
-              <div style="width:130px;">
-                <select id="sandboxLimitstrictUi" title="UI 限制级别">
-                  <option value="none">UI：不限制</option>
-                  <option value="basic">UI：basic（桌面/关机）</option>
-                  <option value="strict" selected>UI：strict（+全局原子/句柄）</option>
-                </select>
-              </div>
-            </div>
-            <div class="set-hint" style="margin-top:6px;">
-              输入顺序：内存（MB）/ 进程数 / CPU 秒；strict 的 UI=strict 可能破坏部分运行时，按需开启。
-            </div>
-            <div class="provider-row" style="margin-top:10px;">
-              <button type="button" class="modal-btn primary" id="sandboxSaveBtn" onclick="saveSandboxSettings()">保存档位</button>
-              <button type="button" class="modal-btn" id="sandboxResetBtn" onclick="sandboxResetDefaults()">重置默认</button>
-            </div>
-          </div>
-              <section class="set-block collaboration-block" id="collaborationBlock" aria-labelledby="collaborationTitle" hidden>
-                <div class="set-title" id="collaborationTitle">双模型协同（默认关闭）</div>
-                <div class="set-hint"> planner/reviewer/finalizer 使用云端，worker/reviser 使用本地；保存配置不会调用模型。</div>
-                <label class="check-row" for="collaborationEnabled"><input type="checkbox" id="collaborationEnabled"> 启用双模型协同</label>
-                <div class="collaboration-config-grid">
-                  <label for="collaborationCloudBudget">云端 token 上限<input id="collaborationCloudBudget" type="number" min="6000" max="30000" step="1000" value="30000"></label>
-                  <label for="collaborationTotalBudget">总 token 上限<input id="collaborationTotalBudget" type="number" min="10000" max="120000" step="1000" value="120000"></label>
-                  <label for="collaborationCostBudget">云端费用上限（¥）<input id="collaborationCostBudget" type="number" min="0.01" max="1000" step="0.01" value="2"></label>
-                  <label for="collaborationDeadline">截止时间（秒）<input id="collaborationDeadline" type="number" min="60" max="1800" step="60" value="1800"></label>
-                  <label for="collaborationReviewRounds">复审轮次<input id="collaborationReviewRounds" type="number" min="0" max="2" step="1" value="2"></label>
-                  <label for="collaborationUploadScope">上传范围<select id="collaborationUploadScope"><option value="task_summary_only">任务摘要</option><option value="selected_results_only">仅选定结果</option><option value="local_only">仅本地</option></select></label>
-                </div>
-                <pre class="collaboration-endpoint-summary" id="collaborationEndpointSummary">尚未读取 EndpointRef</pre>
-                <div class="collaboration-actions">
-                  <button type="button" class="modal-btn" id="collaborationSaveBtn">保存协同配置</button>
-                  <button type="button" class="modal-btn" id="collaborationPreviewBtn">隐私预览</button>
-                  <button type="button" class="modal-btn primary" id="collaborationRunBtn">运行协同</button>
-                  <button type="button" class="modal-btn" id="collaborationStopBtn" hidden>停止</button>
-                  <button type="button" class="modal-btn" id="collaborationRecoverBtn" hidden>恢复</button>
-                </div>
-                <p class="collaboration-status" id="collaborationStatus" aria-live="polite">协同已关闭，保持原混合路由。</p>
-                <pre class="collaboration-preview" id="collaborationPreview" aria-label="实际上传预览"></pre>
-              </section>
-              </div><!-- /set-grid -->
-            </div><!-- /set-content -->
-          </div><!-- /set-win-body -->
-        </div><!-- /set-window -->
-      </div><!-- /settings-panel -->
 
       <section class="new-chat-screen" id="newChatScreen" hidden aria-labelledby="newChatTitle">
         <div class="new-chat-inner">
@@ -1086,5 +683,410 @@
 const APP_VERSION = '__APP_VERSION__';
 /*__APP_SCRIPT__*/
 </script>
+    <!-- v3.4 I25：设置面板迁出 .main（原嵌套在其内部，与手册「迁出 .main」不符）-->
+      <div class="settings-panel" id="settingsPanel">
+        <!-- v4 设置窗口化：遮罩 + 居中窗口 + 左分组导航/右内容单列（WorkBuddy 设置同款布局；
+             开=遮罩淡入+窗口弹簧落入，Esc/点遮罩/× 关闭） -->
+        <div class="set-window">
+          <div class="set-win-head">
+            <span class="set-win-t">设置</span>
+            <span class="set-win-sub">Harbor 首选项 · 改动即生效</span>
+            <button class="set-win-close" onclick="toggleSettings()" title="关闭设置（Esc）" aria-label="关闭设置"><svg class="ui-icon ui-icon-20" aria-hidden="true"><use href="#i-close"/></svg></button>
+          </div>
+          <div class="set-win-body">
+            <!-- 修复 UX-4（v1.4）：设置锚点导航（左竖排分组；按钮与 set-block 一一对应，滚动高亮） -->
+            <nav class="set-nav" id="setNav" aria-label="设置分区导航"></nav>
+            <div class="set-content" id="setContent">
+              <div class="set-grid">
+          <!-- v4「连接与模型」完全单端点（设计书 v4/connect-merge-design.md）：
+               原「连接与模型」「模型服务商（OpenAI 兼容端点）」「本地模型（v1.5）」三块合并为一块。
+               预设下拉 = 唯一端点开关（GLM 官方只是 name='glm' 的预设，不再有独立模式）；
+               单一 Base URL / Key / 模型流；GLM 专属（推理力度）与本地专属（工具调用 / 窗口覆盖）
+               控件进「高级 ▾」折叠并按预设条件显隐（36-connect.js connectUpdateAdvanced）。
+               契约钉住 id：apiKey / modelSelect / reasoningEffort 三者全部保留。 -->
+          <div class="set-block cm-block" id="cmBlock" data-group="模型与端点">
+            <div class="cm-head">
+              <div class="set-title">连接与模型</div>
+              <div class="cm-sub">一个 Key，连所有端点：选预设 → 填 Key → 识别模型，即填即用</div>
+            </div>
+
+            <div class="cm-flow" id="cmFlow">
+              <label for="providerPreset">预设</label>
+              <div class="cm-preset-slot">
+                <select id="providerPreset" onchange="onProviderPresetChange(this.value)">
+                  <option value="glm" selected>智谱 GLM</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="moonshot">Moonshot</option>
+                  <option value="qwen">通义千问</option>
+                  <option value="nemotron">Nemotron 3 Ultra 550B</option>
+                  <option value="github-models">GitHub Models（免费层）</option>
+                  <option value="ollama">Ollama</option>
+                  <option value="lmstudio">LM Studio</option>
+                  <option value="vllm">vLLM</option>
+                  <option value="llamacpp">llama.cpp</option>
+                  <option value="localai">LocalAI</option>
+                  <option value="freetoken">FreeToken Desktop</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+
+              <label for="providerBase">Base URL</label>
+              <input type="text" id="providerBase" placeholder="https://open.bigmodel.cn/api/paas/v4" autocomplete="off" spellcheck="false">
+
+              <div id="cmKeyRow">
+                <label for="apiKey" id="cmKeyLabel">API Key（仅保存在本机）</label>
+                <input type="password" id="apiKey" placeholder="粘贴你的智谱 API Key">
+                <!-- 实现 v1.6 T1：GitHub PAT 获取指引（仅 GitHub Models 预设显示） -->
+                <div class="set-hint" id="cmKeyHelp" style="display:none;margin:4px 0 0;">
+                  在 <a href="https://github.com/settings/tokens" target="_blank">GitHub 设置 → 开发者设置 → Tokens</a>
+                  创建 PAT（classic 或 fine-grained 勾选 <code>models:read</code> scope）后粘贴即可。
+                </div>
+              </div>
+              <div class="local-badge cm-chip" id="cmNoKey" style="display:none;">ℹ 本地服务器通常无需 Key（免 Key · 零费用）</div>
+              <!-- 实现 v1.6 T1：免费层常驻声明（用户裁决①：个人自用算支持范围，明示限制） -->
+              <div class="local-badge cm-chip" id="cmFreeTier" style="display:none;">免费层仅限个人非商业使用，禁止生产使用；高频使用请切换 DeepSeek/GLM 付费层</div>
+
+              <label for="modelSelect">模型</label>
+              <div class="cm-row">
+                <div class="cm-pick" id="cmPick">
+                  <select id="modelSelect">
+                    <option value="auto" selected>智能档（按任务自动调节，最省）</option>
+                    <option value="glm-4.5-flash">glm-4.5-flash（免费 · 日常够用）</option>
+                    <option value="glm-4-flash">glm-4-flash（免费 · 更省）</option>
+                    <option value="glm-4.5">glm-4.5（需余额/额度 · 更强推理）</option>
+                  </select>
+                  <div class="cm-manual" id="cmManual">
+                    <input type="text" id="cmManualInput" placeholder="输入模型名，如 deepseek-v4.1" autocomplete="off" spellcheck="false">
+                    <button type="button" class="cm-back" id="cmManualBack" title="切回下拉选择" aria-label="切回下拉选择"><svg class="ui-icon ui-icon-16" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+                  </div>
+                </div>
+                <span class="local-badge" id="cmCtxBadge" style="display:none;">元数据待获取</span>
+                <button type="button" class="modal-btn cm-identify" id="cmIdentifyBtn" onclick="connectIdentifyNow(true)">↻ 识别模型</button>
+              </div>
+              <!-- 本地系预设：并行端口探测结果（local_probe） -->
+              <div class="local-probe-result" id="localProbeResult"></div>
+
+              <div class="cm-row">
+                <button type="button" class="modal-btn primary" id="providerTestBtn" onclick="connectTestNow()">测试连接</button>
+                <span class="cm-status" id="providerTestStatus"></span>
+              </div>
+            </div>
+
+            <!-- v1.8.0：保存并测试（保存=写入 config 并供对话使用；测试=顺手跑通连接） -->
+            <div class="cm-save-row">
+              <button type="button" class="cm-save-btn" id="cmSaveBtn" onclick="connectSaveAndTest()">保存并测试连接</button>
+              <span class="cm-hint">保存后对话立即使用该模型</span>
+            </div>
+
+            <!-- 高级 ▾：原 GLM 专属 / 云端自定义专属 / 本地专属控件，按预设条件显隐 -->
+            <details class="cm-details" id="cmAdv">
+              <summary><span class="caret">▶</span>高级</summary>
+              <div class="cm-details-body">
+                <div id="advReasoning">
+                  <label for="reasoningEffort">推理力度</label>
+                  <div style="width:220px;max-width:100%;">
+                    <select id="reasoningEffort">
+                      <option value="auto" selected>auto（智能档联动，推荐）</option>
+                      <option value="off">off（关闭思考 · 最省输出）</option>
+                      <option value="low">low（快速省钱）</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                      <option value="max">max（最深思考，最贵）</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="adv-off" id="advReasoningOff">推理力度 — 仅智谱 GLM 预设可用</div>
+
+                <div id="advBilling">
+                  <label>计费三价（¥ / 百万 tokens，留 0 不计费）</label>
+                  <div class="cm-price">
+                    <input type="number" id="providerPriceIn" step="0.1" min="0" title="输入价 ¥/百万 tokens" placeholder="输入价">
+                    <input type="number" id="providerPriceOut" step="0.1" min="0" title="输出价 ¥/百万 tokens" placeholder="输出价">
+                    <input type="number" id="providerPriceCache" step="0.1" min="0" title="缓存命中价 ¥/百万 tokens" placeholder="缓存价">
+                  </div>
+                </div>
+                <div class="adv-off" id="advBillingOff">计费三价 — 仅第三方服务商预设可用（GLM 按内置价格表，本地零费用）</div>
+
+                <div id="advLocal">
+                  <label for="localToolCapable">工具调用</label>
+                  <div style="width:220px;max-width:100%;">
+                    <select id="localToolCapable">
+                      <option value="auto" selected>自动识别</option>
+                      <option value="on">开</option>
+                      <option value="off">关</option>
+                    </select>
+                  </div>
+                  <label for="localCtxWindow" style="margin-top:10px;">上下文窗口覆盖（tokens，0 = 按模型元数据自动）</label>
+                  <input type="number" id="localCtxWindow" min="0" max="2000000" step="1024" placeholder="0 = 自动">
+                </div>
+                <div class="adv-off" id="advLocalOff">工具调用与上下文覆盖 — 仅本地服务器预设可用</div>
+              </div>
+            </details>
+
+            <div class="set-hint cm-bottom-hint">
+              预设切换后立即生效；GLM 专属能力（智能档 / 推理力度 / 联网搜索）仅智谱预设可用；<br>
+              本地预设零费用，上下文按模型窗口自适应压缩；识别失败自动切手动输入，不影响保存与发送。<br>
+              在 <a href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys" target="_blank">智谱开放平台</a> 创建 Key 后粘贴即可。
+            </div>
+          </div>
+
+          <div class="set-block" data-group="对话与生成">
+            <div class="set-title">省 Token 策略</div>
+            <label>截图质量</label>
+            <select id="shotQuality">
+              <option value="low" selected>省流（512px · 默认）</option>
+              <option value="std">标准（640px）</option>
+              <option value="full">完整（768px · 细节多）</option>
+            </select>
+            <div class="field">
+              <label>历史压缩档位</label>
+              <select id="saverLevel">
+                <option value="aggressive">激进（4.5 万 tokens 即压缩）</option>
+                <option value="std" selected>标准（9 万 tokens）</option>
+                <option value="relaxed">宽松（14 万 tokens）</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sessionBudget">单会话预算（¥，0 = 不提醒）</label>
+              <input type="number" id="sessionBudget" value="5" min="0" step="0.1">
+            </div>
+            <div class="set-hint">
+              智能档会自动为轻任务关闭思考（思考 token 按输出计价，最贵）；<br>
+              截图会先裁掉纯色边缘再压缩；缓存命中率低时状态栏会提示。
+            </div>
+          </div>
+
+          <div class="set-block" data-group="对话与生成">
+            <div class="set-title">生成参数</div>
+            <label for="maxTokens">最大输出 tokens</label>
+            <input type="number" id="maxTokens" value="16384" min="256" max="128000" step="256">
+            <div class="field">
+              <label for="temperature">Temperature: <b id="tempVal">1.0</b></label>
+              <input type="range" id="temperature" min="0" max="2" step="0.1" value="1">
+            </div>
+            <div class="field">
+              <label for="topP">Top P: <b id="topPVal">0.95</b></label>
+              <input type="range" id="topP" min="0" max="1" step="0.05" value="0.95">
+            </div>
+          </div>
+
+          <div class="set-block" data-group="对话与生成">
+            <div class="set-title">角色与联网</div>
+            <label for="systemPrompt">系统设定（角色 Prompt，长指令写在这里更省）</label>
+            <textarea id="systemPrompt" rows="3" placeholder="例如: 你是一名专业的软件开发工程师，认真负责，不随口胡说。"></textarea>
+            <label class="check-row" style="margin-top:12px;">
+              <input type="checkbox" id="enableSearch"> 联网搜索
+            </label>
+            <div id="searchEngineWrap" style="display:none;align-items:center;gap:8px;">
+              <span style="font-size:12px;color:var(--text-2);flex-shrink:0;">搜索引擎</span>
+              <div style="width:170px;"><select id="searchEngine">
+                <option value="search_std">基础版</option>
+                <option value="search_pro" selected>Pro 版</option>
+                <option value="search_pro_quark">夸克</option>
+              </select></div>
+            </div>
+            <div class="set-hint">
+              系统设定在缓存前缀内，后续轮按约 0.3 折计费。Key 与端点统一在「连接与模型」配置。
+            </div>
+          </div>
+
+          <!-- WebDAV 数据主权：支持导出、恢复与冲突策略。 -->
+          <div class="set-block" data-group="数据与历史">
+            <div class="set-title">数据同步 · WebDAV</div>
+            <div class="set-hint" style="margin:2px 0 8px;">
+              支持将配置、会话与审计日志导出到 WebDAV（https），也可从备份恢复。<br>
+              本地、云端与备份冲突可选择每次询问、本地优先、云端优先或两边保留。
+            </div>
+            <div class="provider-row">
+              <input type="text" id="webdavUrl" placeholder="https://dav.example.com" style="flex:1;min-width:160px;">
+              <input type="text" id="webdavUser" placeholder="账号" style="width:110px;">
+              <input type="password" id="webdavPass" placeholder="密码" style="width:110px;">
+            </div>
+            <div class="provider-row">
+              <input type="text" id="webdavPath" placeholder="/glm-chat-backup" style="flex:1;min-width:120px;">
+              <div style="width:170px;">
+                <select id="webdavConflict">
+                  <option value="ask" selected>冲突：每次询问</option>
+                  <option value="local_wins">冲突：本地优先</option>
+                  <option value="remote_wins">冲突：云端优先</option>
+                  <option value="keep_both">冲突：两边保留</option>
+                </select>
+              </div>
+            </div>
+            <div class="provider-row">
+              <button class="modal-btn primary" id="webdavSaveBtn" onclick="saveWebdavConfigNow()">保存配置</button>
+              <button class="modal-btn" id="webdavTestBtn" onclick="webdavTestNow()">测试连接</button>
+              <button class="modal-btn" id="webdavExportBtn" onclick="webdavExportNow()">导出备份</button>
+              <button class="modal-btn" id="webdavRestoreBtn" onclick="webdavRestoreNow()">从备份恢复</button>
+              <span id="webdavStatus" style="font-size:12px;color:var(--text-2)"></span>
+            </div>
+          </div>
+
+          <div class="set-block" data-group="系统">
+            <div class="set-title">软件更新</div>
+            <label for="updateManifestUrl">更新清单地址（留空使用默认源）</label>
+            <div class="provider-row">
+              <input type="text" id="updateManifestUrl" placeholder="https://…/update-manifest.json">
+              <button class="modal-btn primary" onclick="checkForUpdate(true)">检查更新</button>
+            </div>
+            <div class="set-hint">
+              有新版本时右上角会出现更新提示；下载经 SHA256 校验，失败不影响当前版本，重启时自动替换并备份旧版。<br>
+              未配置更新源时，检查更新将不可用；有新版本时右上角会出现提示。
+            </div>
+          </div>
+
+          <div class="set-block" data-group="系统">
+            <div class="set-title">外观与特效</div>
+            <label class="check-row" for="fxToggle" style="margin-bottom:4px;">
+              <input type="checkbox" id="fxToggle" onchange="toggleFx()"> 特效全开（极光背景 / 发光 / 数字滚动）
+            </label>
+            <div class="set-hint" style="margin-top:6px;">
+              关闭后保留玻璃质感与必要的状态反馈，动效改为瞬时呈现；<br>
+              系统开启「减弱动态效果」时，所有装饰动效自动停用。
+            </div>
+          </div>
+
+          <!-- 实现 v1.6 T13：免打扰（DND）设置项（独立开关，localStorage 持久，不污染 config.json） -->
+          <div class="set-block" id="dndBlock" data-group="系统">
+            <div class="set-title">免打扰（DND）</div>
+            <label class="check-row" for="dndEnabled" style="margin-bottom:4px;">
+              <input type="checkbox" id="dndEnabled" onchange="saveDndSetting()"> 窗口失焦时免打扰
+            </label>
+            <div class="set-hint" style="margin-top:6px;">
+              开启后，窗口失焦或最小化时抑制非关键提示（成功 / 信息类）；警告与错误仍会弹出。<br>
+              被抑制的提示进入左侧导航「🔔 通知」中心（带红点数）；窗口重新聚焦时红点自动清零。
+            </div>
+          </div>
+
+          <div class="set-block" data-group="工具与软件">
+            <div class="set-title">MCP 服务器</div>
+            <div class="set-hint" style="margin:2px 0 8px;">
+              接入 Model Context Protocol 工具生态：stdio 本地服务器 / Streamable HTTP 远程服务器。<br>
+              新服务器默认停用（opt-in）；启用前会测试连接；调用按档位确认，全程留审计。配置存于
+              <code>~/.glm-chat/mcp_servers.json</code>（Claude 兼容结构），密钥字段经 DPAPI 加密。
+            </div>
+            <div class="provider-row">
+              <button class="modal-btn primary" id="mcpAddBtn" onclick="mcpOpenEditor(null)"><svg class="ui-icon"><use href="#i-plus"/></svg>添加服务器</button>
+              <button class="modal-btn" id="mcpImportBtn" onclick="mcpOpenImport()">导入 Claude 配置</button>
+              <button class="modal-btn" id="mcpRefreshBtn" onclick="loadMcpServers()">↻ 刷新</button>
+            </div>
+            <div class="mcp-list" id="mcpServerList"></div>
+          </div>
+
+          <!-- 实现 v1.6 T6：命令沙箱设置面板 + 状态灯（纯新增区块；新 id 全部唯一，
+               接线既有 js_api sandbox_get_config/sandbox_save_config/sandbox_status） -->
+          <div class="set-block" id="sandboxBlock" data-group="系统">
+            <div class="set-title">命令沙箱</div>
+            <div class="set-hint" style="margin:2px 0 8px;">
+              Windows Job Object 进程隔离：每次命令一个独立 Job，收编整棵进程树，句柄关闭即清剿（防孤儿）。<br>
+              诚实边界：<b>网络不隔离、文件系统仅应用层校验</b>——沙箱不是绝对安全，敏感操作仍会先确认。
+            </div>
+            <label class="check-row" for="sandboxEnabled" style="margin-bottom:10px;">
+              <input type="checkbox" id="sandboxEnabled"> 启用命令沙箱（关闭后全部命令直接执行）
+            </label>
+            <div class="provider-row" style="align-items:center;gap:8px;">
+              <span class="sb-light" id="sandboxStatusLight"></span>
+              <span id="sandboxStatusText" style="font-size:12px;color:var(--text-2);">读取状态中…</span>
+              <button type="button" class="modal-btn" id="sandboxRefreshBtn" onclick="refreshSandboxStatus()">↻ 刷新状态</button>
+            </div>
+            <div class="set-hint" id="sandboxUnavailable" style="display:none;color:var(--warn);">
+              当前系统不支持 Job Object（非 Windows 或句柄创建失败）：沙箱不可用，命令将直接执行。
+            </div>
+            <div class="set-hint" id="sandboxStats" style="margin:2px 0 10px;"></div>
+
+            <label>命令类别档位</label>
+            <div class="provider-row">
+              <span style="width:150px;font-size:12px;color:var(--text-2);flex-shrink:0;">run_command</span>
+              <div style="width:170px;">
+                <select id="sandboxProfilerun_command">
+                  <option value="off">off（不沙箱）</option>
+                  <option value="standard" selected>standard（1024MB · 16 进程）</option>
+                  <option value="strict">strict（512MB · 8 进程）</option>
+                </select>
+              </div>
+            </div>
+            <div class="provider-row">
+              <span style="width:150px;font-size:12px;color:var(--text-2);flex-shrink:0;">run_powershell</span>
+              <div style="width:170px;">
+                <select id="sandboxProfilerun_powershell">
+                  <option value="off">off（不沙箱）</option>
+                  <option value="standard" selected>standard（1024MB · 16 进程）</option>
+                  <option value="strict">strict（512MB · 8 进程）</option>
+                </select>
+              </div>
+            </div>
+            <div class="provider-row">
+              <span style="width:150px;font-size:12px;color:var(--text-2);flex-shrink:0;">run_admin_command</span>
+              <div style="width:170px;">
+                <select id="sandboxProfilerun_admin_command">
+                  <option value="off" selected>off（恒不沙箱：提权子进程无法收编）</option>
+                  <option value="standard">standard（1024MB · 16 进程）</option>
+                  <option value="strict">strict（512MB · 8 进程）</option>
+                </select>
+              </div>
+            </div>
+
+            <label style="margin-top:12px;">standard 档限制</label>
+            <div class="provider-row">
+              <input type="number" id="sandboxLimitstandardMemory" min="64" max="100000" step="64" title="内存上限（MB）" style="width:110px;">
+              <input type="number" id="sandboxLimitstandardProcesses" min="1" max="100" title="活跃进程数上限" style="width:110px;">
+              <input type="number" id="sandboxLimitstandardCpu" min="1" max="100000" title="CPU 时间上限（秒）" style="width:110px;">
+              <div style="width:130px;">
+                <select id="sandboxLimitstandardUi" title="UI 限制级别">
+                  <option value="none">UI：不限制</option>
+                  <option value="basic" selected>UI：basic（桌面/关机）</option>
+                  <option value="strict">UI：strict（+全局原子/句柄）</option>
+                </select>
+              </div>
+            </div>
+            <label style="margin-top:10px;">strict 档限制</label>
+            <div class="provider-row">
+              <input type="number" id="sandboxLimitstrictMemory" min="64" max="100000" step="64" title="内存上限（MB）" style="width:110px;">
+              <input type="number" id="sandboxLimitstrictProcesses" min="1" max="100" title="活跃进程数上限" style="width:110px;">
+              <input type="number" id="sandboxLimitstrictCpu" min="1" max="100000" title="CPU 时间上限（秒）" style="width:110px;">
+              <div style="width:130px;">
+                <select id="sandboxLimitstrictUi" title="UI 限制级别">
+                  <option value="none">UI：不限制</option>
+                  <option value="basic">UI：basic（桌面/关机）</option>
+                  <option value="strict" selected>UI：strict（+全局原子/句柄）</option>
+                </select>
+              </div>
+            </div>
+            <div class="set-hint" style="margin-top:6px;">
+              输入顺序：内存（MB）/ 进程数 / CPU 秒；strict 的 UI=strict 可能破坏部分运行时，按需开启。
+            </div>
+            <div class="provider-row" style="margin-top:10px;">
+              <button type="button" class="modal-btn primary" id="sandboxSaveBtn" onclick="saveSandboxSettings()">保存档位</button>
+              <button type="button" class="modal-btn" id="sandboxResetBtn" onclick="sandboxResetDefaults()">重置默认</button>
+            </div>
+          </div>
+              <section class="set-block collaboration-block" id="collaborationBlock" aria-labelledby="collaborationTitle" hidden>
+                <div class="set-title" id="collaborationTitle">双模型协同（默认关闭）</div>
+                <div class="set-hint"> planner/reviewer/finalizer 使用云端，worker/reviser 使用本地；保存配置不会调用模型。</div>
+                <label class="check-row" for="collaborationEnabled"><input type="checkbox" id="collaborationEnabled"> 启用双模型协同</label>
+                <div class="collaboration-config-grid">
+                  <label for="collaborationCloudBudget">云端 token 上限<input id="collaborationCloudBudget" type="number" min="6000" max="30000" step="1000" value="30000"></label>
+                  <label for="collaborationTotalBudget">总 token 上限<input id="collaborationTotalBudget" type="number" min="10000" max="120000" step="1000" value="120000"></label>
+                  <label for="collaborationCostBudget">云端费用上限（¥）<input id="collaborationCostBudget" type="number" min="0.01" max="1000" step="0.01" value="2"></label>
+                  <label for="collaborationDeadline">截止时间（秒）<input id="collaborationDeadline" type="number" min="60" max="1800" step="60" value="1800"></label>
+                  <label for="collaborationReviewRounds">复审轮次<input id="collaborationReviewRounds" type="number" min="0" max="2" step="1" value="2"></label>
+                  <label for="collaborationUploadScope">上传范围<select id="collaborationUploadScope"><option value="task_summary_only">任务摘要</option><option value="selected_results_only">仅选定结果</option><option value="local_only">仅本地</option></select></label>
+                </div>
+                <pre class="collaboration-endpoint-summary" id="collaborationEndpointSummary">尚未读取 EndpointRef</pre>
+                <div class="collaboration-actions">
+                  <button type="button" class="modal-btn" id="collaborationSaveBtn">保存协同配置</button>
+                  <button type="button" class="modal-btn" id="collaborationPreviewBtn">隐私预览</button>
+                  <button type="button" class="modal-btn primary" id="collaborationRunBtn">运行协同</button>
+                  <button type="button" class="modal-btn" id="collaborationStopBtn" hidden>停止</button>
+                  <button type="button" class="modal-btn" id="collaborationRecoverBtn" hidden>恢复</button>
+                </div>
+                <p class="collaboration-status" id="collaborationStatus" aria-live="polite">协同已关闭，保持原混合路由。</p>
+                <pre class="collaboration-preview" id="collaborationPreview" aria-label="实际上传预览"></pre>
+              </section>
+              </div><!-- /set-grid -->
+            </div><!-- /set-content -->
+          </div><!-- /set-win-body -->
+        </div><!-- /set-window -->
+      </div><!-- /settings-panel -->
 </body>
 </html>

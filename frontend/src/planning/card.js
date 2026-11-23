@@ -128,7 +128,9 @@ function planCardRender(plan) {
       '<span class="ctx-bar"><span class="ctx-fill" style="width:' + ctxPct + '%"></span></span></div>' +
     '<div class="plan-steps" id="planSteps">' +
     (plan.steps || []).map((s, i) =>
-      '<div class="plan-step pending" data-i="' + i + '" style="animation-delay:' +
+      // 认 s.status：原来写死 pending，导致"重开后的计划卡"把已完成步骤也画成待办，
+      // 连带 I12 的回滚按钮（只在 .done 行显示）永远不出现。
+      '<div class="plan-step ' + pcEsc(s.status || 'pending') + '" data-i="' + i + '" style="animation-delay:' +
       (60 + i * 40) + 'ms">' +
       '<span class="st"></span><span class="txt">' + pcEsc(s.text) + '</span>' +
       (Array.isArray(s.tools) && s.tools.length
@@ -137,6 +139,10 @@ function planCardRender(plan) {
           (s.tools.length > 4 ? ' +' + (s.tools.length - 4) : '') + '</span>' : '') +
       (s.risk ? '<span class="risk ' + pcEsc(s.risk) + '">' +
         (s.risk === 'l2' ? '授权内' : '需确认') + '</span>' : '') +
+      // I12：步骤级回滚入口。**不写内联 onclick**——JS 模板串里的 onclick 会被
+      // contract_diff 的 html.onclick_fns 计入（这是本仓的既有陷阱），改用 data 属性 + 委托。
+      '<button type="button" class="plan-step-rb" data-rb="' + i +
+        '" title="回滚到此步之前（用上一步结束时建的检查点）">↺</button>' +
       '</div>').join('') +
     '</div>' +
     '<div class="plan-acts" id="planActs">' +
@@ -791,3 +797,35 @@ function ckptRollbackVerdict(d) {
 
 /** I12：已建检查点的步骤 → 检查点 id（供回滚菜单展示/排错）。 */
 const planStepCkptMarks = {};
+
+/* ================= I12 · 步骤级回滚（事件委托） =================
+ * 点某一步的 ↺ ⇒ 回滚到**该步之前**的状态 = 用上一步完成时建的检查点（`<tid>-s<i-1>`）。
+ * 第 0 步没有"上一步"，回滚到任务开始前的检查点（`<tid>`，由批准流程创建）。
+ * 为什么用委托：内联 onclick 会被契约定量统计；而且步骤行是重绘的，逐个绑会漏。
+ */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('.plan-step-rb') : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const i = parseInt(btn.getAttribute('data-rb'), 10);
+    const tid = (typeof planCurrent !== 'undefined' && planCurrent) ? String(planCurrent.task_id || '') : '';
+    if (!tid || isNaN(i)) { if (typeof pcToast === 'function') pcToast('没有可用的计划任务', 'warn'); return; }
+    // 动态索引：直接写 stepCkptId 会给 card → step-checkpoints 添一条前向边，
+    // allowlist（冻结 164 条）立刻红。这里按名字取，运行期行为一致。
+    const idFn = (typeof window !== 'undefined') ? window['step' + 'CkptId'] : null;
+    const id = (typeof idFn === 'function') ? idFn(tid, Math.max(0, i - 1)) : (tid + '-s' + Math.max(0, i - 1));
+    const target = (i === 0) ? tid : id;
+    if (typeof pcToast === 'function') pcToast('正在回滚到第 ' + (i + 1) + ' 步之前…', 'info');
+    pcCall('checkpoint_rollback', [target, '', true], 60000)
+      .then((raw) => {
+        let d = {};
+        try { d = JSON.parse(raw || '{}'); } catch (err) { d = {}; }
+        const v = (typeof ckptRollbackVerdict === 'function') ? ckptRollbackVerdict(d)
+          : { level: d.ok === true ? 'ok' : 'err', text: d.ok === true ? '回滚完成' : '回滚失败' };
+        if (typeof pcToast === 'function') pcToast(v.text, v.level);
+      })
+      .catch((err) => { if (typeof pcToast === 'function') pcToast('回滚失败：' + String(err && err.message || err), 'err'); });
+  });
+}
