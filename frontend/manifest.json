@@ -978,7 +978,9 @@
       "path": "frontend/src/agent/tool-runtime.js",
       "provides": [
         "WRITE_SEQ_TOOLS",
-        "createToolRuntime"
+        "createToolRuntime",
+        "toolCategoryLabel",
+        "toolCategoryOf"
       ],
       "requires": []
     },
@@ -1128,7 +1130,8 @@
         "traceRenderHtml",
         "traceRenderInto",
         "_traceShortName",
-        "_traceVerdict"
+        "_traceVerdict",
+        "_traceEscAttr"
       ],
       "requires": []
     },

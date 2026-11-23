@@ -640,3 +640,15 @@ body.fx-off .hm-shell{box-shadow:var(--shadow-sm)}
   animation:s2Pulse var(--dur-ambient) var(--ease-out-soft) infinite alternate}
 @keyframes s2Pulse{from{opacity:.62}to{opacity:1}}
 body.fx-off .s2-stage{animation:none;opacity:1}
+
+/* ===== R101 T03 · 工具类别标签（执行轨迹内）=====
+   目的：一眼分出「文件 / 命令 / 网络 / 记忆 / MCP」，因为不同类别的失败
+   归因完全不同（文件=路径；命令=权限/退出码；网络=端点；MCP=鉴权）。
+   用 data-cat 上色，不写死色值。 */
+.et-cat{flex-shrink:0;font-size:10px;line-height:1;padding:1px 5px;border-radius:var(--radius-full);
+  background:var(--surface-2);color:var(--text-3)}
+.et-cat[data-cat="file"]{color:var(--primary)}
+.et-cat[data-cat="shell"]{color:var(--warn)}
+.et-cat[data-cat="web"]{color:var(--ok)}
+.et-cat[data-cat="mcp"]{color:var(--primary-hover)}
+.et-row.fail .et-cat{background:var(--err-bg);color:var(--err)}

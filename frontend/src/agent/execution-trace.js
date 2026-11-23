@@ -69,6 +69,9 @@ function traceAddToolRound(payload) {
   const p = payload || {};
   const calls = Array.isArray(p.toolCalls) ? p.toolCalls : [];
   const results = Array.isArray(p.results) ? p.results : [];
+  // 类别由调用方（run-controller）给出，本模块不反向依赖 tool-runtime
+  // —— trace 要保持零依赖，否则会和 run-controller 形成环（SCC 零余量）。
+  const cats = Array.isArray(p.categories) ? p.categories : [];
   const n = Math.max(calls.length, results.length);
   for (let k = 0; k < n; k++) {
     const call = calls[k] || {};
@@ -78,6 +81,7 @@ function traceAddToolRound(payload) {
       i: EXEC_TRACE.steps.length,
       round: Number(p.round || 0),
       name: _traceShortName(rawName),
+      cat: String(cats[k] || 'other'),
       ok: v.ok,
       status: v.ok ? 'ok' : 'fail',
       summary: v.summary,
@@ -123,6 +127,7 @@ function traceRenderHtml(limit) {
     const mark = s.ok ? '✓' : '✗';
     return '<div class="et-row ' + cls + '">' +
       '<span class="et-mark">' + mark + '</span>' +
+      '<span class="et-cat" data-cat="' + _traceEscAttr(s.cat || 'other') + '"></span>' +
       '<span class="et-name"></span>' +
       '<span class="et-sum"></span>' +
       '</div>';
@@ -147,7 +152,14 @@ function traceRenderInto(el, limit) {
     const s = shown[k];
     const nameEl = rows[k].querySelector('.et-name');
     const sumEl = rows[k].querySelector('.et-sum');
+    const catEl = rows[k].querySelector('.et-cat');
+    if (catEl) catEl.textContent = toolCategoryLabel(s.cat || 'other');
     if (nameEl) nameEl.textContent = s.name;
     if (sumEl) sumEl.textContent = s.summary || '';
   }
+}
+
+/** 类别属性值只需允许的短标识，避免把工具名当属性值注入。 */
+function _traceEscAttr(v) {
+  return String(v == null ? 'other' : v).replace(/[^a-z]/g, '') || 'other';
 }

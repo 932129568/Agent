@@ -1143,7 +1143,13 @@ async function runAgentLoop(s, apiKey) {
       toolCalls.forEach(tc => taskUsed.add(tc.name));  // 回填已用工具，后续轮次保留
       // R101 T03 · Execution Trace 聚合（每轮一次，含失败判定）
       if (typeof traceAddToolRound === 'function') {
-        traceAddToolRound({ toolCalls: toolCalls, results: results });
+        traceAddToolRound({
+          toolCalls: toolCalls,
+          results: results,
+          // 类别在这里算好再传：trace 保持零依赖，不反向引用 tool-runtime（防环）
+          categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
+            ? toolCategoryOf(tc && tc.name) : 'other')),
+        });
         if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8);
       }
       s._readKeys = [...readFileSet];   // 跨任务持久化已读记录

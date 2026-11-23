@@ -359,6 +359,7 @@ backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));-webkit-
 display:flex;flex-direction:column;flex-shrink:0;z-index:10;
 transition:margin-left var(--dur-panel) var(--ease-out-soft);}
 .sidebar.collapsed{margin-left:calc(-1 * var(--sidebar-w));}
+.sidebar.collapsed{visibility:hidden;transition:margin-left var(--dur-panel) var(--ease-out-soft),visibility .01ms linear var(--dur-panel);}
 .sidebar-brand{padding:16px 16px 12px;display:flex;align-items:center;gap:10px;}
 .brand-logo{width:32px;height:32px;border-radius:var(--radius-md);background:var(--brand-gradient);
 display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;
@@ -2945,8 +2946,10 @@ body.fx-off .rail,body.fx-off .sidebar,body.fx-off .main,body.fx-off .input-area
 width:min(86vw,320px);margin-left:0;z-index:80;transform:translateX(-102%);
 transition:transform var(--dur-panel) var(--ease-out-soft);box-shadow:var(--shadow-lg)}
 .sidebar.collapsed{margin-left:0}
+.sidebar{visibility:hidden;transition:transform var(--dur-panel) var(--ease-out-soft),visibility .01ms linear var(--dur-panel)}
 body.sidebar-open{overflow:hidden}
-body.sidebar-open .sidebar{transform:translateX(0);margin-left:0}
+body.sidebar-open .sidebar{transform:translateX(0);margin-left:0;visibility:visible;
+transition:transform var(--dur-panel) var(--ease-out-soft),visibility .01ms linear .01ms}
 .sidebar-backdrop:not([hidden]){display:block;position:fixed;inset:0;z-index:70;
 background:color-mix(in srgb,var(--bg) 55%,transparent)}
 body.fx-off .sidebar{transition:none}
@@ -3479,6 +3482,13 @@ display:inline-block}
 animation:s2Pulse var(--dur-ambient) var(--ease-out-soft) infinite alternate}
 @keyframes s2Pulse{from{opacity:.62}to{opacity:1}}
 body.fx-off .s2-stage{animation:none;opacity:1}
+.et-cat{flex-shrink:0;font-size:10px;line-height:1;padding:1px 5px;border-radius:var(--radius-full);
+background:var(--surface-2);color:var(--text-3)}
+.et-cat[data-cat="file"]{color:var(--primary)}
+.et-cat[data-cat="shell"]{color:var(--warn)}
+.et-cat[data-cat="web"]{color:var(--ok)}
+.et-cat[data-cat="mcp"]{color:var(--primary-hover)}
+.et-row.fail .et-cat{background:var(--err-bg);color:var(--err)}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -14893,6 +14903,21 @@ return results;
 },
 });
 }
+function toolCategoryOf(name) {
+const n = String(name == null ? '' : name);
+if (!n) return 'other';
+if (n.indexOf('mcp__') === 0) return 'mcp';
+if (/^(read_|list_|write_|append_|search_replace|move_|copy_|delete_)/.test(n)) return 'file';
+if (/^(run_|kill_|exec_)/.test(n)) return 'shell';
+if (/^(browser_|open_|web_|fetch_)/.test(n)) return 'web';
+if (/(^|_)memory(_|$)/.test(n)) return 'memory';
+if (/^(clipboard_|take_screenshot|screenshot)/.test(n)) return 'ui';
+return 'other';
+}
+function toolCategoryLabel(cat) {
+const map = { file: '文件', shell: '命令', web: '网络', memory: '记忆', ui: '界面', mcp: 'MCP', other: '其他' };
+return map[String(cat)] || '其他';
+}
 
 
 /* ===== frontend/src/agent/model-executor.js ===== */
@@ -16838,6 +16863,7 @@ function traceAddToolRound(payload) {
 const p = payload || {};
 const calls = Array.isArray(p.toolCalls) ? p.toolCalls : [];
 const results = Array.isArray(p.results) ? p.results : [];
+const cats = Array.isArray(p.categories) ? p.categories : [];
 const n = Math.max(calls.length, results.length);
 for (let k = 0; k < n; k++) {
 const call = calls[k] || {};
@@ -16847,6 +16873,7 @@ EXEC_TRACE.steps.push({
 i: EXEC_TRACE.steps.length,
 round: Number(p.round || 0),
 name: _traceShortName(rawName),
+cat: String(cats[k] || 'other'),
 ok: v.ok,
 status: v.ok ? 'ok' : 'fail',
 summary: v.summary,
@@ -16885,6 +16912,7 @@ const cls = s.ok ? 'ok' : 'fail';
 const mark = s.ok ? '✓' : '✗';
 return '<div class="et-row ' + cls + '">' +
 '<span class="et-mark">' + mark + '</span>' +
+'<span class="et-cat" data-cat="' + _traceEscAttr(s.cat || 'other') + '"></span>' +
 '<span class="et-name"></span>' +
 '<span class="et-sum"></span>' +
 '</div>';
@@ -16907,9 +16935,14 @@ for (let k = 0; k < rows.length && k < shown.length; k++) {
 const s = shown[k];
 const nameEl = rows[k].querySelector('.et-name');
 const sumEl = rows[k].querySelector('.et-sum');
+const catEl = rows[k].querySelector('.et-cat');
+if (catEl) catEl.textContent = toolCategoryLabel(s.cat || 'other');
 if (nameEl) nameEl.textContent = s.name;
 if (sumEl) sumEl.textContent = s.summary || '';
 }
+}
+function _traceEscAttr(v) {
+return String(v == null ? 'other' : v).replace(/[^a-z]/g, '') || 'other';
 }
 
 
@@ -17977,7 +18010,12 @@ generation: context && context.generation !== undefined ? context.generation : r
 if (userStopped) fillMissingToolResults(s, run.assistantMsg);
 toolCalls.forEach(tc => taskUsed.add(tc.name));
 if (typeof traceAddToolRound === 'function') {
-traceAddToolRound({ toolCalls: toolCalls, results: results });
+traceAddToolRound({
+toolCalls: toolCalls,
+results: results,
+categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
+? toolCategoryOf(tc && tc.name) : 'other')),
+});
 if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8);
 }
 s._readKeys = [...readFileSet];

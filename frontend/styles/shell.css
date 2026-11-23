@@ -94,8 +94,11 @@ body.fx-off .rail,body.fx-off .sidebar,body.fx-off .main,body.fx-off .input-area
     width:min(86vw,320px);margin-left:0;z-index:80;transform:translateX(-102%);
     transition:transform var(--dur-panel) var(--ease-out-soft);box-shadow:var(--shadow-lg)}
   .sidebar.collapsed{margin-left:0}
+  /* 抽屉态同理：关闭时除位移外再加 visibility 兜底，避免任何残留像素压住 rail */
+  .sidebar{visibility:hidden;transition:transform var(--dur-panel) var(--ease-out-soft),visibility .01ms linear var(--dur-panel)}
   body.sidebar-open{overflow:hidden}
-  body.sidebar-open .sidebar{transform:translateX(0);margin-left:0}
+  body.sidebar-open .sidebar{transform:translateX(0);margin-left:0;visibility:visible;
+    transition:transform var(--dur-panel) var(--ease-out-soft),visibility .01ms linear .01ms}
   .sidebar-backdrop:not([hidden]){display:block;position:fixed;inset:0;z-index:70;
     background:color-mix(in srgb,var(--bg) 55%,transparent)}
   body.fx-off .sidebar{transition:none}

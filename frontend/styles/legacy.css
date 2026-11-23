@@ -291,6 +291,11 @@ html[data-anim-paused] body *{animation-play-state:paused!important}
   display:flex;flex-direction:column;flex-shrink:0;z-index:10;
   transition:margin-left var(--dur-panel) var(--ease-out-soft);}
 .sidebar.collapsed{margin-left:calc(-1 * var(--sidebar-w));}
+/* R101 修复：折叠时只位移自身宽度是不够的——侧栏左缘位于 rail 之后（64px），
+   位移 --sidebar-w 后右缘恰好停在 x=64，那 64px 会压在 rail 上（两者同为 z-index:1，
+   侧栏在 DOM 中靠后 ⇒ 盖住轨道）。露出的是 #new-chat-btn 的实心主色块，
+   用户看到的就是"左侧轨道上冒出一块橙色"。用 visibility 兜底，位移动画照样播完再隐藏。 */
+.sidebar.collapsed{visibility:hidden;transition:margin-left var(--dur-panel) var(--ease-out-soft),visibility .01ms linear var(--dur-panel);}
 .sidebar-brand{padding:16px 16px 12px;display:flex;align-items:center;gap:10px;}
 .brand-logo{width:32px;height:32px;border-radius:var(--radius-md);background:var(--brand-gradient);
   display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;

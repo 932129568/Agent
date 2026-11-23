@@ -35,3 +35,29 @@ function createToolRuntime(options) {
     },
   });
 }
+
+/* ================= R101 T03 · 工具类别（供轨迹与纠偏建议共用） =================
+ * 为什么用**名称模式**而不是穷举清单：工具名由后端 build_tools 动态给出，
+ * 前端硬编码一份全量清单必然与后端漂移（历史上 TOOLS 双源就是这么烂掉的）。
+ * 模式匹配的好处是：新工具只要命名符合既有习惯就自动归类，不符合就老实落到 other，
+ * 不会出现「清单里没有 ⇒ 假装它是文件工具」这种编造。
+ * 'mcp' 单独一类：MCP 工具的失败语义与内置工具不同（多半是端点/鉴权问题），
+ * 纠偏建议要分开给。
+ */
+function toolCategoryOf(name) {
+  const n = String(name == null ? '' : name);
+  if (!n) return 'other';
+  if (n.indexOf('mcp__') === 0) return 'mcp';
+  if (/^(read_|list_|write_|append_|search_replace|move_|copy_|delete_)/.test(n)) return 'file';
+  if (/^(run_|kill_|exec_)/.test(n)) return 'shell';
+  if (/^(browser_|open_|web_|fetch_)/.test(n)) return 'web';
+  if (/(^|_)memory(_|$)/.test(n)) return 'memory';
+  if (/^(clipboard_|take_screenshot|screenshot)/.test(n)) return 'ui';
+  return 'other';
+}
+
+/** 类别的展示标签（中文短标签，直接进 DOM）。 */
+function toolCategoryLabel(cat) {
+  const map = { file: '文件', shell: '命令', web: '网络', memory: '记忆', ui: '界面', mcp: 'MCP', other: '其他' };
+  return map[String(cat)] || '其他';
+}
