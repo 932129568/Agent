@@ -4,6 +4,11 @@
  * 点一下直接切到那个会话接管——判据「3 会话并行任意审批/异常 1 秒直达接管」。
  *
  * 三条约束：
+ *  ★ 交互裁决（2026-11-23 用户拍定）：**置顶区只做跳转，不做就地审批/纠偏输入**。
+ *    理由：置顶区是"导航"，不是"接管面板"。纠偏输入已在 resume.js 的接管卡里实现，
+ *    就地展开会让侧栏顶部冒出输入框，与导航定位冲突。
+ *    ⇒ 若将来有人想在这里加 textarea / 审批按钮，先回来看这一行：**不在这里做**。
+ *
  *  ① 运行期创建，不往模板加 id/onclick（arch-contract 的 300-id 白名单 + contract_diff 的 dom_id 集合）。
  *  ② 数据只从 `RunRegistry.all()` 取，不自己维护一份"谁在跑"的状态（两份必然分叉）。
  *  ③ 切会话走动态索引 `switchSession`，不产生跨模块静态边（SCC 16 环零余量）。
@@ -82,7 +87,7 @@ function runPinboardRefresh() {
     row.dataset.sid = String(run.sessionId || '');
     const active = _rpStatusText(run);
     row.setAttribute('data-state', active === '待接管' ? 'wait' : (active === '异常' ? 'bad' : 'run'));
-    row.title = '切到「' + (sess.title || run.sessionId) + '」接管';
+    row.title = '跳转到「' + (sess.title || run.sessionId) + '」（只跳转，审批与纠偏在会话内完成）';
     row.innerHTML =
       '<span class="rp-radar" aria-hidden="true"></span>' +
       '<span class="rp-title"></span>' +

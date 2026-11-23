@@ -2132,7 +2132,11 @@
         "renderCompactCard",
         "restoreCompactBackup",
         "saveCompactBackup",
-        "summarizeToolResult"
+        "summarizeToolResult",
+        "ANCHOR_DECISION_RE",
+        "ANCHOR_PATH_RE",
+        "_anchorDigestUpsert",
+        "_anchorExtract"
       ],
       "requires": [
         "sessions",

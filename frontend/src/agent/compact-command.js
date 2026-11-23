@@ -226,6 +226,12 @@ async function compactNow(s, apiKey, opts = {}) {
   if (liveEl) updateLiveTokenStat();
 }
 async function compactHistory(s) {
+  // I10（v3.4）· 锚定压缩：**先抽锚点再截断**。
+  // 原实现是就地截断（长消息截到 1500 字 / 工具结果截到 300 字），
+  // 埋在正文里的「决定了什么」「改了哪些路径」正好死在这一步 —— 50 轮长任务就会遗忘。
+  // 这里把关键决策与路径抽成一条 __anchorDigest 消息，插在最后一条 user 之前：
+  // 它在截断范围之外，且每次压缩**替换**而非追加（幂等，不会堆成一串）。
+  try { _anchorDigestUpsert(s); } catch (e) {}
   let changed = archiveOldTasks(s);
   let lastUserIdx = -1;
   for (let i = s.messages.length - 1; i >= 0; i--) {
@@ -277,3 +283,67 @@ async function compactHistory(s) {
 }
 
 if (typeof registerUISeam === 'function') registerUISeam({ renderCompactCard, compactNow });
+
+/* ================= I10 · 锚点抽取与摘要 =================
+ * 只认「明确表述」的决策与「看起来像路径」的串，不做语义猜测：
+ *   决策：命中 决定/确定/采用/结论/改为/不再/保留/方案 等词的那一行首句（≤120 字）
+ *   路径：Windows 盘符路径、POSIX 绝对路径、常见源码/配置扩展名
+ * 上限：决策 12 条、路径 20 条（超出取**最后出现**的——后期决策通常更新）。
+ * 抽不到就不插摘要（不生成空壳消息）。
+ */
+const ANCHOR_DECISION_RE = /(决定|确定|采用|结论|改为|不再|保留|方案：|decision)/i;
+const ANCHOR_PATH_RE = /(?:[A-Za-z]:[\\/][^\s'"`<>|)）]+|\/[A-Za-z0-9_.-]+\/[^\s'"`<>|)）]+|[\w.-]+\.(?:js|mjs|ts|tsx|jsx|py|json|md|css|html|sh|bat|ps1|yml|yaml|toml))/g;
+
+function _anchorExtract(messages) {
+  const decisions = [];
+  const seenD = new Set();
+  const paths = [];
+  const seenP = new Set();
+  const list = Array.isArray(messages) ? messages : [];
+  for (const m of list) {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
+    const text = typeof m.content === 'string' ? m.content : '';
+    if (!text) continue;
+    for (const line of text.split(/\r?\n/)) {
+      if (!ANCHOR_DECISION_RE.test(line)) continue;
+      const first = line.split(/[。；;!?！？]/)[0].trim().slice(0, 120);
+      if (first && !seenD.has(first)) { seenD.add(first); decisions.push(first); }
+      if (decisions.length >= 12) break;
+    }
+    let mm;
+    ANCHOR_PATH_RE.lastIndex = 0;
+    while ((mm = ANCHOR_PATH_RE.exec(text))) {
+      const p = String(mm[0]).replace(/[.,;:]+$/, '');
+      if (p.length < 4 || seenP.has(p)) continue;
+      seenP.add(p); paths.push(p);
+      if (paths.length >= 20) break;
+    }
+  }
+  return { decisions: decisions.slice(-12), paths: paths.slice(-20) };
+}
+
+/** 生成/替换锚点摘要（幂等：先删旧的 __anchorDigest，再按需插新的）。 */
+function _anchorDigestUpsert(s) {
+  if (!s || !Array.isArray(s.messages)) return 0;
+  for (let i = s.messages.length - 1; i >= 0; i--) {
+    if (s.messages[i] && s.messages[i].__anchorDigest) s.messages.splice(i, 1);
+  }
+  const a = _anchorExtract(s.messages);
+  if (!a.decisions.length && !a.paths.length) return 0;
+  const lines = ['【已压缩历史的锚点摘要】（自动生成，随压缩更新；不是用户消息）'];
+  if (a.decisions.length) {
+    lines.push('关键决策：');
+    a.decisions.forEach((d, i) => lines.push((i + 1) + '. ' + d));
+  }
+  if (a.paths.length) {
+    lines.push('涉及路径：');
+    lines.push(a.paths.join('\n'));
+  }
+  const digest = { role: 'system', content: lines.join('\n'), __anchorDigest: true };
+  let insertAt = s.messages.length;
+  for (let i = s.messages.length - 1; i >= 0; i--) {
+    if (s.messages[i] && s.messages[i].role === 'user') { insertAt = i; break; }
+  }
+  s.messages.splice(insertAt, 0, digest);
+  return 1;
+}
