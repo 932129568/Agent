@@ -940,7 +940,10 @@
         "renderMdStream",
         "resetMdStream",
         "scheduleRender",
-        "viewImage"
+        "viewImage",
+        "REWIND_MAX_CHARS",
+        "REWIND_MAX_MSGS",
+        "buildRewindSnapshot"
       ],
       "requires": [
         "sessions",

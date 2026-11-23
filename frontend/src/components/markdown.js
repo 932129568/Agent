@@ -550,18 +550,26 @@ function msgRollback(msgEl, text) {
     return;
   }
   const sid = s.id;
+  // R101 T03 · Rewind 联动快照：把被移除的消息**落进会话**（s._rewind），
+  // 而不是只放在内存 __rollbackBuf 里。原因：原来撤销依赖内存 + 10s 横幅，
+  // 刷新页面或横幅超时后这部分内容永久丢失（saveSessions 已经把截断写盘了）。
+  // 现在截断与快照在同一次 saveSessions 里落盘 ⇒ 撤销不再受刷新/超时影响。
+  // 容量上限见 REWIND_MAX_MSGS / REWIND_MAX_CHARS；超限时只记条数并标记 truncated，
+  // **不假装仍可完整撤销**（UI 会据此把按钮换成说明）。
   __rollbackBuf.sid = sid;
   __rollbackBuf.msgs = s.messages.splice(midx + 1);
+  s._rewind = buildRewindSnapshot(__rollbackBuf.msgs, midx);
   // R99 P0：回退本身改变了 s.messages（切片已移入撤销缓冲），同样推进 updatedAt——
   // 否则「回退」在后端落盘失败后重开时会被旧的长版本反压，回退静默失效。
   s.updatedAt = Date.now();
   if (typeof saveSessions === 'function') saveSessions();
   if (typeof renderChatHistory === 'function') renderChatHistory(s);
-  _rollbackUndoBanner(s, __rollbackBuf.msgs.length);
+  // 快照已落盘 ⇒ 横幅也走持久档：10s 就消失的话，与「其实还能撤销」自相矛盾
+  _rollbackUndoBanner(s, __rollbackBuf.msgs.length, true);
 }
 
 /** 回退撤销横幅（10s 自动消失；撤销=拼接回历史并重渲染，不重跑模型）。 */
-function _rollbackUndoBanner(s, count) {
+function _rollbackUndoBanner(s, count, persistent) {
   if (typeof document === 'undefined') return;
   const host = document.getElementById('chatContainer');
   if (!host) return;
@@ -570,15 +578,32 @@ function _rollbackUndoBanner(s, count) {
   bar.style.cssText = 'display:flex;align-items:center;gap:10px;margin:8px auto;max-width:640px;' +
     'padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);' +
     'background:var(--main-bg);font-size:12.5px;color:var(--text-2);';
+  const truncated = !!(s && s._rewind && s._rewind.truncated);
   const label = document.createElement('span');
-  label.textContent = '已回退 ' + count + ' 条消息（上下文将不含这部分；已消耗的 token 不退还）';
+  label.textContent = truncated
+    ? ('已回退 ' + count + ' 条消息（内容过多，仅记录条数，无法完整撤销）')
+    : ('已回退 ' + count + ' 条消息（上下文将不含这部分；已消耗的 token 不退还' +
+       (persistent ? '；快照已保存，刷新后仍可撤销' : '') + '）');
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'modal-btn';
   btn.textContent = '撤销回退';
+  if (truncated) { btn.disabled = true; btn.title = '内容过多，未保留正文'; }
   btn.onclick = () => {
     if (_convBusyGuard()) { if (typeof toast === 'function') toast('正在生成中，无法撤销回退', 'warn'); return; }
-    if (__rollbackBuf.sid === s.id && Array.isArray(__rollbackBuf.msgs)) {
+    // 撤销来源优先用**持久快照**（s._rewind），内存缓冲只作为同会话内的快路径。
+    const snap = (s && s._rewind && Array.isArray(s._rewind.removed)) ? s._rewind : null;
+    const memOk = __rollbackBuf.sid === s.id && Array.isArray(__rollbackBuf.msgs);
+    if (snap && !snap.truncated) {
+      s.messages.push(...snap.removed);
+      delete s._rewind;
+      __rollbackBuf.sid = null; __rollbackBuf.msgs = null;
+      if (typeof saveSessions === 'function') saveSessions();
+      if (typeof renderChatHistory === 'function') renderChatHistory(s);
+      if (typeof toast === 'function') toast('已撤销回退，对话已恢复', 'ok');
+    } else if (snap && snap.truncated) {
+      if (typeof toast === 'function') toast('这次回退内容过多，只记录了条数，无法完整撤销', 'warn');
+    } else if (memOk) {
       s.messages.push(...__rollbackBuf.msgs);
       __rollbackBuf.sid = null; __rollbackBuf.msgs = null;
       if (typeof saveSessions === 'function') saveSessions();
@@ -590,7 +615,34 @@ function _rollbackUndoBanner(s, count) {
   bar.appendChild(label);
   bar.appendChild(btn);
   host.appendChild(bar);
-  if (__rollbackBuf.timer) { try { clearTimeout(__rollbackBuf.timer); } catch (e) {} }
-  __rollbackBuf.timer = setTimeout(() => { try { bar.remove(); } catch (e) {} }, 10000);
+  // 持久档（快照已落盘）不自动消失：它代表"还有一个可撤销的回退"，藏起来等于骗人。
+  if (!persistent) {
+    if (__rollbackBuf.timer) { try { clearTimeout(__rollbackBuf.timer); } catch (e) {} }
+    __rollbackBuf.timer = setTimeout(() => { try { bar.remove(); } catch (e) {} }, 10000);
+  }
 }
 
+/* R101 T03 · Rewind 快照（模块级，便于用例直接构造/断言）
+ * 上限：200 条消息 / 200000 字符。超限时**不保留正文**，只记条数并置 truncated=true，
+ * 由 UI 把「撤销回退」按钮置灰并说明原因 —— 宁可明确告诉用户撤不回来，
+ * 也不能留一个按下去没反应（或恢复一半）的按钮。 */
+const REWIND_MAX_MSGS = 200;
+const REWIND_MAX_CHARS = 200000;
+
+function buildRewindSnapshot(removed, midx) {
+  const list = Array.isArray(removed) ? removed : [];
+  let chars = 0;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i] && list[i].content;
+    chars += (typeof c === 'string') ? c.length : 0;
+    if (chars > REWIND_MAX_CHARS) break;
+  }
+  const tooBig = list.length > REWIND_MAX_MSGS || chars > REWIND_MAX_CHARS;
+  return {
+    midx: Number(midx) || 0,
+    at: Date.now(),
+    count: list.length,
+    truncated: tooBig,
+    removed: tooBig ? [] : list.slice(),
+  };
+}

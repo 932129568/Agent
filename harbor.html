@@ -14678,12 +14678,13 @@ return;
 const sid = s.id;
 __rollbackBuf.sid = sid;
 __rollbackBuf.msgs = s.messages.splice(midx + 1);
+s._rewind = buildRewindSnapshot(__rollbackBuf.msgs, midx);
 s.updatedAt = Date.now();
 if (typeof saveSessions === 'function') saveSessions();
 if (typeof renderChatHistory === 'function') renderChatHistory(s);
-_rollbackUndoBanner(s, __rollbackBuf.msgs.length);
+_rollbackUndoBanner(s, __rollbackBuf.msgs.length, true);
 }
-function _rollbackUndoBanner(s, count) {
+function _rollbackUndoBanner(s, count, persistent) {
 if (typeof document === 'undefined') return;
 const host = document.getElementById('chatContainer');
 if (!host) return;
@@ -14692,15 +14693,31 @@ bar.className = 'rollback-banner';
 bar.style.cssText = 'display:flex;align-items:center;gap:10px;margin:8px auto;max-width:640px;' +
 'padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);' +
 'background:var(--main-bg);font-size:12.5px;color:var(--text-2);';
+const truncated = !!(s && s._rewind && s._rewind.truncated);
 const label = document.createElement('span');
-label.textContent = '已回退 ' + count + ' 条消息（上下文将不含这部分；已消耗的 token 不退还）';
+label.textContent = truncated
+? ('已回退 ' + count + ' 条消息（内容过多，仅记录条数，无法完整撤销）')
+: ('已回退 ' + count + ' 条消息（上下文将不含这部分；已消耗的 token 不退还' +
+(persistent ? '；快照已保存，刷新后仍可撤销' : '') + '）');
 const btn = document.createElement('button');
 btn.type = 'button';
 btn.className = 'modal-btn';
 btn.textContent = '撤销回退';
+if (truncated) { btn.disabled = true; btn.title = '内容过多，未保留正文'; }
 btn.onclick = () => {
 if (_convBusyGuard()) { if (typeof toast === 'function') toast('正在生成中，无法撤销回退', 'warn'); return; }
-if (__rollbackBuf.sid === s.id && Array.isArray(__rollbackBuf.msgs)) {
+const snap = (s && s._rewind && Array.isArray(s._rewind.removed)) ? s._rewind : null;
+const memOk = __rollbackBuf.sid === s.id && Array.isArray(__rollbackBuf.msgs);
+if (snap && !snap.truncated) {
+s.messages.push(...snap.removed);
+delete s._rewind;
+__rollbackBuf.sid = null; __rollbackBuf.msgs = null;
+if (typeof saveSessions === 'function') saveSessions();
+if (typeof renderChatHistory === 'function') renderChatHistory(s);
+if (typeof toast === 'function') toast('已撤销回退，对话已恢复', 'ok');
+} else if (snap && snap.truncated) {
+if (typeof toast === 'function') toast('这次回退内容过多，只记录了条数，无法完整撤销', 'warn');
+} else if (memOk) {
 s.messages.push(...__rollbackBuf.msgs);
 __rollbackBuf.sid = null; __rollbackBuf.msgs = null;
 if (typeof saveSessions === 'function') saveSessions();
@@ -14712,8 +14729,29 @@ bar.remove();
 bar.appendChild(label);
 bar.appendChild(btn);
 host.appendChild(bar);
+if (!persistent) {
 if (__rollbackBuf.timer) { try { clearTimeout(__rollbackBuf.timer); } catch (e) {} }
 __rollbackBuf.timer = setTimeout(() => { try { bar.remove(); } catch (e) {} }, 10000);
+}
+}
+const REWIND_MAX_MSGS = 200;
+const REWIND_MAX_CHARS = 200000;
+function buildRewindSnapshot(removed, midx) {
+const list = Array.isArray(removed) ? removed : [];
+let chars = 0;
+for (let i = 0; i < list.length; i++) {
+const c = list[i] && list[i].content;
+chars += (typeof c === 'string') ? c.length : 0;
+if (chars > REWIND_MAX_CHARS) break;
+}
+const tooBig = list.length > REWIND_MAX_MSGS || chars > REWIND_MAX_CHARS;
+return {
+midx: Number(midx) || 0,
+at: Date.now(),
+count: list.length,
+truncated: tooBig,
+removed: tooBig ? [] : list.slice(),
+};
 }
 
 
@@ -25032,6 +25070,12 @@ toast('已进入项目对话；工作区绑定暂未同步，可稍后重试', '
 refreshWsCard();
 }
 function renderChatHistory(s) {
+try {
+if (s && s._rewind && s._rewind.count) {
+const show = (typeof window !== 'undefined') ? window['_roll' + 'backUndoBanner'] : null;
+if (typeof show === 'function') setTimeout(() => { try { show(s, s._rewind.count, true); } catch (e) {} }, 0);
+}
+} catch (e) {}
 const box = document.getElementById('chatContainer');
 box.classList.add('batch');
 box.innerHTML = '';

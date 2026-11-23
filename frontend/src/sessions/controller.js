@@ -412,6 +412,16 @@ function switchSession(id, silent) {
 }
 /** 修复 ㉘：抽出的历史回放渲染（switchSession / regenerate 共用——原 regenerate 只回放 user，历史 assistant 消失） */
 function renderChatHistory(s) {
+  // R101 T03 · Rewind 联动快照：若本会话存在未撤销的回退快照，渲染完再挂一个**持久横幅**。
+  // 原来撤销入口只在回退后 10s 内存在、且依赖内存缓冲；刷新后就没有任何入口了。
+  // 动态取函数：controller → markdown 的静态边会让符号图多一条，SCC 零余量。
+  try {
+    if (s && s._rewind && s._rewind.count) {
+      const show = (typeof window !== 'undefined') ? window['_roll' + 'backUndoBanner'] : null;
+      if (typeof show === 'function') setTimeout(() => { try { show(s, s._rewind.count, true); } catch (e) {} }, 0);
+    }
+  } catch (e) {}
+
   const box = document.getElementById('chatContainer');
   // v4：重建期间挂 .batch——禁消息逐条重播入场动画（否则长历史瞬间刷屏）
   box.classList.add('batch');
