@@ -3520,6 +3520,16 @@ background:var(--card-bg);border:1px solid var(--border);border-radius:var(--rad
 transition:border-color var(--dur-fast) var(--ease-out)}
 .rb-directive:focus,.prc-directive:focus{outline:none;border-color:var(--primary)}
 .rb-directive::placeholder,.prc-directive::placeholder{color:var(--text-3)}
+body.drop-active #chatInputArea .input-inner{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.drop-magnet{position:fixed;inset:0;z-index:520;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.dm-ring{position:absolute;width:180px;height:180px;border-radius:var(--radius-full);
+border:2px dashed var(--primary);opacity:.65;
+animation:dmBreathe var(--dur-ambient) var(--ease-out-soft) infinite alternate}
+.dm-tip{margin-top:220px;padding:6px 14px;border-radius:var(--radius-full);
+background:var(--card-bg);border:1px solid var(--border);color:var(--text-2);font-size:12px;
+box-shadow:var(--shadow-md)}
+@keyframes dmBreathe{from{transform:scale(.92);opacity:.35}to{transform:scale(1.04);opacity:.75}}
+body.fx-off .dm-ring{animation:none;opacity:.6}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -26252,6 +26262,51 @@ toast(`已加入 ${groups.file.length} 个文件（含 .md / .ppt / PDF 等任�
 renderPreview();
 return true;
 }
+function attachDropMagnetInit() {
+if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+if (window.__attachMagnetBound) return window.__attachMagnetBound;
+let depth = 0;
+const hasFiles = (e) => {
+const dt = e && e.dataTransfer;
+if (!dt) return false;
+if (dt.types && Array.prototype.indexOf.call(dt.types, 'Files') >= 0) return true;
+return !!(dt.files && dt.files.length);
+};
+const show = () => {
+if (document.body) document.body.classList.add('drop-active');
+if (!document.getElementById('dropMagnet')) {
+const el = document.createElement('div');
+el.id = 'dropMagnet';
+el.className = 'drop-magnet';
+el.setAttribute('aria-hidden', 'true');
+el.innerHTML = '<div class="dm-ring"></div><div class="dm-tip">松开接入文件</div>';
+(document.body || document.documentElement).appendChild(el);
+}
+};
+const hide = () => {
+depth = 0;
+if (document.body) document.body.classList.remove('drop-active');
+const el = document.getElementById('dropMagnet');
+if (el && el.parentNode) el.parentNode.removeChild(el);
+};
+const onEnter = (e) => {
+if (!hasFiles(e)) return;
+depth++;
+show();
+};
+const onLeave = (e) => {
+if (!hasFiles(e) && depth === 0) return;
+depth = Math.max(0, depth - 1);
+if (depth === 0) hide();
+};
+const onDrop = () => hide();
+window.addEventListener('dragenter', onEnter);
+window.addEventListener('dragleave', onLeave);
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) show(); });
+window.addEventListener('drop', onDrop);
+window.__attachMagnetBound = true;
+return true;
+}
 
 
 /* ===== frontend/src/agent/text-compress.js ===== */
@@ -31985,6 +32040,10 @@ document.getElementById('searchEngineWrap').style.display = this.checked ? 'flex
 queueSaveConfig();
 });
 updateLabels();
+try {
+const mag = (typeof window !== 'undefined') ? window['attach' + 'DropMagnetInit'] : null;
+if (typeof mag === 'function') mag();
+} catch (e) { console.warn('拖放磁吸初始化失败', e); }
 window.addEventListener('dragover', e => { e.preventDefault(); });
 window.addEventListener('drop', e => {
 e.preventDefault();

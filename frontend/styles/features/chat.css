@@ -674,3 +674,17 @@ body.fx-off .s2-stage{animation:none;opacity:1}
   transition:border-color var(--dur-fast) var(--ease-out)}
 .rb-directive:focus,.prc-directive:focus{outline:none;border-color:var(--primary)}
 .rb-directive::placeholder,.prc-directive::placeholder{color:var(--text-3)}
+
+/* ===== v3.4 I22 · 拖文件磁吸接引 =====
+   整屏淡遮罩 + 输入舱高亮 + 一圈呼吸环（用 transform/opacity，不碰布局属性）。
+   时长全部走 --dur-* 令牌；body.fx-off 下停动画只留静态提示。 */
+body.drop-active #chatInputArea .input-inner{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.drop-magnet{position:fixed;inset:0;z-index:520;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.dm-ring{position:absolute;width:180px;height:180px;border-radius:var(--radius-full);
+  border:2px dashed var(--primary);opacity:.65;
+  animation:dmBreathe var(--dur-ambient) var(--ease-out-soft) infinite alternate}
+.dm-tip{margin-top:220px;padding:6px 14px;border-radius:var(--radius-full);
+  background:var(--card-bg);border:1px solid var(--border);color:var(--text-2);font-size:12px;
+  box-shadow:var(--shadow-md)}
+@keyframes dmBreathe{from{transform:scale(.92);opacity:.35}to{transform:scale(1.04);opacity:.75}}
+body.fx-off .dm-ring{animation:none;opacity:.6}

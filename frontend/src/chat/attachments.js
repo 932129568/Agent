@@ -284,3 +284,62 @@ async function hubDispatchFiles(fileList) {
   renderPreview();
   return true;
 }
+
+/* ================= v3.4 I22 · 拖文件磁吸接引 =================
+ * 痛点：文件拖进窗口时没有任何视觉引导，用户不知道"能不能放这儿、放哪儿"。
+ * 判据：拖文件入窗 → 磁吸接引成胶囊。
+ *
+ * 边界（重要）：本函数**只做视觉引导与状态标记**，不处理文件本身。
+ * 文件落地仍由 bootstrap.js 既有的 drop 处理走 handleFiles → renderPreview 生成胶囊。
+ * 如果这里也调 handleFiles，同一次拖放会被处理两遍（附件翻倍）——这是最容易犯的错。
+ */
+function attachDropMagnetInit() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+  if (window.__attachMagnetBound) return window.__attachMagnetBound;
+  let depth = 0;   // dragenter/dragleave 成对计数，避免子元素抖动导致闪烁
+
+  const hasFiles = (e) => {
+    const dt = e && e.dataTransfer;
+    if (!dt) return false;
+    if (dt.types && Array.prototype.indexOf.call(dt.types, 'Files') >= 0) return true;
+    return !!(dt.files && dt.files.length);
+  };
+
+  const show = () => {
+    if (document.body) document.body.classList.add('drop-active');
+    if (!document.getElementById('dropMagnet')) {
+      const el = document.createElement('div');
+      el.id = 'dropMagnet';
+      el.className = 'drop-magnet';
+      el.setAttribute('aria-hidden', 'true');
+      el.innerHTML = '<div class="dm-ring"></div><div class="dm-tip">松开接入文件</div>';
+      (document.body || document.documentElement).appendChild(el);
+    }
+  };
+  const hide = () => {
+    depth = 0;
+    if (document.body) document.body.classList.remove('drop-active');
+    const el = document.getElementById('dropMagnet');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  };
+
+  const onEnter = (e) => {
+    if (!hasFiles(e)) return;
+    depth++;
+    show();
+  };
+  const onLeave = (e) => {
+    if (!hasFiles(e) && depth === 0) return;
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) hide();
+  };
+  // 注意：这里不 preventDefault 也不读文件——只清视觉；实际接收由 bootstrap 的 drop 完成。
+  const onDrop = () => hide();
+
+  window.addEventListener('dragenter', onEnter);
+  window.addEventListener('dragleave', onLeave);
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) show(); });
+  window.addEventListener('drop', onDrop);
+  window.__attachMagnetBound = true;
+  return true;
+}

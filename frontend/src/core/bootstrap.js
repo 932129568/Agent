@@ -132,6 +132,11 @@ async function loadAll() {
     queueSaveConfig();
   });
   updateLabels();
+  // v3.4 I22：拖文件磁吸接引（只做视觉；文件落地仍由下面的 drop 处理）
+  try {
+    const mag = (typeof window !== 'undefined') ? window['attach' + 'DropMagnetInit'] : null;
+    if (typeof mag === 'function') mag();
+  } catch (e) { console.warn('拖放磁吸初始化失败', e); }
   window.addEventListener('dragover', e => { e.preventDefault(); });
   window.addEventListener('drop', e => {
     e.preventDefault();

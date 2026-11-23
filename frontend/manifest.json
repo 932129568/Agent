@@ -2084,7 +2084,8 @@
         "HUB_VIDEO_EXT",
         "hubFileKind",
         "_hubReadGzTar",
-        "hubDispatchFiles"
+        "hubDispatchFiles",
+        "attachDropMagnetInit"
       ],
       "requires": [
         "attachments",
