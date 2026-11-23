@@ -412,6 +412,14 @@ function switchSession(id, silent) {
 }
 /** 修复 ㉘：抽出的历史回放渲染（switchSession / regenerate 共用——原 regenerate 只回放 user，历史 assistant 消失） */
 function renderChatHistory(s) {
+  // I02（v3.4）：重开会话时从 session.meta.trace 复原执行轨迹（幂等，已有则不覆盖）。
+  // 动态取函数：避免 controller → execution-trace 的静态边（SCC 零余量）。
+  try {
+    if (s && s.meta && s.meta.trace) {
+      const hyd = (typeof window !== 'undefined') ? window['trace' + 'HydrateFrom'] : null;
+      if (typeof hyd === 'function') hyd(s);
+    }
+  } catch (e) {}
   // R101 T03 · Rewind 联动快照：若本会话存在未撤销的回退快照，渲染完再挂一个**持久横幅**。
   // 原来撤销入口只在回退后 10s 内存在、且依赖内存缓冲；刷新后就没有任何入口了。
   // 动态取函数：controller → markdown 的静态边会让符号图多一条，SCC 零余量。

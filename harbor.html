@@ -11676,6 +11676,9 @@ return _stripToolTags(out);
 }
 function normalizeSystemMessages(msgs) {
 if (!Array.isArray(msgs)) return msgs;
+if (msgs.some(m => m && m.__resumeDirective)) {
+msgs = msgs.filter(m => !(m && m.__resumeDirective));
+}
 const sysParts = [];
 const rest = [];
 let sysCount = 0;
@@ -16854,15 +16857,23 @@ return Object.keys(map || {}).map(k => k + '=' + (map[k] == null ? '' : map[k]))
 
 
 /* ===== frontend/src/agent/execution-trace.js ===== */
-const EXEC_TRACE = {
-sid: '',
-steps: [],
-startedAt: 0,
-};
+const EXEC_TRACE = new Map();
+let _traceLastSid = '';
+function _traceState(sid, create) {
+let key = String(sid == null ? '' : sid);
+if (!key) key = _traceLastSid;
+let st = key ? EXEC_TRACE.get(key) : null;
+if (!st && create && key) {
+st = { sid: key, steps: [], startedAt: Date.now() };
+EXEC_TRACE.set(key, st);
+}
+return st || null;
+}
 function traceReset(sid) {
-EXEC_TRACE.sid = String(sid == null ? '' : sid);
-EXEC_TRACE.steps.length = 0;
-EXEC_TRACE.startedAt = Date.now();
+const key = String(sid == null ? '' : sid);
+if (!key) return;
+_traceLastSid = key;
+EXEC_TRACE.set(key, { sid: key, steps: [], startedAt: Date.now() });
 }
 function _traceShortName(name) {
 const n = String(name || '工具');
@@ -16897,28 +16908,34 @@ return { ok: true, summary: '' };
 }
 function traceAddToolRound(payload) {
 const p = payload || {};
+const st = _traceState(p.sid, true);
+if (!st) return;
 const calls = Array.isArray(p.toolCalls) ? p.toolCalls : [];
 const results = Array.isArray(p.results) ? p.results : [];
 const cats = Array.isArray(p.categories) ? p.categories : [];
+const prevTs = st.steps.length ? st.steps[st.steps.length - 1].ts : st.startedAt;
 const n = Math.max(calls.length, results.length);
 for (let k = 0; k < n; k++) {
 const call = calls[k] || {};
 const rawName = (call.function && call.function.name) || call.name || call.tool || '';
 const v = _traceVerdict(results[k]);
-EXEC_TRACE.steps.push({
-i: EXEC_TRACE.steps.length,
+const now = Date.now();
+st.steps.push({
+i: st.steps.length,
 round: Number(p.round || 0),
 name: _traceShortName(rawName),
 cat: String(cats[k] || 'other'),
 ok: v.ok,
 status: v.ok ? 'ok' : 'fail',
 summary: v.summary,
-ts: Date.now(),
+ts: now,
+ms: Math.max(0, now - prevTs),
 });
 }
 }
-function traceSnapshot() {
-const steps = EXEC_TRACE.steps;
+function traceSnapshot(sid) {
+const st = _traceState(sid, false);
+const steps = st ? st.steps : [];
 const byName = {};
 let ok = 0;
 let fail = 0;
@@ -16928,17 +16945,17 @@ byName[s.name] = (byName[s.name] || 0) + 1;
 if (s.ok) ok++; else fail++;
 }
 return {
-sid: EXEC_TRACE.sid,
+sid: st ? st.sid : '',
 total: steps.length,
 ok: ok,
 fail: fail,
 byName: byName,
-elapsedMs: EXEC_TRACE.startedAt ? (Date.now() - EXEC_TRACE.startedAt) : 0,
+elapsedMs: (st && st.startedAt) ? (Date.now() - st.startedAt) : 0,
 steps: steps.slice(),
 };
 }
-function traceRenderHtml(limit) {
-const snap = traceSnapshot();
+function traceRenderHtml(limit, sid) {
+const snap = traceSnapshot(sid);
 const max = Number(limit) > 0 ? Number(limit) : 8;
 if (!snap.total) {
 return '<div class="et-empty">本轮暂无工具调用</div>';
@@ -16960,9 +16977,9 @@ const head = '<div class="et-head">' +
 return head + '<div class="et-list">' + rows + '</div>' +
 (snap.total > max ? '<div class="et-more">另有 ' + (snap.total - max) + ' 步未显示</div>' : '');
 }
-function traceRenderInto(el, limit) {
+function traceRenderInto(el, limit, sid) {
 if (!el || typeof document === 'undefined') return;
-const snap = traceSnapshot();
+const snap = traceSnapshot(sid);
 const max = Number(limit) > 0 ? Number(limit) : 8;
 el.innerHTML = traceRenderHtml(limit);
 const rows = el.querySelectorAll('.et-row');
@@ -16979,6 +16996,33 @@ if (sumEl) sumEl.textContent = s.summary || '';
 }
 function _traceEscAttr(v) {
 return String(v == null ? 'other' : v).replace(/[^a-z]/g, '') || 'other';
+}
+function traceAttachTo(session, sid) {
+if (!session || typeof session !== 'object') return null;
+const snap = traceSnapshot(sid);
+if (!snap.total) return null;
+const trimmed = snap.steps.slice(-50).map(s => ({
+name: s.name, cat: s.cat, ok: s.ok, summary: String(s.summary || '').slice(0, 80), ms: s.ms,
+}));
+session.meta = session.meta || {};
+session.meta.trace = { sid: snap.sid, total: snap.total, ok: snap.ok, fail: snap.fail, steps: trimmed, at: Date.now() };
+return session.meta.trace;
+}
+function traceHydrateFrom(session) {
+if (!session || !session.meta || !session.meta.trace) return 0;
+const t = session.meta.trace;
+const key = String(t.sid || session.id || '');
+if (!key) return 0;
+const exist = EXEC_TRACE.get(key);
+if (exist && exist.steps && exist.steps.length) return 0;
+const steps = (Array.isArray(t.steps) ? t.steps : []).map((s, i) => ({
+i, round: 0, name: String(s.name || '工具'), cat: String(s.cat || 'other'),
+ok: !!s.ok, status: s.ok ? 'ok' : 'fail', summary: String(s.summary || ''),
+ts: Number(s.at) || 0, ms: Number(s.ms) || 0,
+}));
+EXEC_TRACE.set(key, { sid: key, steps, startedAt: Number(t.at) || Date.now() });
+_traceLastSid = key;
+return steps.length;
 }
 
 
@@ -17937,17 +17981,7 @@ delete_path: `删除 ${args.path}`
 callApi('append_worklog', [desc]).catch(() => {});
 }
 } catch (e) {}
-if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].includes(tc.name)) {
-try {
-const parsed = JSON.parse(result);
-if (parsed.ok) {
-const pks = [args.path, args.src, args.dst].filter(Boolean).map(p => String(p).toLowerCase());
-for (const k of [...readFileSet]) {
-if (pks.some(pk => k.startsWith(pk + '@'))) readFileSet.delete(k);
-}
-}
-} catch (e) {}
-}
+try { invalidateReadCache(readFileSet, tc.name, args, result); } catch (e) {}
 }
 }
 const sp = toolDiv.querySelector('.tool-spinner');
@@ -18047,12 +18081,14 @@ if (userStopped) fillMissingToolResults(s, run.assistantMsg);
 toolCalls.forEach(tc => taskUsed.add(tc.name));
 if (typeof traceAddToolRound === 'function') {
 traceAddToolRound({
+sid: s && s.id,
 toolCalls: toolCalls,
 results: results,
 categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
 ? toolCategoryOf(tc && tc.name) : 'other')),
 });
-if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8);
+if (typeof traceAttachTo === 'function') traceAttachTo(s, s && s.id);
+if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8, s && s.id);
 }
 s._readKeys = [...readFileSet];
 if (!userStopped) {
@@ -18320,6 +18356,36 @@ el.textContent = t;
 el.hidden = false;
 el.setAttribute('data-stage', t);
 return t;
+}
+const READ_CACHE_WRITE_TOOLS = ['write_file', 'append_file', 'search_replace',
+'delete_path', 'move_path', 'copy_path'];
+function invalidateReadCache(readFileSet, toolName, args, result) {
+if (!readFileSet || typeof readFileSet.clear !== 'function') return 0;
+const name = String(toolName || '');
+const isWrite = READ_CACHE_WRITE_TOOLS.indexOf(name) >= 0;
+const isCmd = name === 'run_command';
+if (!isWrite && !isCmd) return 0;
+let ok = false;
+try {
+const parsed = JSON.parse(result);
+ok = !!(parsed && parsed.ok);
+} catch (e) { ok = false; }
+if (isCmd) {
+const n = readFileSet.size;
+readFileSet.clear();
+return n;
+}
+if (!ok) return 0;
+const a = (args && typeof args === 'object') ? args : {};
+const pks = [a.path, a.src, a.dst, a.new_path]
+.filter(Boolean).map(x => String(x).toLowerCase());
+if (!pks.length) return 0;
+let removed = 0;
+for (const k of [...readFileSet]) {
+const key = String(k).toLowerCase();
+if (pks.some(pk => key.startsWith(pk + '@'))) { readFileSet.delete(k); removed++; }
+}
+return removed;
 }
 
 
@@ -20069,6 +20135,7 @@ function normalizeSessions(raw) {
 let arr = null;
 try {
 const p = (typeof raw === 'string') ? JSON.parse(raw || '[]') : raw;
+try { sanitizeResumeResidue(p); } catch (e) {}
 if (Array.isArray(p)) arr = p;
 } catch (e) { arr = null; }
 if (!arr) return [];
@@ -20338,6 +20405,20 @@ let tomb = [];
 try { tomb = JSON.parse(localStorage.getItem('glm_deleted_ids') || '[]'); } catch (e) {}
 if (!tomb.includes(id)) { tomb.push(id); localStorage.setItem('glm_deleted_ids', JSON.stringify(tomb)); }
 } catch (e) {}
+}
+function sanitizeResumeResidue(list) {
+if (!Array.isArray(list)) return 0;
+let removed = 0;
+for (const sess of list) {
+if (!sess || !Array.isArray(sess.messages)) continue;
+const keep = [];
+for (const m of sess.messages) {
+if (m && m.__resumeDirective) { removed++; continue; }
+keep.push(m);
+}
+if (keep.length !== sess.messages.length) sess.messages = keep;
+}
+return removed;
 }
 
 
@@ -25068,6 +25149,12 @@ toast('已进入项目对话；工作区绑定暂未同步，可稍后重试', '
 refreshWsCard();
 }
 function renderChatHistory(s) {
+try {
+if (s && s.meta && s.meta.trace) {
+const hyd = (typeof window !== 'undefined') ? window['trace' + 'HydrateFrom'] : null;
+if (typeof hyd === 'function') hyd(s);
+}
+} catch (e) {}
 try {
 if (s && s._rewind && s._rewind.count) {
 const show = (typeof window !== 'undefined') ? window['_roll' + 'backUndoBanner'] : null;

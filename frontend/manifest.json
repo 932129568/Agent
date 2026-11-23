@@ -1134,7 +1134,11 @@
         "traceRenderInto",
         "_traceShortName",
         "_traceVerdict",
-        "_traceEscAttr"
+        "_traceEscAttr",
+        "_traceLastSid",
+        "_traceState",
+        "traceAttachTo",
+        "traceHydrateFrom"
       ],
       "requires": []
     },
@@ -1185,7 +1189,9 @@
         "planFinishIfNatural",
         "runAgentLoop",
         "renderReason",
-        "renderStage"
+        "renderStage",
+        "READ_CACHE_WRITE_TOOLS",
+        "invalidateReadCache"
       ],
       "requires": [
         "isStreaming",
@@ -1451,7 +1457,8 @@
         "saveSessions",
         "_sessionStateRead",
         "_sessionStateWrite",
-        "_sessionStateCurrentId"
+        "_sessionStateCurrentId",
+        "sanitizeResumeResidue"
       ],
       "requires": [
         "sessions",

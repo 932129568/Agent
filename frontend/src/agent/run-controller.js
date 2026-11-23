@@ -1024,17 +1024,8 @@ async function runAgentLoop(s, apiKey) {
                 callApi('append_worklog', [desc]).catch(() => {});
               }
             } catch (e) {}
-            if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].includes(tc.name)) {
-              try {
-                const parsed = JSON.parse(result);
-                if (parsed.ok) {
-                  const pks = [args.path, args.src, args.dst].filter(Boolean).map(p => String(p).toLowerCase());
-                  for (const k of [...readFileSet]) {
-                    if (pks.some(pk => k.startsWith(pk + '@'))) readFileSet.delete(k);
-                  }
-                }
-              } catch (e) {}
-            }
+            // I01（v3.4）：写后精确失效 + 写命令清脏缓存（逻辑抽成模块级函数，便于用例断言）。
+            try { invalidateReadCache(readFileSet, tc.name, args, result); } catch (e) {}
           }
         }
         const sp = toolDiv.querySelector('.tool-spinner');
@@ -1144,13 +1135,16 @@ async function runAgentLoop(s, apiKey) {
       // R101 T03 · Execution Trace 聚合（每轮一次，含失败判定）
       if (typeof traceAddToolRound === 'function') {
         traceAddToolRound({
+          sid: s && s.id,
           toolCalls: toolCalls,
           results: results,
           // 类别在这里算好再传：trace 保持零依赖，不反向引用 tool-runtime（防环）
           categories: toolCalls.map((tc) => (typeof toolCategoryOf === 'function'
             ? toolCategoryOf(tc && tc.name) : 'other')),
         });
-        if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8);
+        // I02：每轮把摘要写进 session.meta.trace（重开/重启后可复原）
+        if (typeof traceAttachTo === 'function') traceAttachTo(s, s && s.id);
+        if (traceHost && typeof traceRenderInto === 'function') traceRenderInto(traceHost, 8, s && s.id);
       }
       s._readKeys = [...readFileSet];   // 跨任务持久化已读记录
 
@@ -1483,4 +1477,46 @@ function renderStage(el, text) {
   el.hidden = false;
   el.setAttribute('data-stage', t);
   return t;
+}
+
+/* I01（v3.4）· 写后失效已读缓存
+ * 原实现的三个漏洞：
+ *   ① 只处理 6 个写文件工具，`run_command` 完全不管 —— 而命令能改任意文件；
+ *   ② 直接读 `args.path`，args 缺失时抛错被外层 catch 吞掉 ⇒ **静默不失效**；
+ *   ③ 只看 `path/src/dst`，漏了 `new_path`（move/copy 的新位置）。
+ * 判据（doc I01）：改文件紧接 read_file 读最新内容且 0 Token 膨胀。
+ * 语义：写类工具成功 ⇒ 精确删对应路径前缀的缓存；run_command ⇒ 整表清空（无法推断影响面，
+ * 宁可多读一次也不让 Agent 拿到陈旧内容）。
+ */
+const READ_CACHE_WRITE_TOOLS = ['write_file', 'append_file', 'search_replace',
+  'delete_path', 'move_path', 'copy_path'];
+
+function invalidateReadCache(readFileSet, toolName, args, result) {
+  if (!readFileSet || typeof readFileSet.clear !== 'function') return 0;
+  const name = String(toolName || '');
+  const isWrite = READ_CACHE_WRITE_TOOLS.indexOf(name) >= 0;
+  const isCmd = name === 'run_command';
+  if (!isWrite && !isCmd) return 0;
+  let ok = false;
+  try {
+    const parsed = JSON.parse(result);
+    ok = !!(parsed && parsed.ok);
+  } catch (e) { ok = false; }
+  if (isCmd) {
+    // 写命令：即便返回非 ok 也可能已改了文件（半途失败）⇒ 无条件清空
+    const n = readFileSet.size;
+    readFileSet.clear();
+    return n;
+  }
+  if (!ok) return 0;
+  const a = (args && typeof args === 'object') ? args : {};
+  const pks = [a.path, a.src, a.dst, a.new_path]
+    .filter(Boolean).map(x => String(x).toLowerCase());
+  if (!pks.length) return 0;
+  let removed = 0;
+  for (const k of [...readFileSet]) {
+    const key = String(k).toLowerCase();
+    if (pks.some(pk => key.startsWith(pk + '@'))) { readFileSet.delete(k); removed++; }
+  }
+  return removed;
 }

@@ -73,6 +73,12 @@ function shrinkHistoryForApi(msgs) {
  */
 function normalizeSystemMessages(msgs) {
   if (!Array.isArray(msgs)) return msgs;
+  // I03（v3.4）：续跑残留的临时 system 不得进请求（双保险之二）。
+  // **必须在入口就过滤**：下面的合并逻辑在 sysCount<=1 时会 early return 原数组，
+  // 若把过滤写在循环里，恰好「1 条正常 system + 1 条残留」这种情况会被整组放过。
+  if (msgs.some(m => m && m.__resumeDirective)) {
+    msgs = msgs.filter(m => !(m && m.__resumeDirective));
+  }
   const sysParts = [];
   const rest = [];
   let sysCount = 0;

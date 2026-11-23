@@ -19,6 +19,9 @@ function normalizeSessions(raw) {
   let arr = null;
   try {
     const p = (typeof raw === 'string') ? JSON.parse(raw || '[]') : raw;
+    // I03（v3.4）：进程硬杀会留下带 __resumeDirective 的 system 消息（界面上没有气泡、
+    // 但下次请求会带上它，等于永久毒化）。这里在**反序列化**时剔除，作为双保险的第一道。
+    try { sanitizeResumeResidue(p); } catch (e) {}
     if (Array.isArray(p)) arr = p;
   } catch (e) { arr = null; }
   if (!arr) return [];
@@ -387,3 +390,21 @@ function rememberDeletedSession(id) {
   } catch (e) {}
 }
 
+/* I03 · 剔除续跑残留（双保险之一：反序列化时）
+ * 只删带 __resumeDirective 标记的消息；不动任何正常 system / user / assistant。
+ * 返回删除条数（调用方不需要，但便于用例断言）。
+ */
+function sanitizeResumeResidue(list) {
+  if (!Array.isArray(list)) return 0;
+  let removed = 0;
+  for (const sess of list) {
+    if (!sess || !Array.isArray(sess.messages)) continue;
+    const keep = [];
+    for (const m of sess.messages) {
+      if (m && m.__resumeDirective) { removed++; continue; }
+      keep.push(m);
+    }
+    if (keep.length !== sess.messages.length) sess.messages = keep;
+  }
+  return removed;
+}
