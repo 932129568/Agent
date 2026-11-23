@@ -44,7 +44,7 @@
       "frontend/app/tests/smoke-render.mjs",
       "tools/contract_golden_replay.py",
       "tools/contract_diff.py",
-      "deliverables/dev-plan/contract-baseline-r133.json",
+      "deliverables/dev-plan/contract-baseline-r134.json",
       "tools/uiaudit/assert_motion.py",
       "tools/uiaudit/assert_dead_controls.py",
       "tools/audit-apca-r101.mjs",

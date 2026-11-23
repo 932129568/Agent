@@ -65,9 +65,6 @@ function scOpen() {
     '<div class="modal-acts"><button class="modal-btn primary sc-ok">知道了</button></div>';
   mask.appendChild(card);
   document.body.appendChild(mask);
-  try {
-    if (typeof mask.showPopover === 'function' && !mask.matches(':popover-open')) mask.showPopover();
-  } catch (e) { /* 进不了顶层就按普通 div 走 */ }
   mask.addEventListener('click', e => { if (e.target === mask) scClose(); });
   card.querySelector('.sc-ok').onclick = scClose;
   if (!_scEscHandler) {
@@ -267,6 +264,9 @@ function cpPaletteOpen() {
     '<div class="cp-list" role="listbox" aria-label="命令列表"></div>';
   mask.appendChild(card);
   document.body.appendChild(mask);
+  // I27 续：命令面板进 top layer（popover manual）。放对位置——
+  // 首次替换时命中了 scOpen 的同名语句，面板反而没加（已修）。
+  try { if (typeof mask.showPopover === 'function' && !mask.matches(':popover-open')) mask.showPopover(); } catch (e) { console.warn('popover 失败:', e && e.message); }
   mask.addEventListener('click', e => { if (e.target === mask) cpPaletteClose(); });
 
   const input = card.querySelector('.cp-input');

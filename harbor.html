@@ -23485,9 +23485,6 @@ SC_MOUSE.map(x => '<div class="sc-row"><span class="sc-desc only">· ' + _scEsc(
 '<div class="modal-acts"><button class="modal-btn primary sc-ok">知道了</button></div>';
 mask.appendChild(card);
 document.body.appendChild(mask);
-try {
-if (typeof mask.showPopover === 'function' && !mask.matches(':popover-open')) mask.showPopover();
-} catch (e) {  }
 mask.addEventListener('click', e => { if (e.target === mask) scClose(); });
 card.querySelector('.sc-ok').onclick = scClose;
 if (!_scEscHandler) {
@@ -23641,6 +23638,7 @@ card.innerHTML =
 '<div class="cp-list" role="listbox" aria-label="命令列表"></div>';
 mask.appendChild(card);
 document.body.appendChild(mask);
+try { if (typeof mask.showPopover === 'function' && !mask.matches(':popover-open')) mask.showPopover(); } catch (e) { console.warn('popover 失败:', e && e.message); }
 mask.addEventListener('click', e => { if (e.target === mask) cpPaletteClose(); });
 const input = card.querySelector('.cp-input');
 _cpIndex = 0;
