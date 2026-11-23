@@ -164,3 +164,23 @@ test('harnessMeta.skills 为空串/非字符串时回落 l3:no-source（不塞�
     assert.ok(r.dropped.includes('l3:no-source'), JSON.stringify(bad) + ' 应回落为无来源');
   }
 });
+
+test('harnessMeta.handoff 有内容时 handoffState 落地（不再是无来源）', () => {
+  const r = rewriteChatBodyWithHarnessV2(chatBody(), {
+    env: ON,
+    harnessMeta: { v: 2, phase: 'execute', skills: '', handoff: '交接给：后端\n产出：接口已就绪' },
+  });
+  assert.equal(r.applied, true, 'reason=' + r.reason);
+  assert.ok(!r.dropped.includes('handoff:no-source'), 'handoff 已提供');
+  assert.ok(r.body.includes('接口已就绪'), '交接正文没进装配结果');
+});
+
+test('harnessMeta.handoff 为空/非法时回落 handoff:no-source', () => {
+  for (const bad of ['', null, 0, {}, undefined]) {
+    const r = rewriteChatBodyWithHarnessV2(chatBody(), {
+      env: ON, harnessMeta: { v: 2, phase: 'execute', handoff: bad },
+    });
+    assert.equal(r.applied, true);
+    assert.ok(r.dropped.includes('handoff:no-source'), JSON.stringify(bad) + ' 应回落为无来源');
+  }
+});

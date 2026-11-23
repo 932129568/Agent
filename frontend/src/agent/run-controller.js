@@ -1199,10 +1199,12 @@ async function runAgentLoop(s, apiKey) {
             if (h && Object.keys(h).length > 0) {
               const phase = uiSeamCall('harnessPhaseNow');
               const skills = uiSeamCall('harnessSkillsNow');
+              const handoff = uiSeamCall('harnessHandoffNow');
               h['X-Harbor-Harness'] = JSON.stringify({
                 v: 2,
                 phase: (phase === 'plan' ? 'plan' : 'execute'),
                 skills: (typeof skills === 'string' && skills) ? skills : '',
+                handoff: (typeof handoff === 'string' && handoff) ? handoff : '',
               });
             }
           } catch (e) { /* 元数据失败不影响请求 */ }

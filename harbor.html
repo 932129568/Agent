@@ -17916,10 +17916,12 @@ try {
 if (h && Object.keys(h).length > 0) {
 const phase = uiSeamCall('harnessPhaseNow');
 const skills = uiSeamCall('harnessSkillsNow');
+const handoff = uiSeamCall('harnessHandoffNow');
 h['X-Harbor-Harness'] = JSON.stringify({
 v: 2,
 phase: (phase === 'plan' ? 'plan' : 'execute'),
 skills: (typeof skills === 'string' && skills) ? skills : '',
+handoff: (typeof handoff === 'string' && handoff) ? handoff : '',
 });
 }
 } catch (e) {  }
@@ -27869,6 +27871,24 @@ text = (r && (r.content || r.text)) || '';
 groupFilesMsg('');
 groupDetailOpen(text || '（读取失败）', { id: 'gf', name: (f.member || '') + ' · 群文件', host: false }, null);
 } catch (e) { groupFilesMsg('读取失败：' + (e && e.message ? e.message : e)); }
+}
+function harnessHandoffNow() {
+try {
+const getSess = (typeof globalThis !== 'undefined') ? globalThis['get' + 'CurrentSession'] : null;
+const s = (typeof getSess === 'function') ? getSess() : null;
+if (!s || !Array.isArray(s.messages)) return '';
+for (let i = s.messages.length - 1; i >= 0; i--) {
+const c = s.messages[i] && s.messages[i].content;
+const text = (typeof c === 'string') ? c : '';
+if (text.indexOf('【交接文档】') < 0) continue;
+const m = /【交接文档】\s*\n?([\s\S]*)$/.exec(text);
+const body = m ? m[1] : text;
+const out = String(body || '').trim();
+if (!out) continue;
+return out.length > 1200 ? out.slice(0, 1200) : out;
+}
+} catch (e) {  }
+return '';
 }
 
 

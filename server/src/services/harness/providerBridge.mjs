@@ -289,7 +289,20 @@ export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assem
       // L3/handoff：仍无来源，显式留空而不是去猜。
       l2PhasePrompt: (harnessMeta && typeof harnessMeta.phase === 'string') ? ('当前阶段：' + harnessMeta.phase) : '',
       l3ActiveSkills: (harnessMeta && typeof harnessMeta.skills === 'string') ? harnessMeta.skills : '',
-      handoffState: null,
+      // handoff：群聊【交接文档】正文（只读视图）。
+      // 用鸭子类型对象而不是 AnchoredHandoffState：assemble 只调 renderMarkdown，
+      // 而这个外部文档是**权威来源**，压缩不应回写它（applyDelta 记内存但不外泄）。
+      handoffState: (harnessMeta && typeof harnessMeta.handoff === 'string' && harnessMeta.handoff)
+        ? {
+            __externalHandoff: true,
+            _turns: [],
+            renderMarkdown(maxTokens) {
+              const cap = Math.max(200, Math.floor((Number(maxTokens) || 1800) * 1.2));
+              return String(harnessMeta.handoff).slice(0, cap);
+            },
+            applyDelta() { /* 只读：外部交接文档不被压缩改写 */ },
+          }
+        : null,
       workingTurns: turns,
       env,
       assembler,
@@ -305,7 +318,7 @@ export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assem
   if (!l1Charter) dropped.push('l1:no-system-message')
   if (!(harnessMeta && typeof harnessMeta.phase === 'string')) dropped.push('l2:no-source')
   if (!(harnessMeta && typeof harnessMeta.skills === 'string' && harnessMeta.skills)) dropped.push('l3:no-source')
-  dropped.push('handoff:no-source')
+  if (!(harnessMeta && typeof harnessMeta.handoff === 'string' && harnessMeta.handoff)) dropped.push('handoff:no-source')
 
   const out = Object.assign({}, json, { messages: envelope.messages })
   if (Array.isArray(envelope.surface && envelope.surface.activeTools)) {

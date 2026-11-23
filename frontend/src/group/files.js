@@ -363,3 +363,29 @@ async function groupFilesRead(name) {
     groupDetailOpen(text || '（读取失败）', { id: 'gf', name: (f.member || '') + ' · 群文件', host: false }, null);
   } catch (e) { groupFilesMsg('读取失败：' + (e && e.message ? e.message : e)); }
 }
+
+/* R101 T05 · Harness V2 的 handoffState 探针
+ * 来源就是群聊里已有的【交接文档】：本仓没有独立的交接单存储，
+ * 成员在正文里写【交接文档】小节、group/files.js 负责解析与归档（见本文件头部说明）。
+ * 因此这里取「当前会话最后一条含【交接文档】的消息」的正文小节，而不是去编造结构化字段。
+ * 上限 1200 字符：handoff 分区 1800 token，中文约 1.2 token/字符，留出段头余量。
+ * 非群聊 / 没有交接文档 ⇒ 返回空串，服务端回落 handoff:no-source（不编造）。
+ */
+function harnessHandoffNow() {
+  try {
+    const getSess = (typeof globalThis !== 'undefined') ? globalThis['get' + 'CurrentSession'] : null;
+    const s = (typeof getSess === 'function') ? getSess() : null;
+    if (!s || !Array.isArray(s.messages)) return '';
+    for (let i = s.messages.length - 1; i >= 0; i--) {
+      const c = s.messages[i] && s.messages[i].content;
+      const text = (typeof c === 'string') ? c : '';
+      if (text.indexOf('【交接文档】') < 0) continue;
+      const m = /【交接文档】\s*\n?([\s\S]*)$/.exec(text);
+      const body = m ? m[1] : text;
+      const out = String(body || '').trim();
+      if (!out) continue;
+      return out.length > 1200 ? out.slice(0, 1200) : out;
+    }
+  } catch (e) { /* 取不到返回空串 */ }
+  return '';
+}

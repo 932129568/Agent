@@ -2209,7 +2209,8 @@
         "groupFilesSync",
         "groupHandoffFields",
         "groupHandoffOf",
-        "groupHandoffTitle"
+        "groupHandoffTitle",
+        "harnessHandoffNow"
       ],
       "requires": [
         "callApi",
