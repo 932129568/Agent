@@ -233,3 +233,79 @@ export function buildHarnessV2Envelope({
     handoff,
   };
 }
+
+/**
+ * R101 T05 · 把 harness V2 装配接进「代理层」的请求体（默认关闭）。
+ *
+ * 为什么接在代理层而不是 provider.js：渲染进程自己组装 messages（request-builder.js
+ * 只放 {messages, tools}），服务端只负责转发。所以真正能拿到「完整请求体」的位置
+ * 只有 local-proxy.js 的 relay()。接在代理层不需要新增任何 js_api 方法。
+ *
+ * 映射关系（body 里只有这些字段，所以只能映射这些）：
+ *   system 消息 → l1Charter
+ *   tools 里非 mcp__ → baseOpenAITools；mcp__* → mcpTools
+ *   其余 messages → workingTurns
+ *
+ * ⚠ 三个字段在 body 里**没有对应来源**，一律留空并写进 dropped：
+ *   l2PhasePrompt / l3ActiveSkills / handoffState
+ *   ⇒ 开启后装配出的 system prompt 会缺 L2/L3 两段。**这不是完整融合**，
+ *     它是「管线能端到端跑通」的验证开关；生产启用前必须先让前端把这两段送上来
+ *     （那是另一处改动，需要单独的契约推进）。本条限制由测试用例逐条断言。
+ *
+ * 失败一律**不阻断转发**：返回 applied=false 并把原始 body 原样交回。
+ */
+export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assembler = null } = {}) {
+  const pass = (reason) => ({ applied: false, body: rawBody, reason, dropped: [] })
+  if (!harnessV2Enabled(env)) return pass('disabled')
+
+  let text = ''
+  try {
+    text = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody == null ? '' : rawBody)
+  } catch (e) { return pass('unreadable') }
+  if (!text) return pass('empty')
+
+  let json = null
+  try { json = JSON.parse(text) } catch (e) { return pass('not-json') }
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return pass('not-object')
+  if (!Array.isArray(json.messages) || json.messages.length === 0) return pass('no-messages')
+
+  const first = json.messages[0]
+  const hasSystem = !!(first && first.role === 'system' && typeof first.content === 'string')
+  const l1Charter = hasSystem ? first.content : ''
+  const turns = json.messages.slice(hasSystem ? 1 : 0)
+  const tools = Array.isArray(json.tools) ? json.tools : []
+  const nameOf = (t) => String((t && t.function && t.function.name) || (t && t.name) || '')
+  const mcpTools = tools.filter((t) => nameOf(t).startsWith('mcp__'))
+  const baseTools = tools.filter((t) => !nameOf(t).startsWith('mcp__'))
+
+  let envelope = null
+  try {
+    envelope = buildHarnessV2Envelope({
+      baseOpenAITools: baseTools,
+      mcpTools,
+      l1Charter,
+      // 这三个是「no-source」：body 里没有对应字段，显式留空而不是去猜。
+      l2PhasePrompt: '',
+      l3ActiveSkills: '',
+      handoffState: null,
+      workingTurns: turns,
+      env,
+      assembler,
+    })
+  } catch (e) {
+    return pass('assemble-threw:' + ((e && e.message) ? e.message : String(e)))
+  }
+  if (!envelope || !Array.isArray(envelope.messages) || envelope.messages.length === 0) {
+    return pass('empty-envelope')
+  }
+
+  const dropped = []
+  if (!l1Charter) dropped.push('l1:no-system-message')
+  dropped.push('l2:no-source', 'l3:no-source', 'handoff:no-source')
+
+  const out = Object.assign({}, json, { messages: envelope.messages })
+  if (Array.isArray(envelope.surface && envelope.surface.activeTools)) {
+    out.tools = envelope.surface.activeTools
+  }
+  return { applied: true, body: JSON.stringify(out), reason: 'ok', dropped, envelope }
+}

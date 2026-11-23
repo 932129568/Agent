@@ -198,6 +198,19 @@ async function relay(req, res) {
     return jsonError(req, res, e && e.code === 413 ? 413 : 400,
       e && e.code === 413 ? '请求体过大（上限 32MB）' : '请求体读取失败')
   }
+  // R101 T05 · Harness V2 装配（默认关闭；关闭时 body 逐字节原样透传）
+  // 接在这里的原因：渲染进程只把 {messages, tools} 交给代理，服务端唯一能拿到
+  // 「完整请求体 + 已通过白名单校验的目标」的位置就是这里。
+  // 任何异常一律不阻断转发——宁可退回旧行为，也不能让模型请求挂掉。
+  if (process.env.HARBOR_HARNESS_V2 === '1' && req.method !== 'GET' &&
+      String(req.url || '').split('?')[0].endsWith('/chat/completions')) {
+    try {
+      const { rewriteChatBodyWithHarnessV2 } = await import('./harness/providerBridge.mjs')
+      const rw = rewriteChatBodyWithHarnessV2(body)
+      if (rw && rw.applied) body = rw.body
+    } catch (e) { /* 装配失败：原 body 原样透传，绝不中断请求 */ }
+  }
+
   let upstream
   try {
     upstream = await fetch(resolved.url, {
