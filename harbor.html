@@ -3012,6 +3012,14 @@ transform:translateX(-100%);animation:rpFlow var(--dur-stream) linear infinite}
 @keyframes rpFlow{from{transform:translateX(-100%)}to{transform:translateX(360%)}}
 body.fx-off .rp-radar::before,body.fx-off .rp-radar::after{animation:none;opacity:.35}
 body.fx-off .rp-flow{animation:none;opacity:.25;transform:none}
+.ap-row{margin-top:10px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-md);
+background:var(--surface-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ap-tip{flex-basis:100%;font-size:11px;color:var(--text-3);margin-bottom:2px}
+.ap-btn{padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius-full);
+background:var(--card-bg);color:var(--text-2);font-size:12px;cursor:pointer}
+.ap-btn:hover{border-color:var(--primary);color:var(--text)}
+.ap-btn.on{background:var(--primary);border-color:var(--primary);color:#fff}
+body.fx-lite .ap-row{--fx-scale:0.6}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -3825,6 +3833,13 @@ font-variant-numeric:tabular-nums}
 .cd-ln.same{color:var(--text-3)}
 .cd-hunk-note{padding:4px 8px;color:var(--text-3);font-size:11px}
 .cd-prev{white-space:pre-wrap;line-height:1.5}
+.sp-root.sp-docked{position:fixed;top:56px;right:12px;bottom:12px;left:auto;
+width:min(380px,40vw);max-height:none;z-index:420;overflow:auto;
+border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);background:var(--card-bg)}
+html.sp-dock-mode .main{padding-right:calc(min(380px,40vw) + 12px)!important}
+html.sp-dock-mode .sp-mask{display:none}
+.sp-dock{border:0;background:transparent;color:var(--text-3);cursor:pointer;font-size:13px;padding:0 4px}
+.sp-dock:hover{color:var(--text)}
 
 
 /* ===== frontend/styles/features/generative.css ===== */
@@ -8495,6 +8510,61 @@ if (on) root.removeAttribute('data-glass-demo');
 else root.setAttribute('data-glass-demo', '1');
 return !on;
 }
+const APPEARANCE_PRESETS = {
+standard: { opacity: 0.62, fx: 1.0, label: '标准' },
+airy: { opacity: 0.30, fx: 0.6, label: '通透' },
+rich: { opacity: 0.85, fx: 1.2, label: '浓郁' },
+};
+const APPEARANCE_KEY = 'harbor.appearance.preset';
+function appearanceApply(name) {
+if (typeof document === 'undefined') return 'standard';
+const key = APPEARANCE_PRESETS[name] ? name : 'standard';
+const p = APPEARANCE_PRESETS[key];
+const root = document.documentElement;
+root.style.setProperty('--glass-opacity', String(p.opacity));
+root.style.setProperty('--fx-scale', String(p.fx));
+document.body.classList.toggle('fx-lite', p.fx < 0.8);
+try { localStorage.setItem(APPEARANCE_KEY, key); } catch (e) {}
+const host = document.getElementById('appearancePresets');
+if (host) {
+host.querySelectorAll('.ap-btn').forEach((b) => {
+b.classList.toggle('on', b.getAttribute('data-preset') === key);
+});
+}
+return key;
+}
+function appearancePresetsMount() {
+if (typeof document === 'undefined') return null;
+if (document.getElementById('appearancePresets')) return document.getElementById('appearancePresets');
+let block = null;
+const blocks = document.querySelectorAll('#settingsPanel .set-block');
+for (const b of blocks) {
+const t = b.querySelector('.set-title');
+if (t && /外观/.test(t.textContent)) { block = b; break; }
+}
+if (!block) return null;
+const wrap = document.createElement('div');
+wrap.id = 'appearancePresets';
+wrap.className = 'ap-row';
+const tip = document.createElement('div');
+tip.className = 'ap-tip';
+tip.textContent = '外观档位（实时预览：玻璃透明度 + 动效强度）';
+wrap.appendChild(tip);
+Object.keys(APPEARANCE_PRESETS).forEach((k) => {
+const b = document.createElement('button');
+b.type = 'button';
+b.className = 'ap-btn';
+b.setAttribute('data-preset', k);
+b.textContent = APPEARANCE_PRESETS[k].label;
+b.onclick = () => appearanceApply(k);
+wrap.appendChild(b);
+});
+block.appendChild(wrap);
+let cur = 'standard';
+try { cur = localStorage.getItem(APPEARANCE_KEY) || 'standard'; } catch (e) { cur = 'standard'; }
+appearanceApply(cur);
+return wrap;
+}
 
 
 /* ===== frontend/src/shell/panels.js ===== */
@@ -12234,6 +12304,10 @@ nav.appendChild(btn);
 });
 });
 _setNavSearchMount(nav);
+try {
+const ap = (typeof window !== 'undefined') ? window['appearance' + 'PresetsMount'] : null;
+if (typeof ap === 'function') ap();
+} catch (e) {}
 const anyActive = nav.querySelector('.set-nav-btn.on');
 if (!anyActive && blocks[0]) _showSetBlock(blocks[0].id, { scroll: false });
 }
@@ -19328,6 +19402,7 @@ panel.innerHTML =
 '<div class="sp-head">' +
 '<span class="sp-title">浏览器搜索</span>' +
 '<span class="sp-pill" id="spPill">就绪</span>' +
+'<button class="sp-dock" id="spDock" title="停靠到右侧（内容回流，不遮挡）" aria-label="停靠到右侧">⇥</button>' +
 '<button class="sp-fold" id="spFold" title="折叠/展开面板" aria-label="折叠/展开面板">▾</button>' +
 '<button class="sp-close" id="spClose" title="关闭面板（Esc）" aria-label="关闭面板">×</button>' +
 '</div>' +
@@ -19350,6 +19425,7 @@ panel.innerHTML =
 '<div class="sp-foot" id="spFoot"></div>';
 document.body.appendChild(panel);
 searchPanelWire();
+try { searchPanelRestoreDock(); } catch (e) {}
 return true;
 }
 function searchPanelWire() {
@@ -19357,6 +19433,10 @@ const wirePanel = searchPanelEl();
 if (wirePanel) {
 if (wirePanel.__spWired) return;
 wirePanel.__spWired = true;
+}
+const dockBtn = spEl('spDock');
+if (dockBtn && dockBtn.addEventListener) {
+dockBtn.addEventListener('click', (e) => { e.preventDefault(); searchPanelToggleDock(); });
 }
 const close = spEl('spClose');
 if (close) close.addEventListener('click', () => searchPanelClose());
@@ -19786,6 +19866,33 @@ function spEsc(s) {
 return String(s == null ? '' : s)
 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 .replace(/"/g, '&quot;');
+}
+const SP_DOCK_KEY = 'harbor.search.dock';
+function searchPanelApplyDock(on) {
+if (typeof document === 'undefined') return false;
+const panel = searchPanelEl();
+const want = !!on;
+try { localStorage.setItem(SP_DOCK_KEY, want ? '1' : '0'); } catch (e) {}
+if (panel) panel.classList.toggle('sp-docked', want);
+document.documentElement.classList.toggle('sp-dock-mode', want);
+const btn = spEl('spDock');
+if (btn) {
+btn.textContent = want ? '⇤' : '⇥';
+btn.title = want ? '取消停靠（回到浮层）' : '停靠到右侧（内容回流，不遮挡）';
+btn.setAttribute('aria-pressed', want ? 'true' : 'false');
+}
+return want;
+}
+function searchPanelToggleDock() {
+const panel = searchPanelEl();
+const on = !!(panel && panel.classList.contains('sp-docked'));
+return searchPanelApplyDock(!on);
+}
+function searchPanelRestoreDock() {
+let on = false;
+try { on = localStorage.getItem(SP_DOCK_KEY) === '1'; } catch (e) { on = false; }
+if (on) searchPanelApplyDock(true);
+return on;
 }
 
 

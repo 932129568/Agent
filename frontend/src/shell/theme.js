@@ -84,3 +84,71 @@ function glassDemoToggle() {
   else root.setAttribute('data-glass-demo', '1');
   return !on;
 }
+
+/* ================= v3.4 I25 续 · 三档外观实时预览 =================
+ * 判据：切档立即生效且可回读。三档只改**视觉参数**（玻璃透明度 + 动效强度），
+ * 不碰主题（主题是明暗皮肤，两个维度）。
+ * 档次：标准 0.62 / 通透 0.30 / 浓郁 0.85；动效 1 / 0.6 / 1.2 倍。
+ * 落点：写 --glass-opacity 与 --fx-scale（新增变量），并由 body.fx-lite 降级动效。
+ */
+const APPEARANCE_PRESETS = {
+  standard: { opacity: 0.62, fx: 1.0, label: '标准' },
+  airy: { opacity: 0.30, fx: 0.6, label: '通透' },
+  rich: { opacity: 0.85, fx: 1.2, label: '浓郁' },
+};
+const APPEARANCE_KEY = 'harbor.appearance.preset';
+
+function appearanceApply(name) {
+  if (typeof document === 'undefined') return 'standard';
+  const key = APPEARANCE_PRESETS[name] ? name : 'standard';
+  const p = APPEARANCE_PRESETS[key];
+  const root = document.documentElement;
+  root.style.setProperty('--glass-opacity', String(p.opacity));
+  root.style.setProperty('--fx-scale', String(p.fx));
+  // 动效强度：<0.8 走 lite（只降级、不关闭；fx-off 是另一套开关）
+  document.body.classList.toggle('fx-lite', p.fx < 0.8);
+  try { localStorage.setItem(APPEARANCE_KEY, key); } catch (e) {}
+  // 三档按钮的选中态
+  const host = document.getElementById('appearancePresets');
+  if (host) {
+    host.querySelectorAll('.ap-btn').forEach((b) => {
+      b.classList.toggle('on', b.getAttribute('data-preset') === key);
+    });
+  }
+  return key;
+}
+
+/** 在「外观与特效」块里挂三档按钮（运行期创建，不碰模板 id）。 */
+function appearancePresetsMount() {
+  if (typeof document === 'undefined') return null;
+  if (document.getElementById('appearancePresets')) return document.getElementById('appearancePresets');
+  // 找标题含「外观」的 set-block
+  let block = null;
+  const blocks = document.querySelectorAll('#settingsPanel .set-block');
+  for (const b of blocks) {
+    const t = b.querySelector('.set-title');
+    if (t && /外观/.test(t.textContent)) { block = b; break; }
+  }
+  if (!block) return null;
+  const wrap = document.createElement('div');
+  wrap.id = 'appearancePresets';
+  wrap.className = 'ap-row';
+  const tip = document.createElement('div');
+  tip.className = 'ap-tip';
+  tip.textContent = '外观档位（实时预览：玻璃透明度 + 动效强度）';
+  wrap.appendChild(tip);
+  Object.keys(APPEARANCE_PRESETS).forEach((k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ap-btn';
+    b.setAttribute('data-preset', k);
+    b.textContent = APPEARANCE_PRESETS[k].label;
+    b.onclick = () => appearanceApply(k);
+    wrap.appendChild(b);
+  });
+  block.appendChild(wrap);
+  let cur = 'standard';
+  try { cur = localStorage.getItem(APPEARANCE_KEY) || 'standard'; } catch (e) { cur = 'standard'; }
+  appearanceApply(cur);
+  return wrap;
+}

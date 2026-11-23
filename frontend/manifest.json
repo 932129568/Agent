@@ -259,7 +259,11 @@
         "glassOpacitySet",
         "glassPolarityApply",
         "glassPolarityToggle",
-        "glassStateRestore"
+        "glassStateRestore",
+        "APPEARANCE_KEY",
+        "APPEARANCE_PRESETS",
+        "appearanceApply",
+        "appearancePresetsMount"
       ],
       "requires": []
     },
@@ -1346,7 +1350,11 @@
         "spEsc",
         "spFeatureEnabled",
         "spManualOpen",
-        "spToast"
+        "spToast",
+        "SP_DOCK_KEY",
+        "searchPanelApplyDock",
+        "searchPanelRestoreDock",
+        "searchPanelToggleDock"
       ],
       "requires": [
         "callApi",

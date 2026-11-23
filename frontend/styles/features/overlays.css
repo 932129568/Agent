@@ -169,3 +169,15 @@ body:has(#modalRoot:not(:empty)),body:has(.settings-panel.show){overflow:hidden}
 .cd-ln.same{color:var(--text-3)}
 .cd-hunk-note{padding:4px 8px;color:var(--text-3);font-size:11px}
 .cd-prev{white-space:pre-wrap;line-height:1.5}
+
+/* ===== v3.4 I20 · 搜索面板停靠（内容回流）=====
+   html.sp-dock-mode 时：面板固定右列，主区让出等宽 padding ⇒ 内容是回流，不是被覆盖。 */
+.sp-root.sp-docked{position:fixed;top:56px;right:12px;bottom:12px;left:auto;
+  width:min(380px,40vw);max-height:none;z-index:420;overflow:auto;
+  border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);background:var(--card-bg)}
+/* !important：.main 的 padding 会被别的规则层覆盖（实测该声明在 CSSOM 里值正确、class 也在，
+   但 computed 仍是 0px）。这里属于"必须赢"的布局让步，用 !important 明确表达意图。 */
+html.sp-dock-mode .main{padding-right:calc(min(380px,40vw) + 12px)!important}
+html.sp-dock-mode .sp-mask{display:none}
+.sp-dock{border:0;background:transparent;color:var(--text-3);cursor:pointer;font-size:13px;padding:0 4px}
+.sp-dock:hover{color:var(--text)}

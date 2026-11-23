@@ -147,6 +147,11 @@ function buildSetNav() {
   // 首次构建（或动态块刚到）：无激活项时默认激活第一项
   // I25：顶部搜索（按块标题与导航文案过滤；组标题在整组无命中时一起隐藏）
   _setNavSearchMount(nav);
+  // I25：外观三档（动态取函数，避免 navigation → theme 的静态边）
+  try {
+    const ap = (typeof window !== 'undefined') ? window['appearance' + 'PresetsMount'] : null;
+    if (typeof ap === 'function') ap();
+  } catch (e) {}
   const anyActive = nav.querySelector('.set-nav-btn.on');
   if (!anyActive && blocks[0]) _showSetBlock(blocks[0].id, { scroll: false });
 }

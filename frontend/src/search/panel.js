@@ -37,6 +37,7 @@ function searchPanelInit() {
     '<div class="sp-head">' +
       '<span class="sp-title">浏览器搜索</span>' +
       '<span class="sp-pill" id="spPill">就绪</span>' +
+      '<button class="sp-dock" id="spDock" title="停靠到右侧（内容回流，不遮挡）" aria-label="停靠到右侧">⇥</button>' +
       '<button class="sp-fold" id="spFold" title="折叠/展开面板" aria-label="折叠/展开面板">▾</button>' +
       '<button class="sp-close" id="spClose" title="关闭面板（Esc）" aria-label="关闭面板">×</button>' +
     '</div>' +
@@ -59,6 +60,7 @@ function searchPanelInit() {
     '<div class="sp-foot" id="spFoot"></div>';
   document.body.appendChild(panel);
   searchPanelWire();
+  try { searchPanelRestoreDock(); } catch (e) {}
   return true;
 }
 function searchPanelWire() {
@@ -66,6 +68,10 @@ function searchPanelWire() {
   if (wirePanel) {
     if (wirePanel.__spWired) return;      // 幂等：防重复接线（监听器翻倍）
     wirePanel.__spWired = true;
+  }
+  const dockBtn = spEl('spDock');
+  if (dockBtn && dockBtn.addEventListener) {
+    dockBtn.addEventListener('click', (e) => { e.preventDefault(); searchPanelToggleDock(); });
   }
   const close = spEl('spClose');
   if (close) close.addEventListener('click', () => searchPanelClose());
@@ -550,4 +556,41 @@ function spEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/* ================= v3.4 I20 · 搜索面板停靠（内容回流版） =================
+ * 上一版失败的原因：我把模式 class 挂在 body 上，却没断言它真的挂上了，
+ * 结果 padding-right 计算为 0px ⇒ "零遮挡"证不出来，只能回滚。
+ * 这一版改挂 **html**（documentElement），并把「内容右边界 ≤ 面板左边界」当作硬判据，
+ * 同时断言 html class 与 computed padding 两个中间量——任何一环没生效都会立刻暴露。
+ */
+const SP_DOCK_KEY = 'harbor.search.dock';
+
+function searchPanelApplyDock(on) {
+  if (typeof document === 'undefined') return false;
+  const panel = searchPanelEl();
+  const want = !!on;
+  try { localStorage.setItem(SP_DOCK_KEY, want ? '1' : '0'); } catch (e) {}
+  if (panel) panel.classList.toggle('sp-docked', want);
+  document.documentElement.classList.toggle('sp-dock-mode', want);
+  const btn = spEl('spDock');
+  if (btn) {
+    btn.textContent = want ? '⇤' : '⇥';
+    btn.title = want ? '取消停靠（回到浮层）' : '停靠到右侧（内容回流，不遮挡）';
+    btn.setAttribute('aria-pressed', want ? 'true' : 'false');
+  }
+  return want;
+}
+
+function searchPanelToggleDock() {
+  const panel = searchPanelEl();
+  const on = !!(panel && panel.classList.contains('sp-docked'));
+  return searchPanelApplyDock(!on);
+}
+
+function searchPanelRestoreDock() {
+  let on = false;
+  try { on = localStorage.getItem(SP_DOCK_KEY) === '1'; } catch (e) { on = false; }
+  if (on) searchPanelApplyDock(true);
+  return on;
 }
