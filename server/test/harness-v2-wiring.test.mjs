@@ -66,12 +66,31 @@ test('开启时装配：messages 被替换、mcp 工具摘出 tools', () => {
     'mcp__ 工具不应留在 tools 里');
 });
 
-test('开启时显式登记三个无来源字段（不许假装完整）', () => {
+test('开启时显式登记无来源字段（不许假装完整）', () => {
   const r = rewriteChatBodyWithHarnessV2(chatBody(), { env: ON });
   assert.equal(r.applied, true);
+  // 无 harnessMeta 时 L2 也是无来源
   assert.deepEqual(r.dropped.filter((x) => /^(l2|l3|handoff)/.test(x)).sort(),
     ['handoff:no-source', 'l2:no-source', 'l3:no-source']);
   assert.ok(r.dropped.every((x) => x !== 'l1:no-system-message'), '本次有 system 段，不该报 l1 缺失');
+});
+
+test('有 harnessMeta 时 L2 落地（不再是无来源），L3/handoff 仍无来源', () => {
+  const r = rewriteChatBodyWithHarnessV2(chatBody(), { env: ON, harnessMeta: { v: 2, phase: 'plan' } });
+  assert.equal(r.applied, true);
+  assert.ok(!r.dropped.includes('l2:no-source'), 'L2 已由请求头提供，不该再报无来源');
+  assert.ok(r.dropped.includes('l3:no-source'));
+  assert.ok(r.dropped.includes('handoff:no-source'));
+  assert.ok(r.body.includes('当前阶段：plan'), 'L2 正文没进装配结果');
+});
+
+test('harnessMeta 形状非法时按无来源处理（不抛错、不塞 undefined）', () => {
+  for (const bad of [null, {}, { phase: 123 }, { phase: null }, 'nonsense']) {
+    const r = rewriteChatBodyWithHarnessV2(chatBody(), { env: ON, harnessMeta: bad });
+    assert.equal(r.applied, true, JSON.stringify(bad) + ' 不该导致装配失败');
+    assert.ok(r.dropped.includes('l2:no-source'), JSON.stringify(bad) + ' 应回落为无来源');
+    assert.ok(!r.body.includes('当前阶段：undefined'));
+  }
 });
 
 test('无 system 段时登记 l1:no-system-message', () => {

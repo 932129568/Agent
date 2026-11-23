@@ -1534,7 +1534,8 @@
         "planGenerativeRender",
         "planGenerativeShow",
         "planGenerativeHide",
-        "planGenerativeRefresh"
+        "planGenerativeRefresh",
+        "harnessPhaseNow"
       ],
       "requires": [
         "callApi",

@@ -17883,7 +17883,16 @@ context: { messages: s.messages, runId: run.id, sessionId: s.id, generation: run
 endpoint: {
 endpoint: resolveApiEndpoint(), apiKey,
 local: typeof localState !== 'undefined' && localState.mode,
-proxyHeaders: (typeof localProxyHeaders === 'function') ? localProxyHeaders() : {},
+proxyHeaders: (() => {
+const h = (typeof localProxyHeaders === 'function') ? localProxyHeaders() : {};
+try {
+if (h && Object.keys(h).length > 0) {
+const phase = uiSeamCall('harnessPhaseNow');
+h['X-Harbor-Harness'] = JSON.stringify({ v: 2, phase: (phase === 'plan' ? 'plan' : 'execute') });
+}
+} catch (e) {  }
+return h;
+})(),
 },
 transport: ModelTransport,
 tools: createToolRuntime({ executeBatch }),
@@ -21083,6 +21092,9 @@ btn.style.color = 'var(--err)';
 btn._rbTimer = setTimeout(() => {
 if (btn.dataset.armed) { btn.dataset.armed = ''; btn.textContent = '确认回滚'; btn.style.color = ''; }
 }, 3000);
+}
+function harnessPhaseNow() {
+return planResolveApprove ? 'plan' : 'execute';
 }
 
 

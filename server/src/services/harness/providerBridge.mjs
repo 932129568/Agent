@@ -254,7 +254,7 @@ export function buildHarnessV2Envelope({
  *
  * 失败一律**不阻断转发**：返回 applied=false 并把原始 body 原样交回。
  */
-export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assembler = null } = {}) {
+export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assembler = null, harnessMeta = null } = {}) {
   const pass = (reason) => ({ applied: false, body: rawBody, reason, dropped: [] })
   if (!harnessV2Enabled(env)) return pass('disabled')
 
@@ -284,8 +284,10 @@ export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assem
       baseOpenAITools: baseTools,
       mcpTools,
       l1Charter,
-      // 这三个是「no-source」：body 里没有对应字段，显式留空而不是去猜。
-      l2PhasePrompt: '',
+      // L2：由请求头 X-Harbor-Harness 带下来的阶段（plan/execute）。
+      //   body 里没有这个信息，只有渲染进程知道；头由代理读取后作为 harnessMeta 传入。
+      // L3/handoff：仍无来源，显式留空而不是去猜。
+      l2PhasePrompt: (harnessMeta && typeof harnessMeta.phase === 'string') ? ('当前阶段：' + harnessMeta.phase) : '',
       l3ActiveSkills: '',
       handoffState: null,
       workingTurns: turns,
@@ -301,7 +303,8 @@ export function rewriteChatBodyWithHarnessV2(rawBody, { env = process.env, assem
 
   const dropped = []
   if (!l1Charter) dropped.push('l1:no-system-message')
-  dropped.push('l2:no-source', 'l3:no-source', 'handoff:no-source')
+  if (!(harnessMeta && typeof harnessMeta.phase === 'string')) dropped.push('l2:no-source')
+  dropped.push('l3:no-source', 'handoff:no-source')
 
   const out = Object.assign({}, json, { messages: envelope.messages })
   if (Array.isArray(envelope.surface && envelope.surface.activeTools)) {

@@ -1189,7 +1189,20 @@ async function runAgentLoop(s, apiKey) {
       endpoint: {
         endpoint: resolveApiEndpoint(), apiKey,
         local: typeof localState !== 'undefined' && localState.mode,
-        proxyHeaders: (typeof localProxyHeaders === 'function') ? localProxyHeaders() : {},
+        proxyHeaders: (() => {
+          const h = (typeof localProxyHeaders === 'function') ? localProxyHeaders() : {};
+          // R101 T05 · Harness V2 元数据随请求头下发（不塞 body：body 会漏给上游，
+          // 而代理层的 fwd 白名单只放 content-type/authorization/accept，天然不转发本头）。
+          // 只有代理模式（h 非空）才加，避免直连时把私有头发给真实端点。
+          // 阶段经 uiSeamCall 取（字符串查表，不产生静态依赖边）。
+          try {
+            if (h && Object.keys(h).length > 0) {
+              const phase = uiSeamCall('harnessPhaseNow');
+              h['X-Harbor-Harness'] = JSON.stringify({ v: 2, phase: (phase === 'plan' ? 'plan' : 'execute') });
+            }
+          } catch (e) { /* 元数据失败不影响请求 */ }
+          return h;
+        })(),
       },
       transport: ModelTransport,
       tools: createToolRuntime({ executeBatch }),

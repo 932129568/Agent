@@ -206,7 +206,13 @@ async function relay(req, res) {
       String(req.url || '').split('?')[0].endsWith('/chat/completions')) {
     try {
       const { rewriteChatBodyWithHarnessV2 } = await import('./harness/providerBridge.mjs')
-      const rw = rewriteChatBodyWithHarnessV2(body)
+      // 阶段等元数据由渲染进程放在 X-Harbor-Harness 头里；本代理不透传该头给上游。
+      let harnessMeta = null
+      try {
+        const raw = req.headers['x-harbor-harness']
+        if (raw) harnessMeta = JSON.parse(String(raw))
+      } catch (e) { harnessMeta = null }
+      const rw = rewriteChatBodyWithHarnessV2(body, { harnessMeta })
       if (rw && rw.applied) body = rw.body
     } catch (e) { /* 装配失败：原 body 原样透传，绝不中断请求 */ }
   }

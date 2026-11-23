@@ -740,3 +740,14 @@ function rbTwice(btn, taskId, box) {
     if (btn.dataset.armed) { btn.dataset.armed = ''; btn.textContent = '确认回滚'; btn.style.color = ''; }
   }, 3000);
 }
+
+/* R101 T05 · Harness V2 的 L2 探针（供 run-controller 经 uiSeamCall 取用）
+ * 为什么放在本模块：判断「是否在等用户批准计划」只有这里知道（planResolveApprove）。
+ * 为什么用 seam 而不是直接引用：run-controller 若静态引用本符号会新增 SCC 边
+ * （当前 16 环零余量）；uiSeamCall('harnessPhaseNow') 走字符串查表，不产生边。
+ * 返回值：'plan'（计划待批准）| 'execute'（已进入执行）。其余阶段（review 等）
+ * 本仓尚无状态机信号，故不臆造 —— 缺信号就说缺，不返回编造值。
+ */
+function harnessPhaseNow() {
+  return planResolveApprove ? 'plan' : 'execute';
+}
