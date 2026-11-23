@@ -6,7 +6,7 @@
     "layers": {
       "legacyFrontend": {
         "files": 123,
-        "lines": 30745
+        "lines": 30856
       },
       "reactProduction": {
         "files": 16,
@@ -43,9 +43,9 @@
         "lines": 16149
       }
     },
-    "totalSourceLines": 52289,
+    "totalSourceLines": 52400,
     "readErrors": [],
-    "harborHtmlBytes": 3769291,
+    "harborHtmlBytes": 3774032,
     "normalizedAppBundleBytes": 851045
   },
   "dependencyGraph": {

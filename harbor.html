@@ -3031,6 +3031,29 @@ background:var(--card-bg)}
 background:var(--surface-2);color:var(--text-2);font-size:11px;cursor:pointer}
 .tc-btn:hover{border-color:var(--primary);color:var(--text)}
 .tc-empty{font-size:11.5px;color:var(--text-3)}
+.rp-item{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:4px}
+.rp-item:last-child{margin-bottom:0}
+.rp-item .rp-row{width:auto;flex:1 1 auto;min-width:0;margin-bottom:0}
+.rp-fix{flex-shrink:0;font:inherit;font-size:10.5px;line-height:1.4;padding:2px 8px;cursor:pointer;
+color:var(--text-2);background:transparent;border:1px solid var(--border);border-radius:var(--radius-full)}
+.rp-fix:hover{color:var(--primary);border-color:var(--primary)}
+.rp-fix:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.rp-fix[aria-expanded="true"]{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+.rp-fix-box{flex:1 0 100%;display:flex;flex-direction:column;gap:5px;padding:0 2px 4px}
+.rp-fix-box[hidden]{display:none}
+.rp-fix-ta{width:100%;box-sizing:border-box;font:inherit;font-size:11.5px;line-height:1.5;
+padding:5px 8px;resize:vertical;color:var(--text);background:var(--card-bg);
+border:1px solid var(--border);border-radius:var(--radius-sm);
+transition:border-color var(--dur-fast) var(--ease-out)}
+.rp-fix-ta:focus{outline:none;border-color:var(--primary)}
+.rp-fix-ta::placeholder{color:var(--text-3)}
+.rp-fix-btns{display:flex;justify-content:flex-end;gap:6px}
+.rp-fix-send,.rp-fix-cancel{font:inherit;font-size:11px;line-height:1.4;padding:2px 10px;cursor:pointer;
+border-radius:var(--radius-full);border:1px solid var(--border);background:transparent;color:var(--text-2)}
+.rp-fix-send{color:var(--primary);border-color:var(--primary)}
+.rp-fix-send:disabled{opacity:.6;cursor:default}
+.rp-fix-send:hover:not(:disabled){background:var(--primary-soft)}
+.rp-fix-cancel:hover{color:var(--text);background:var(--hover)}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -24072,6 +24095,11 @@ el.textContent = '';
 return 0;
 }
 el.hidden = false;
+try {
+if (typeof el.querySelector === 'function' && el.querySelector('.rp-fix-box:not([hidden])')) {
+return runs.length;
+}
+} catch (e) {  }
 const cur = (typeof AppState !== 'undefined') ? AppState.currentSessionId : '';
 runs.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 el.innerHTML = '';
@@ -24079,15 +24107,33 @@ const head = document.createElement('div');
 head.className = 'rp-head';
 head.textContent = '进行中 · ' + runs.length;
 el.appendChild(head);
+const closeFixBoxes = (keep) => {
+try {
+const boxes = el.querySelectorAll('.rp-fix-box');
+for (let i = 0; i < boxes.length; i++) {
+const bx = boxes[i];
+if (!bx || bx === keep) continue;
+bx.hidden = true;
+const ta = bx.querySelector ? bx.querySelector('.rp-fix-ta') : null;
+if (ta) ta.value = '';
+}
+} catch (e) {}
+};
 runs.forEach((run) => {
 const sess = run.session || {};
+const active = _rpStatusText(run);
+const state = active === '待接管' ? 'wait' : (active === '异常' ? 'bad' : 'run');
+const item = document.createElement('div');
+item.className = 'rp-item';
+item.setAttribute('data-state', state);
+item.dataset.sid = String(run.sessionId || '');
 const row = document.createElement('button');
 row.type = 'button';
 row.className = 'rp-row' + (run.sessionId === cur ? ' on' : '');
 row.dataset.sid = String(run.sessionId || '');
-const active = _rpStatusText(run);
-row.setAttribute('data-state', active === '待接管' ? 'wait' : (active === '异常' ? 'bad' : 'run'));
-row.title = '跳转到「' + (sess.title || run.sessionId) + '」（只跳转，审批与纠偏在会话内完成）';
+row.setAttribute('data-state', state);
+row.title = '跳转到「' + (sess.title || run.sessionId) + '」'
++ (state === 'run' ? '（只跳转，审批与纠偏在会话内完成）' : '（或直接用右侧「纠偏」就地补一句）');
 row.innerHTML =
 '<span class="rp-radar" aria-hidden="true"></span>' +
 '<span class="rp-title"></span>' +
@@ -24105,7 +24151,75 @@ const ts = _rpFn('toggle' + 'Sidebar');
 if (document.body.classList.contains('sidebar-open') && typeof ts === 'function') ts();
 } catch (e) {}
 };
-el.appendChild(row);
+item.appendChild(row);
+if (state === 'wait' || state === 'bad') {
+const fixBtn = document.createElement('button');
+fixBtn.type = 'button';
+fixBtn.className = 'rp-fix';
+fixBtn.textContent = '纠偏';
+fixBtn.title = '就地补一句纠偏说明，再让这个会话继续跑';
+const box = document.createElement('div');
+box.className = 'rp-fix-box';
+box.hidden = true;
+const ta = document.createElement('textarea');
+ta.className = 'rp-fix-ta';
+ta.placeholder = '补充一句纠偏说明（可选）';
+ta.setAttribute('maxlength', '500');
+ta.setAttribute('rows', '2');
+ta.setAttribute('aria-label', '纠偏说明');
+const sendBtn = document.createElement('button');
+sendBtn.type = 'button';
+sendBtn.className = 'rp-fix-send';
+sendBtn.textContent = '发送';
+sendBtn.title = '发送这句纠偏并让该会话继续跑';
+const cancelBtn = document.createElement('button');
+cancelBtn.type = 'button';
+cancelBtn.className = 'rp-fix-cancel';
+cancelBtn.textContent = '取消';
+const closeBox = () => {
+box.hidden = true;
+ta.value = '';
+if (fixBtn.setAttribute) fixBtn.setAttribute('aria-expanded', 'false');
+};
+fixBtn.setAttribute('aria-expanded', 'false');
+fixBtn.onclick = () => {
+if (!box.hidden) { closeBox(); return; }
+closeFixBoxes(box);
+box.hidden = false;
+if (fixBtn.setAttribute) fixBtn.setAttribute('aria-expanded', 'true');
+try { if (typeof ta.focus === 'function') ta.focus(); } catch (e) {}
+};
+cancelBtn.onclick = closeBox;
+sendBtn.onclick = async () => {
+if (sendBtn.disabled) return;
+const keyFn = (typeof window !== 'undefined') ? window['effective' + 'ApiKey'] : null;
+const key = (typeof keyFn === 'function') ? keyFn() : '';
+if (!key) {
+const t = _rpFn('toast');
+if (typeof t === 'function') { try { t('请先设置 API Key', 'warn'); } catch (e) {} }
+return;
+}
+const cont = (typeof window !== 'undefined') ? window['continue' + 'LastGeneration'] : null;
+if (typeof cont !== 'function') return;
+const directive = String(ta.value || '').trim();
+sendBtn.disabled = true;
+try {
+await cont(run.session, key, directive);
+sendBtn.textContent = '已发送';
+} catch (e) {
+sendBtn.disabled = false;
+}
+};
+box.appendChild(ta);
+const btnRow = document.createElement('div');
+btnRow.className = 'rp-fix-btns';
+btnRow.appendChild(sendBtn);
+btnRow.appendChild(cancelBtn);
+box.appendChild(btnRow);
+item.appendChild(fixBtn);
+item.appendChild(box);
+}
+el.appendChild(item);
 });
 return runs.length;
 }
