@@ -71,6 +71,14 @@ GATES = [
     ('contract-diff', [PY, 'tools/contract_diff.py', '--compare',
                        'deliverables/dev-plan/contract-baseline-r109.json'], True,
      'r100 锚点零漂移（锚点链最新项）'),
+    # R101 Q10 晋升：这两门在 T01 期间**曾经真红**（A1 死引用 30 条、A6 钩子 0 处），
+    # 修复后转绿且判据常数未放宽（A5 拆成 A5a/A5b 是"存量走棘轮"，新增债务仍 required），
+    # 满足 Q10 的晋升条件（曾红 → 修绿 → 常数未改），故以 required=True 正式接入，
+    # 不再靠人工记得去跑。负控（assert_motion_negative）单独跑，不进门禁（耗时 ~40s）。
+    ('ui-audit-motion', [PY, 'tools/uiaudit/assert_motion.py'], True,
+     '动效静态判据 A1–A5a（死引用/重复关键帧/合成器直通/transition all/新增裸时长）'),
+    ('ui-audit-controls', [PY, 'tools/uiaudit/assert_dead_controls.py'], True,
+     '死控件与调试残余 A6–A9'),
     ('type-annotation', [PY, 'tools/type_annotation_audit.py'], True,
      'JSDoc 类型契约覆盖率（非静态类型检查）'),
     ('arch-assessment', [PY, 'tools/arch_assessment.py'], True,
