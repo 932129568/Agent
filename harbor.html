@@ -18546,6 +18546,13 @@ callApi('append_worklog', [desc]).catch(() => {});
 }
 } catch (e) {}
 try {
+if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].indexOf(tc.name) >= 0) {
+const _nw = (typeof window !== 'undefined') ? window['step' + 'CkptNoteWrite'] : null;
+if (typeof _nw === 'function') {
+const _a = (args && typeof args === 'object') ? args : {};
+_nw(_a.path || _a.src || _a.dst || _a.new_path || '');
+}
+}
 const _inv = invalidateReadCache(readFileSet, tc.name, args, result);
 if (['write_file','append_file','search_replace','delete_path','move_path','copy_path','run_command'].indexOf(tc.name) >= 0) {
 runWroteFiles = true;
@@ -21870,6 +21877,17 @@ el.classList.add(status);
 if (planCurrent.steps && planCurrent.steps[index]) planCurrent.steps[index].status = status;
 if (planCurrent.task_id) {
 pcCall('plan_update', [planCurrent.task_id, '', index, status], 15000).catch(() => {});
+if (status === 'done') {
+try {
+const flush = (typeof window !== 'undefined') ? window['step' + 'CkptFlush'] : null;
+if (typeof flush === 'function') {
+flush(function (name, args, timeout) { return pcCall(name, args, timeout); },
+planCurrent.task_id, index, '').then(function (r) {
+if (r && r.ok) planStepCkptMarks[index] = r.id;
+}).catch(function () {});
+}
+} catch (e) {}
+}
 }
 planUiRevision++;
 if (card.__uiHost && !card.__uiHost.hidden) planGenerativeRender(card);
@@ -22138,6 +22156,7 @@ const modeTxt = res.mode === 'git' ? 'git 锚点' : (res.mode === 'snapshot' ? '
 return { level: 'warn', kind: 'noop',
 text: '该检查点只记录了' + modeTxt + '，没有备份文件内容 —— 本次回滚**未改动任何文件**' };
 }
+const planStepCkptMarks = {};
 
 
 /* ===== frontend/src/shell/onboarding.js ===== */
@@ -23462,6 +23481,43 @@ if (typeof ckptRollbackFlow === 'function') ckptRollbackFlow(tid, btn);
 else if (typeof toast === 'function') toast('回滚组件未加载', 'err');
 });
 });
+}
+
+
+/* ===== frontend/src/planning/step-checkpoints.js ===== */
+const STEP_CKPT_MAX_FILES = 50;
+let _pending = [];
+function stepCkptNoteWrite(relPath) {
+const p = String(relPath == null ? '' : relPath).trim();
+if (!p) return false;
+if (_pending.indexOf(p) >= 0) return false;
+if (_pending.length >= STEP_CKPT_MAX_FILES) return false;
+_pending.push(p);
+return true;
+}
+function stepCkptPending() { return _pending.slice(); }
+function stepCkptClear() { _pending = []; }
+function stepCkptId(taskId, idx) {
+const tid = String(taskId == null ? '' : taskId);
+if (!tid) return '';
+const n = Math.max(0, Number(idx) || 0);
+const suffix = '-s' + n;
+const room = 64 - suffix.length;
+return tid.slice(0, Math.max(1, room)) + suffix;
+}
+async function stepCkptFlush(callApiFn, taskId, idx, wsDir) {
+if (typeof callApiFn !== 'function') return null;
+const tid = stepCkptId(taskId, idx);
+if (!tid) return null;
+const files = _pending.slice();
+if (!files.length) return null;
+_pending = [];
+let raw = null;
+try { raw = await callApiFn('checkpoint_create', [tid, files, String(wsDir || '')], 60000); }
+catch (e) { return { ok: false, id: tid, files, error: String(e && e.message || e) }; }
+let parsed = null;
+try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+return { ok: !!(parsed && parsed.ok !== false), id: tid, files, raw: parsed };
 }
 
 

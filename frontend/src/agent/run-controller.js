@@ -1027,6 +1027,14 @@ async function runAgentLoop(s, apiKey) {
             } catch (e) {}
             // I01（v3.4）：写后精确失效 + 写命令清脏缓存（逻辑抽成模块级函数，便于用例断言）。
             try {
+              // I12：把写操作路径记进"待结算"缓冲，供步骤完成时建检查点
+              if (['write_file','append_file','search_replace','delete_path','move_path','copy_path'].indexOf(tc.name) >= 0) {
+                const _nw = (typeof window !== 'undefined') ? window['step' + 'CkptNoteWrite'] : null;
+                if (typeof _nw === 'function') {
+                  const _a = (args && typeof args === 'object') ? args : {};
+                  _nw(_a.path || _a.src || _a.dst || _a.new_path || '');
+                }
+              }
               const _inv = invalidateReadCache(readFileSet, tc.name, args, result);
               // I05：只要发生过写类工具（或命令），就认为「改过东西」，收尾前需要自检
               if (['write_file','append_file','search_replace','delete_path','move_path','copy_path','run_command'].indexOf(tc.name) >= 0) {

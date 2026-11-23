@@ -453,6 +453,19 @@ function planStepStatus(index, status) {
   if (planCurrent.steps && planCurrent.steps[index]) planCurrent.steps[index].status = status;
   if (planCurrent.task_id) {
     pcCall('plan_update', [planCurrent.task_id, '', index, status], 15000).catch(() => {});
+    // I12：步骤完成时把它期间写过的文件建成该步的检查点（<tid>-s<idx>）。
+    // 动态取函数：card → step-checkpoints 的静态边会让符号图多一条（SCC 零余量）。
+    if (status === 'done') {
+      try {
+        const flush = (typeof window !== 'undefined') ? window['step' + 'CkptFlush'] : null;
+        if (typeof flush === 'function') {
+          flush(function (name, args, timeout) { return pcCall(name, args, timeout); },
+            planCurrent.task_id, index, '').then(function (r) {
+            if (r && r.ok) planStepCkptMarks[index] = r.id;
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    }
   }
   planUiRevision++;
   if (card.__uiHost && !card.__uiHost.hidden) planGenerativeRender(card);
@@ -775,3 +788,6 @@ function ckptRollbackVerdict(d) {
   return { level: 'warn', kind: 'noop',
     text: '该检查点只记录了' + modeTxt + '，没有备份文件内容 —— 本次回滚**未改动任何文件**' };
 }
+
+/** I12：已建检查点的步骤 → 检查点 id（供回滚菜单展示/排错）。 */
+const planStepCkptMarks = {};

@@ -1592,7 +1592,8 @@
         "planGenerativeHide",
         "planGenerativeRefresh",
         "harnessPhaseNow",
-        "ckptRollbackVerdict"
+        "ckptRollbackVerdict",
+        "planStepCkptMarks"
       ],
       "requires": [
         "callApi",
@@ -1750,6 +1751,19 @@
         "planCurrent",
         "toast"
       ]
+    },
+    {
+      "path": "frontend/src/planning/step-checkpoints.js",
+      "provides": [
+        "STEP_CKPT_MAX_FILES",
+        "_pending",
+        "stepCkptNoteWrite",
+        "stepCkptPending",
+        "stepCkptClear",
+        "stepCkptId",
+        "stepCkptFlush"
+      ],
+      "requires": []
     },
     {
       "path": "frontend/src/shell/shortcuts.js",
