@@ -1934,7 +1934,8 @@
         "renderToolBars",
         "renderToolRingAndMs",
         "renderTrendChart",
-        "setTrendMetric"
+        "setTrendMetric",
+        "analyticsTopCostMount"
       ],
       "requires": [
         "sessions",
@@ -2116,6 +2117,17 @@
         "attachments",
         "toast"
       ]
+    },
+    {
+      "path": "frontend/src/chat/composer-menu.js",
+      "provides": [
+        "CM_MAX_ITEMS",
+        "_cmSessions",
+        "_cmCommands",
+        "composerMenuCandidates",
+        "composerMenuMount"
+      ],
+      "requires": []
     },
     {
       "path": "frontend/src/agent/text-compress.js",

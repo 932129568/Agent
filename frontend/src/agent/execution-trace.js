@@ -152,7 +152,17 @@ function traceRenderHtml(limit, sid) {
       '<span class="et-sum"></span>' +
       '</div>';
   }).join('');
-  const head = '<div class="et-head">' +
+  // I26：SVG 能量脊柱——每步一段竖条，成功/失败上色，高度按步序递增。
+  // 段数 === 步数（可断言），不是装饰性曲线。
+  const segs = snap.steps.slice(-max).map((st, i) => {
+    const h = 4 + Math.round((i + 1) * (16 / Math.max(1, Math.min(max, snap.steps.length))));
+    const y = 20 - h;
+    const cls = st.ok ? 'ok' : 'fail';
+    return '<rect class="et-sp ' + cls + '" x="' + (i * 3) + '" y="' + y + '" width="2" height="' + h + '" rx="1"></rect>';
+  }).join('');
+  const spine = '<svg class="et-spine" width="' + Math.max(1, Math.min(max, snap.steps.length)) * 3 + '" height="20" ' +
+    'viewBox="0 0 ' + Math.max(1, Math.min(max, snap.steps.length)) * 3 + ' 20" aria-hidden="true">' + segs + '</svg>';
+  const head = spine + '<div class="et-head">' +
     '<span class="et-count">' + snap.total + ' 步</span>' +
     (snap.fail ? '<span class="et-bad">' + snap.fail + ' 失败</span>' : '<span class="et-allok">全部成功</span>') +
     '</div>';

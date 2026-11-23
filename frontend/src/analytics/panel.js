@@ -305,3 +305,64 @@ function renderAnalytics() {
   renderToolBars(snapshot.toolRows);
   renderToolRingAndMs(snapshot.toolRows);
 }
+
+/* ================= v3.4 I20 续 · 高耗 Top5 + 直达压缩 =================
+ * 判据「看板点击直达动作」：Top5 每行带一个「压缩」按钮，点它直接对该会话跑压缩，
+ * 不是跳到会话让用户自己再找按钮。
+ * 口径：token 估算与副屏一致（字符数 / 1.8），只统计 assistant+user 文本。
+ */
+function analyticsTopCostMount() {
+  if (typeof document === 'undefined') return null;
+  const host = document.getElementById('panelAnalytics');
+  if (!host) return null;
+  let box = document.getElementById('topCostBox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'topCostBox';
+    box.className = 'top-cost-box';
+    host.appendChild(box);
+  }
+  const st = (typeof AppState !== 'undefined') ? AppState : null;
+  const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+  const rows = list.map(s => {
+    let chars = 0;
+    const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+    for (const m of msgs) {
+      if (m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') chars += m.content.length;
+    }
+    return { id: s.id, title: s.title || ('会话 ' + String(s.id).slice(0, 6)), tokens: Math.ceil(chars / 1.8) };
+  }).filter(r => r.tokens > 0).sort((a, b) => b.tokens - a.tokens).slice(0, 5);
+
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'tc-head';
+  head.textContent = '高耗会话 Top ' + (rows.length || 0) + '（点击「压缩」直接收紧，不是跳转）';
+  box.appendChild(head);
+  if (!rows.length) {
+    const em = document.createElement('div');
+    em.className = 'tc-empty';
+    em.textContent = '还没有可统计的会话';
+    box.appendChild(em);
+    return box;
+  }
+  rows.forEach((r) => {
+    const row = document.createElement('div');
+    row.className = 'tc-row';
+    const t = document.createElement('span'); t.className = 'tc-title'; t.textContent = r.title;
+    const n = document.createElement('span'); n.className = 'tc-tokens'; n.textContent = '约 ' + r.tokens.toLocaleString() + ' tokens';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'tc-btn'; btn.textContent = '压缩';
+    btn.onclick = async () => {
+      const st2 = (typeof AppState !== 'undefined') ? AppState : null;
+      const target = st2 && Array.isArray(st2.sessions) ? st2.sessions.find(x => x.id === r.id) : null;
+      const fn = (typeof window !== 'undefined') ? window['compact' + 'History'] : null;
+      if (!target || typeof fn !== 'function') return;
+      btn.disabled = true; btn.textContent = '压缩中…';
+      try { await fn(target); btn.textContent = '已压缩'; } catch (e) { btn.textContent = '失败'; btn.disabled = false; }
+      analyticsTopCostMount();
+    };
+    row.appendChild(t); row.appendChild(n); row.appendChild(btn);
+    box.appendChild(row);
+  });
+  return box;
+}

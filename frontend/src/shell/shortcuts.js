@@ -65,6 +65,9 @@ function scOpen() {
     '<div class="modal-acts"><button class="modal-btn primary sc-ok">知道了</button></div>';
   mask.appendChild(card);
   document.body.appendChild(mask);
+  try {
+    if (typeof mask.showPopover === 'function' && !mask.matches(':popover-open')) mask.showPopover();
+  } catch (e) { /* 进不了顶层就按普通 div 走 */ }
   mask.addEventListener('click', e => { if (e.target === mask) scClose(); });
   card.querySelector('.sc-ok').onclick = scClose;
   if (!_scEscHandler) {
@@ -246,6 +249,13 @@ function cpPaletteOpen() {
   if (document.querySelector('.cp-mask')) return;
   const mask = document.createElement('div');
   mask.className = 'modal-mask cp-mask';
+  // I27 续：面板也进 top layer（popover manual）。不支持则保持普通 div（渐进增强）。
+  try {
+    if (typeof mask.showPopover === 'function') {
+      mask.setAttribute('popover', 'manual');
+      mask.popover = 'manual';
+    }
+  } catch (e) {}
   const card = document.createElement('div');
   card.className = 'modal-card cp-card';
   card.setAttribute('role', 'dialog');
@@ -296,6 +306,7 @@ function cpPaletteRun() {
 
 function cpPaletteClose() {
   const mask = document.querySelector('.cp-mask');
+  try { if (mask && typeof mask.hidePopover === 'function') mask.hidePopover(); } catch (e) {}
   if (mask) mask.remove();
   _cpItems = [];
   _cpIndex = 0;

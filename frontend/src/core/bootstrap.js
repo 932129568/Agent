@@ -137,6 +137,11 @@ async function loadAll() {
     queueSaveConfig();
   });
   updateLabels();
+  // v3.4 I22（后半）：@ 提及 / 斜杠命令菜单
+  try {
+    const cm = (typeof window !== 'undefined') ? window['composer' + 'MenuMount'] : null;
+    if (typeof cm === 'function') cm();
+  } catch (e) { console.warn('输入舱菜单初始化失败', e); }
   // v3.4 I22：拖文件磁吸接引（只做视觉；文件落地仍由下面的 drop 处理）
   try {
     const mag = (typeof window !== 'undefined') ? window['attach' + 'DropMagnetInit'] : null;

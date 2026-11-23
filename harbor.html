@@ -3020,6 +3020,17 @@ background:var(--card-bg);color:var(--text-2);font-size:12px;cursor:pointer}
 .ap-btn:hover{border-color:var(--primary);color:var(--text)}
 .ap-btn.on{background:var(--primary);border-color:var(--primary);color:#fff}
 body.fx-lite .ap-row{--fx-scale:0.6}
+.top-cost-box{margin:14px 0;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-md);
+background:var(--card-bg)}
+.tc-head{font-size:12px;color:var(--text-2);margin-bottom:8px}
+.tc-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px solid var(--border)}
+.tc-row:first-of-type{border-top:0}
+.tc-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text)}
+.tc-tokens{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.tc-btn{padding:2px 10px;border:1px solid var(--border);border-radius:var(--radius-full);
+background:var(--surface-2);color:var(--text-2);font-size:11px;cursor:pointer}
+.tc-btn:hover{border-color:var(--primary);color:var(--text)}
+.tc-empty{font-size:11.5px;color:var(--text-3)}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -3585,6 +3596,26 @@ animation-duration:calc(var(--dur-comp) / 2)}
 @keyframes s2Orbit{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 body.fx-off .s2-stage.s2-wait::before,body.fx-off .s2-stage.s2-wait::after{animation:none}
 body.fx-off .s2-stage.s2-wait::before{border-top-color:var(--primary)}
+.input-inner{position:relative}
+.input-inner::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;
+background:conic-gradient(from 0deg,transparent 0 70%,var(--primary) 85%,transparent 100%);
+-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+-webkit-mask-composite:xor;mask-composite:exclude;
+opacity:0;pointer-events:none;transform:rotate(0deg)}
+.input-inner.is-typing::after{opacity:.85;animation:cmFlow var(--dur-stream) linear infinite}
+@keyframes cmFlow{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+body.fx-off .input-inner.is-typing::after{animation:none;opacity:.5}
+.cmx-menu{position:absolute;left:8px;right:8px;bottom:calc(100% - 4px);z-index:60;
+background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-md);
+box-shadow:var(--shadow-md);overflow:hidden;max-height:220px;overflow-y:auto}
+.cmx-row{display:flex;gap:6px;align-items:center;padding:6px 10px;font-size:12px;color:var(--text-2);cursor:pointer}
+.cmx-row:hover,.cmx-row.on{background:var(--active);color:var(--text)}
+.cmx-kind{width:14px;text-align:center;color:var(--text-3)}
+.et-spine{display:block;margin-bottom:4px}
+.et-sp.ok{fill:var(--ok)}
+.et-sp.fail{fill:var(--err)}
+.cmx-empty{color:var(--text-3);cursor:default}
+.cmx-empty:hover{background:transparent;color:var(--text-3)}
 
 
 /* ===== frontend/styles/features/plan.css ===== */
@@ -8600,7 +8631,13 @@ if (_panelLeaving && _panelLeaving.el === oldEl) _panelLeaving = null;
 });
 }
 }
-if (name === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
+if (name === 'analytics' && typeof renderAnalytics === 'function') {
+renderAnalytics();
+try {
+const tc = (typeof window !== 'undefined') ? window['analytics' + 'TopCostMount'] : null;
+if (typeof tc === 'function') tc();
+} catch (e) {}
+}
 if (name !== 'chat' && typeof isStreaming !== 'undefined' && isStreaming) {
 if (typeof addSysTip === 'function') addSysTip('正在生成回复，可随时回到「对话」面板查看进度');
 }
@@ -17460,7 +17497,15 @@ return '<div class="et-row ' + cls + '">' +
 '<span class="et-sum"></span>' +
 '</div>';
 }).join('');
-const head = '<div class="et-head">' +
+const segs = snap.steps.slice(-max).map((st, i) => {
+const h = 4 + Math.round((i + 1) * (16 / Math.max(1, Math.min(max, snap.steps.length))));
+const y = 20 - h;
+const cls = st.ok ? 'ok' : 'fail';
+return '<rect class="et-sp ' + cls + '" x="' + (i * 3) + '" y="' + y + '" width="2" height="' + h + '" rx="1"></rect>';
+}).join('');
+const spine = '<svg class="et-spine" width="' + Math.max(1, Math.min(max, snap.steps.length)) * 3 + '" height="20" ' +
+'viewBox="0 0 ' + Math.max(1, Math.min(max, snap.steps.length)) * 3 + ' 20" aria-hidden="true">' + segs + '</svg>';
+const head = spine + '<div class="et-head">' +
 '<span class="et-count">' + snap.total + ' 步</span>' +
 (snap.fail ? '<span class="et-bad">' + snap.fail + ' 失败</span>' : '<span class="et-allok">全部成功</span>') +
 '</div>';
@@ -23440,6 +23485,9 @@ SC_MOUSE.map(x => '<div class="sc-row"><span class="sc-desc only">· ' + _scEsc(
 '<div class="modal-acts"><button class="modal-btn primary sc-ok">知道了</button></div>';
 mask.appendChild(card);
 document.body.appendChild(mask);
+try {
+if (typeof mask.showPopover === 'function' && !mask.matches(':popover-open')) mask.showPopover();
+} catch (e) {  }
 mask.addEventListener('click', e => { if (e.target === mask) scClose(); });
 card.querySelector('.sc-ok').onclick = scClose;
 if (!_scEscHandler) {
@@ -23576,6 +23624,12 @@ if (typeof document === 'undefined') return;
 if (document.querySelector('.cp-mask')) return;
 const mask = document.createElement('div');
 mask.className = 'modal-mask cp-mask';
+try {
+if (typeof mask.showPopover === 'function') {
+mask.setAttribute('popover', 'manual');
+mask.popover = 'manual';
+}
+} catch (e) {}
 const card = document.createElement('div');
 card.className = 'modal-card cp-card';
 card.setAttribute('role', 'dialog');
@@ -23623,6 +23677,7 @@ fn.apply(null, c.args || []);
 }
 function cpPaletteClose() {
 const mask = document.querySelector('.cp-mask');
+try { if (mask && typeof mask.hidePopover === 'function') mask.hidePopover(); } catch (e) {}
 if (mask) mask.remove();
 _cpItems = [];
 _cpIndex = 0;
@@ -24980,6 +25035,60 @@ renderStatCards(snapshot.sessionRows);
 renderTrendChart(snapshot.sessionRows);
 renderToolBars(snapshot.toolRows);
 renderToolRingAndMs(snapshot.toolRows);
+}
+function analyticsTopCostMount() {
+if (typeof document === 'undefined') return null;
+const host = document.getElementById('panelAnalytics');
+if (!host) return null;
+let box = document.getElementById('topCostBox');
+if (!box) {
+box = document.createElement('div');
+box.id = 'topCostBox';
+box.className = 'top-cost-box';
+host.appendChild(box);
+}
+const st = (typeof AppState !== 'undefined') ? AppState : null;
+const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+const rows = list.map(s => {
+let chars = 0;
+const msgs = (s && Array.isArray(s.messages)) ? s.messages : [];
+for (const m of msgs) {
+if (m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') chars += m.content.length;
+}
+return { id: s.id, title: s.title || ('会话 ' + String(s.id).slice(0, 6)), tokens: Math.ceil(chars / 1.8) };
+}).filter(r => r.tokens > 0).sort((a, b) => b.tokens - a.tokens).slice(0, 5);
+box.innerHTML = '';
+const head = document.createElement('div');
+head.className = 'tc-head';
+head.textContent = '高耗会话 Top ' + (rows.length || 0) + '（点击「压缩」直接收紧，不是跳转）';
+box.appendChild(head);
+if (!rows.length) {
+const em = document.createElement('div');
+em.className = 'tc-empty';
+em.textContent = '还没有可统计的会话';
+box.appendChild(em);
+return box;
+}
+rows.forEach((r) => {
+const row = document.createElement('div');
+row.className = 'tc-row';
+const t = document.createElement('span'); t.className = 'tc-title'; t.textContent = r.title;
+const n = document.createElement('span'); n.className = 'tc-tokens'; n.textContent = '约 ' + r.tokens.toLocaleString() + ' tokens';
+const btn = document.createElement('button');
+btn.type = 'button'; btn.className = 'tc-btn'; btn.textContent = '压缩';
+btn.onclick = async () => {
+const st2 = (typeof AppState !== 'undefined') ? AppState : null;
+const target = st2 && Array.isArray(st2.sessions) ? st2.sessions.find(x => x.id === r.id) : null;
+const fn = (typeof window !== 'undefined') ? window['compact' + 'History'] : null;
+if (!target || typeof fn !== 'function') return;
+btn.disabled = true; btn.textContent = '压缩中…';
+try { await fn(target); btn.textContent = '已压缩'; } catch (e) { btn.textContent = '失败'; btn.disabled = false; }
+analyticsTopCostMount();
+};
+row.appendChild(t); row.appendChild(n); row.appendChild(btn);
+box.appendChild(row);
+});
+return box;
 }
 
 
@@ -26692,6 +26801,122 @@ window.addEventListener('dragover', (e) => { if (hasFiles(e)) show(); });
 window.addEventListener('drop', onDrop);
 window.__attachMagnetBound = true;
 return true;
+}
+
+
+/* ===== frontend/src/chat/composer-menu.js ===== */
+const CM_MAX_ITEMS = 8;
+function _cmSessions() {
+try {
+const st = (typeof AppState !== 'undefined') ? AppState : null;
+const list = (st && Array.isArray(st.sessions)) ? st.sessions : [];
+const cur = st ? st.currentSessionId : '';
+return list.filter(s => s && s.id !== cur).slice(0, CM_MAX_ITEMS)
+.map(s => ({ kind: 'session', label: s.title || ('会话 ' + String(s.id).slice(0, 6)), value: '@' + (s.title || s.id) + ' ' }));
+} catch (e) { return []; }
+}
+function _cmCommands() {
+return [
+{ kind: 'cmd', label: '/plan <任务>', value: '/plan ' },
+{ kind: 'cmd', label: '/compact', value: '/compact' },
+];
+}
+function composerMenuCandidates(text, caret) {
+const t = String(text == null ? '' : text);
+const pos = (typeof caret === 'number' && caret >= 0) ? caret : t.length;
+const head = t.slice(0, pos);
+if (/^\s*\/[\w-]*$/.test(head)) return { mode: 'cmd', items: _cmCommands() };
+const m = /(^|[\s(（])@([^\s@]*)$/.exec(head);
+if (m) {
+const q = String(m[2] || '').toLowerCase();
+const items = _cmSessions().filter(it => !q || it.label.toLowerCase().indexOf(q) >= 0);
+return { mode: 'mention', items };
+}
+return { mode: '', items: [] };
+}
+function composerMenuMount() {
+if (typeof document === 'undefined') return null;
+const input = document.getElementById('userInput');
+if (!input || input.__cmBound) return null;
+input.__cmBound = true;
+let menu = null;
+let items = [];
+let idx = 0;
+let mode = '';
+const close = () => {
+if (menu && menu.parentNode) menu.parentNode.removeChild(menu);
+menu = null; items = []; idx = 0; mode = '';
+};
+const render = () => {
+if (!items.length) {
+if (!menu) {
+menu = document.createElement('div');
+menu.className = 'cmx-menu';
+const host = input.closest('.input-inner') || input.parentNode;
+if (host && host.appendChild) host.appendChild(menu);
+}
+menu.innerHTML = '<div class="cmx-row cmx-empty"><span class="cmx-label"></span></div>';
+const lab = menu.querySelector('.cmx-label');
+if (lab) lab.textContent = mode === 'mention' ? '没有可提及的会话' : '没有匹配的命令';
+return;
+}
+if (!menu) {
+menu = document.createElement('div');
+menu.className = 'cmx-menu';
+menu.setAttribute('role', 'listbox');
+const host = input.closest('.input-inner') || input.parentNode;
+if (host && host.appendChild) host.appendChild(menu);
+}
+menu.innerHTML = items.map((it, i) =>
+'<div class="cmx-row' + (i === idx ? ' on' : '') + '" role="option" data-i="' + i + '">' +
+'<span class="cmx-kind">' + (it.kind === 'session' ? '@' : '/') + '</span>' +
+'<span class="cmx-label"></span></div>').join('');
+Array.prototype.forEach.call(menu.querySelectorAll('.cmx-row'), (row, i) => {
+const lab = row.querySelector('.cmx-label');
+if (lab) lab.textContent = items[i].label;
+row.onmouseenter = () => { idx = i; render(); };
+row.onclick = () => { pick(i); };
+});
+};
+const pick = (i) => {
+const it = items[i];
+if (!it) { close(); return; }
+const v = String(input.value || '');
+const pos = (typeof input.selectionStart === 'number') ? input.selectionStart : v.length;
+let start = pos;
+if (mode === 'cmd') {
+while (start > 0 && !/\s/.test(v[start - 1])) start--;
+} else {
+const at = v.lastIndexOf('@', pos - 1);
+start = at >= 0 ? at : pos;
+}
+const next = v.slice(0, start) + it.value + v.slice(pos);
+input.value = next;
+const caret = start + it.value.length;
+try { input.setSelectionRange(caret, caret); } catch (e) {}
+close();
+input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+const refresh = () => {
+const res = composerMenuCandidates(input.value, input.selectionStart);
+mode = res.mode; items = res.items; idx = 0;
+render();
+};
+input.addEventListener('input', refresh);
+input.addEventListener('keydown', (e) => {
+if (!items.length) return;
+if (e.key === 'ArrowDown') { e.preventDefault(); idx = (idx + 1) % items.length; render(); }
+else if (e.key === 'ArrowUp') { e.preventDefault(); idx = (idx - 1 + items.length) % items.length; render(); }
+else if (e.key === 'Enter') { e.preventDefault(); pick(idx); }
+else if (e.key === 'Escape') { e.preventDefault(); close(); }
+});
+const hostEl = input.closest('.input-inner');
+if (hostEl) {
+input.addEventListener('focus', () => hostEl.classList.add('is-typing'));
+input.addEventListener('blur', () => hostEl.classList.remove('is-typing'));
+}
+input.addEventListener('blur', () => setTimeout(close, 120));
+return input;
 }
 
 
@@ -32484,6 +32709,10 @@ document.getElementById('searchEngineWrap').style.display = this.checked ? 'flex
 queueSaveConfig();
 });
 updateLabels();
+try {
+const cm = (typeof window !== 'undefined') ? window['composer' + 'MenuMount'] : null;
+if (typeof cm === 'function') cm();
+} catch (e) { console.warn('输入舱菜单初始化失败', e); }
 try {
 const mag = (typeof window !== 'undefined') ? window['attach' + 'DropMagnetInit'] : null;
 if (typeof mag === 'function') mag();

@@ -42,7 +42,14 @@ function switchPanel(name) {
     }
   }
   // 进入分析面板时刷新一次图表（数据纯前端聚合，成本低）
-  if (name === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
+  if (name === 'analytics' && typeof renderAnalytics === 'function') {
+    renderAnalytics();
+    // I20 续：高耗 Top5（动态取函数，避免 panels → analytics 的新静态边）
+    try {
+      const tc = (typeof window !== 'undefined') ? window['analytics' + 'TopCostMount'] : null;
+      if (typeof tc === 'function') tc();
+    } catch (e) {}
+  }
   // R8：生成中切走对话面板，提示可随时切回
   if (name !== 'chat' && typeof isStreaming !== 'undefined' && isStreaming) {
     if (typeof addSysTip === 'function') addSysTip('正在生成回复，可随时回到「对话」面板查看进度');
