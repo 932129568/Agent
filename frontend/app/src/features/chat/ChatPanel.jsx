@@ -20,6 +20,8 @@ import {
   undoSessionRewind,
   toggleDock,
   setAskBeforeDesign,
+  openProjectSessionModal,
+  convertSessionToNormal,
   openModal,
   triggerFourActShowcase,
   pushToast,
@@ -31,6 +33,7 @@ import { appendMemory } from '../../services/bridge.js'
 import { copyText, readFileAsText } from '../../platform/dom.js'
 import { captureTriggerRect } from '../../platform/kinetic.js'
 import { estTokens, historyTokens } from '../../services/compaction.js'
+import { normalizeSessionKind, shortFolderLabel } from '../../services/sessionMode.js'
 import { CURATED_INDUSTRY_PACKS } from '../../services/industryExperts.js'
 import ContextUsageRing from '../../ui/ContextUsageRing.jsx'
 import MarkdownView from '../../ui/MarkdownView.jsx'
@@ -352,6 +355,31 @@ export default function ChatPanel() {
 
         <div className="chat-composer">
           <ComposerMenu items={menu.items} activeIndex={activeMenuIdx} onPick={pickMenuItem} />
+
+          <div className="chat-mode-strip" data-kind={normalizeSessionKind(session)}>
+            {normalizeSessionKind(session) === 'project' ? (
+              <>
+                <span className="chat-mode-label" title={session && session.workspaceDir}>
+                  📁 项目会话 · <strong>{shortFolderLabel(session && session.workspaceDir) || '已绑定工作目录'}</strong>
+                </span>
+                <div className="chat-mode-actions">
+                  <button type="button" className="chat-mini-btn" onClick={() => openProjectSessionModal('bind', sid)}>
+                    更换目录
+                  </button>
+                  <button type="button" className="chat-mini-btn" onClick={() => convertSessionToNormal(sid)}>
+                    转为普通会话
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="chat-mode-label">💬 普通会话 · 未绑定专属工作文件夹</span>
+                <button type="button" className="chat-mini-btn" onClick={() => openProjectSessionModal('bind', sid)}>
+                  📁 绑定项目文件夹
+                </button>
+              </>
+            )}
+          </div>
 
           {ui.composerTokens.length > 0 && (
             <div className="chat-tokens-row">

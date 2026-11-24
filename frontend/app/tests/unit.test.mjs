@@ -512,3 +512,22 @@ test('toolRouter.js 群聊隔离模式剔除全局 memory 工具并仅注入本�
   assert.ok(!names.includes('memory_search') && !names.includes('memory_write') && !names.includes('append_memory'))
   assert.ok(names.includes('group_file_list') && names.includes('group_file_read') && names.includes('group_file_search'))
 })
+
+
+test('sessionMode.js 普通会话与项目会话互转及路径短名提取（Windows/Unix 兼容）', async () => {
+  const { normalizeSessionKind, shortFolderLabel, applyProjectWorkspace, clearProjectWorkspace } = await import('../src/services/sessionMode.js')
+  assert.equal(shortFolderLabel('C:\\Users\\陈\\Desktop\\my-project\\'), 'my-project')
+  assert.equal(shortFolderLabel('/Users/dev/harbor-app/'), 'harbor-app')
+
+  const normal = { id: 's_1', title: '新对话', kind: 'chat', workspaceDir: '' }
+  assert.equal(normalizeSessionKind(normal), 'chat')
+
+  const proj = applyProjectWorkspace(normal, 'C:\\Users\\陈\\Desktop\\pendulum-clock')
+  assert.equal(normalizeSessionKind(proj), 'project')
+  assert.equal(proj.workspaceDir, 'C:\\Users\\陈\\Desktop\\pendulum-clock')
+  assert.equal(proj.title, 'pendulum-clock')
+
+  const backToNormal = clearProjectWorkspace(proj)
+  assert.equal(normalizeSessionKind(backToNormal), 'chat')
+  assert.equal(backToNormal.workspaceDir, '')
+})

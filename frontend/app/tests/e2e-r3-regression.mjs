@@ -82,6 +82,7 @@ const stubState = {
   savedGuardConfigs: [],
   groupFilesByGid: {},
   purgedGroupIds: [],
+  boundProjectWs: [],
   writtenFiles: [],
   chatRequests: [],
   triggerGroupToolOnce: false,
@@ -139,7 +140,12 @@ const server = http.createServer(async (req, res) => {
       out = { ok: true }
     } else if (method === 'get_sessions') out = []
     else if (method === 'save_sessions' || method === 'set_current_sid') out = { ok: true }
-    else if (method === 'get_ws_state') out = { enabled: true, effective: REPO_ROOT }
+    else if (method === 'get_ws_state') out = { enabled: true, ws: REPO_ROOT, effective: REPO_ROOT }
+    else if (method === 'set_session_ws') {
+      stubState.boundProjectWs.push({ sid: String(args[0] || ''), dir: String(args[1] || ''), enabled: args[2] !== false })
+      out = { ok: true, sid: String(args[0] || ''), ws: String(args[1] || REPO_ROOT), bound: Boolean(args[1]) }
+    }
+    else if (method === 'pick_folder') out = { ok: true, path: 'C:/Users/demo/Desktop/harbor-project' }
     else if (method === 'list_recent_ws') out = { recent: [REPO_ROOT] }
     else if (method === 'list_dir') out = { ok: true, entries: ['README.md', 'package.json'] }
     else if (method === 'expert_list') out = []
@@ -828,41 +834,74 @@ try {
   )
 
   /* ======================================================================== *
-   * Suite I · R12 多群聊严格隔离 + 群文件按群隔离 + 删除群聊可选清空群文件
+   * Suite I · R13 左侧边栏上下文切换「群聊列表/+新建群聊」+ 多群文件严格隔离 + 删群清文件
    * ======================================================================== */
   await page.locator('.hb-rail-btn[title="角色群聊"]').click()
   await page.waitForSelector('.gp-root')
-  const oldGroupId = await page.locator('.gp-select').inputValue()
+  const sideHeadGroup = await page.locator('.hb-side-head').textContent()
+  const oldGroupId = await page.locator('.ss-side[data-mode="group"] .ss-item[data-active="true"]').getAttribute('data-group-id')
   const oldFilesBtnText = await page.locator('.gp-controls button:has-text("本群文件")').textContent()
 
-  // I1: 点击「+ 新建群聊」→ 新群 ID 与旧群不同，且本群文件严格归零（绝不串读旧群）
-  await page.locator('.gp-head-left button:has-text("新建群聊")').click()
+  // I1: 左侧边栏点击「+ 新建群聊」→ 顶栏不再堆砌选择器，新群 ID 独立且本群文件归零
+  await page.locator('.ss-side[data-mode="group"] button:has-text("新建群聊")').click()
   await page.waitForTimeout(220)
-  const newGroupId = await page.locator('.gp-select').inputValue()
+  const newGroupId = await page.locator('.ss-side[data-mode="group"] .ss-item[data-active="true"]').getAttribute('data-group-id')
   const newFilesBtnText = await page.locator('.gp-controls button:has-text("本群文件")').textContent()
-  const isolatedEmpty = newGroupId !== oldGroupId && /本群文件\s*\(0\)/.test(newFilesBtnText || '')
+  const isolatedEmpty = /群聊列表/.test(sideHeadGroup || '') && newGroupId !== oldGroupId && /本群文件\s*\(0\)/.test(newFilesBtnText || '')
   record(
     'Suite-I',
-    '新建群聊拥有独立群 ID 且本群文件严格归零（与旧群彻底隔离）',
+    '切入角色群聊时侧边栏切换为群聊列表，侧边栏新建群聊独立隔离且本群文件归零',
     isolatedEmpty,
-    `old=${oldGroupId}(${(oldFilesBtnText || '').trim()}), new=${newGroupId}(${(newFilesBtnText || '').trim()})`
+    `head=${(sideHeadGroup || '').trim()}, old=${oldGroupId}(${(oldFilesBtnText || '').trim()}), new=${newGroupId}(${(newFilesBtnText || '').trim()})`
   )
 
-  // I2: 切回旧群 → 点「🗑 删除群聊」→ 弹窗可选「同时删除该群聊的全部群文件」→ 确认后后端触发 __PURGE_ALL__
-  await page.locator('.gp-select').selectOption(oldGroupId)
-  await page.waitForTimeout(220)
-  await page.locator('.gp-head-left button:has-text("删除群聊")').click()
+  // I2: 在左侧边栏直接点旧群的「×」→ 弹出删除确认窗 → 选清空群文件 → 后端触发 __PURGE_ALL__
+  await page.locator(`.ss-side[data-mode="group"] .ss-item[data-group-id="${oldGroupId}"] .ss-del`).click()
   await page.waitForSelector('.gd-modal', { timeout: 4000 })
   await page.locator('.gd-foot button:has-text("确认删除群聊与群文件")').click()
   await page.waitForSelector('.gd-modal', { state: 'detached', timeout: 4000 })
   await page.waitForTimeout(220)
   const purgedOld = stubState.purgedGroupIds.includes(oldGroupId)
-  const remainingIds = await page.locator('.gp-select option').evaluateAll((els) => els.map((o) => o.value))
+  const remainingIds = await page.locator('.ss-side[data-mode="group"] .ss-item').evaluateAll((els) => els.map((el) => el.getAttribute('data-group-id')))
   record(
     'Suite-I',
-    '删除群聊弹窗支持选择清空群文件，确认后彻底清理旧群目录并移除列表',
+    '侧边栏删除群聊弹窗支持清空群文件，确认后彻底清理旧群目录并移除列表',
     purgedOld && !remainingIds.includes(oldGroupId),
     `purged=${purgedOld}, remaining=${JSON.stringify(remainingIds)}`
+  )
+
+  /* ======================================================================== *
+   * Suite J · R13 项目会话（绑定专属工作文件夹）与普通会话自由新建与切换
+   * ======================================================================== */
+  await page.locator('.hb-rail-btn[title="智能对话"]').click()
+  await page.waitForSelector('.ss-side[data-mode="sessions"]')
+  stubState.boundProjectWs.length = 0
+  await page.locator('.ss-side[data-mode="sessions"] button:has-text("项目会话")').click()
+  await page.waitForSelector('.pm-modal', { timeout: 4000 })
+  await page.locator('.pm-modal button:has-text("浏览文件夹")').click()
+  await page.waitForTimeout(160)
+  await page.locator('.pm-foot button:has-text("创建项目会话")').click()
+  await page.waitForSelector('.pm-modal', { state: 'detached', timeout: 4000 })
+  await page.waitForTimeout(220)
+  const modeStripProj = await page.locator('.chat-mode-strip').textContent()
+  const hasProjItem = (await page.locator('.ss-side[data-mode="sessions"] .ss-item[data-kind="project"][data-active="true"]').count()) === 1
+  const boundOk = stubState.boundProjectWs.some((x) => x.dir.includes('harbor-project') && x.enabled)
+  record(
+    'Suite-J',
+    '新建项目会话：浏览绑定专属文件夹 + 侧边栏与输入区标识清晰 + 同步后端 set_session_ws',
+    hasProjItem && boundOk && /项目会话/.test(modeStripProj || '') && /harbor-project/.test(modeStripProj || ''),
+    `hasProjItem=${hasProjItem}, boundOk=${boundOk}, strip=${(modeStripProj || '').trim()}`
+  )
+
+  // J2: 一键转为普通会话（解除专属文件夹绑定）
+  await page.locator('.chat-mode-strip button:has-text("转为普通会话")').click()
+  await page.waitForTimeout(200)
+  const modeStripNormal = await page.locator('.chat-mode-strip').textContent()
+  record(
+    'Suite-J',
+    '项目会话支持一键转为普通会话并解除专属工作目录绑定',
+    /普通会话/.test(modeStripNormal || ''),
+    `strip=${(modeStripNormal || '').trim()}`
   )
 
   // D4: 全程零未捕获页面异常

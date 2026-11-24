@@ -31,19 +31,7 @@
     flex-wrap: wrap;
   }
   .gp-title { margin: 0; font-size: 16px; font-weight: 700; white-space: nowrap; }
-  .gp-select {
-    max-width: 190px;
-    padding: 4px 10px;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--border-strong);
-    background: var(--card-elevated);
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    outline: none;
-  }
-  .gp-select:focus { border-color: var(--primary); }
+
   .gp-seg {
     display: inline-flex;
     padding: 2px;

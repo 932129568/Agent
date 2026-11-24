@@ -4,6 +4,12 @@ import { readStorage, writeStorage } from '../platform/storage.js'
 import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers, buildModeratorPrompt, parseModeratorPlan } from '../services/capabilityRouter.js'
 import { isAutonomousAuthorized } from '../services/toolRouter.js'
 import {
+  normalizeSessionKind,
+  shortFolderLabel,
+  applyProjectWorkspace,
+  clearProjectWorkspace,
+} from '../services/sessionMode.js'
+import {
   createIsolatedGroup,
   hydrateGroupCollection,
   removeGroupFromCollection,
@@ -77,12 +83,15 @@ function persistGroups(items, activeGroupId) {
   } catch {}
 }
 
-function makeSession(title = '新对话', kind = 'chat') {
+function makeSession(title = '新对话', kind = 'chat', workspaceDir = '') {
   const now = Date.now()
+  const cleanDir = String(workspaceDir || '').trim()
+  const resolvedKind = cleanDir || kind === 'project' ? 'project' : 'chat'
   return ensureTree({
     id: 's_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 6),
-    title,
-    kind,
+    title: String(title || '').trim() || (resolvedKind === 'project' ? (shortFolderLabel(cleanDir) || '项目会话') : '新对话'),
+    kind: resolvedKind,
+    workspaceDir: cleanDir,
     runStatus: 'completed',
     createdAt: now,
     updatedAt: now,
@@ -122,6 +131,7 @@ const initialState = Object.freeze({
     pendingApproval: null,
     pendingClarify: null,
     pendingGroupDelete: null,  // { groupId, title, fileCount }
+    pendingProjectModal: null, // { id, mode: 'create'|'bind', sid, initialDir, initialTitle }
     pendingTakeover: null,     // { sid, takeoverId, url, message }
     pendingBudgetPause: null,  // { sid, kind, detail }
     activeToolProfile: null,   // { id, label, activeCount, totalCount }
@@ -385,9 +395,16 @@ export async function hydrateApp() {
     }))
   }
   if (sessRes.status === 'fulfilled' && Array.isArray(sessRes.value) && sessRes.value.length > 0) {
-    const hydrated = sessRes.value.map((x) => ensureTree(x))
+    const hydrated = sessRes.value.map((x) => {
+      const t = ensureTree(x)
+      const dir = String(t.workspaceDir || '').trim()
+      return { ...t, kind: normalizeSessionKind(t), workspaceDir: dir }
+    })
     hydrated.sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))
     patchSlice('sessions', { items: hydrated, currentId: hydrated[0].id, hydrated: true })
+    if (hydrated[0].kind === 'project' && hydrated[0].workspaceDir) {
+      api.setSessionWs(hydrated[0].id, hydrated[0].workspaceDir, true).catch(() => {})
+    }
     api.setCurrentSid(hydrated[0].id).catch(() => {})
   } else {
     patchSlice('sessions', (s) => ({ ...s, hydrated: true }))
@@ -443,7 +460,7 @@ function syncRuntimeTelemetryForSid(targetSid) {
 }
 
 export function createNewSession(title = '新对话') {
-  const s = makeSession(title)
+  const s = makeSession(title, 'chat', '')
   patchSlice('sessions', (st) => ({ ...st, items: [s, ...st.items], currentId: s.id }))
   patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
   syncRuntimeTelemetryForSid(s.id)
@@ -452,12 +469,107 @@ export function createNewSession(title = '新对话') {
   return s
 }
 
+export async function createProjectSession({ title = '', workspaceDir = '' } = {}) {
+  const cleanDir = String(workspaceDir || '').trim()
+  if (!cleanDir) {
+    pushToast('请先选择或输入项目工作文件夹', 'warn')
+    return null
+  }
+  const s = makeSession(title || shortFolderLabel(cleanDir) || '项目会话', 'project', cleanDir)
+  patchSlice('sessions', (st) => ({ ...st, items: [s, ...st.items], currentId: s.id }))
+  patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
+  patchSlice('workspace', (w) => ({ ...w, enabled: true, rootPath: cleanDir }))
+  syncRuntimeTelemetryForSid(s.id)
+  queuePersistSessions()
+  try {
+    await api.setCurrentSid(s.id)
+    await api.setSessionWs(s.id, cleanDir, true)
+    await api.setWsEnabled(s.id, true)
+    await refreshWorkspace()
+  } catch {}
+  pushToast(`已创建项目会话「${s.title}」并绑定工作目录`, 'ok')
+  return s
+}
+
+export async function bindSessionToProject(sid, workspaceDir, customTitle = '') {
+  const targetId = sid || state.sessions.currentId
+  const cleanDir = String(workspaceDir || '').trim()
+  if (!targetId || !cleanDir) return
+  invalidateSessionPrefixCache(targetId)
+  updateSessionById(targetId, (s) => applyProjectWorkspace(s, cleanDir, customTitle))
+  if (targetId === state.sessions.currentId) {
+    patchSlice('workspace', (w) => ({ ...w, enabled: true, rootPath: cleanDir }))
+  }
+  try {
+    await api.setSessionWs(targetId, cleanDir, true)
+    await api.setWsEnabled(targetId, true)
+    if (targetId === state.sessions.currentId) await refreshWorkspace()
+  } catch {}
+  pushToast(`已绑定项目工作目录：${shortFolderLabel(cleanDir)}`, 'ok')
+}
+
+export async function convertSessionToNormal(sid) {
+  const targetId = sid || state.sessions.currentId
+  if (!targetId) return
+  invalidateSessionPrefixCache(targetId)
+  updateSessionById(targetId, (s) => clearProjectWorkspace(s))
+  try {
+    await api.setSessionWs(targetId, '', false)
+    if (targetId === state.sessions.currentId) await refreshWorkspace()
+  } catch {}
+  pushToast('已转为普通会话（解除专属项目目录绑定）', 'info')
+}
+
+export function openProjectSessionModal(mode = 'create', sid = '') {
+  const target = mode === 'bind'
+    ? state.sessions.items.find((x) => x.id === (sid || state.sessions.currentId))
+    : null
+  patchSlice('runtime', {
+    pendingProjectModal: {
+      id: 'pm_' + Date.now(),
+      mode: mode === 'bind' ? 'bind' : 'create',
+      sid: target ? target.id : '',
+      initialDir: (target && target.workspaceDir) || '',
+      initialTitle: target && target.title !== '新对话' ? target.title : '',
+    },
+  })
+}
+
+export function closeProjectSessionModal() {
+  patchSlice('runtime', { pendingProjectModal: null })
+}
+
+export async function confirmProjectSessionModal({ mode = 'create', sid = '', workspaceDir = '', title = '' } = {}) {
+  patchSlice('runtime', { pendingProjectModal: null })
+  if (mode === 'bind' && sid) {
+    return bindSessionToProject(sid, workspaceDir, title)
+  }
+  return createProjectSession({ title, workspaceDir })
+}
+
+export async function browseProjectFolder() {
+  try {
+    const res = await api.pickFolder(state.sessions.currentId || '')
+    return (res && (res.path || res.dir || res.ws)) || ''
+  } catch (e) {
+    pushToast(`浏览文件夹失败：${e.message}`, 'err')
+    return ''
+  }
+}
+
 export function selectSession(sid) {
-  if (!state.sessions.items.some((x) => x.id === sid)) return
+  const target = state.sessions.items.find((x) => x.id === sid)
+  if (!target) return
   patchSlice('sessions', (st) => ({ ...st, currentId: sid }))
   patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
   syncRuntimeTelemetryForSid(sid)
   api.setCurrentSid(sid).catch(() => {})
+  if (normalizeSessionKind(target) === 'project' && target.workspaceDir) {
+    patchSlice('workspace', (w) => ({ ...w, enabled: true, rootPath: target.workspaceDir }))
+    api.setSessionWs(sid, target.workspaceDir, true).then(() => refreshWorkspace()).catch(() => {})
+  } else {
+    refreshWorkspace().catch(() => {})
+  }
 }
 
 export function deleteSession(sid) {
@@ -1014,7 +1126,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
       historyMessages: targetSession.messages,
       endpointConfig: ep,
       expertPrompt,
-      workspacePath: state.workspace.rootPath,
+      workspacePath: (targetSession && targetSession.workspaceDir) || state.workspace.rootPath,
       sessionBudgetRmb: Number(state.settings.backendConfig.session_budget) || 0,
       correctiveDirective: opts.correctiveDirective || '',
       askBeforeDesign: state.ui.askBeforeDesign,
@@ -1264,8 +1376,10 @@ export async function refreshWorkspace() {
     patchSlice('workspace', (w) => ({
       ...w,
       enabled: ws.status === 'fulfilled' && ws.value ? ws.value.enabled !== false : w.enabled,
-      rootPath: ws.status === 'fulfilled' && ws.value ? (ws.value.effective || ws.value.dir || w.rootPath) : w.rootPath,
-      recent: recent.status === 'fulfilled' && Array.isArray(recent.value && recent.value.recent) ? recent.value.recent : w.recent,
+      rootPath: ws.status === 'fulfilled' && ws.value ? (ws.value.ws || ws.value.effective || ws.value.dir || w.rootPath) : w.rootPath,
+      recent: recent.status === 'fulfilled' && Array.isArray(recent.value)
+        ? recent.value
+        : (recent.status === 'fulfilled' && Array.isArray(recent.value && recent.value.recent) ? recent.value.recent : w.recent),
       entries: dir.status === 'fulfilled' && dir.value && Array.isArray(dir.value.entries) ? dir.value.entries : [],
       guardRules: rules.status === 'fulfilled' && rules.value && Array.isArray(rules.value.rules) ? rules.value.rules : [],
     }))
@@ -1275,10 +1389,14 @@ export async function refreshWorkspace() {
 }
 
 export async function setWorkspacePath(dirPath) {
-  invalidateSessionPrefixCache(state.sessions.currentId)
-  await api.setSessionWs(state.sessions.currentId, dirPath, true)
+  const cleanDir = String(dirPath || '').trim()
+  if (!cleanDir) return
+  const sid = state.sessions.currentId
+  invalidateSessionPrefixCache(sid)
+  updateSessionById(sid, (s) => applyProjectWorkspace(s, cleanDir))
+  await api.setSessionWs(sid, cleanDir, true)
   await refreshWorkspace()
-  pushToast(`工作区已切换至 ${dirPath}`, 'ok')
+  pushToast(`工作区已切换至 ${cleanDir}（已绑定为当前项目会话）`, 'ok')
 }
 
 export async function toggleWorkspaceEnabled(enabled) {

@@ -10,6 +10,7 @@ import {
   toggleDock,
   toggleSearchDock,
   createNewSession,
+  createNewGroup,
   updateVisualSettings,
 } from '../state/store.js'
 import HarborLogo from '../ui/HarborLogo.jsx'
@@ -39,6 +40,7 @@ const PRIMARY_NAV = [
 export default function AppShell() {
   const ui = useSlice('ui')
   const sessionsState = useSlice('sessions')
+  const group = useSlice('group')
   const runtime = useSlice('runtime')
   const settings = useSlice('settings')
   const [compactRail, setCompactRail] = useState(false)
@@ -124,19 +126,34 @@ export default function AppShell() {
       } else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'd') {
         e.preventDefault(); toggleDock()
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
-        e.preventDefault(); createNewSession('新对话')
+        e.preventDefault()
+        if (ui.activePanel === 'group') createNewGroup()
+        else createNewSession('新对话')
       }
     }
     globalThis.addEventListener('keydown', onKey)
     return () => globalThis.removeEventListener('keydown', onKey)
-  }, [])
+  }, [ui.activePanel])
 
+  const isGroupPanel = ui.activePanel === 'group'
   const currentSession = sessionsState.items.find((s) => s.id === sessionsState.currentId)
   const curRun = currentSession && runtime.runsBySid[currentSession.id]
-  const busy = !!(curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase))
+  const busy = isGroupPanel
+    ? !!group.running
+    : !!(curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase))
+  // r13 的 TDZ 崩溃点：activeModel 原先声明在 topSubStatus 之后，
+  // 但 topSubStatus 第 148/149 行就引用它 ⇒ 渲染即
+  // "ReferenceError: Cannot access 'activeModel' before initialization"，
+  // 整个应用外壳挂不上（e2e 连 .hb-shell 都等不到）。必须在使用前声明。
+  const activeModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
+  const topTitle = isGroupPanel
+    ? (group.title || '多角色群聊')
+    : (currentSession ? currentSession.title : 'Harbor')
+  const topSubStatus = isGroupPanel
+    ? (group.running ? (group.status === 'planning' ? '主持人调度中…' : '群聊接力中…') : activeModel)
+    : (busy ? (curRun.stageLabel || curRun.phase) : activeModel)
   const split = runtime.hybridSplit || { localTokens: 0, cloudTokens: 0 }
   const savedYuan = ((split.localTokens / 1000) * 0.002).toFixed(2)
-  const activeModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
 
   return (
     <div ref={shellRef} className="hb-shell">
@@ -214,8 +231,10 @@ export default function AppShell() {
       {ui.sidebarOpen && (
         <aside className="hb-sidebar">
           <div className="hb-side-head">
-            <span>历史会话</span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{sessionsState.items.length} 条</span>
+            <span>{isGroupPanel ? '群聊列表' : '历史会话'}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              {isGroupPanel ? `${(group.items || []).length} 个` : `${sessionsState.items.length} 条`}
+            </span>
           </div>
           <SidebarSessions />
         </aside>
@@ -230,8 +249,8 @@ export default function AppShell() {
             </button>
             <div className="hb-island" data-busy={String(busy)}>
               <span>{busy ? '◉' : '●'}</span>
-              <strong>{currentSession ? currentSession.title : 'Harbor'}</strong>
-              <span>· {busy ? (curRun.stageLabel || curRun.phase) : activeModel}</span>
+              <strong>{topTitle}</strong>
+              <span>· {topSubStatus}</span>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

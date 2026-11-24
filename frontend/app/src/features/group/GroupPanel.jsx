@@ -18,9 +18,6 @@ import {
   applyGroupPreset,
   setGroupRoutingMode,
   setAskBeforeDesign,
-  createNewGroup,
-  selectGroup,
-  requestDeleteGroup,
   pushToast,
 } from '../../state/store.js'
 import { CAPABILITY_CATALOG, GROUP_ROSTER_PRESETS, inferMemberCapabilities } from '../../services/capabilityRouter.js'
@@ -117,25 +114,7 @@ export default function GroupPanel() {
     <section className="gp-root">
       <header className="gp-head">
         <div className="gp-head-left">
-          <h2 className="gp-title">多角色群聊</h2>
-          <select
-            className="gp-select"
-            aria-label="切换隔离群聊"
-            value={group.activeGroupId}
-            onChange={(e) => selectGroup(e.target.value)}
-          >
-            {(group.items || []).map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.title || '未命名群聊'} ({(g.messages || []).length} 条)
-              </option>
-            ))}
-          </select>
-          <button type="button" className="gp-chip-btn" data-active="true" onClick={() => createNewGroup()}>
-            + 新建群聊
-          </button>
-          <button type="button" className="gp-chip-btn" onClick={() => requestDeleteGroup(group.activeGroupId)} title="删除当前群聊（可选是否同时清空本群文件）">
-            🗑 删除群聊
-          </button>
+          <h2 className="gp-title">{group.title || '多角色群聊'}</h2>
           <div className="gp-seg" role="group" aria-label="路由模式">
             <button type="button" className="gp-seg-btn" data-active={String(group.routingMode === 'smart')} onClick={() => setGroupRoutingMode('smart')}>
               🎙 主持人智能调度
