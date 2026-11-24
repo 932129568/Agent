@@ -1519,6 +1519,16 @@ async function runAgentLoop(s, apiKey) {
 function renderReason(host, rr) {
 
     if (!host) return;
+    // v3.5：等待态光带（替代原圆环+三红点）。运行期插入，不改模板 id。
+    try {
+      const stage = document.querySelector('.s2-stage.s2-wait');
+      if (stage && !stage.querySelector('.s2-wait-bar')) {
+        const bar = document.createElement('span');
+        bar.className = 's2-wait-bar';
+        bar.setAttribute('aria-hidden', 'true');
+        stage.insertBefore(bar, stage.firstChild);
+      }
+    } catch (e) {}
     // I26：用**真实 chunk 间隔**采样出字速度，驱动星轨转速（不拍固定映射）。
     // 采样点在 renderReason 入口：它每来一段增量就被调用一次，天然是 chunk 节奏。
     try {

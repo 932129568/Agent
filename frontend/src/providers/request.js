@@ -62,7 +62,8 @@ function _wrapBodyWithSlotRelease(body, slot) {
     async start(controller) {
       const reader = body.getReader();
       try {
-        while (true) {
+      
+  while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           controller.enqueue(value);
@@ -112,6 +113,24 @@ async function modelTransportStream(request, signal) {
 }
 
 async function _modelTransportStreamInner(request, signal) {
+  // 用户实测：API Key 里混入中文/全角字符时，fetch 会抛
+  //   TypeError: Failed to read the 'headers' property from 'RequestInit':
+  //   String contains non ISO-8859-1 code point.
+  // 这是浏览器底层限制（Header 只允许 Latin-1），但原样抛给用户等于没提示。
+  // 这里在发请求前做一次显式校验，给出「哪个配置项、含什么字符」的人话错误。
+  const _key = String(request.apiKey == null ? '' : request.apiKey);
+  const _badIdx = (function () {
+    for (let i = 0; i < _key.length; i++) { if (_key.charCodeAt(i) > 255) return i; }
+    return -1;
+  })();
+  if (_badIdx >= 0) {
+    const ch = _key[_badIdx];
+    const err = new Error('API Key 含非法字符「' + ch + '」（第 ' + (_badIdx + 1) +
+      ' 个，非 ASCII）。请到「设置 → 模型连接」重新粘贴纯英文数字的 Key。');
+    err.__configError = true;
+    throw err;
+  }
+
   const body = request.body || {};
   if (body && Array.isArray(body.messages) && typeof normalizeSystemMessages === 'function') {
     body.messages = normalizeSystemMessages(body.messages);

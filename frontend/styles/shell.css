@@ -262,3 +262,50 @@ body.fx-lite .ap-row{--fx-scale:0.6}
   border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
 /* 停靠态（I20）优先：右列铺满高度 */
 .sp-root.sp-docked[popover]{top:56px;bottom:12px;right:12px;left:auto}
+
+/* ===== v3.5 UX 返工 · 透色语义修正（用户实测反馈）=====
+   用户原话：「我要求透色背景，不是透色桌面」。
+   现状：Electron 把桌面壁纸镜像成 #lw-ambient-wallpaper 铺在最底层，而应用底色是
+   transparent ⇒ 看着像"整个应用透到桌面"。正确语义是：**界面内部层之间透色**，
+   桌面不透。做法：①隐藏壁纸镜像层；②应用底色改实色 var(--bg)；
+   ③内部卡片仍用 --surface-2/--card-bg（保留层间透色质感）。 */
+html #lw-ambient-wallpaper,
+html[data-wp="ready"] #lw-ambient-wallpaper,
+html[data-skin="lightwell"] #lw-ambient-wallpaper{display:none !important;opacity:0 !important;visibility:hidden !important}
+html,body{background:var(--bg) !important}
+.app,.main{background:var(--bg) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+/* 层间透色：卡片/侧栏保留玻璃感，但混的是应用底色而不是壁纸 */
+.main .panel,.rail,.sidebar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+
+/* ===== v3.5 UX 返工 · 等待态重做 =====
+   原样（用户截图圈出）：一个缺口圆环 + 三个红点，像 2015 年的 loading。
+   改为：一条 2px 流动光带（单向，不来回闪）+ 文字轻微呼吸；
+   去掉圆环与圆点，减少视觉噪点。 */
+.s2-stage.s2-wait::before,
+.s2-stage.s2-wait::after{display:none !important;content:none !important}
+.s2-stage.s2-wait{position:relative;padding-left:14px}
+.s2-stage.s2-wait::marker{content:none}
+.s2-wait-bar{position:absolute;left:0;top:50%;width:8px;height:2px;margin-top:-1px;
+  border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--primary) 18%,transparent)}
+.s2-wait-bar::after{content:"";position:absolute;inset:0;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--primary),transparent);
+  transform:translateX(-100%);animation:s2WaitSweep var(--dur-panel-lg) var(--ease-out) infinite}
+@keyframes s2WaitSweep{to{transform:translateX(100%)}}
+body.fx-off .s2-wait-bar::after{animation:none;opacity:.45}
+.s2-dots{display:none !important}
+
+/* ===== v3.5 UX 返工 · 撞击光效柔化 =====
+   原样：硬边线性渐变条（截图里那条斜线就是它），像贴了一条胶带。
+   改为：径向柔光晕 + 更短的时长，只做"边缘被撞亮"的暗示。 */
+.main.kin-impact-left::after,
+.main.kin-impact-right::after,
+.main.kin-impact-top::after,
+.main.kin-impact-bottom::after{
+  background:radial-gradient(circle at var(--kin-origin,50% 50%),
+    color-mix(in srgb,var(--primary) 26%,transparent),transparent 68%) !important;
+  animation:kinEdgeFlash var(--dur-panel) var(--ease-out) forwards !important;
+  filter:blur(1px)}
+.main.kin-impact-left::after{--kin-origin:0% 50%}
+.main.kin-impact-right::after{--kin-origin:100% 50%}
+.main.kin-impact-top::after{--kin-origin:50% 0%}
+.main.kin-impact-bottom::after{--kin-origin:50% 100%}

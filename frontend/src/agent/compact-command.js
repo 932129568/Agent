@@ -177,7 +177,8 @@ async function compactNow(s, apiKey, opts = {}) {
     const resp = await fetch(resolveApiEndpoint(), { method: 'POST',
       // v1.6 HF-P0：local 模式经后端 CORS 代理时附 X-Harbor-Target（真实本地
       // base_url）；typeof 守卫保 node vm 单模块沙箱可测（71-provider 未加载时跳过）
-      headers: Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+      // 同 request.js：Key 含非 ASCII 会让 fetch 抛底层 TypeError，先给人话错误
+      headers: Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + String(apiKey || '').replace(/[^\x20-\x7E]/g, '') },
         (typeof localProxyHeaders === 'function') ? localProxyHeaders() : {}),
       signal: AbortSignal.timeout(30000),
       body: JSON.stringify(_cmpBody) });

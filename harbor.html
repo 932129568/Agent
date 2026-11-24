@@ -3092,6 +3092,36 @@ border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
 .sp-root[popover]{position:fixed;top:60px;right:12px;bottom:auto;left:auto;margin:0;padding:0;
 border:0;background:transparent;max-width:none;max-height:none;overflow:visible}
 .sp-root.sp-docked[popover]{top:56px;bottom:12px;right:12px;left:auto}
+html #lw-ambient-wallpaper,
+html[data-wp="ready"] #lw-ambient-wallpaper,
+html[data-skin="lightwell"] #lw-ambient-wallpaper{display:none !important;opacity:0 !important;visibility:hidden !important}
+html,body{background:var(--bg) !important}
+.app,.main{background:var(--bg) !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+.main .panel,.rail,.sidebar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+.s2-stage.s2-wait::before,
+.s2-stage.s2-wait::after{display:none !important;content:none !important}
+.s2-stage.s2-wait{position:relative;padding-left:14px}
+.s2-stage.s2-wait::marker{content:none}
+.s2-wait-bar{position:absolute;left:0;top:50%;width:8px;height:2px;margin-top:-1px;
+border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--primary) 18%,transparent)}
+.s2-wait-bar::after{content:"";position:absolute;inset:0;border-radius:2px;
+background:linear-gradient(90deg,transparent,var(--primary),transparent);
+transform:translateX(-100%);animation:s2WaitSweep var(--dur-panel-lg) var(--ease-out) infinite}
+@keyframes s2WaitSweep{to{transform:translateX(100%)}}
+body.fx-off .s2-wait-bar::after{animation:none;opacity:.45}
+.s2-dots{display:none !important}
+.main.kin-impact-left::after,
+.main.kin-impact-right::after,
+.main.kin-impact-top::after,
+.main.kin-impact-bottom::after{
+background:radial-gradient(circle at var(--kin-origin,50% 50%),
+color-mix(in srgb,var(--primary) 26%,transparent),transparent 68%) !important;
+animation:kinEdgeFlash var(--dur-panel) var(--ease-out) forwards !important;
+filter:blur(1px)}
+.main.kin-impact-left::after{--kin-origin:0% 50%}
+.main.kin-impact-right::after{--kin-origin:100% 50%}
+.main.kin-impact-top::after{--kin-origin:50% 0%}
+.main.kin-impact-bottom::after{--kin-origin:50% 100%}
 
 
 /* ===== frontend/styles/features/chat.css ===== */
@@ -14557,6 +14587,18 @@ throw e;
 }
 }
 async function _modelTransportStreamInner(request, signal) {
+const _key = String(request.apiKey == null ? '' : request.apiKey);
+const _badIdx = (function () {
+for (let i = 0; i < _key.length; i++) { if (_key.charCodeAt(i) > 255) return i; }
+return -1;
+})();
+if (_badIdx >= 0) {
+const ch = _key[_badIdx];
+const err = new Error('API Key 含非法字符「' + ch + '」（第 ' + (_badIdx + 1) +
+' 个，非 ASCII）。请到「设置 → 模型连接」重新粘贴纯英文数字的 Key。');
+err.__configError = true;
+throw err;
+}
 const body = request.body || {};
 if (body && Array.isArray(body.messages) && typeof normalizeSystemMessages === 'function') {
 body.messages = normalizeSystemMessages(body.messages);
@@ -18965,6 +19007,15 @@ try { void chatGenerativeAutoRender(run.sessionId); } catch (e) {}
 }
 function renderReason(host, rr) {
 if (!host) return;
+try {
+const stage = document.querySelector('.s2-stage.s2-wait');
+if (stage && !stage.querySelector('.s2-wait-bar')) {
+const bar = document.createElement('span');
+bar.className = 's2-wait-bar';
+bar.setAttribute('aria-hidden', 'true');
+stage.insertBefore(bar, stage.firstChild);
+}
+} catch (e) {}
 try {
 const t = String(rr == null ? '' : rr);
 const now = Date.now();
@@ -27661,7 +27712,7 @@ _cmpBody.messages = normalizeSystemMessages(_cmpBody.messages);
 }
 if (_glm) _cmpBody.thinking = { type: 'disabled' };
 const resp = await fetch(resolveApiEndpoint(), { method: 'POST',
-headers: Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+headers: Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + String(apiKey || '').replace(/[^\x20-\x7E]/g, '') },
 (typeof localProxyHeaders === 'function') ? localProxyHeaders() : {}),
 signal: AbortSignal.timeout(30000),
 body: JSON.stringify(_cmpBody) });
