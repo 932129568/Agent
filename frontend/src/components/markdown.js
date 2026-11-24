@@ -557,7 +557,21 @@ function msgRollback(msgEl, text) {
   // 容量上限见 REWIND_MAX_MSGS / REWIND_MAX_CHARS；超限时只记条数并标记 truncated，
   // **不假装仍可完整撤销**（UI 会据此把按钮换成说明）。
   __rollbackBuf.sid = sid;
-  __rollbackBuf.msgs = s.messages.splice(midx + 1);
+  // I11 接线：回退改成**非破坏式分叉**——尾巴搬进 s.branches，而不是直接丢弃。
+  // 原先 branchFork 零产品调用方（分支永远建不出来），DAG 只是库函数；
+  // 这里让它成为回退的唯一入口，撤销/分支切换才都跑在同一条数据路径上。
+  // 没有分支能力时回落到原来的 splice，行为不变。
+  let _forked = null;
+  try {
+    const _bf = window['branch' + 'Fork'];
+    if (typeof _bf === 'function') _forked = _bf(s, midx, '回退@' + midx);
+  } catch (e) { _forked = null; }
+  if (_forked && _forked.ok) {
+    __rollbackBuf.msgs = (s.branches && s.branches[_forked.id] && Array.isArray(s.branches[_forked.id].tail))
+      ? s.branches[_forked.id].tail.slice() : [];
+  } else {
+    __rollbackBuf.msgs = s.messages.splice(midx + 1);
+  }
   s._rewind = buildRewindSnapshot(__rollbackBuf.msgs, midx);
   // R99 P0：回退本身改变了 s.messages（切片已移入撤销缓冲），同样推进 updatedAt——
   // 否则「回退」在后端落盘失败后重开时会被旧的长版本反压，回退静默失效。

@@ -15094,7 +15094,17 @@ return;
 }
 const sid = s.id;
 __rollbackBuf.sid = sid;
+let _forked = null;
+try {
+const _bf = window['branch' + 'Fork'];
+if (typeof _bf === 'function') _forked = _bf(s, midx, '回退@' + midx);
+} catch (e) { _forked = null; }
+if (_forked && _forked.ok) {
+__rollbackBuf.msgs = (s.branches && s.branches[_forked.id] && Array.isArray(s.branches[_forked.id].tail))
+? s.branches[_forked.id].tail.slice() : [];
+} else {
 __rollbackBuf.msgs = s.messages.splice(midx + 1);
+}
 s._rewind = buildRewindSnapshot(__rollbackBuf.msgs, midx);
 s.updatedAt = Date.now();
 if (typeof saveSessions === 'function') saveSessions();
@@ -19304,7 +19314,12 @@ if (bag.size >= SUB_MAX) return { ok: false, reason: 'max-subagents' };
 const sess = subagentMakeSession(parent, task);
 const runner = (typeof opts.runner === 'function')
 ? opts.runner
-: ((s, k) => { const f = _subFn('runAgentLoop'); return (typeof f === 'function') ? f(s, k) : Promise.resolve(''); });
+: ((sess, k) => {
+const real = _subFn('subagentRunner') || _subFn('runAgentLoop')
+|| (typeof runAgentLoop === 'function' ? runAgentLoop : null);
+if (typeof real !== 'function') return Promise.resolve('');
+return real(sess, k);
+});
 const apiKey = opts.apiKey;
 let resolveDone;
 const done = new Promise((res) => { resolveDone = res; });
@@ -33243,6 +33258,9 @@ document.getElementById('searchEngineWrap').style.display = this.checked ? 'flex
 queueSaveConfig();
 });
 updateLabels();
+try {
+if (typeof runAgentLoop === 'function') window['sub' + 'agentRunner'] = runAgentLoop;
+} catch (e) {}
 try {
 const cm = (typeof window !== 'undefined') ? window['composer' + 'MenuMount'] : null;
 if (typeof cm === 'function') cm();

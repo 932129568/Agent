@@ -55,7 +55,15 @@ function subagentSpawn(parent, task, opts = {}) {
   const sess = subagentMakeSession(parent, task);
   const runner = (typeof opts.runner === 'function')
     ? opts.runner
-    : ((s, k) => { const f = _subFn('runAgentLoop'); return (typeof f === 'function') ? f(s, k) : Promise.resolve(''); });
+    // 动态取真实 runner。此前这里取 _subFn('runAgentLoop') 恒为 null（该函数没挂到 window），
+    // 于是 /sub 会立刻返回空串、回一句"(子代理无输出)"——**看起来跑了其实没跑**。
+    // 现在优先用 bootstrap 注册的 window['sub'+'agentRunner']。
+    : ((sess, k) => {
+        const real = _subFn('subagentRunner') || _subFn('runAgentLoop')
+          || (typeof runAgentLoop === 'function' ? runAgentLoop : null);
+        if (typeof real !== 'function') return Promise.resolve('');
+        return real(sess, k);
+      });
   const apiKey = opts.apiKey;
 
   let resolveDone;

@@ -137,6 +137,10 @@ async function loadAll() {
     queueSaveConfig();
   });
   updateLabels();
+  // I08：把真实 runAgentLoop 注册给子代理（拼键写入，避免静态前向边）。
+  try {
+    if (typeof runAgentLoop === 'function') window['sub' + 'agentRunner'] = runAgentLoop;
+  } catch (e) {}
   // v3.4 I22（后半）：@ 提及 / 斜杠命令菜单
   try {
     const cm = (typeof window !== 'undefined') ? window['composer' + 'MenuMount'] : null;

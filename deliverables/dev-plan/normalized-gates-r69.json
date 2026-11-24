@@ -45,7 +45,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "删除后残留体检（运行时配置类真问题判红，文档漂移登记不阻塞）",
-      "tail": "{'exact-deleted-path': 51})\n  契约面: public=51 hidden=117 registered=168 missing=0 ghosts=0\n  server 门 51, 退役 stub 9, 陈旧文档 7\n  verdict: realDefectsFound=0 (运行时配置类), fixedFiles=9, dynamic=True\n  freshness meta: 2026-11-23T18:07:53.189420+00:00"
+      "tail": "{'exact-deleted-path': 51})\n  契约面: public=51 hidden=117 registered=168 missing=0 ghosts=0\n  server 门 51, 退役 stub 9, 陈旧文档 7\n  verdict: realDefectsFound=0 (运行时配置类), fixedFiles=9, dynamic=True\n  freshness meta: 2026-11-24T00:27:11.065816+00:00"
     },
     {
       "id": "arch-contract",
@@ -61,7 +61,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "前端 L1 单元",
-      "tail": "0.1409\n  type: 'test'\n  ...\n# Subtest: R71 状态机：计量与语义判定不得混淆\nok 18 - R71 状态机：计量与语义判定不得混淆\n  ---\n  duration_ms: 0.1574\n  type: 'test'\n  ...\n1..18\n# tests 18\n# suites 0\n# pass 18\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 169.3815"
+      "tail": "0.3273\n  type: 'test'\n  ...\n# Subtest: R71 状态机：计量与语义判定不得混淆\nok 18 - R71 状态机：计量与语义判定不得混淆\n  ---\n  duration_ms: 0.4196\n  type: 'test'\n  ...\n1..18\n# tests 18\n# suites 0\n# pass 18\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 225.3821"
     },
     {
       "id": "frontend-l2",
@@ -125,7 +125,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "架构度量可复跑",
-      "tail": "[arch-assessment] C:\\Users\\陈\\Desktop\\GLM-Chat-v1.0.0-完整开发包\\deliverables\\dev-plan\\architecture-metrics-r69.json\n  layers=9 sourceLines=52832 sccCycles=16 cyclicSymbols=102 handWrittenTs=0"
+      "tail": "[arch-assessment] C:\\Users\\陈\\Desktop\\GLM-Chat-v1.0.0-完整开发包\\deliverables\\dev-plan\\architecture-metrics-r69.json\n  layers=9 sourceLines=52858 sccCycles=16 cyclicSymbols=102 handWrittenTs=0"
     },
     {
       "id": "ui-contract",
@@ -133,7 +133,7 @@
       "status": "PASS",
       "returncode": 0,
       "note": "UI 五大契约",
-      "tail": "ght.min.js\n    OK   libs/marked.min.js\n    OK   libs/purify.min.js\n    OK   libs/ui-schema.bundle.js\n[构建产物] harbor.html 存在 (3780099 字节)\n\n========================================================\n结果: PASS — 五大契约全部保住（manifest: 128 JS / 14 CSS）"
+      "tail": "ght.min.js\n    OK   libs/marked.min.js\n    OK   libs/purify.min.js\n    OK   libs/ui-schema.bundle.js\n[构建产物] harbor.html 存在 (3780678 字节)\n\n========================================================\n结果: PASS — 五大契约全部保住（manifest: 128 JS / 14 CSS）"
     },
     {
       "id": "server-gates",
