@@ -1,11 +1,12 @@
 /**
- * 群聊智能多能力路由与角色自动画像引擎（R9 全面升级版）：
- * - 解决旧版只匹配单一 capability 导致「只调度架构师+实现工程师、跳过 ui设计/审查员」的局限；
- * - 新增 inferMemberCapabilities(name, persona)：添加/编辑角色时自动根据角色名与人设推断能力标签；
- * - 新增 multi-intent + 角色语义相关度联合路由：
- *   1) 自动识别复合任务意图（如“做带好看 UI 的网页”同时命中 vision + code）；
- *   2) 结合历史上下文补全短指令（如“继续”、“按这个做”）；
- *   3) 直接匹配每个成员的 name 与 persona 关键词，确保用户自定义添加的「ui设计」「测试」「文案」等角色被精准调度。
+ * 群聊主持人智能统筹与动态交接路由引擎（R10 升级版）：
+ * - 告别死板的“按角色表顺序机械接力”：
+ *   1) buildModeratorPrompt(topic, members, recentContext)：构建主持人统筹调度指令，
+ *      让 AI 主持人根据任务类型动态筛选最匹配的专家、重排最优协作顺序（如 架构 → UI设计 → 实现 → 审查），
+ *      并为每位入选角色定制专属任务书与交接方向；
+ *   2) parseModeratorPlan(rawText, members)：从主持人输出中解析结构化调度计划，
+ *      严格校验成员归属、去重、补齐定制 taskBrief，并在任何解析异常时平滑降级为本地拓扑智能编排；
+ *   3) inferMemberCapabilities(name, persona)：添加/编辑角色时自动推断能力标签。
  */
 export const CAPABILITY_CATALOG = Object.freeze([
   { id: 'text', label: '文本策划', color: 'primary' },
@@ -48,7 +49,6 @@ export const GROUP_ROSTER_PRESETS = Object.freeze({
   },
 })
 
-/** 根据角色名称与人设自动推断最匹配的能力标签组合（避免新加的「ui设计」被误标成纯 text） */
 export function inferMemberCapabilities(name = '', persona = '') {
   const hay = `${String(name || '')} ${String(persona || '')}`
   const caps = new Set()
@@ -78,7 +78,6 @@ export function normalizeGroupMember(raw, index = 0) {
   const validCaps = Array.isArray(m.capabilities)
     ? m.capabilities.filter((c) => CAPABILITY_CATALOG.some((x) => x.id === c))
     : []
-  // 若未显式传 capabilities（或仅默认占位且名字明显指向设计/视频/代码），结合角色名智能补全
   const inferred = inferMemberCapabilities(name, persona)
   let caps = validCaps.length ? [...validCaps] : inferred
   if (validCaps.length === 1 && validCaps[0] === 'text' && inferred.some((c) => c !== 'text')) {
@@ -99,15 +98,18 @@ export function normalizeGroupMember(raw, index = 0) {
   }
 }
 
-const CAP_LABEL_MAP = Object.freeze({
-  text: '文本策划',
-  code: '代码工程',
-  vision: 'UI与视觉',
-  video: '视频制作',
-  'long-context': '长文深度',
-})
+/** 工作流拓扑阶段权重（确保设计/规划在编码实现之前，审查/定稿在实现之后，而非死板按表顺序） */
+function workflowStageRank(member) {
+  const hay = `${member.name} ${member.persona}`.toLowerCase()
+  if (/策划|产品|需求|调研|研究|总监|统筹/.test(hay)) return 10
+  if (/架构|结构|分镜/.test(hay)) return 20
+  if (/ui|ux|设计|视觉|美工|界面|样式/.test(hay)) return 30
+  if (/实现|开发|工程|前端|后端|全栈|制片/.test(hay)) return 40
+  if (/审查|测试|qa|质检|反方|质疑|安全/.test(hay)) return 50
+  if (/主编|定稿|总结|交付/.test(hay)) return 60
+  return 35
+}
 
-/** 多维度意图识别：支持复合任务（例如“做一个带好看 UI 的网页”同时命中 vision + code） */
 export function classifyTaskIntent(topic, recentContextText = '') {
   const raw = String(topic || '').trim()
   const isFollowUp = /^(?:继续|接着|开始|好的|可以|按这个|执行|落地|go|continue)$/i.test(raw) || raw.length <= 4
@@ -137,9 +139,8 @@ export function classifyTaskIntent(topic, recentContextText = '') {
     if (reasons.length === 0) reasons.push('文本策划')
   }
 
-  const primary = requiredCaps[0]
   return {
-    capability: primary,
+    capability: requiredCaps[0],
     capabilities: [...new Set(requiredCaps)],
     label: reasons.slice(0, 3).join(' + '),
     reason: `识别任务需求：${reasons.join('、')}`,
@@ -153,21 +154,117 @@ function extractKeywords(text) {
   return [...new Set(tokens.filter((t) => !stop.has(t)))]
 }
 
+/** 构造发给 AI 主持人的调度提示词，要求输出严格的 JSON 选人与动态交接顺序 */
+export function buildModeratorPrompt(topic, members = [], recentContextText = '') {
+  const list = (Array.isArray(members) ? members : []).map((m, i) => normalizeGroupMember(m, i))
+  const rosterLines = list.map((m) =>
+    `- id="${m.id}" | 角色名="${m.name}" | 能力=[${m.capabilities.join(',')}] | 职责="${m.persona}"`
+  ).join('\n')
+
+  return [
+    '你是本群聊的「智能接力主持人（Moderator）」。你的唯一任务是根据用户当前需求与近期上下文，从下方名册中**动态挑选最合适的成员、决定最合理的先后交接顺序（不要死板照抄名册顺序！）**，并为每位入选成员分配具体的本棒任务与交接重点。',
+    '',
+    '【调度铁律】',
+    '1. 按真实工作流逻辑排顺序：例如做网页/产品时，应先「架构/策划」→ 再「UI/视觉设计」→ 再「实现工程师写代码落地」→ 最后「代码审查/测试验收」；如果是纯文案/调研任务，只选文案/调研相关角色，不要硬塞无关角色；如果用户明确点名某角色，必须入选。',
+    '2. 只输出一个合法的 JSON 对象，不要输出多余寒暄或解释文字：',
+    '```json',
+    '{',
+    '  "analysis": "一句话说明你的调度策略与为什么按此顺序交接",',
+    '  "plan": [',
+    '    { "id": "成员id", "taskBrief": "给该成员的具体本棒指令与交付要求" }',
+    '  ]',
+    '}',
+    '```',
+    '',
+    '【当前可选角色名册】',
+    rosterLines,
+    ...(recentContextText ? ['', '【近期对话摘要】', recentContextText.slice(0, 800)] : []),
+    '',
+    `【用户本轮需求】\n${String(topic || '').trim()}`,
+  ].join('\n')
+}
+
+/** 解析 AI 主持人返回的 JSON 调度单，失败时平滑降级为本地拓扑智能编排 */
+export function parseModeratorPlan(rawText, members = [], fallbackRouted = null) {
+  const list = (Array.isArray(members) ? members : []).map((m, i) => normalizeGroupMember(m, i))
+  const byId = new Map(list.map((m) => [m.id, m]))
+  const byName = new Map(list.map((m) => [m.name.toLowerCase(), m]))
+
+  let parsed = null
+  const str = String(rawText || '').trim()
+  const fenceMatch = str.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidates = [
+    fenceMatch ? fenceMatch[1].trim() : '',
+    str,
+    (() => {
+      const s = str.indexOf('{')
+      const e = str.lastIndexOf('}')
+      return (s >= 0 && e > s) ? str.slice(s, e + 1) : ''
+    })(),
+  ].filter(Boolean)
+
+  for (const cand of candidates) {
+    try {
+      const obj = JSON.parse(cand)
+      if (obj && typeof obj === 'object' && Array.isArray(obj.plan)) {
+        parsed = obj
+        break
+      }
+    } catch {}
+  }
+
+  if (parsed && parsed.plan.length > 0) {
+    const picked = []
+    const seen = new Set()
+    for (const step of parsed.plan) {
+      if (!step || typeof step !== 'object') continue
+      const rawId = String(step.id || '').trim()
+      const rawName = String(step.name || '').trim().toLowerCase()
+      const member = byId.get(rawId) || byName.get(rawName)
+      if (!member || seen.has(member.id)) continue
+      seen.add(member.id)
+      picked.push({
+        ...member,
+        taskBrief: String(step.taskBrief || step.brief || member.persona).trim(),
+      })
+    }
+    if (picked.length > 0) {
+      const routeChain = picked.map((m) => m.name).join(' ⟶ ')
+      return {
+        source: 'moderator-ai',
+        analysis: String(parsed.analysis || `主持人已根据任务特征动态编排 ${picked.length} 棒协作流`).trim(),
+        selected: picked,
+        intentLabel: `主持人调度 (${picked.length}/${list.length} 棒: ${picked.map((m) => m.name).join('→')})`,
+        routeChain,
+      }
+    }
+  }
+
+  // 兜底：使用本地拓扑智能排序（规划 → UI设计 → 实现 → 审查）
+  const fb = fallbackRouted || routeGroupMembers('', list, 'smart', '')
+  const fbSelected = fb.selected.map((m) => ({
+    ...m,
+    taskBrief: m.taskBrief || m.persona,
+  }))
+  return {
+    source: 'topology-fallback',
+    analysis: `按工作流阶段自动编排协作顺序：${fbSelected.map((m) => m.name).join(' ⟶ ')}`,
+    selected: fbSelected,
+    intentLabel: fb.intent.label,
+    routeChain: fbSelected.map((m) => m.name).join(' ⟶ '),
+  }
+}
+
 /**
- * 智能多角色调度器：
- * - mode === 'all'：全员按名册顺序接力；
- * - mode === 'smart'：
- *   1) 识别任务的复合能力集合（intent.capabilities）；
- *   2) 对每位成员计算「能力标签命中分 + 角色名/职责语义关键词命中分」；
- *   3) 凡命中任一所需能力或角色语义匹配度 > 0 的成员全部入选（保持名册自然流水线顺序）；
- *   4) 若无专长命中则诚实预警并回退全员，绝不会莫名其妙只挑 2 个人而丢掉 UI设计 / 审查员！
+ * 智能多角色拓扑路由（作为主持人前置初筛 + 离线/单元测试确定性调度器）：
+ * 不仅按能力匹配，还会按工作流阶段权重（规划/架构 → UI设计 → 实现 → 审查）动态重排顺序！
  */
 export function routeGroupMembers(topic, members = [], mode = 'smart', recentContextText = '') {
   const list = (Array.isArray(members) ? members : []).map((m, i) => normalizeGroupMember(m, i))
   const intent = classifyTaskIntent(topic, recentContextText)
   if (mode === 'all' || !list.length) {
     return {
-      intent: { ...intent, label: `全员接力 (${list.length} 棒)` },
+      intent: { ...intent, label: `全员按序 (${list.length} 棒)` },
       selected: list,
       matchedCount: list.length,
       missingCapabilityWarning: '',
@@ -179,39 +276,41 @@ export function routeGroupMembers(topic, members = [], mode = 'smart', recentCon
     const capMatches = intent.capabilities.filter((c) => m.capabilities.includes(c))
     const roleTokens = extractKeywords(`${m.name} ${m.persona}`)
     const kwHits = roleTokens.filter((kw) => promptLower.includes(kw))
-    // 明确点名角色名（如“ui设计”/“审查”）给高权重
     const directNameHit = m.name && promptLower.includes(m.name.toLowerCase()) ? 5 : 0
     const score = capMatches.length * 3 + kwHits.length * 2 + directNameHit
-    return { member: m, idx, score, capMatches, kwHits }
+    return { member: m, idx, score, stage: workflowStageRank(m) }
   })
 
-  // 如果提示词只是极短通用指令（如“继续”且无历史上下文），默认全员协同执行，而不是只挑 2 人
+  const sortByWorkflow = (arr) => [...arr].sort((a, b) => (a.stage - b.stage) || (a.idx - b.idx)).map((x) => x.member)
+
   const isGenericContinuation = /^(?:继续|接着|开始|好的|执行|go|continue)$/i.test(String(topic || '').trim()) && !String(recentContextText || '').trim()
   if (isGenericContinuation) {
+    const ordered = sortByWorkflow(scored)
     return {
-      intent: { ...intent, label: `全员协同 (${list.length} 棒)` },
-      selected: list,
-      matchedCount: list.length,
+      intent: { ...intent, label: `智能协同 (${ordered.length} 棒)` },
+      selected: ordered,
+      matchedCount: ordered.length,
       missingCapabilityWarning: '',
     }
   }
 
-  const matched = scored.filter((x) => x.score > 0).map((x) => x.member)
-  if (matched.length > 0) {
-    const namesSummary = matched.map((m) => m.name).join('→')
+  const matchedItems = scored.filter((x) => x.score > 0)
+  if (matchedItems.length > 0) {
+    const ordered = sortByWorkflow(matchedItems)
+    const namesSummary = ordered.map((m) => m.name).join('→')
     return {
-      intent: { ...intent, label: `${intent.label} (${matched.length}/${list.length} 棒: ${namesSummary})` },
-      selected: matched,
-      matchedCount: matched.length,
+      intent: { ...intent, label: `${intent.label} (${ordered.length}/${list.length} 棒: ${namesSummary})` },
+      selected: ordered,
+      matchedCount: ordered.length,
       missingCapabilityWarning: '',
     }
   }
 
-  const needLabels = intent.capabilities.map((c) => CAP_LABEL_MAP[c] || c).join(' / ')
-  const warn = `当前议题需要「${needLabels}」，名册中暂无对应专长角色；已自动调度全员（${list.length} 位）协同接力。`
+  const orderedAll = sortByWorkflow(scored)
+  const warn = `当前议题暂无单一专长匹配，已智能编排全员（${orderedAll.length} 位）协同接力。`
   return {
-    intent: { ...intent, label: `全员兜底 (${list.length} 棒)` },
-    selected: list,
+    intent: { ...intent, label: `全员协同 (${orderedAll.length} 棒)` },
+    selected: orderedAll,
     matchedCount: 0,
     missingCapabilityWarning: warn,
   }

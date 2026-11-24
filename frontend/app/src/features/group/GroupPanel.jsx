@@ -115,10 +115,10 @@ export default function GroupPanel() {
           <h2 className="gp-title">多角色群聊接力</h2>
           <div className="gp-seg" role="group" aria-label="路由模式">
             <button type="button" className="gp-seg-btn" data-active={String(group.routingMode === 'smart')} onClick={() => setGroupRoutingMode('smart')}>
-              智能能力路由
+              🎙 主持人智能调度
             </button>
             <button type="button" className="gp-seg-btn" data-active={String(group.routingMode === 'all')} onClick={() => setGroupRoutingMode('all')}>
-              全员按序接力
+              固定名册顺序
             </button>
           </div>
         </div>

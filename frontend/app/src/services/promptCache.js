@@ -171,13 +171,8 @@ export function applyProviderCacheControl({
     return { provider, messages: outMessages, tools: markedTools, extraBody, breakpoints: bp }
   }
 
-  if (provider === 'openai') {
+  if (provider === 'openai' || provider === 'deepseek') {
     if (sid) extraBody.prompt_cache_key = `harbor_${String(sid).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48)}`
-    extraBody.stream_options = { include_usage: true }
-    return { provider, messages: outMessages, tools: canonTools, extraBody, breakpoints: 1 }
-  }
-
-  if (provider === 'deepseek') {
     extraBody.stream_options = { include_usage: true }
     return { provider, messages: outMessages, tools: canonTools, extraBody, breakpoints: 1 }
   }

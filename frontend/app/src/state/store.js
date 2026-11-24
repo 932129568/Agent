@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { readVisualPrefs, applyVisualPrefs } from '../platform/theme.js'
 import { readStorage, writeStorage } from '../platform/storage.js'
-import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers } from '../services/capabilityRouter.js'
+import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers, buildModeratorPrompt, parseModeratorPlan } from '../services/capabilityRouter.js'
 import * as api from '../services/bridge.js'
 import {
   ensureTree,
@@ -1149,21 +1149,116 @@ export async function runGroupRelay(topic) {
     .slice(-4)
     .map((m) => String(m && m.content || '').slice(0, 240))
     .join('\n')
-  const routed = routeGroupMembers(clean, state.group.members, state.group.routingMode, recentGroupText)
+
+  const isSmart = state.group.routingMode !== 'all'
+  const fallbackRouted = routeGroupMembers(clean, state.group.members, state.group.routingMode, recentGroupText)
+
   patchSlice('group', (g) => ({
     ...g,
-    lastIntent: routed.intent,
-    routingWarning: routed.missingCapabilityWarning,
-    messages: [...g.messages, { id: 'gm_' + Date.now(), author: '我（主持人）', role: 'user', content: clean }],
+    lastIntent: fallbackRouted.intent,
+    routingWarning: isSmart ? '' : fallbackRouted.missingCapabilityWarning,
+    messages: [...g.messages, { id: 'gm_' + Date.now(), author: '我（发起人）', role: 'user', content: clean }],
   }))
-  if (routed.missingCapabilityWarning) pushToast(routed.missingCapabilityWarning, 'info')
+
+  let plannedMembers = fallbackRouted.selected.map((m) => ({ ...m, taskBrief: m.persona }))
+  let intentLabel = fallbackRouted.intent.label
+  const relayContext = [{ role: 'user', content: clean }]
+
+  // 主持人智能调度模式：先由「🎙 主持人」分析需求、动态挑选最匹配成员、重排最优工作流顺序并发布调度单！
+  if (isSmart && state.group.members.length > 0) {
+    const baseEp = resolveEndpointConfig()
+    const groupSid = state.sessions.currentId || state.group.activeGroupId
+    groupAbortReason = ''
+    groupAbortCtrl = new AbortController()
+
+    patchSlice('group', {
+      running: true,
+      status: 'planning',
+      activeMembers: state.group.members,
+      activeIndex: -1,
+      handoffFrom: '',
+      handoffTo: '',
+      liveContent: '',
+      liveReasoning: '',
+      liveTools: [],
+      cps: 0,
+      checkpoint: null,
+    })
+
+    try {
+      const modPrompt = buildModeratorPrompt(clean, state.group.members, recentGroupText)
+      const modRes = await runAgentConversation({
+        sid: groupSid,
+        userQuery: clean,
+        historyMessages: [{ role: 'user', content: modPrompt }],
+        endpointConfig: { ...baseEp, max_tokens: Math.min(1200, Number(baseEp.max_tokens) || 1200) },
+        workspacePath: state.workspace.rootPath,
+        allowTools: false,
+        maxRounds: 1,
+        skipMemoryRecall: true,
+        skipSelfCheck: true,
+        signal: groupAbortCtrl.signal,
+        onEvent: (ev) => {
+          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
+          if (ev && typeof ev.cps === 'number') patchSlice('group', { cps: ev.cps })
+        },
+      })
+
+      if (groupAbortCtrl.signal.aborted) {
+        patchSlice('group', { running: false, status: 'idle', cps: 0 })
+        return
+      }
+
+      const planObj = parseModeratorPlan((modRes && modRes.content) || '', state.group.members, fallbackRouted)
+      plannedMembers = planObj.selected
+      intentLabel = planObj.intentLabel
+
+      const dispatchCardMd = [
+        `**调度策略**：${planObj.analysis}`,
+        '',
+        `**动态接力路线**：\`${planObj.routeChain}\``,
+        '',
+        ...plannedMembers.map((m, idx) =>
+          `${idx + 1}. **${m.name}**${m.model ? ` \`${m.model}\`` : ''}：${m.taskBrief || m.persona}`
+        ),
+      ].join('\n')
+
+      // 将主持人调度单写入消息流，并同步追加进 relayContext（保持 100% append-only 前缀缓存！）
+      relayContext.push({ role: 'assistant', content: dispatchCardMd })
+      patchSlice('group', (g) => ({
+        ...g,
+        lastIntent: { ...fallbackRouted.intent, label: intentLabel },
+        messages: [
+          ...g.messages,
+          {
+            id: 'gm_mod_' + Date.now(),
+            author: '🎙 主持人（智能调度）',
+            model: baseEp.model,
+            role: 'assistant',
+            isModerator: true,
+            content: dispatchCardMd,
+            tools: [],
+          },
+        ],
+      }))
+    } catch (e) {
+      if (isAbort(e)) {
+        patchSlice('group', { running: false, status: 'idle', cps: 0 })
+        return
+      }
+      // 主持人调用失败时静默降级为拓扑智能排程，绝不阻断接力
+      const fbPlan = parseModeratorPlan('', state.group.members, fallbackRouted)
+      plannedMembers = fbPlan.selected
+      intentLabel = fbPlan.intentLabel
+    }
+  }
 
   return _executeGroupRelayLoop({
     topic: clean,
-    plannedMembers: routed.selected,
+    plannedMembers,
     startIndex: 0,
-    relayContext: [{ role: 'user', content: clean }],
-    intentLabel: routed.intent.label,
+    relayContext,
+    intentLabel,
   })
 }
 
@@ -1201,9 +1296,11 @@ function _recordCacheStats(cs) {
 
 async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relayContext, intentLabel }) {
   const baseEp = resolveEndpointConfig()
-  const latestMembers = plannedMembers.map((pm) => state.group.members.find((m) => m.id === pm.id) || pm)
-  // 群聊共享当前工作区会话的 sid，确保所有成员共用同一冻结 [tools + systemPrompt] 前缀（KV-Cache 90%+）
-  // 且写文件/执行命令直接落入当前选定的工作区！
+  // 保留主持人定制的 taskBrief，同时允许用户在暂停期间修改模型/人设
+  const latestMembers = plannedMembers.map((pm) => {
+    const fresh = state.group.members.find((m) => m.id === pm.id)
+    return fresh ? { ...fresh, taskBrief: pm.taskBrief || fresh.persona } : pm
+  })
   const groupSid = state.sessions.currentId || state.group.activeGroupId
 
   groupAbortReason = ''
@@ -1231,6 +1328,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       currentIdx = i
       livePartial = ''
       const m = latestMembers[i]
+      const nextMember = latestMembers[i + 1] || null
       if (groupAbortCtrl.signal.aborted) break
 
       if (i > startIndex) {
@@ -1252,18 +1350,22 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       }
 
       const canUseTools = m.allowTools !== false && memberEp.tool_mode !== 'off'
+      const handoffDirective = nextMember
+        ? `完成你的部分后，明确列出交接给下一棒「${nextMember.name}」（其重点：${nextMember.taskBrief || nextMember.persona}）的关键成果与文件路径。`
+        : '你是本轮最后一棒，请做好最终整合与收口总结。'
+
       const roleBatonMsg = {
         role: 'user',
         content:
-          `【群聊接力 · 第 ${i + 1}/${latestMembers.length} 棒 · 当前发言角色：${m.name}】\n` +
-          `• 专长能力：${(m.capabilities || ['text']).join(' / ')}\n` +
-          `• 本棒职责：${m.persona}\n` +
+          `【主持人点将 · 第 ${i + 1}/${latestMembers.length} 棒 · 当前角色：${m.name}】\n` +
+          `• 主持人分配本棒任务：${m.taskBrief || m.persona}\n` +
+          `• 角色专长：${m.persona}（能力：${(m.capabilities || ['text']).join(' / ')}）\n` +
+          `• 交接要求：${handoffDirective}\n` +
           (canUseTools
-            ? '• 执行要求：若本棒需要创建/修改代码或文件（如网页、脚本、配置）或执行验证命令，请直接调用工作区工具（write_file / search_replace / read_file / run_command）实际落地，回答里只需给出清晰简明的交付摘要与文件路径，避免贴数百行原始代码。'
-            : '• 输出要求：承接前序结论，输出简洁高密度的结构化交付。'),
+            ? '• 工具要求：需要创建/修改代码或文件（如网页、脚本、配置）或执行验证命令时，请直接调用工作区工具实际落地，回答里只给出清晰简明的交付摘要与路径。'
+            : '• 输出要求：输出简洁高密度的结构化交付。'),
       }
 
-      // 关键优化：使用与主对话统一的 runAgentConversation（支持真工具调用 + 护栏审批 + 共享冻结前缀 KV-Cache）
       const turnHistory = [...relayContext, roleBatonMsg]
       const res = await runAgentConversation({
         sid: groupSid,
@@ -1295,7 +1397,6 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
 
       const reply = String((res && res.content) || '').trim()
       const usedTools = (res && Array.isArray(res.tools)) ? res.tools : []
-      // 保持 append-only 历史：把角色指令与成员回复追加进 relayContext，下一棒天然吃满前序 KV-Cache！
       relayContext.push({
         role: 'user',
         content: (res && res.wiredUserContent) || roleBatonMsg.content,
@@ -1303,7 +1404,6 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       if (res && Array.isArray(res.wireTrail) && res.wireTrail.length) {
         for (const step of res.wireTrail) relayContext.push(step)
       }
-      // 严守 Append-Only 前缀缓存铁律：assistant 回复 100% 原样落入 relayContext，绝不前置改写角色头打穿 KV-Cache！
       relayContext.push({ role: 'assistant', content: reply })
 
       patchSlice('group', (g) => ({
@@ -1329,7 +1429,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
 
     if (!groupAbortCtrl.signal.aborted) {
       const assistantSections = (state.group.messages || [])
-        .slice(-latestMembers.length)
+        .slice(-(latestMembers.length + 1))
         .filter((x) => x && x.role === 'assistant' && x.content)
         .map((x) => `【${x.author}${x.model ? ` (${x.model})` : ''}】\n${x.content}`)
       const handoff = `【交接文档】\n议题：${topic}\n\n` + assistantSections.join('\n\n---\n\n')
@@ -1390,7 +1490,6 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
   }
 }
 
-/** 零 Token 一键演示独立接力轨道 + 光梭交棒动效（避免视觉疲劳的专属科技轨道风格） */
 export function triggerRelayShowcase() {
   while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
   const members = state.group.members.length ? state.group.members : GROUP_ROSTER_PRESETS.video.members

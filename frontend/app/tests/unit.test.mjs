@@ -382,3 +382,36 @@ test('agentEngine.js 全量覆盖 provider.js 全部 30 个内置工具 + 参数
   assert.equal(calls[3].args[0], 'whoami')
   assert.equal(calls[3].args[2], 30)
 })
+
+
+test('capabilityRouter.js 主持人调度构建与动态重排解析（按工作流阶段而非死板角色表顺序）', async () => {
+  const { GROUP_ROSTER_PRESETS, buildModeratorPrompt, parseModeratorPlan } = await import('../src/services/capabilityRouter.js')
+  const roster = [
+    ...GROUP_ROSTER_PRESETS.engineering.members,
+    { id: 'm_ui', name: 'ui设计', persona: '负责界面视觉与CSS设计' },
+  ]
+  const prompt = buildModeratorPrompt('做一个带漂亮玻璃界面的网页', roster)
+  assert.ok(prompt.includes('智能接力主持人') && prompt.includes('m_ui'))
+
+  // 模拟 AI 主持人把原本排在 #4 的 ui设计 动态调度到第 2 棒（架构师 -> ui设计 -> 实现工程师 -> 代码审查员）
+  const llmOut = JSON.stringify({
+    analysis: '先定架构，再出UI视觉规范，最后工程落地与审查',
+    plan: [
+      { id: 'm_arch', taskBrief: '规划网页目录与组件结构' },
+      { id: 'm_ui', taskBrief: '设计玻璃拟态配色与响应式布局' },
+      { id: 'm_dev', taskBrief: '编写 index.html 并落盘' },
+      { id: 'm_qa', taskBrief: '验收页面细节与兼容性' },
+    ],
+  })
+  const parsed = parseModeratorPlan(llmOut, roster)
+  assert.equal(parsed.source, 'moderator-ai')
+  assert.deepEqual(parsed.selected.map((m) => m.name), ['架构师', 'ui设计', '实现工程师', '代码审查员'])
+  assert.equal(parsed.selected[1].taskBrief, '设计玻璃拟态配色与响应式布局')
+
+  // 异常输出兜底：拓扑排序也应把 ui设计 排在 实现工程师 和 代码审查员 之前
+  const fallback = parseModeratorPlan('not valid json', roster)
+  assert.equal(fallback.source, 'topology-fallback')
+  const names = fallback.selected.map((m) => m.name)
+  assert.ok(names.indexOf('ui设计') < names.indexOf('实现工程师'))
+  assert.ok(names.indexOf('实现工程师') < names.indexOf('代码审查员'))
+})

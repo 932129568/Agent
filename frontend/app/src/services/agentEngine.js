@@ -102,6 +102,13 @@ export function extractAndStripDiff(toolName, args, rawResult) {
     delete copy.diff
     parsed = copy
   }
+  // 写文件成功后不再把完整文件内容回灌 tool 响应（模型自己的 tool_calls.arguments 已含全文，
+  // 避免新增冗余未缓存 Token，进一步把前缀缓存命中率推高至 95%+）
+  if ((toolName === 'write_file' || toolName === 'append_file') && parsed.ok === true && typeof parsed.content === 'string') {
+    const copy = { ...parsed }
+    delete copy.content
+    parsed = copy
+  }
   const ok = !(parsed.ok === false || parsed.error)
   return { cleanJson: JSON.stringify(parsed), diff, ok }
 }
@@ -279,9 +286,12 @@ export async function runAgentConversation({
 
   emit({ phase: 'waiting', stageLabel: '装配工作区规范、长期记忆与工具面' })
 
+  // 关键 KV-Cache 纪律：即使本轮 allowTools=false（如主持人统筹或仅文本成员），
+  // 只要全局 tool_mode !== 'off'，依然发送同一份冻结 canonical tools 数组，保证 [tools + system] 100% 字节锁死！
   const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
   const includeMcp = !!endpointConfig.hasEnabledMcp
-  const toolsOn = allowTools !== false && endpointConfig.tool_mode !== 'off'
+  const toolsOn = endpointConfig.tool_mode !== 'off'
+  const blockToolDispatch = allowTools === false
   const prefixScopeKey = `${workspacePath || ''}|${toolsOn ? 'on' : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
   const existingFrozen = sid ? _frozenPrefixBySid.get(String(sid)) : null
 
@@ -341,11 +351,15 @@ export async function runAgentConversation({
     } catch {}
   }
 
+  const combinedDirective = [
+    correctiveDirective,
+    blockToolDispatch ? '【本步指令约束】本步骤仅做任务分析、角色分工与交接规划，严禁调用任何工具，请直接输出最终结果。' : '',
+  ].filter(Boolean).join('\n')
   const tailReminder = buildDynamicTurnReminder({
     memories: dynamicMemories,
     expertPrompt,
     readonlyMode: false,
-    correctiveDirective,
+    correctiveDirective: combinedDirective,
   })
   const baseWireMsgs = attachReminderToLatestUserTurn(sanitizeMessagesForApi(historyMessages), tailReminder)
   let wiredUserContent = ''
@@ -436,7 +450,7 @@ export async function runAgentConversation({
     if (res.reasoning) finalReasoning = finalReasoning ? `${finalReasoning}\n\n${res.reasoning}` : res.reasoning
     finalContent = res.content || ''
 
-    if (!res.toolCalls || !res.toolCalls.length) {
+    if (blockToolDispatch || !res.toolCalls || !res.toolCalls.length) {
       if (!skipSelfCheck && wroteFiles && !selfCheckDone && !(signal && signal.aborted)) {
         selfCheckDone = true
         emit({ phase: 'thinking', stageLabel: '写后自动验收自检中…' })

@@ -88,9 +88,18 @@
     100% { transform: scale(1.08); opacity: 0; }
   }
   @keyframes rtBatonRocket {
-    0% { transform: translateX(-24px); opacity: 0.2; }
-    25% { opacity: 1; }
-    100% { transform: translateX(120px); opacity: 0.95; }
+    0% { transform: translateX(-28px) scaleX(0.7); opacity: 0; }
+    20% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { transform: translateX(140px) scaleX(1.1); opacity: 0; }
+  }
+  @keyframes rtConduitFlow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+  @keyframes rtDotWave {
+    0%, 80%, 100% { transform: scale(0.72); opacity: 0.42; }
+    40% { transform: scale(1.18); opacity: 1; }
   }
   @keyframes harborImpactArcFlash {
     0% { opacity: 0; transform: scale(0.92); }

@@ -212,6 +212,25 @@ const server = http.createServer(async (req, res) => {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
     })
+    const lastUserStr = Array.isArray(body.messages) ? String((body.messages[body.messages.length - 1] || {}).content || '') : ''
+    if (lastUserStr.includes('智能接力主持人')) {
+      const idMatches = [...lastUserStr.matchAll(/id="([^"]+)"\s*\|\s*角色名="([^"]+)"/g)]
+      // 模拟主持人智能重排：把含 ui/设计 的角色排在 实现/开发 之前
+      const ranked = idMatches.map((m) => ({ id: m[1], name: m[2] })).sort((a, b) => {
+        const score = (n) => (/策划|架构|导演/.test(n) ? 1 : (/ui|设计|分镜/i.test(n) ? 2 : (/实现|工程|制片/.test(n) ? 3 : 4)))
+        return score(a.name) - score(b.name)
+      })
+      const modJson = JSON.stringify({
+        analysis: '主持人已按任务特征动态筛选并重排最佳交接顺序',
+        plan: ranked.map((r) => ({ id: r.id, taskBrief: `完成${r.name}阶段核心交付` })),
+      })
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' })
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: modJson } }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 60, total_tokens: 1060, prompt_tokens_details: { cached_tokens: 950 } } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
     if (stubState.triggerGroupToolOnce && Array.isArray(body.tools) && body.tools.length > 0 && !hasToolRole) {
       stubState.triggerGroupToolOnce = false
@@ -327,14 +346,14 @@ try {
   await page.locator('.hb-rail-btn[title="角色群聊"]').click()
   await page.waitForSelector('.gp-root')
 
-  // A1: 默认工程铁三角收到视频议题 → 智能能力路由触发诚实缺失预警
+  // A1: 主持人智能调度：先由主持人统筹分析并发布动态调度单卡片
   await page.locator('.gp-input').fill('帮我制作一段 60 秒科技产品宣传视频分镜脚本')
   await page.locator('.gp-bar button:has-text("发起接力")').click()
-  await page.waitForSelector('.gp-warn', { timeout: 5000 })
-  const warnText = await page.locator('.gp-warn').textContent()
-  record('Suite-A', '智能能力路由：无视频角色时触发诚实预警', /视频制作/.test(warnText || ''), (warnText || '').slice(0, 60))
+  await page.waitForSelector('.gp-msg:has-text("主持人（智能调度）")', { timeout: 6000 })
+  const modCardText = await page.locator('.gp-msg:has-text("主持人（智能调度）")').first().textContent()
+  record('Suite-A', '主持人智能调度：先出统筹调度单规划角色与交接路线', /动态接力路线/.test(modCardText || ''), (modCardText || '').slice(0, 68))
 
-  // 中止该轮回退接力，准备测自定义视频班底
+  // 中止该轮接力，准备测自定义视频班底
   const abortBtn = page.locator('.gp-bar button:has-text("中止")')
   if (await abortBtn.isVisible()) await abortBtn.click()
   await page.waitForTimeout(200)
@@ -398,17 +417,14 @@ try {
   await page.locator('.gp-controls button:has-text("预览光梭接力动画")').click()
   await page.waitForSelector('.rt-stage[data-status="running"]', { timeout: 4000 })
 
-  const eqCount = await page.locator('.rt-eq-bar').count()
+  const waveDotCount = await page.locator('.rt-wave-dot').count()
   const chamberCount = await page.locator('.lc-chamber').count()
-  const h1 = await page.locator('.rt-eq-bar').evaluateAll((els) => els.map((e) => e.style.height))
-  await page.waitForTimeout(280)
-  const h2 = await page.locator('.rt-eq-bar').evaluateAll((els) => els.map((e) => e.style.height))
-  const eqAnimated = h1.join(',') !== h2.join(',')
+  const hasSvgAvatar = (await page.locator('.rt-avatar svg').count()) > 0
   record(
     'Suite-B',
-    '独立冷色轨道舞台 + 16 柱示波器真实动态跳动（非主对话流体波）',
-    eqCount === 16 && eqAnimated && chamberCount === 0,
-    `eqBars=${eqCount}, animated=${eqAnimated}, lcChamber=${chamberCount}`
+    '重设计玻璃光轨舞台 + 角色专属 SVG 徽标 + 谐波呼吸点阵（非主对话流体波）',
+    waveDotCount === 4 && hasSvgAvatar && chamberCount === 0,
+    `waveDots=${waveDotCount}, svgAvatar=${hasSvgAvatar}, lcChamber=${chamberCount}`
   )
 
   // 轮询捕获光梭交棒瞬间（.rt-baton / .rt-handoff-banner / data-ignited="true"）
@@ -434,13 +450,13 @@ try {
   )
 
   await page.waitForSelector('.rt-stage[data-status="done"]', { timeout: 6000 })
-  const eqAfterDone = await page.locator('.rt-eq').count()
+  const waveAfterDone = await page.locator('.rt-wave-dots').count()
   const doneNodes = await page.locator('.rt-node[data-state="done"]').count()
   record(
     'Suite-B',
-    '接力完成后全部站点点亮 done 且示波器卸载（0% 后台空转）',
-    eqAfterDone === 0 && doneNodes === 4,
-    `doneNodes=${doneNodes}, eqAfterDone=${eqAfterDone}`
+    '接力完成后全部站点点亮 done 且呼吸点阵卸载（0% 后台空转）',
+    waveAfterDone === 0 && doneNodes === 4,
+    `doneNodes=${doneNodes}, waveAfterDone=${waveAfterDone}`
   )
 
   /* ======================================================================== *
@@ -711,6 +727,8 @@ try {
   const collapsedCount = await page.locator('.gp-body-wrap[data-collapsed="true"]').count()
   const compactDoneTrack = await page.locator('.rt-stage[data-compact="true"]').count()
   const gpNoOverflow = await page.locator('.gp-root').evaluate((el) => el.scrollWidth <= el.clientWidth + 2)
+  const routeSummaryTxt = await page.locator('.rt-route-summary').textContent()
+  const uiBeforeImpl = Boolean(routeSummaryTxt && routeSummaryTxt.indexOf('ui设计') >= 0 && routeSummaryTxt.indexOf('ui设计') < routeSummaryTxt.indexOf('实现工程师'))
   await page.locator('.gp-controls button:has-text("群文件")').click()
   await page.waitForSelector('.gp-files-panel', { timeout: 3000 })
   const filesPanelVisible = await page.locator('.gp-files-panel').isVisible()
@@ -719,8 +737,8 @@ try {
   record(
     'Suite-F',
     '群聊真工具写文件 + 长交付无遮挡折叠 + 完成轨道自动收束 + 群文件悬浮抽屉零裁切',
-    wroteHtml && collapsedCount > 0 && compactDoneTrack === 1 && gpNoOverflow && filesPanelVisible && fileRowCount > 0,
-    `wroteHtml=${wroteHtml}, collapsed=${collapsedCount}, compactTrack=${compactDoneTrack}, noOverflow=${gpNoOverflow}, files=${fileRowCount}`
+    wroteHtml && collapsedCount > 0 && compactDoneTrack === 1 && gpNoOverflow && uiBeforeImpl && filesPanelVisible && fileRowCount > 0,
+    `wroteHtml=${wroteHtml}, uiBeforeImpl=${uiBeforeImpl}, route=${routeSummaryTxt}, collapsed=${collapsedCount}, files=${fileRowCount}`
   )
 
   /* ======================================================================== *

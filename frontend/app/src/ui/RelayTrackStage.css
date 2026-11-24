@@ -1,28 +1,42 @@
-/* 群聊接力专属横向轨道与光梭交棒动效（冷色调科技轨道语言；完成后自动收束为 40px 精致摘要条） */
+/* 群聊接力现代玻璃拟态光轨舞台（与主对话暖色液态波场区隔，高质感建筑感流水线） */
 @layer components {
   .rt-stage {
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-strong);
     background: var(--card-elevated);
-    box-shadow: var(--elev-1);
-    padding: 13px 16px;
+    box-shadow: var(--elev-2);
+    padding: 14px 18px;
     display: flex;
     flex-direction: column;
     gap: 12px;
     max-width: 100%;
     animation: harborActionRise var(--dur-panel) var(--ease-spring) both;
   }
+  .rt-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary-2), var(--primary), transparent);
+    opacity: 0.65;
+    pointer-events: none;
+  }
+  .rt-stage[data-status="planning"] {
+    border-color: var(--primary);
+    box-shadow: 0 12px 32px -10px rgba(212, 101, 62, 0.25), var(--rim-top);
+  }
   .rt-stage[data-status="running"] {
     border-color: var(--primary-2);
-    box-shadow: 0 12px 30px -8px rgba(18, 130, 200, 0.22), var(--rim-top);
+    box-shadow: 0 12px 32px -10px rgba(18, 130, 200, 0.24), var(--rim-top);
   }
   .rt-stage[data-status="paused"] { border-color: var(--warn); }
   .rt-stage[data-status="done"] { border-color: var(--ok); }
   .rt-stage[data-compact="true"] {
     padding: 8px 14px;
+    border-radius: var(--radius-md);
     gap: 0;
   }
 
@@ -47,18 +61,24 @@
     gap: 8px;
     flex-shrink: 0;
   }
+
   .rt-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 10px;
+    padding: 4px 11px;
     border-radius: var(--radius-full);
     font-size: 12px;
     font-weight: 600;
-    background: rgba(18, 130, 200, 0.14);
+    background: rgba(18, 130, 200, 0.13);
     color: var(--primary-2);
-    border: 1px solid rgba(18, 130, 200, 0.34);
+    border: 1px solid rgba(18, 130, 200, 0.30);
     white-space: nowrap;
+  }
+  .rt-stage[data-status="planning"] .rt-badge {
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: rgba(212, 101, 62, 0.35);
   }
   .rt-stage[data-status="paused"] .rt-badge { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
   .rt-stage[data-status="done"] .rt-badge { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
@@ -72,7 +92,7 @@
   }
   .rt-meta {
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--text-3);
     white-space: nowrap;
   }
@@ -88,67 +108,83 @@
   }
   .rt-toggle-btn:hover { border-color: var(--primary-2); color: var(--text); }
 
+  /* 精致玻璃胶囊节点流水线 */
   .rt-track {
     display: flex;
     align-items: center;
     gap: 0;
     overflow-x: auto;
-    padding: 4px 2px;
+    padding: 6px 4px;
     max-width: 100%;
   }
 
   .rt-node {
     position: relative;
     flex: 0 0 auto;
-    min-width: 116px;
-    padding: 8px 11px;
-    border-radius: var(--radius-md);
+    min-width: 126px;
+    padding: 8px 13px 8px 9px;
+    border-radius: var(--radius-full);
     border: 1px solid var(--border);
-    background: var(--card-bg);
+    background: var(--surface-subtle);
     display: flex;
     align-items: center;
     gap: 9px;
     transition:
       transform var(--dur-panel) var(--ease-spring),
       border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out),
       box-shadow var(--dur-base) var(--ease-out);
   }
   .rt-node[data-state="active"] {
+    background: var(--card-elevated);
     border-color: var(--primary-2);
-    transform: translate3d(0, -2px, 0) scale(1.02);
-    box-shadow: 0 8px 20px -6px rgba(18, 130, 200, 0.34);
+    transform: translate3d(0, -2px, 0) scale(1.03);
+    box-shadow: 0 8px 22px -6px rgba(18, 130, 200, 0.36), var(--rim-top);
   }
-  .rt-node[data-state="done"] { border-color: var(--ok); background: var(--ok-bg); }
-  .rt-node[data-state="paused"] { border-color: var(--warn); background: var(--warn-bg); }
+  .rt-node[data-state="done"] {
+    border-color: rgba(35, 116, 76, 0.36);
+    background: var(--ok-bg);
+  }
+  .rt-node[data-state="paused"] {
+    border-color: var(--warn);
+    background: var(--warn-bg);
+  }
 
   .rt-avatar {
     position: relative;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: var(--radius-full);
     display: grid;
     place-items: center;
-    font-weight: 700;
-    font-size: 12px;
     flex-shrink: 0;
-    background: var(--surface-subtle);
+    background: var(--card-bg);
     border: 1.5px solid var(--border-strong);
-    color: var(--text);
+    color: var(--text-2);
+    transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
   }
-  .rt-node[data-state="active"] .rt-avatar { background: var(--primary-2); border-color: var(--primary-2); color: #fff; }
-  .rt-node[data-state="done"] .rt-avatar { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .rt-node[data-state="active"] .rt-avatar {
+    background: linear-gradient(135deg, #2196F3, #0F74BC);
+    border-color: transparent;
+    color: #fff;
+  }
+  .rt-node[data-state="done"] .rt-avatar {
+    background: var(--ok);
+    border-color: transparent;
+    color: #fff;
+  }
   .rt-node[data-state="active"] .rt-avatar::after {
     content: "";
     position: absolute;
     inset: -5px;
     border-radius: var(--radius-full);
-    border: 1.5px solid var(--primary-2);
+    border: 1.5px solid rgba(18, 130, 200, 0.55);
     animation: rtRadarRing var(--dur-stream) var(--ease-out) infinite;
   }
   .rt-node[data-ignited="true"]::after {
     content: "";
     position: absolute;
-    inset: -3px;
+    inset: -4px;
     border-radius: inherit;
     border: 2px solid var(--primary-2);
     pointer-events: none;
@@ -157,16 +193,25 @@
 
   .rt-node-info { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
   .rt-node-name { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
-  .rt-node-model { font-size: 10.5px; font-family: var(--font-mono); color: var(--text-3); max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rt-node-model {
+    font-size: 10.5px;
+    font-family: var(--font-mono);
+    color: var(--text-3);
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
+  /* 流体光导轨 + 彗星交棒脉冲 */
   .rt-rail {
     position: relative;
-    flex: 1 0 36px;
-    min-width: 36px;
-    height: 4px;
-    margin: 0 4px;
+    flex: 1 0 42px;
+    min-width: 42px;
+    height: 3px;
+    margin: 0 6px;
     border-radius: var(--radius-full);
-    background: var(--border-strong);
+    background: var(--border);
     overflow: hidden;
   }
   .rt-rail-fill {
@@ -178,47 +223,71 @@
     transition: transform var(--dur-panel) var(--ease-spring);
   }
   .rt-rail[data-filled="true"] .rt-rail-fill { transform: scaleX(1); }
+  .rt-rail[data-flowing="true"] {
+    background: linear-gradient(90deg, var(--border), rgba(18, 130, 200, 0.65), var(--border));
+    background-size: 200% 100%;
+    animation: rtConduitFlow var(--dur-stream) linear infinite;
+  }
 
   .rt-baton {
     position: absolute;
-    top: -1px;
+    top: -1.5px;
     left: 0;
-    width: 24px;
+    width: 32px;
     height: 6px;
     border-radius: var(--radius-full);
-    background: linear-gradient(90deg, transparent, #60D4FF, #FFFFFF);
-    box-shadow: 0 0 12px rgba(82, 180, 245, 0.9);
+    background: linear-gradient(90deg, transparent, rgba(82, 180, 245, 0.7), #FFFFFF);
+    box-shadow: 0 0 14px rgba(82, 180, 245, 0.95);
     animation: rtBatonRocket var(--dur-stage) var(--ease-spring) forwards;
   }
 
+  /* 优雅谐波呼吸指示器 + 纯净中文实时状态窗（彻底告别声波柱与英文思维链泄漏） */
   .rt-telemetry {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 9px 12px;
-    border-radius: var(--radius-sm);
+    padding: 9px 14px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--surface-subtle);
   }
-  .rt-eq { display: flex; align-items: flex-end; gap: 3px; height: 26px; flex-shrink: 0; }
-  .rt-eq-bar {
-    width: 3px;
+  .rt-wave-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
     border-radius: var(--radius-full);
-    background: linear-gradient(to top, var(--primary-2), var(--ok));
-    transition: height var(--dur-fast) var(--ease-out);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
   }
-  .rt-stage[data-status="paused"] .rt-eq-bar { background: var(--warn); }
+  .rt-wave-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--primary-2);
+    animation: rtDotWave var(--dur-stream) var(--ease-out) infinite;
+  }
+  .rt-stage[data-status="planning"] .rt-wave-dot { background: var(--primary); }
+  .rt-stage[data-status="paused"] .rt-wave-dot { background: var(--warn); animation: none; }
 
-  .rt-stream-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  .rt-stream-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); }
-  .rt-stream-preview { font-size: 12px; color: var(--text); max-height: 68px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+  .rt-stream-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .rt-stream-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-2); }
+  .rt-stream-preview {
+    font-size: 12.5px;
+    color: var(--text);
+    max-height: 64px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
 
   .rt-tools-row { display: flex; flex-wrap: wrap; gap: 6px; }
   .rt-tool-pill {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 2px 8px;
+    padding: 2px 9px;
     border-radius: var(--radius-full);
     border: 1px solid var(--border-strong);
     background: var(--card-bg);
@@ -230,9 +299,9 @@
   .rt-tool-pill[data-status="fail"] { border-color: var(--err); color: var(--err); }
 
   .rt-handoff-banner {
-    padding: 6px 11px;
+    padding: 7px 12px;
     border-radius: var(--radius-sm);
-    background: rgba(18, 130, 200, 0.14);
+    background: rgba(18, 130, 200, 0.12);
     border-left: 3px solid var(--primary-2);
     font-size: 12px;
     font-weight: 600;
