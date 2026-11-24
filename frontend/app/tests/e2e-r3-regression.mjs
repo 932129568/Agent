@@ -258,7 +258,7 @@ const server = http.createServer(async (req, res) => {
     const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
     if (stubState.triggerArtifactOnce) {
       stubState.triggerArtifactOnce = false
-      const artContent = '已为你生成交互式卡片：\n\n```html\n<!doctype html><html><head><title>R15 交互画布测试</title></head><body><h1>Hello Artifact Canvas</h1></body></html>\n```'
+      const artContent = '已为你生成交互式卡片：\n\n```html\n<!doctype html><html><head><title>R15 交互画布测试</title></head><body><h1>Hello Artifact Canvas</h1><form id="f"><button id="subbtn">点击提交测试</button></form><a id="rel" href="index.html">回首页</a></body></html>\n```'
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: artContent } }] })}\n\n`)
       res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 900, completion_tokens: 60, total_tokens: 960, prompt_tokens_details: { cached_tokens: 800 } } })}\n\n`)
       res.write('data: [DONE]\n\n')
@@ -936,9 +936,31 @@ try {
   record(
     'Suite-K',
     '实时交互 Artifact 画布：自动识别 HTML 代码块并在沙箱 iframe 实时渲染 + 代码块复制栏',
-    hasCodeCopyBar && Boolean(frameSrcDoc && frameSrcDoc.includes('Hello Artifact Canvas')),
-    `hasCodeCopyBar=${hasCodeCopyBar}, hasSrcDoc=${Boolean(frameSrcDoc)}`
+    hasCodeCopyBar && Boolean(frameSrcDoc && frameSrcDoc.includes('Hello Artifact Canvas') && frameSrcDoc.includes('data-harbor-guard')),
+    `hasCodeCopyBar=${hasCodeCopyBar}, hasGuard=${Boolean(frameSrcDoc && frameSrcDoc.includes('data-harbor-guard'))}`
   )
+
+  // M1: 点击沙箱内 <form><button> 与 <a href="index.html">，绝不套娃重新打开 Harbor，且弹出拦截提示
+  const frameLoc = page.frameLocator('.ac-frame')
+  await frameLoc.locator('#subbtn').click()
+  await page.waitForTimeout(220)
+  const nestedShellAfterForm = await frameLoc.locator('.hb-shell').count()
+  // 注意：提示必须在**点完链接之后**再读。
+  // 原实现在表单点击后就取值，而 `<button>` 无 type ⇒ 默认 submit；
+  // iframe 的 sandbox 是 "allow-scripts"（不含 allow-forms）⇒ 浏览器在提交**之前**
+  // 就拦掉了，submit 事件根本不触发，守卫自然无从通知 —— 那一刻取值必然为空。
+  // 「点链接被拦截并提示」才是可靠可断言的那条路径。
+  await frameLoc.locator('#rel').click()
+  await page.waitForTimeout(260)
+  const guardNoticeText = await page.locator('.ac-notice').textContent().catch(() => '')
+  const nestedShellAfterLink = await frameLoc.locator('.hb-shell').count()
+  record(
+    'Suite-M',
+    '防套娃守护：在实时画布内点击网页表单按钮/相对链接绝不重载 Harbor 宿主项目网页',
+    nestedShellAfterForm === 0 && nestedShellAfterLink === 0 && /已拦截沙箱内页面跳转/.test(guardNoticeText || ''),
+    `nestedForm=${nestedShellAfterForm}, nestedLink=${nestedShellAfterLink}, notice=${(guardNoticeText || '').trim()}`
+  )
+
   await page.locator('.dk-close').click()
   await page.waitForTimeout(220)
 
@@ -998,6 +1020,26 @@ try {
     '插件热插拔中心：自定义 JSON 插件实时校验安装 + 即时启停热重载生效',
     installedVisible && toggledOff,
     `installed=${installedVisible}, toggledOff=${toggledOff}`
+  )
+
+  // M2: 工作流工坊可用性升级 — 一句话生成并发 DAG 工作流 + 检视器直接增删拓扑连线
+  await page.locator('.wf-seg-btn:has-text("编排工坊")').click()
+  await page.waitForSelector('.wf-root .wg-viewport', { timeout: 4000 })
+  await page.locator('.wf-actions button:has-text("一句话生成流")').click()
+  await page.waitForSelector('.wf-synth-bar', { timeout: 3000 })
+  await page.locator('.wf-synth-bar input').fill('调研竞品定价并做红蓝反证生成报告')
+  await page.locator('.wf-synth-bar button:has-text("生成并载入 DAG")').click()
+  await page.waitForTimeout(240)
+  const genTitle = await page.locator('.wf-meta-desc').textContent()
+  const edgesBefore = await page.locator('.wg-edge-base').count()
+  await page.locator('.wf-edge-add button:has-text("连线")').click()
+  await page.waitForTimeout(200)
+  const edgesAfter = await page.locator('.wg-edge-base').count()
+  record(
+    'Suite-M',
+    '工作流工坊升级：一句话智能生成并发 DAG + 检视器直接增删拓扑连线',
+    /智能生成/.test(genTitle || '') && edgesAfter === edgesBefore + 1,
+    `genTitle=${(genTitle || '').trim().slice(0, 36)}, edges=${edgesBefore}->${edgesAfter}`
   )
 
   // D4: 全程零未捕获页面异常

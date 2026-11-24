@@ -1,19 +1,13 @@
-import { useEffect, useState } from 'react'
-import { useSlice, selectSession } from '../../state/store.js'
-import * as api from '../../services/bridge.js'
+import { useEffect } from 'react'
+import { useSlice, selectSession, refreshAuditLogs } from '../../state/store.js'
 import './AnalyticsPanel.css'
 
 export default function AnalyticsPanel() {
   const sessionsState = useSlice('sessions')
   const runtime = useSlice('runtime')
-  const [audit, setAudit] = useState([])
+  const audit = Array.isArray(runtime.auditLogs) ? runtime.auditLogs : []
 
-  useEffect(() => {
-    api.getAuditLog(20, 0).then((r) => {
-      const items = (r && (r.entries || r.logs || r.items)) || (Array.isArray(r) ? r : [])
-      setAudit(items)
-    }).catch(() => {})
-  }, [])
+  useEffect(() => { refreshAuditLogs(20).catch(() => {}) }, [])
 
   const ranked = sessionsState.items.map((s) => {
     const chars = (s.messages || []).reduce((acc, m) => acc + String(m.content || '').length, 0)

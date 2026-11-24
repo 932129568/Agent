@@ -778,3 +778,48 @@ test('pluginRegistry.js 支持热插拔校验自定义 JSON 插件、收集工�
   const hooks = runPluginBeforePromptHooks(all)
   assert.ok(hooks.includes('验收标准'))
 })
+
+
+test('artifacts.js 强制为完整 HTML 文档注入沙箱导航守护脚本（根治点击按钮套娃重载 Harbor）', async () => {
+  const { buildArtifactSandboxDoc } = await import('../src/services/artifacts.js')
+  const fullHtml = '<!doctype html><html><head><title>表单页</title></head><body><form><button>提交</button></form><a href="index.html">首页</a></body></html>'
+  const guarded = buildArtifactSandboxDoc({ kind: 'html', title: '表单页', code: fullHtml }, 'light')
+  assert.ok(guarded.includes('data-harbor-guard="1"'))
+  assert.ok(guarded.includes('nav_blocked') && guarded.includes('form_blocked'))
+  assert.ok(guarded.includes('e.preventDefault()'))
+  const twice = buildArtifactSandboxDoc({ kind: 'html', title: '表单页', code: guarded }, 'light')
+  assert.equal(twice.split('data-harbor-guard="1"').length - 1, 1)
+})
+
+test('workflowEngine.js 一句话自然语言智能合成多节点并发 DAG + 实时流式 onDelta + 报告格式化', async () => {
+  const { synthesizeWorkflowFromPrompt, analyzeWorkflowDag, executeWorkflowDag, formatWorkflowRunMarkdown } = await import('../src/services/workflowEngine.js')
+  const resWf = synthesizeWorkflowFromPrompt('调研竞品价格并做 SWOT 分析生成 HTML 简报')
+  const dag = analyzeWorkflowDag(resWf)
+  assert.equal(dag.ok, true)
+  assert.ok(resWf.nodes.length >= 5)
+  assert.ok(dag.layers.some((l) => l.length >= 2), '应包含并行扇出拓扑层')
+
+  const deltas = []
+  const run = await executeWorkflowDag({
+    workflow: {
+      id: 'wf_stream',
+      name: '流式测试',
+      nodes: [{ id: 'in', kind: 'input', label: '输入' }, { id: 'a', kind: 'llm', label: '模型A' }],
+      edges: [{ from: 'in', to: 'a' }],
+    },
+    input: 'hello',
+    runLlmNode: async ({ onDelta }) => {
+      onDelta('第一段流式输出', 42)
+      return { content: '最终完成输出' }
+    },
+    onProgress: (p) => {
+      if (p.nodeStates && p.nodeStates.a && p.nodeStates.a.status === 'running' && p.nodeStates.a.output) {
+        deltas.push(p.nodeStates.a.output)
+      }
+    },
+  })
+  assert.equal(run.status, 'done')
+  assert.ok(deltas.includes('第一段流式输出'))
+  const md = formatWorkflowRunMarkdown(resWf, run)
+  assert.ok(md.includes('工作流执行报告'))
+})

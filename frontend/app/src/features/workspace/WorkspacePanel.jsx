@@ -5,9 +5,10 @@ import {
   setWorkspacePath,
   toggleWorkspaceEnabled,
   previewWorkspaceFile,
-  pushToast,
+  pickWorkspaceFolder,
+  addWorkspaceGuardRule,
+  removeWorkspaceGuardRule,
 } from '../../state/store.js'
-import * as api from '../../services/bridge.js'
 import './WorkspacePanel.css'
 
 export default function WorkspacePanel() {
@@ -19,24 +20,12 @@ export default function WorkspacePanel() {
   useEffect(() => { refreshWorkspace().catch(() => {}) }, [])
   useEffect(() => { if (ws.rootPath) setPathInput(ws.rootPath) }, [ws.rootPath])
 
-  const handlePickFolder = async () => {
-    try {
-      const res = await api.pickFolder('')
-      if (res && res.path) await setWorkspacePath(res.path)
-    } catch (e) {
-      pushToast(`选择目录失败：${e.message}`, 'err')
-    }
-  }
+  const handlePickFolder = () => pickWorkspaceFolder()
 
   const handleAddRule = async () => {
     if (!rulePat.trim()) return
-    try {
-      await api.guardRuleAdd(ruleOp, rulePat.trim(), 'React 控制台添加')
+    if (await addWorkspaceGuardRule(ruleOp, rulePat.trim(), 'React 控制台添加')) {
       setRulePat('')
-      await refreshWorkspace()
-      pushToast('护栏规则已添加', 'ok')
-    } catch (e) {
-      pushToast(e.message, 'err')
     }
   }
 
@@ -95,7 +84,7 @@ export default function WorkspacePanel() {
         {(ws.guardRules || []).map((r) => (
           <div key={r.id} className="ws-row" style={{ justifyContent: 'space-between', fontSize: 12.5 }}>
             <span>[{r.op_pattern || r.op}] {r.detail_pattern || r.pattern}</span>
-            <button type="button" className="ws-btn" onClick={async () => { await api.guardRuleRemove(r.id); await refreshWorkspace() }}>移除</button>
+            <button type="button" className="ws-btn" onClick={() => removeWorkspaceGuardRule(r.id)}>移除</button>
           </div>
         ))}
       </div>

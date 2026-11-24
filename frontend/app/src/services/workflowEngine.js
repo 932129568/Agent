@@ -227,6 +227,7 @@ export async function executeWorkflowDag({
   const activeEdges = new Set()
   const branchPass = new Map() // edge.id -> boolean
   const logs = []
+  let lastArtifact = null
 
   for (const n of wf.nodes) {
     if (resumeOutputs && Object.prototype.hasOwnProperty.call(resumeOutputs, n.id)) {
@@ -362,16 +363,34 @@ export async function executeWorkflowDag({
             code: `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${safeTitle}</title><style>body{font-family:"Segoe UI","PingFang SC",system-ui,sans-serif;max-width:860px;margin:0 auto;padding:28px;line-height:1.7;background:#faf8f4;color:#1b1a18}h1{border-bottom:2px solid #d4653e;padding-bottom:8px}pre{white-space:pre-wrap;background:#fff;padding:16px;border-radius:12px;border:1px solid rgba(0,0,0,.1)}</style></head><body><h1>✦ ${safeTitle}</h1><pre>${safeBody}</pre></body></html>`,
           }
         }
-        if (artifact && typeof onArtifact === 'function') onArtifact(artifact)
+        if (artifact) {
+          lastArtifact = artifact
+          if (typeof onArtifact === 'function') onArtifact(artifact)
+        }
         outText = artifact ? `已推送交互画布产物：「${artifact.title}」（${artifact.filename}）\n\n${sourceText.slice(0, 600)}` : sourceText
       } else {
-        // llm node
+        // llm node（支持流式增量实时回推到画布节点与右侧检视器）
         const promptText = interpolateTemplate(
           node.prompt || `请以「${node.role || node.label}」身份完成以下任务：\n{{input}}\n\n前序节点输出：\n{{upstream}}`,
           tplCtx
         )
+        let lastDeltaEmit = 0
+        const onDelta = (partialText, cps = 0) => {
+          const now = Date.now()
+          if (now - lastDeltaEmit < 90) return
+          lastDeltaEmit = now
+          const str = String(partialText || '')
+          nodeStates[node.id] = {
+            status: 'running',
+            ms: now - nodeT0,
+            cps: Math.round(Number(cps) || 0),
+            output: str,
+            summary: str.replace(/\s+/g, ' ').trim().slice(-72) || '实时推理中…',
+          }
+          emit()
+        }
         if (typeof runLlmNode === 'function') {
-          const res = await runLlmNode({ node, prompt: promptText, upstream: upstreamText, input, signal })
+          const res = await runLlmNode({ node, prompt: promptText, upstream: upstreamText, input, signal, onDelta })
           outText = typeof res === 'string' ? res : String((res && res.content) || '')
         } else {
           outText = `[${node.label}] 已处理：${promptText.slice(0, 120)}`
@@ -419,13 +438,14 @@ export async function executeWorkflowDag({
     const finalOutput = (lastId && outputs[lastId] && outputs[lastId].output) || ''
     const totalMs = Date.now() - tStart
     pushLog(`✦ 工作流「${wf.name}」执行完成（总耗时 ${totalMs}ms）`)
-    emit({ status: 'done', totalMs, finalOutput })
+    emit({ status: 'done', totalMs, finalOutput, lastArtifact })
     return {
       status: 'done',
       workflowId: wf.id,
       nodeStates,
       outputs,
       finalOutput,
+      lastArtifact,
       totalMs,
       logs,
       checkpoint: null,
@@ -484,4 +504,146 @@ export function compileGroupToWorkflow(group = {}) {
     nodes,
     edges,
   })
+}
+
+
+/** 一句话自然语言智能编译为多节点并发 DAG 工作流（离线零延迟确定性合成，覆盖研发/调研/审计/创作四大范式）。 */
+export function synthesizeWorkflowFromPrompt(goalText = '') {
+  const goal = String(goalText || '').trim()
+  const titleSeed = goal.slice(0, 18) || '智能定制流水线'
+  const isResearch = /调研|研究|竞品|对比|分析|报告|swot|市场|趋势/i.test(goal)
+  const isAudit = /审计|安全|漏洞|体检|重构|压测|review|bug|报错/i.test(goal)
+  const isContent = /文案|文章|视频|脚本|公众号|小红书|营销|宣传|海报/i.test(goal)
+
+  if (isResearch) {
+    return normalizeWorkflowDef({
+      id: `wf_gen_${Date.now().toString(36)}`,
+      pluginId: 'custom',
+      name: `智能生成：${titleSeed}`,
+      description: `由自然语言需求「${goal}」自动编排的双轨调研与可视化报告流水线。`,
+      category: 'research',
+      builtin: false,
+      nodes: [
+        { id: 'in', kind: 'input', label: '调研命题' },
+        { id: 'pro', kind: 'llm', label: '核心维度拆解', role: '资深行业分析师', prompt: `围绕目标「${goal}」及输入「{{input}}」，输出结构化核心事实与对比维度。` },
+        { id: 'risk', kind: 'llm', label: '盲区与反证', role: '红队评审专家', prompt: `针对「${goal}」（{{input}}），找出 3 个关键风险、隐藏成本与常见误区。` },
+        { id: 'join', kind: 'merge', label: '双轨洞察汇合' },
+        { id: 'html_rep', kind: 'llm', label: 'HTML 报告生成', role: '信息可视化设计师', prompt: '将以下双轨洞察渲染为一份高颜值单页 HTML 执行报告（用 ```html 代码块输出）：\n{{upstream}}' },
+        { id: 'art', kind: 'artifact', label: '报告实时画布', prompt: '{{nodes.html_rep.output}}' },
+      ],
+      edges: [
+        { from: 'in', to: 'pro' },
+        { from: 'in', to: 'risk' },
+        { from: 'pro', to: 'join' },
+        { from: 'risk', to: 'join' },
+        { from: 'join', to: 'html_rep' },
+        { from: 'html_rep', to: 'art' },
+      ],
+    })
+  }
+
+  if (isAudit) {
+    return normalizeWorkflowDef({
+      id: `wf_gen_${Date.now().toString(36)}`,
+      pluginId: 'custom',
+      name: `智能生成：${titleSeed}`,
+      description: `由需求「${goal}」自动编排的目录扫描 → 审计 → 条件分流重构流水线。`,
+      category: 'security',
+      builtin: false,
+      nodes: [
+        { id: 'in', kind: 'input', label: '审计输入' },
+        { id: 'scan', kind: 'tool', label: '工作区目录扫描', toolName: 'list_dir', toolArgs: { path: '.' } },
+        { id: 'audit', kind: 'llm', label: '深度代码审计', role: '首席安全架构师', allowTools: true, prompt: `目标：${goal}\n补充：{{input}}\n目录：{{nodes.scan.output}}\n若存在高危问题请标注 HIGH_RISK。` },
+        { id: 'cond', kind: 'condition', label: '高危判定门', condition: { op: 'contains', value: 'HIGH_RISK' } },
+        { id: 'fix', kind: 'llm', label: '紧急修复补丁', role: '重构专家', prompt: '给出可落地的修复步骤与验证清单：\n{{nodes.audit.output}}' },
+        { id: 'ok_sum', kind: 'merge', label: '常规改进汇总', prompt: '未发现阻断高危，常规建议如下：\n{{nodes.audit.output}}' },
+      ],
+      edges: [
+        { from: 'in', to: 'scan' },
+        { from: 'scan', to: 'audit' },
+        { from: 'audit', to: 'cond' },
+        { from: 'cond', to: 'fix', when: 'true', label: '含高危' },
+        { from: 'cond', to: 'ok_sum', when: 'false', label: '常规' },
+      ],
+    })
+  }
+
+  if (isContent) {
+    return normalizeWorkflowDef({
+      id: `wf_gen_${Date.now().toString(36)}`,
+      pluginId: 'custom',
+      name: `智能生成：${titleSeed}`,
+      description: `由需求「${goal}」自动编排的并行创意钩子 + 结构化终稿流水线。`,
+      category: 'creative',
+      builtin: false,
+      nodes: [
+        { id: 'in', kind: 'input', label: '创作命题' },
+        { id: 'hook', kind: 'llm', label: '开场钩子', role: '增长文案总监', prompt: `针对「${goal}」（{{input}}）设计 3 个高吸睛开场。` },
+        { id: 'body', kind: 'llm', label: '核心结构', role: '内容主编', prompt: `针对「${goal}」（{{input}}）规划高密度正文脉络与案例。` },
+        { id: 'gate', kind: 'human_gate', label: '风格语气拍板' },
+        { id: 'merge', kind: 'merge', label: '创意汇合' },
+        { id: 'final', kind: 'llm', label: '终稿精修', role: '总编辑', prompt: '结合所选风格输出可直接发布的成稿：\n{{upstream}}' },
+      ],
+      edges: [
+        { from: 'in', to: 'hook' },
+        { from: 'in', to: 'body' },
+        { from: 'in', to: 'gate' },
+        { from: 'hook', to: 'merge' },
+        { from: 'body', to: 'merge' },
+        { from: 'gate', to: 'merge' },
+        { from: 'merge', to: 'final' },
+      ],
+    })
+  }
+
+  // 默认工程并行交付流水线
+  return normalizeWorkflowDef({
+    id: `wf_gen_${Date.now().toString(36)}`,
+    pluginId: 'custom',
+    name: `智能生成：${titleSeed}`,
+    description: `由需求「${goal || '全栈交付'}」自动编排的架构 → 并行规范/拍板 → 代码实现 → 实时画布流水线。`,
+    category: 'engineering',
+    builtin: false,
+    nodes: [
+      { id: 'in', kind: 'input', label: '需求输入' },
+      { id: 'arch', kind: 'llm', label: '方案架构', role: '系统架构师', prompt: `围绕「${goal}」（{{input}}）拆解核心功能与实现架构。` },
+      { id: 'design', kind: 'llm', label: '界面与交互规范', role: 'UI 设计师', prompt: '制定高质感配色、布局与动效细节：\n{{upstream}}' },
+      { id: 'gate', kind: 'human_gate', label: '方案方向拍板' },
+      { id: 'join', kind: 'merge', label: '规范汇合' },
+      { id: 'impl', kind: 'llm', label: '工程落地实现', role: '全栈工程师', allowTools: true, prompt: '严格按汇合规范输出完整可运行实现（网页请用 ```html 代码块）：\n{{upstream}}' },
+      { id: 'art', kind: 'artifact', label: '实时交互画布', prompt: '{{nodes.impl.output}}' },
+    ],
+    edges: [
+      { from: 'in', to: 'arch' },
+      { from: 'arch', to: 'design' },
+      { from: 'arch', to: 'gate' },
+      { from: 'design', to: 'join' },
+      { from: 'gate', to: 'join' },
+      { from: 'join', to: 'impl' },
+      { from: 'impl', to: 'art' },
+    ],
+  })
+}
+
+/** 将工作流运行结果格式化为完整 Markdown 交付报告。 */
+export function formatWorkflowRunMarkdown(workflow, run) {
+  if (!workflow) return ''
+  const states = (run && run.nodeStates) || {}
+  const lines = [
+    `# 工作流执行报告：${workflow.name || '未命名工作流'}`,
+    '',
+    `- **工作流 ID**：\`${workflow.id}\``,
+    `- **执行状态**：${(run && run.status) || 'idle'}`,
+    `- **总耗时**：${(run && run.totalMs) || 0} ms`,
+    ...(run && run.input ? [`- **输入目标**：${run.input}`] : []),
+    '',
+    '---',
+    '',
+  ]
+  for (const n of (workflow.nodes || [])) {
+    const st = states[n.id] || {}
+    lines.push(`## ${n.label} (\`${n.id}\` · ${n.kind} · ${st.status || 'pending'})`, '')
+    lines.push(String(st.output || '（无输出）').trim(), '', '---', '')
+  }
+  return lines.join('\n')
 }

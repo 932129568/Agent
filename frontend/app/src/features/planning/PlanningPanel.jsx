@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSlice, refreshPlanning, pushToast } from '../../state/store.js'
-import * as api from '../../services/bridge.js'
+import { useSlice, refreshPlanning, createTaskPlan, rollbackTaskCheckpoint } from '../../state/store.js'
 import './PlanningPanel.css'
 
 export default function PlanningPanel() {
@@ -14,26 +13,15 @@ export default function PlanningPanel() {
   const handleCreate = async () => {
     if (!title.trim()) return
     const steps = stepsText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
-    try {
-      await api.planCreate(title.trim(), steps.length ? steps : ['分析现状', '执行修改', '验证收口'])
+    if (await createTaskPlan(title.trim(), steps)) {
       setTitle('')
       setStepsText('')
-      await refreshPlanning()
-      pushToast('任务计划已创建', 'ok')
-    } catch (e) {
-      pushToast(e.message, 'err')
     }
   }
 
   const handleRollback = async (taskId) => {
-    try {
-      const r = await api.checkpointRollback(taskId, '', true)
-      setConfirmRb('')
-      if (r && r.ok) pushToast(`已回滚至检查点 ${taskId}`, 'ok')
-      else pushToast(`回滚失败：${(r && (r.error || r.message)) || '无可用检查点'}`, 'err')
-    } catch (e) {
-      pushToast(e.message, 'err')
-    }
+    await rollbackTaskCheckpoint(taskId)
+    setConfirmRb('')
   }
 
   return (

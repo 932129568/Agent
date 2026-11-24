@@ -333,11 +333,13 @@ async function boot() {
     })
   } catch (e) {}
 
+  let initialPageLoaded = false
   const PAGE_ORIGIN_OK = USE_CUSTOM_PROTOCOL
     ? (u => String(u || '').startsWith(HARBOR_SCHEME + '://app/'))
     : (u => String(u || '').startsWith('file://'))
   win.webContents.on('will-navigate', (event, url) => {
-    if (!PAGE_ORIGIN_OK(url)) event.preventDefault()
+    // 铁律防护：首屏加载完毕后，拦截一切意外主帧跳转（含相对路径重载自身或外链劫持）
+    if (initialPageLoaded || !PAGE_ORIGIN_OK(url)) event.preventDefault()
   })
   win.on('closed', () => {
     win = null
@@ -349,6 +351,7 @@ async function boot() {
   } else {
     await win.loadFile(path.join(APP_DIST, 'index.html'))
   }
+  initialPageLoaded = true
   __mark('window-loaded')
   if (!SMOKE) setTimeout(revealWindowSmoothly, 80)
   console.log('[harbor] React 19 window loaded; bridge base =', process.env.HARBOR_API_BASE, '| backdrop =', currentBackdrop)

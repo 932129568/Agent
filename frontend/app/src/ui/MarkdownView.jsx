@@ -5,12 +5,21 @@ import './MarkdownView.css'
 
 /**
  * 唯一允许使用 dangerouslySetInnerHTML 的组件（LAW-04 强制经 platform/markdown.js DOMPurify 净化）。
- * R15：采用 React 事件委托支持代码块「复制代码」按钮，零直接 DOM 查询（100% 遵守 LAW-01 / LAW-07）。
+ * R17：React 事件委托同时处理代码块「复制代码」与 <a> 链接拦截，杜绝点击相对链接意外重载 Harbor 宿主！
  */
 const MarkdownView = memo(function MarkdownView({ content, className = '' }) {
   const markup = useMemo(() => renderSafeMarkdown(content), [content])
 
   const handleClick = useCallback((e) => {
+    const link = e.target && typeof e.target.closest === 'function' ? e.target.closest('a[href]') : null
+    if (link) {
+      e.preventDefault()
+      const href = String(link.getAttribute('href') || '').trim()
+      if (/^https?:\/\//i.test(href)) {
+        copyText(href).catch(() => {})
+      }
+      return
+    }
     const btn = e.target && typeof e.target.closest === 'function' ? e.target.closest('.md-code-copy') : null
     if (!btn) return
     const block = btn.closest('.md-code-block')

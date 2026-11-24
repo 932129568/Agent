@@ -15,6 +15,7 @@ import {
   analyzeWorkflowDag,
   executeWorkflowDag,
   compileGroupToWorkflow,
+  synthesizeWorkflowFromPrompt,
 } from '../services/workflowEngine.js'
 
 const PLUGINS_ENABLED_KEY = 'harbor.v5.plugins.enabled'
@@ -52,6 +53,7 @@ export function createInitialPluginsSlice() {
       activeEdges: [],
       logs: [],
       finalOutput: '',
+      lastArtifact: null,
       totalMs: 0,
       error: '',
       checkpoint: null,
@@ -179,6 +181,47 @@ export function compileActiveGroupToWorkflow() {
   return wf
 }
 
+export function cloneWorkflowDef(workflowId) {
+  const st = getState().plugins
+  const src = st.workflows.find((w) => w.id === (workflowId || st.activeWorkflowId))
+  if (!src) return null
+  const cloned = normalizeWorkflowDef({
+    ...JSON.parse(JSON.stringify(src)),
+    id: `${src.id}_copy_${Date.now().toString(36)}`,
+    name: `${src.name}（副本）`,
+    builtin: false,
+    pluginId: 'custom',
+  })
+  const nextCustomWf = [cloned, ...st.customWorkflows]
+  recomputeAndPersist(st.enabledMap, st.customPlugins, nextCustomWf, cloned.id)
+  return cloned
+}
+
+export function importWorkflowJson(rawJson) {
+  let obj
+  try {
+    obj = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+  } catch (e) {
+    return { ok: false, error: `工作流 JSON 解析失败：${e.message}` }
+  }
+  const norm = normalizeWorkflowDef({ ...obj, builtin: false, pluginId: 'custom' })
+  if (!norm.nodes.length) return { ok: false, error: '工作流至少需要 1 个节点' }
+  const check = analyzeWorkflowDag(norm)
+  if (!check.ok) return { ok: false, error: check.error }
+  const st = getState().plugins
+  const nextCustomWf = [norm, ...st.customWorkflows.filter((w) => w.id !== norm.id)]
+  recomputeAndPersist(st.enabledMap, st.customPlugins, nextCustomWf, norm.id)
+  return { ok: true, workflow: norm }
+}
+
+export function createWorkflowFromPrompt(goalText) {
+  const wf = synthesizeWorkflowFromPrompt(goalText)
+  const st = getState().plugins
+  const nextCustomWf = [wf, ...st.customWorkflows]
+  recomputeAndPersist(st.enabledMap, st.customPlugins, nextCustomWf, wf.id)
+  return wf
+}
+
 let _wfAbortCtrl = null
 const _wfDemoTimers = []
 
@@ -210,6 +253,7 @@ export function resetWorkflowRunState() {
       activeEdges: [],
       logs: [],
       finalOutput: '',
+      lastArtifact: null,
       totalMs: 0,
       error: '',
       checkpoint: null,
@@ -249,6 +293,7 @@ export async function runWorkflowWithHandlers({
       activeEdges: [],
       logs: [],
       finalOutput: '',
+      lastArtifact: null,
       totalMs: 0,
       error: '',
       checkpoint: null,
@@ -285,6 +330,7 @@ export async function runWorkflowWithHandlers({
       activeEdges: [],
       logs: result.logs,
       finalOutput: result.finalOutput || '',
+      lastArtifact: result.lastArtifact || p.run.lastArtifact || null,
       totalMs: result.totalMs || 0,
       error: result.error || '',
       checkpoint: result.checkpoint || null,
@@ -314,6 +360,7 @@ export function triggerWorkflowShowcaseRun(onArtifact) {
       activeEdges: [],
       logs: [{ id: 'demo_0', at: Date.now(), text: `▶ 开始演练插件工作流「${wf.name}」` }],
       finalOutput: '',
+      lastArtifact: null,
       totalMs: 0,
       error: '',
       checkpoint: null,
@@ -366,15 +413,17 @@ export function triggerWorkflowShowcaseRun(onArtifact) {
           logs: [...p.run.logs, { id: `d_e_${idx}`, at: Date.now(), text: isLast ? `✦ 演练全部完成（${wf.nodes.length} 节点）` : `✓ 第 ${idx + 1} 层完成` }],
         },
       }))
-      if (isLast && typeof onArtifact === 'function') {
-        onArtifact({
+      if (isLast) {
+        const demoArt = {
           id: `wf_demo_art_${Date.now()}`,
           kind: 'html',
           lang: 'html',
           title: `${wf.name} · 演练交付`,
           filename: 'workflow-showcase.html',
           code: `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>DAG 演练交付</title><style>body{margin:0;padding:28px;font-family:"Segoe UI","PingFang SC",sans-serif;background:linear-gradient(135deg,#faf7f2,#eef6fb);color:#171614}.card{background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.1);border-radius:18px;padding:22px;box-shadow:0 16px 36px -12px rgba(0,0,0,.12)}h1{margin:0 0 8px;font-size:20px;color:#d4653e}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:16px}.kpi{padding:12px;border-radius:12px;background:#fff;border:1px solid rgba(0,0,0,.08)}.kpi strong{display:block;font-size:20px;color:#1282c8}</style></head><body><div class="card"><h1>✦ ${wf.name}</h1><p>插件化 DAG 工作流引擎已完成 ${dag.layers.length} 层拓扑并发调度，产物已自动送入实时交互画布。</p><div class="grid"><div class="kpi"><span>总节点</span><strong>${wf.nodes.length}</strong></div><div class="kpi"><span>拓扑层数</span><strong>${dag.layers.length}</strong></div><div class="kpi"><span>状态</span><strong>PASS</strong></div></div></div></body></html>`,
-        })
+        }
+        patchSlice('plugins', (p) => ({ ...p, run: { ...p.run, lastArtifact: demoArt } }))
+        if (typeof onArtifact === 'function') onArtifact(demoArt)
       }
     })
   })

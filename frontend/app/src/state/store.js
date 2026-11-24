@@ -53,6 +53,9 @@ import {
   saveCustomWorkflowDef,
   deleteCustomWorkflowDef,
   compileActiveGroupToWorkflow,
+  cloneWorkflowDef,
+  importWorkflowJson,
+  createWorkflowFromPrompt,
   stopWorkflowExecution,
   resetWorkflowRunState,
   runWorkflowWithHandlers,
@@ -62,9 +65,52 @@ import { streamChatCompletion } from '../services/modelTransport.js'
 import { compactSessionHistory } from '../services/compaction.js'
 import { spawnIsolatedSubagent, cancelAllSubagents, purgeSubagents } from '../services/subagent.js'
 import { isResumableError } from '../services/budgetAndResume.js'
-import { runExpertTeam } from '../services/expertTeam.js'
-import { COLLABORATION_DEFAULTS, normalizeCollaborationConfig, runDualModelCollaboration } from '../services/collaboration.js'
+import { COLLABORATION_DEFAULTS } from '../services/collaboration.js'
+import { formatWorkflowRunMarkdown } from '../services/workflowEngine.js'
 import { isAbort } from '../services/errors.js'
+import {
+  fireShellImpact,
+  setActivePanel,
+  toggleSidebar,
+  toggleZenMode,
+  openModal,
+  closeModal,
+  toggleDock,
+  setDockTab,
+  setDockPreview,
+  openArtifactCanvas,
+  toggleSearchDock,
+  setComposerDraft,
+  appendComposerDraft,
+  addComposerToken,
+  removeComposerToken,
+  pushToast,
+  dismissToast,
+} from './uiSlice.js'
+import {
+  resolveEndpointConfig,
+  refreshWorkspace,
+  toggleWorkspaceEnabled,
+  previewWorkspaceFile,
+  addWorkspaceGuardRule,
+  removeWorkspaceGuardRule,
+  refreshPlanning,
+  createTaskPlan,
+  rollbackTaskCheckpoint,
+  refreshAuditLogs,
+  saveAtomicMemory,
+  toggleCuratedPackEnabled,
+  refreshMarket,
+  refreshSettingsAux,
+  checkAppUpdate,
+  startExpertTeamRun,
+  stopExpertTeamRun,
+  updateCollaborationConfig,
+  startCollaborationRun,
+  stopCollaborationRun,
+  runWebSearch,
+  extractSearchUrl,
+} from './domainSlice.js'
 
 const initialVisual = readVisualPrefs()
 const GROUP_MEMBERS_KEY = 'harbor.v3.group.members'
@@ -180,6 +226,7 @@ const initialState = Object.freeze({
       latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
       prefixHash: '', prefixLocked: false,
     },
+    auditLogs: [],
     updateInfo: null,          // { latest, url, sha256, notes }
     updateProgress: null,
   },
@@ -292,11 +339,8 @@ let approvalResolver = null
 let clarifyResolver = null
 let takeoverResolver = null
 let budgetResolver = null
-let teamAbortCtrl = null
-let collabAbortCtrl = null
 let groupAbortCtrl = null
 let groupAbortReason = ''
-let impactSeq = 0
 const relayDemoTimers = []
 let saveSessionsTimer = 0
 
@@ -310,89 +354,25 @@ function syncRuntimeTelemetryForSid(targetSid) {
   state = kernelSyncTelemetry(targetSid)
 }
 
-/* ---- 通用 UI & 图层调度（LAW-05：Modal 与 Dock 强互斥） ---- */
-export function fireShellImpact(edge = 'left', strength = 'medium', vec = null) {
-  patchSlice('ui', (u) => ({
-    ...u,
-    impactSignal: {
-      seq: ++impactSeq,
-      edge,
-      strength,
-      dx: vec && Number.isFinite(vec.dx) ? vec.dx : 0,
-      dy: vec && Number.isFinite(vec.dy) ? vec.dy : 0,
-    },
-  }))
-}
-
-export function setActivePanel(panel) {
-  const prev = state.ui.activePanel
-  patchSlice('ui', (u) => ({ ...u, activePanel: panel }))
-  if (prev !== panel) {
-    syncRuntimeTelemetryForSid(panel === 'group' ? state.group.activeGroupId : state.sessions.currentId)
-    fireShellImpact('left', 'panel')
-  }
-}
-export function toggleSidebar() { patchSlice('ui', (u) => ({ ...u, sidebarOpen: !u.sidebarOpen })) }
-export function toggleZenMode(force) {
-  patchSlice('ui', (u) => {
-    const next = typeof force === 'boolean' ? force : !u.zenMode
-    return { ...u, zenMode: next }
-  })
-}
-export function openModal(modalId, originRect = null) {
-  patchSlice('ui', (u) => ({ ...u, activeModal: modalId, modalOriginRect: originRect || null, dockOpen: false }))
-}
-export function closeModal(impactEdge = 'left', skipImpact = false) {
-  const hadModal = !!state.ui.activeModal
-  patchSlice('ui', (u) => ({ ...u, activeModal: null, modalOriginRect: null }))
-  if (hadModal && !skipImpact) fireShellImpact(impactEdge, 'strong')
-}
-export function toggleDock(tab) {
-  const wasOpen = state.ui.dockOpen
-  patchSlice('ui', (u) => {
-    const willOpen = tab ? true : !u.dockOpen
-    return { ...u, dockOpen: willOpen, dockTab: tab || u.dockTab, activeModal: willOpen ? null : u.activeModal }
-  })
-  if (wasOpen && !tab) fireShellImpact('right', 'strong')
-}
-export function setDockTab(tab) { patchSlice('ui', (u) => ({ ...u, dockTab: tab })) }
-export function setDockPreview(text) {
-  patchSlice('ui', (u) => ({ ...u, dockPreview: String(text || ''), dockOpen: true, dockTab: 'preview', activeModal: null }))
-}
-export function openArtifactCanvas(artifact) {
-  if (!artifact || !artifact.code) return
-  patchSlice('ui', (u) => ({
-    ...u,
-    activeArtifact: artifact,
-    dockOpen: true,
-    dockTab: 'artifact',
-    activeModal: null,
-  }))
-}
-export function toggleSearchDock(force) {
-  patchSlice('ui', (u) => ({ ...u, searchDockOpen: typeof force === 'boolean' ? force : !u.searchDockOpen }))
-}
-export function setComposerDraft(text) { patchSlice('ui', (u) => ({ ...u, composerDraft: String(text == null ? '' : text) })) }
-export function appendComposerDraft(snippet) {
-  patchSlice('ui', (u) => ({ ...u, composerDraft: u.composerDraft ? `${u.composerDraft}\n${snippet}` : String(snippet || '') }))
-}
-export function addComposerToken(token) {
-  patchSlice('ui', (u) => {
-    if (!token || !token.id || u.composerTokens.some((t) => t.id === token.id)) return u
-    return { ...u, composerTokens: [...u.composerTokens, token] }
-  })
-}
-export function removeComposerToken(id) {
-  patchSlice('ui', (u) => ({ ...u, composerTokens: u.composerTokens.filter((t) => t.id !== id) }))
-}
-
-export function pushToast(message, kind = 'info') {
-  const id = 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)
-  patchSlice('ui', (u) => ({ ...u, toasts: [...u.toasts.slice(-3), { id, message: String(message || ''), kind }] }))
-  setTimeout(() => dismissToast(id), 3800)
-}
-export function dismissToast(id) {
-  patchSlice('ui', (u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) }))
+/* ---- 通用 UI & 图层调度（已解耦至 state/uiSlice.js，此处统一门面再导出） ---- */
+export {
+  fireShellImpact,
+  setActivePanel,
+  toggleSidebar,
+  toggleZenMode,
+  openModal,
+  closeModal,
+  toggleDock,
+  setDockTab,
+  setDockPreview,
+  openArtifactCanvas,
+  toggleSearchDock,
+  setComposerDraft,
+  appendComposerDraft,
+  addComposerToken,
+  removeComposerToken,
+  pushToast,
+  dismissToast,
 }
 
 /* ---- 启动水合 ---- */
@@ -804,46 +784,7 @@ export async function saveBackendConfig(patch) {
   pushToast('配置已保存到本机 config.json', 'ok')
 }
 
-export function resolveEndpointConfig(preferLocal = false) {
-  const c = state.settings.backendConfig || {}
-  const hasEnabledMcp = (state.settings.mcpServers || []).some((s) => s && s.enabled !== false)
-  const useLocal = preferLocal || (c.local_mode && c.local_base_url)
-  if (useLocal && c.local_base_url) {
-    return {
-      isLocal: true,
-      hasEnabledMcp,
-      baseUrl: c.local_base_url,
-      apiKey: c.provider_key || c.api_key || '',
-      model: c.local_model || c.model || 'qwen2.5:7b',
-      temperature: c.temperature,
-      top_p: c.top_p,
-      context_window: Number(c.context_window) || 32768,
-      max_tokens: Number(c.max_tokens) || 4096,
-      reasoning_effort: c.reasoning_effort || 'auto',
-      thinking_budget: Number(c.thinking_budget) || 8192,
-      custom_effort: String(c.custom_effort || ''),
-      system_prompt: c.system_prompt,
-      tool_mode: c.tool_mode,
-    }
-  }
-  const pickedModel = c.provider_model || c.model || 'glm-4.5-flash'
-  return {
-    isLocal: false,
-    hasEnabledMcp,
-    baseUrl: c.provider_base_url || c.provider_base || c.base_url || 'https://open.bigmodel.cn/api/paas/v4',
-    apiKey: c.provider_key || c.api_key || '',
-    model: pickedModel === 'auto' ? 'glm-4.5-flash' : pickedModel,
-    temperature: c.temperature,
-    top_p: c.top_p,
-    context_window: Number(c.context_window) || 128000,
-    max_tokens: Number(c.max_tokens) || 4096,
-    reasoning_effort: c.reasoning_effort || 'auto',
-    thinking_budget: Number(c.thinking_budget) || 8192,
-    custom_effort: String(c.custom_effort || ''),
-    system_prompt: c.system_prompt,
-    tool_mode: c.tool_mode,
-  }
-}
+export { resolveEndpointConfig }
 
 /* ---- 并行 Run、审批、验证码接管与熔断协调 ---- */
 function patchRun(sid, updater) {
@@ -1389,107 +1330,29 @@ export function triggerFourActShowcase(sid) {
   at(4600, () => patchRun(sid, (r) => ({ ...r, phase: 'done', cps: 0, elapsedMs: Date.now() - t0 })))
 }
 
-/* ---- 专家团队编排 & 双模型协同 ---- */
-export async function startExpertTeamRun({ goal, lead, members, useRecovery = false }) {
-  if (teamAbortCtrl) teamAbortCtrl.abort()
-  teamAbortCtrl = new AbortController()
-  patchSlice('expertTeam', (t) => ({
-    ...t,
-    running: true,
-    timeline: useRecovery ? t.timeline : [],
-    finalReport: '',
-  }))
-  try {
-    const res = await runExpertTeam({
-      goal,
-      lead,
-      members,
-      endpointConfig: resolveEndpointConfig(),
-      recovery: useRecovery ? state.expertTeam.checkpoint : null,
-      signal: teamAbortCtrl.signal,
-      onUpdate: (upd) => patchSlice('expertTeam', (t) => ({ ...t, ...upd })),
-    })
-    patchSlice('expertTeam', (t) => ({
-      ...t,
-      running: false,
-      timeline: res.timeline,
-      mailbox: res.mailbox,
-      checkpoint: res.checkpoint,
-      finalReport: res.finalReport,
-    }))
-    if (res.status === 'completed') pushToast('专家团队编排已完成交付', 'ok')
-  } catch (e) {
-    patchSlice('expertTeam', { running: false })
-    if (!isAbort(e)) pushToast(`团队编排失败：${e.message}`, 'err')
-  } finally {
-    teamAbortCtrl = null
-  }
-}
-
-export function stopExpertTeamRun() {
-  if (teamAbortCtrl) teamAbortCtrl.abort()
-}
-
-export function updateCollaborationConfig(partial) {
-  patchSlice('collaboration', (c) => ({ ...c, config: normalizeCollaborationConfig({ ...c.config, ...partial }) }))
-}
-
-export async function startCollaborationRun(goal) {
-  if (collabAbortCtrl) collabAbortCtrl.abort()
-  collabAbortCtrl = new AbortController()
-  patchSlice('collaboration', (c) => ({ ...c, running: true, events: [], finalAnswer: '' }))
-  try {
-    const cloudEp = resolveEndpointConfig(false)
-    const localEp = resolveEndpointConfig(true)
-    const res = await runDualModelCollaboration({
-      goal,
-      config: state.collaboration.config,
-      cloudEndpoint: cloudEp,
-      localEndpoint: localEp,
-      signal: collabAbortCtrl.signal,
-      onEvent: (ev) => patchSlice('collaboration', (c) => ({ ...c, ...ev })),
-    })
-    patchSlice('collaboration', (c) => ({
-      ...c,
-      running: false,
-      events: res.events,
-      cloudTokens: res.cloudTokens,
-      localTokens: res.localTokens,
-      finalAnswer: res.finalAnswer,
-    }))
-    pushToast('双模型协同完成', 'ok')
-  } catch (e) {
-    patchSlice('collaboration', { running: false })
-    if (!isAbort(e)) pushToast(`双模型协同失败：${e.message}`, 'err')
-  } finally {
-    collabAbortCtrl = null
-  }
-}
-
-export function stopCollaborationRun() {
-  if (collabAbortCtrl) collabAbortCtrl.abort()
-}
-
-/* ---- 域刷新：工作区 / 计划 / 市场 / 设置全量扩展（Hybrid/Sandbox/WebDAV/Software/Update） ---- */
-export async function refreshWorkspace() {
-  try {
-    const sid = state.sessions.currentId
-    const [ws, recent, dir, rules] = await Promise.allSettled([
-      api.getWsState(sid), api.listRecentWs(), api.listDir('.'), api.guardRuleList(),
-    ])
-    patchSlice('workspace', (w) => ({
-      ...w,
-      enabled: ws.status === 'fulfilled' && ws.value ? ws.value.enabled !== false : w.enabled,
-      rootPath: ws.status === 'fulfilled' && ws.value ? (ws.value.ws || ws.value.effective || ws.value.dir || w.rootPath) : w.rootPath,
-      recent: recent.status === 'fulfilled' && Array.isArray(recent.value)
-        ? recent.value
-        : (recent.status === 'fulfilled' && Array.isArray(recent.value && recent.value.recent) ? recent.value.recent : w.recent),
-      entries: dir.status === 'fulfilled' && dir.value && Array.isArray(dir.value.entries) ? dir.value.entries : [],
-      guardRules: rules.status === 'fulfilled' && rules.value && Array.isArray(rules.value.rules) ? rules.value.rules : [],
-    }))
-  } catch (e) {
-    pushToast(`读取工作区失败：${e.message}`, 'err')
-  }
+/* ---- 业务域统一出口（已解耦至 state/domainSlice.js） ---- */
+export {
+  startExpertTeamRun,
+  stopExpertTeamRun,
+  updateCollaborationConfig,
+  startCollaborationRun,
+  stopCollaborationRun,
+  refreshWorkspace,
+  toggleWorkspaceEnabled,
+  previewWorkspaceFile,
+  addWorkspaceGuardRule,
+  removeWorkspaceGuardRule,
+  refreshPlanning,
+  createTaskPlan,
+  rollbackTaskCheckpoint,
+  refreshAuditLogs,
+  saveAtomicMemory,
+  toggleCuratedPackEnabled,
+  refreshMarket,
+  refreshSettingsAux,
+  checkAppUpdate,
+  runWebSearch,
+  extractSearchUrl,
 }
 
 export async function setWorkspacePath(dirPath) {
@@ -1503,85 +1366,10 @@ export async function setWorkspacePath(dirPath) {
   pushToast(`工作区已切换至 ${cleanDir}（已绑定为当前项目会话）`, 'ok')
 }
 
-export async function toggleWorkspaceEnabled(enabled) {
-  invalidateSessionPrefixCache(state.sessions.currentId)
-  await api.setWsEnabled(state.sessions.currentId, enabled)
-  await refreshWorkspace()
-}
-
-export async function previewWorkspaceFile(filePath) {
-  const res = await api.readFile(filePath, 0, 200, true)
-  patchSlice('workspace', { previewFile: { path: filePath, content: String((res && res.content) || '') } })
-}
-
-export async function refreshPlanning() {
-  const [pl, ck] = await Promise.allSettled([api.planList(25), api.checkpointList('')])
-  patchSlice('planning', {
-    plans: pl.status === 'fulfilled' && pl.value && Array.isArray(pl.value.plans) ? pl.value.plans : [],
-    checkpoints: ck.status === 'fulfilled' && ck.value && Array.isArray(ck.value.checkpoints) ? ck.value.checkpoints : [],
-  })
-}
-
-export function toggleCuratedPackEnabled(packId) {
-  patchSlice('market', (m) => {
-    const cur = Array.isArray(m.disabledCurated) ? m.disabledCurated : []
-    const next = cur.includes(packId) ? cur.filter((x) => x !== packId) : [...cur, packId]
-    try { writeStorage(DISABLED_CURATED_KEY, JSON.stringify(next)) } catch {}
-    return { ...m, disabledCurated: next }
-  })
-}
-
-export async function refreshMarket(query = '') {
-  patchSlice('market', { loading: true })
-  try {
-    const res = await api.expertList(query)
-    const list = Array.isArray(res) ? res : ((res && (res.packages || res.items || res.experts)) || [])
-    patchSlice('market', { experts: list, loading: false })
-  } catch {
-    patchSlice('market', { loading: false })
-  }
-}
-
-export async function refreshSettingsAux() {
-  const [mcp, mem, gd, hy, rd, sb, sbSt, wd, sw] = await Promise.allSettled([
-    api.mcpListServers(),
-    api.getMemory(),
-    api.guardGetConfig(),
-    api.hybridGetConfig(),
-    api.readerConfigGet(),
-    api.sandboxGetConfig(),
-    api.sandboxStatus(),
-    api.webdavGetConfig(),
-    api.softwareList(''),
-  ])
-  patchSlice('settings', (s) => ({
-    ...s,
-    mcpServers: mcp.status === 'fulfilled' && mcp.value ? (Array.isArray(mcp.value) ? mcp.value : (mcp.value.servers || [])) : s.mcpServers,
-    memories: mem.status === 'fulfilled' && Array.isArray(mem.value) ? mem.value : s.memories,
-    guardConfig: gd.status === 'fulfilled' ? gd.value : s.guardConfig,
-    hybridConfig: hy.status === 'fulfilled' && hy.value && typeof hy.value === 'object' ? { ...s.hybridConfig, ...hy.value } : s.hybridConfig,
-    readerConfig: rd.status === 'fulfilled' && rd.value && typeof rd.value === 'object' ? { ...s.readerConfig, ...rd.value } : s.readerConfig,
-    sandboxConfig: sb.status === 'fulfilled' && sb.value && typeof sb.value === 'object' ? { ...s.sandboxConfig, ...sb.value } : s.sandboxConfig,
-    sandboxStatus: sbSt.status === 'fulfilled' ? sbSt.value : s.sandboxStatus,
-    webdavConfig: wd.status === 'fulfilled' && wd.value && typeof wd.value === 'object' ? { ...s.webdavConfig, ...wd.value, password: '' } : s.webdavConfig,
-    softwareList: sw.status === 'fulfilled' && sw.value ? (Array.isArray(sw.value) ? sw.value : (sw.value.items || sw.value.software || [])) : s.softwareList,
-  }))
-}
-
-export async function checkAppUpdate(manual = true) {
-  try {
-    const url = state.settings.backendConfig.update_manifest_url || null
-    const r = await api.checkUpdate(url)
-    if (r && r.update_available) {
-      patchSlice('runtime', { updateInfo: r })
-      if (manual) pushToast(`发现新版本 v${r.latest}`, 'ok')
-    } else {
-      patchSlice('runtime', { updateInfo: null })
-      if (manual) pushToast('当前已是最新版本', 'info')
-    }
-  } catch (e) {
-    if (manual) pushToast(`检查更新失败：${e.message}`, 'err')
-  }
+export async function pickWorkspaceFolder() {
+  const picked = await browseProjectFolder()
+  if (picked) await setWorkspacePath(picked)
+  return picked
 }
 
 export function setGroupRoutingMode(mode) {
@@ -2202,33 +1990,6 @@ export async function deleteGroupFile(name) {
   }
 }
 
-export async function runWebSearch(query) {
-  const q = String(query || '').trim()
-  if (!q) return
-  patchSlice('search', { query: q, loading: true, extracted: null })
-  try {
-    const res = await api.browserSearch({ query: q, max_results: 8 })
-    const items = (res && (res.results || res.items)) || []
-    patchSlice('search', { results: Array.isArray(items) ? items : [], loading: false })
-  } catch (e) {
-    patchSlice('search', { loading: false })
-    pushToast(`搜索失败：${e.message}`, 'err')
-  }
-}
-
-export async function extractSearchUrl(url) {
-  patchSlice('search', { loading: true })
-  try {
-    await api.browserNavigate(url)
-    const ex = await api.browserExtract('', 'text')
-    patchSlice('search', { extracted: { url, text: String((ex && (ex.content || ex.text)) || '') }, loading: false })
-  } catch (e) {
-    patchSlice('search', { loading: false })
-    pushToast(`正文提取失败：${e.message}`, 'err')
-  }
-}
-
-
 /* ---- R16 插件化工作流统一动作出口（委托 workflowSlice.js） ---- */
 export { setWorkflowViewTab, selectWorkflow }
 
@@ -2288,6 +2049,38 @@ export function convertGroupToWorkflow() {
   return wf
 }
 
+export function cloneCurrentWorkflow(workflowId) {
+  const wf = cloneWorkflowDef(workflowId)
+  if (wf) pushToast(`已克隆可编辑副本「${wf.name}」`, 'ok')
+  return wf
+}
+
+export function importWorkflowFromJson(rawJson) {
+  const res = importWorkflowJson(rawJson)
+  if (res.ok) pushToast(`已导入工作流「${res.workflow.name}」`, 'ok')
+  else pushToast(res.error || '导入工作流失败', 'err')
+  return res
+}
+
+export function synthesizeWorkflowNow(goalText) {
+  const wf = createWorkflowFromPrompt(goalText)
+  setWorkflowViewTab('studio')
+  setActivePanel('workflow')
+  pushToast(`已根据需求自动编排 ${wf.nodes.length} 节点并发工作流「${wf.name}」`, 'ok')
+  return wf
+}
+
+export function exportWorkflowRunReport() {
+  const p = getState().plugins
+  const wf = (p.workflows || []).find((w) => w.id === p.activeWorkflowId)
+  if (!wf) return false
+  const md = formatWorkflowRunMarkdown(wf, p.run)
+  const fname = safeExportFilename(`工作流报告-${wf.name}`, '.md')
+  const ok = downloadTextFile(fname, md, 'text/markdown;charset=utf-8')
+  if (ok) pushToast(`已导出工作流执行报告：${fname}`, 'ok')
+  return ok
+}
+
 export function stopWorkflowRun() {
   stopWorkflowExecution()
   pushToast('已中止当前 DAG 工作流运行', 'info')
@@ -2308,7 +2101,7 @@ export async function runActiveWorkflow({ workflowId = '', input = '', resume = 
     workflowId,
     input,
     resume,
-    runLlmNode: async ({ node, prompt, signal }) => {
+    runLlmNode: async ({ node, prompt, signal, onDelta }) => {
       const nodeEp = {
         ...baseEp,
         model: node.model || baseEp.model,
@@ -2319,7 +2112,7 @@ export async function runActiveWorkflow({ workflowId = '', input = '', resume = 
         userQuery: prompt,
         historyMessages: [{ role: 'user', content: prompt }],
         endpointConfig: nodeEp,
-        workspacePath: state.workspace.rootPath,
+        workspacePath: getState().workspace.rootPath,
         allowTools: node.allowTools === true,
         askBeforeDesign: false,
         maxRounds: node.allowTools ? 6 : 1,
@@ -2328,6 +2121,9 @@ export async function runActiveWorkflow({ workflowId = '', input = '', resume = 
         signal,
         onEvent: (ev) => {
           if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats, wfSid)
+          if (ev && typeof onDelta === 'function' && (ev.answer || ev.reasoning)) {
+            onDelta(ev.answer || ev.reasoning, ev.cps || 0)
+          }
         },
         requestApproval: (req) => new Promise((resolve) => {
           approvalResolver = resolve

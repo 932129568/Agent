@@ -31,14 +31,22 @@ export default function WorkflowGraph({
   nodeStates = {},
   activeEdges = [],
   selectedNodeId = '',
+  zoom = 1,
   onSelectNode,
 }) {
   const positions = (layout && layout.positions) || {}
   const activeSet = new Set(Array.isArray(activeEdges) ? activeEdges : [])
 
+  const scale = Number.isFinite(Number(zoom)) ? Math.max(0.65, Math.min(1.4, Number(zoom))) : 1
+  const baseW = Math.max(620, layout.width || 620)
+  const baseH = Math.max(250, layout.height || 250)
   return (
     <div className="wg-viewport" role="region" aria-label="DAG 工作流可视化画布">
-      <div className="wg-canvas" style={{ width: Math.max(620, layout.width || 620), height: Math.max(250, layout.height || 250) }}>
+      <div className="wg-zoom-wrap" style={{ width: Math.round(baseW * scale), height: Math.round(baseH * scale) }}>
+        <div
+          className="wg-canvas"
+          style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+        >
         <svg className="wg-svg" width={layout.width || 620} height={layout.height || 250}>
           <defs>
             <marker id="wg-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -104,7 +112,7 @@ export default function WorkflowGraph({
                 <span className="wg-kind-pill">{KIND_BADGES[n.kind] || n.kind}</span>
                 <span className="wg-status-dot">
                   {STATUS_TEXT[st.status || 'pending'] || st.status}
-                  {st.ms > 0 ? ` ${st.ms}ms` : ''}
+                  {st.status === 'running' && st.cps > 0 ? ` ${st.cps}字/s` : (st.ms > 0 ? ` ${st.ms}ms` : '')}
                 </span>
               </div>
               <div className="wg-node-title">{n.label}</div>
@@ -112,6 +120,7 @@ export default function WorkflowGraph({
             </button>
           )
         })}
+        </div>
       </div>
     </div>
   )

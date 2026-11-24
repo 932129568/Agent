@@ -8,35 +8,59 @@ import {
   createNewWorkflow,
   saveWorkflowDef,
   deleteWorkflowDef,
+  cloneCurrentWorkflow,
+  importWorkflowFromJson,
+  synthesizeWorkflowNow,
   convertGroupToWorkflow,
   runActiveWorkflow,
   stopWorkflowRun,
   resetWorkflowRun,
   triggerWorkflowShowcase,
+  openArtifactCanvas,
+  exportWorkflowRunReport,
   pushToast,
 } from '../../state/store.js'
 import { analyzeWorkflowDag, WORKFLOW_NODE_KINDS } from '../../services/workflowEngine.js'
+import { REASONING_TIERS } from '../../services/reasoningPresets.js'
 import { SAMPLE_CUSTOM_PLUGIN_JSON } from '../../services/pluginRegistry.js'
 import { copyText, downloadTextFile } from '../../platform/dom.js'
 import WorkflowGraph from '../../ui/WorkflowGraph.jsx'
 import './WorkflowPanel.css'
+
+const TOOL_PRESET_NAMES = ['list_dir', 'read_file', 'write_file', 'search_replace', 'run_command', 'browser_search', 'list_workflow_plugins']
 
 export default function WorkflowPanel() {
   const pluginsState = useSlice('plugins')
   const workflows = Array.isArray(pluginsState.workflows) ? pluginsState.workflows : []
   const plugins = Array.isArray(pluginsState.plugins) ? pluginsState.plugins : []
   const activeWf = workflows.find((w) => w.id === pluginsState.activeWorkflowId) || workflows[0] || null
-  const run = pluginsState.run || { status: 'idle', nodeStates: {}, activeEdges: [], logs: [] }
+  const run = pluginsState.run || { status: 'idle', nodeStates: {}, activeEdges: [], logs: [], lastArtifact: null }
 
   const [goalInput, setGoalInput] = useState('')
   const [selectedNodeId, setSelectedNodeId] = useState('')
   const [editingNode, setEditingNode] = useState(null)
+  const [toolArgsDraft, setToolArgsDraft] = useState('{}')
+  const [gateOptionsDraft, setGateOptionsDraft] = useState('')
+  const [zoom, setZoom] = useState(1)
+
   const [showAddNode, setShowAddNode] = useState(false)
   const [newNodeLabel, setNewNodeLabel] = useState('')
   const [newNodeKind, setNewNodeKind] = useState('llm')
   const [newNodeFrom, setNewNodeFrom] = useState('')
+
+  const [edgeTargetId, setEdgeTargetId] = useState('')
+  const [edgeWhen, setEdgeWhen] = useState('always')
+
+  const [showSynthBox, setShowSynthBox] = useState(false)
+  const [synthPrompt, setSynthPrompt] = useState('')
+  const [showEditMeta, setShowEditMeta] = useState(false)
+  const [metaName, setMetaName] = useState('')
+  const [metaDesc, setMetaDesc] = useState('')
+
   const [showInstallBox, setShowInstallBox] = useState(false)
   const [pluginJsonDraft, setPluginJsonDraft] = useState(SAMPLE_CUSTOM_PLUGIN_JSON)
+  const [showImportWf, setShowImportWf] = useState(false)
+  const [importWfDraft, setImportWfDraft] = useState('')
 
   const dag = useMemo(
     () => (activeWf ? analyzeWorkflowDag(activeWf) : { ok: false, error: '暂无可用工作流', layers: [], layout: { width: 640, height: 240, positions: {} } }),
@@ -51,10 +75,72 @@ export default function WorkflowPanel() {
   const isRunning = run.status === 'running'
   const canResume = run.status === 'paused' && run.checkpoint && activeWf && run.checkpoint.workflowId === activeWf.id
 
-  const handleRun = () => {
-    if (!activeWf || isRunning) return
-    const text = goalInput.trim() || '请按本工作流标准执行示范任务并输出完整交付'
-    runActiveWorkflow({ workflowId: activeWf.id, input: text, resume: false })
+  const outEdges = activeWf && selectedNode ? activeWf.edges.filter((e) => e.from === selectedNode.id) : []
+  const inEdges = activeWf && selectedNode ? activeWf.edges.filter((e) => e.to === selectedNode.id) : []
+  const connectableTargets = activeWf && selectedNode
+    ? activeWf.nodes.filter((n) => n.id !== selectedNode.id && !outEdges.some((e) => e.to === n.id))
+    : []
+
+  const beginEditNode = (node) => {
+    setEditingNode({
+      ...node,
+      condition: node.condition ? { ...node.condition } : { op: 'contains', value: '' },
+      gateConfig: node.gateConfig ? JSON.parse(JSON.stringify(node.gateConfig)) : {
+        title: `确认：${node.label}`,
+        subtitle: '请在下游继续执行前拍板方向',
+        questions: [{ id: 'dir', label: '偏好方向', options: [{ id: 'a', label: '方案 A' }, { id: 'b', label: '方案 B' }] }],
+      },
+    })
+    setToolArgsDraft(JSON.stringify(node.toolArgs || {}, null, 2))
+    const q0 = node.gateConfig && node.gateConfig.questions && node.gateConfig.questions[0]
+    setGateOptionsDraft(q0 && Array.isArray(q0.options) ? q0.options.map((o) => o.label).join('，') : '通透玻璃拟态，极简高对比，暖调杂志风')
+  }
+
+  const handleSaveEditedNode = () => {
+    if (!activeWf || !editingNode) return
+    const updated = { ...editingNode }
+    if (updated.kind === 'tool') {
+      try {
+        updated.toolArgs = JSON.parse(toolArgsDraft || '{}')
+      } catch {
+        pushToast('工具参数必须是合法 JSON 对象', 'err')
+        return
+      }
+    }
+    if (updated.kind === 'human_gate') {
+      const optLabels = gateOptionsDraft.split(/[，,\n]+/).map((s) => s.trim()).filter(Boolean)
+      const opts = (optLabels.length ? optLabels : ['推荐方案', '深度打磨']).map((label, i) => ({
+        id: `opt_${i + 1}`,
+        label,
+        desc: `按「${label}」方向推进后续节点`,
+      }))
+      updated.gateConfig = {
+        title: (updated.gateConfig && updated.gateConfig.title) || updated.label,
+        subtitle: (updated.gateConfig && updated.gateConfig.subtitle) || '请确认执行方向',
+        allow_custom: true,
+        questions: [{ id: 'dir', label: '选择期望方向', options: opts }],
+      }
+    }
+    const nextNodes = activeWf.nodes.map((n) => (n.id === updated.id ? { ...n, ...updated } : n))
+    const saved = saveWorkflowDef({ ...activeWf, nodes: nextNodes })
+    if (saved && saved.ok) setEditingNode(null)
+  }
+
+  const handleAddEdge = () => {
+    if (!activeWf || !selectedNode) return
+    const tgt = edgeTargetId || (connectableTargets[0] && connectableTargets[0].id)
+    if (!tgt) return
+    const when = selectedNode.kind === 'condition' ? edgeWhen : 'always'
+    const label = when === 'true' ? 'TRUE' : (when === 'false' ? 'FALSE' : '')
+    const nextEdges = [...activeWf.edges, { id: `e_${selectedNode.id}_${tgt}_${Date.now().toString(36)}`, from: selectedNode.id, to: tgt, when, label }]
+    const saved = saveWorkflowDef({ ...activeWf, edges: nextEdges })
+    if (saved && saved.ok) setEdgeTargetId('')
+  }
+
+  const handleRemoveEdge = (edgeId) => {
+    if (!activeWf) return
+    const nextEdges = activeWf.edges.filter((e) => e.id !== edgeId)
+    saveWorkflowDef({ ...activeWf, edges: nextEdges })
   }
 
   const handleAddNode = () => {
@@ -82,13 +168,6 @@ export default function WorkflowPanel() {
     }
   }
 
-  const handleSaveEditedNode = () => {
-    if (!activeWf || !editingNode) return
-    const nextNodes = activeWf.nodes.map((n) => (n.id === editingNode.id ? { ...n, ...editingNode } : n))
-    const saved = saveWorkflowDef({ ...activeWf, nodes: nextNodes })
-    if (saved && saved.ok) setEditingNode(null)
-  }
-
   const handleDeleteSelectedNode = () => {
     if (!activeWf || !selectedNode || activeWf.nodes.length <= 2) {
       pushToast('工作流至少需保留 2 个节点', 'warn')
@@ -100,11 +179,23 @@ export default function WorkflowPanel() {
     setEditingNode(null)
   }
 
-  const handleInstallPlugin = () => {
-    const res = installPluginJson(pluginJsonDraft)
-    if (res && res.ok) {
-      setShowInstallBox(false)
-    }
+  const handleRun = () => {
+    if (!activeWf || isRunning) return
+    const text = goalInput.trim() || '请按本工作流标准执行示范任务并输出完整交付'
+    runActiveWorkflow({ workflowId: activeWf.id, input: text, resume: false })
+  }
+
+  const handleSynthesize = () => {
+    if (!synthPrompt.trim()) return
+    synthesizeWorkflowNow(synthPrompt.trim())
+    setSynthPrompt('')
+    setShowSynthBox(false)
+  }
+
+  const handleSaveMeta = () => {
+    if (!activeWf || !metaName.trim()) return
+    const saved = saveWorkflowDef({ ...activeWf, name: metaName.trim(), description: metaDesc.trim() })
+    if (saved && saved.ok) setShowEditMeta(false)
   }
 
   const enabledPluginCount = plugins.filter((p) => p.enabled).length
@@ -113,7 +204,7 @@ export default function WorkflowPanel() {
     <section className="wf-root">
       <header className="wf-head">
         <div className="wf-head-left">
-          <h2 className="wf-title">⚡ 插件化 DAG 工作流引擎</h2>
+          <h2 className="wf-title">⚡ 插件化 DAG 工作流工坊</h2>
           <div className="wf-seg" role="tablist" aria-label="工作流视图切换">
             <button
               type="button"
@@ -121,7 +212,7 @@ export default function WorkflowPanel() {
               data-active={String(pluginsState.viewTab !== 'plugins')}
               onClick={() => setWorkflowViewTab('studio')}
             >
-              可视化编排工坊 ({workflows.length})
+              编排工坊 ({workflows.length})
             </button>
             <button
               type="button"
@@ -137,7 +228,10 @@ export default function WorkflowPanel() {
         <div className="wf-actions">
           {pluginsState.viewTab !== 'plugins' ? (
             <>
-              <button type="button" className="wf-chip" onClick={() => createNewWorkflow()}>+ 新建空白流</button>
+              <button type="button" className="wf-chip" data-active={String(showSynthBox)} onClick={() => setShowSynthBox((v) => !v)}>
+                ✨ 一句话生成流
+              </button>
+              <button type="button" className="wf-chip" onClick={() => createNewWorkflow()}>+ 空白流</button>
               <button type="button" className="wf-chip" onClick={() => convertGroupToWorkflow()}>👥 群聊转 DAG</button>
               {activeWf && (
                 <button
@@ -153,6 +247,12 @@ export default function WorkflowPanel() {
                 </button>
               )}
               {activeWf && (
+                <button type="button" className="wf-chip" onClick={() => cloneCurrentWorkflow(activeWf.id)}>克隆</button>
+              )}
+              <button type="button" className="wf-chip" data-active={String(showImportWf)} onClick={() => setShowImportWf((v) => !v)}>
+                导入 JSON
+              </button>
+              {activeWf && (
                 <button
                   type="button"
                   className="wf-chip"
@@ -161,7 +261,17 @@ export default function WorkflowPanel() {
                     pushToast(`已导出工作流 JSON：${activeWf.id}.json`, 'ok')
                   }}
                 >
-                  ⬇ 导出 JSON
+                  ⬇ JSON
+                </button>
+              )}
+              {run.lastArtifact && (
+                <button type="button" className="wf-chip" data-active="true" onClick={() => openArtifactCanvas(run.lastArtifact)}>
+                  ✦ 打开画布
+                </button>
+              )}
+              {run.status === 'done' && (
+                <button type="button" className="wf-chip" onClick={() => exportWorkflowRunReport()}>
+                  ⬇ 运行报告
                 </button>
               )}
               <button type="button" className="wf-chip" onClick={() => triggerWorkflowShowcase()}>
@@ -200,7 +310,9 @@ export default function WorkflowPanel() {
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button type="button" className="wf-chip" onClick={() => setShowInstallBox(false)}>取消</button>
-                <button type="button" className="wf-btn" onClick={handleInstallPlugin}>校验并热安装插件 →</button>
+                <button type="button" className="wf-btn" onClick={() => { if (installPluginJson(pluginJsonDraft)?.ok) setShowInstallBox(false) }}>
+                  校验并热安装插件 →
+                </button>
               </div>
             </div>
           )}
@@ -249,16 +361,71 @@ export default function WorkflowPanel() {
       ) : (
         <>
           <div className="wf-studio-body">
+            {showSynthBox && (
+              <div className="wf-synth-bar">
+                <input
+                  className="wf-input"
+                  style={{ flex: 1, minWidth: 220 }}
+                  value={synthPrompt}
+                  onChange={(e) => setSynthPrompt(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSynthesize() }}
+                  placeholder="用一句话描述你要的流程（如：调研竞品定价并做红蓝反证，最后生成 HTML 简报）…"
+                />
+                <button type="button" className="wf-btn" onClick={handleSynthesize}>生成并载入 DAG →</button>
+              </div>
+            )}
+
+            {showImportWf && (
+              <div className="wf-install-box">
+                <strong style={{ fontSize: 13 }}>导入工作流 JSON</strong>
+                <textarea
+                  className="wf-textarea"
+                  value={importWfDraft}
+                  onChange={(e) => setImportWfDraft(e.target.value)}
+                  placeholder='粘贴导出的工作流 JSON（含 nodes / edges）…'
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button type="button" className="wf-chip" onClick={() => setShowImportWf(false)}>取消</button>
+                  <button type="button" className="wf-btn" onClick={() => { if (importWorkflowFromJson(importWfDraft)?.ok) { setImportWfDraft(''); setShowImportWf(false) } }}>
+                    导入工作流
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeWf && (
               <div className="wf-meta-bar">
-                <div className="wf-meta-desc">
-                  <strong>{activeWf.name}</strong>
-                  {activeWf.description ? ` — ${activeWf.description}` : ''}
-                </div>
+                {showEditMeta ? (
+                  <div style={{ display: 'flex', gap: 8, flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input className="wf-input" style={{ width: 220 }} value={metaName} onChange={(e) => setMetaName(e.target.value)} placeholder="工作流名称" />
+                    <input className="wf-input" style={{ flex: 1, minWidth: 180 }} value={metaDesc} onChange={(e) => setMetaDesc(e.target.value)} placeholder="简短描述" />
+                    <button type="button" className="wf-chip" data-active="true" onClick={handleSaveMeta}>保存名称</button>
+                    <button type="button" className="wf-chip" onClick={() => setShowEditMeta(false)}>取消</button>
+                  </div>
+                ) : (
+                  <div className="wf-meta-desc">
+                    <strong>{activeWf.name}</strong>
+                    {activeWf.description ? ` — ${activeWf.description}` : ''}
+                  </div>
+                )}
                 <div className="wf-meta-badges">
-                  <span className="wf-badge">{activeWf.nodes.length} 节点</span>
-                  <span className="wf-badge">{dag.layers.length} 拓扑层</span>
-                  <span className="wf-badge">{activeWf.builtin ? '插件提供' : '可编辑自定义'}</span>
+                  <span className="wf-badge">{activeWf.nodes.length} 节点 · {activeWf.edges.length} 边 · {dag.layers.length} 层</span>
+                  <div style={{ display: 'inline-flex', gap: 3 }}>
+                    {[0.75, 1, 1.2].map((z) => (
+                      <button key={z} type="button" className="wf-chip" style={{ padding: '2px 7px', fontSize: 11 }} data-active={String(zoom === z)} onClick={() => setZoom(z)}>
+                        {Math.round(z * 100)}%
+                      </button>
+                    ))}
+                  </div>
+                  {!showEditMeta && (
+                    <button
+                      type="button"
+                      className="wf-chip"
+                      onClick={() => { setMetaName(activeWf.name); setMetaDesc(activeWf.description || ''); setShowEditMeta(true) }}
+                    >
+                      改名
+                    </button>
+                  )}
                   {!activeWf.builtin && (
                     <button type="button" className="wf-chip" onClick={() => deleteWorkflowDef(activeWf.id)}>删工作流</button>
                   )}
@@ -299,13 +466,14 @@ export default function WorkflowPanel() {
                   nodes={activeWf ? activeWf.nodes : []}
                   edges={activeWf ? activeWf.edges : []}
                   layout={dag.layout}
+                  zoom={zoom}
                   nodeStates={run.workflowId === (activeWf && activeWf.id) ? run.nodeStates : {}}
                   activeEdges={run.workflowId === (activeWf && activeWf.id) ? run.activeEdges : []}
                   selectedNodeId={effectiveSelectedId}
-                  onSelectNode={(nid) => { setSelectedNodeId(nid); setEditingNode(null) }}
+                  onSelectNode={(nid) => { setSelectedNodeId(nid); setEditingNode(null); setEdgeTargetId('') }}
                 />
 
-                <aside className="wf-inspector" aria-label="节点属性与实时输出检视器">
+                <aside className="wf-inspector" aria-label="节点属性、连线编排与实时输出检视器">
                   {selectedNode ? (
                     <>
                       <div className="wf-insp-head">
@@ -317,9 +485,12 @@ export default function WorkflowPanel() {
                         </div>
                         <div style={{ display: 'flex', gap: 5 }}>
                           {editingNode ? (
-                            <button type="button" className="wf-chip" data-active="true" onClick={handleSaveEditedNode}>保存</button>
+                            <>
+                              <button type="button" className="wf-chip" data-active="true" onClick={handleSaveEditedNode}>保存</button>
+                              <button type="button" className="wf-chip" onClick={() => setEditingNode(null)}>取消</button>
+                            </>
                           ) : (
-                            <button type="button" className="wf-chip" onClick={() => setEditingNode({ ...selectedNode })}>编辑</button>
+                            <button type="button" className="wf-chip" onClick={() => beginEditNode(selectedNode)}>编辑</button>
                           )}
                           <button type="button" className="wf-chip" onClick={handleDeleteSelectedNode}>删</button>
                         </div>
@@ -334,36 +505,137 @@ export default function WorkflowPanel() {
                           {editingNode.kind === 'llm' && (
                             <>
                               <label className="wf-field">
-                                独立模型名（留空继承）
+                                独立模型名（留空继承全局）
                                 <input className="wf-input" value={editingNode.model || ''} onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })} placeholder="例如：deepseek-v4.1 / glm-4.5" />
                               </label>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'end' }}>
+                                <label className="wf-field">
+                                  思考档位
+                                  <select className="wf-select" value={editingNode.reasoningTier || 'auto'} onChange={(e) => setEditingNode({ ...editingNode, reasoningTier: e.target.value })}>
+                                    {REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => (
+                                      <option key={t.id} value={t.id}>{t.label}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <button
+                                  type="button"
+                                  className="wf-chip"
+                                  data-active={String(!!editingNode.allowTools)}
+                                  onClick={() => setEditingNode({ ...editingNode, allowTools: !editingNode.allowTools })}
+                                >
+                                  {editingNode.allowTools ? '🔧 允许调工具' : '仅文本推理'}
+                                </button>
+                              </div>
                               <label className="wf-field">
-                                提示词模板（支持 {'{{input}}'} / {'{{upstream}}'}）
+                                提示词模板（支持 {'{{input}}'} / {'{{upstream}}'} / {'{{nodes.id.output}}'}）
                                 <textarea className="wf-textarea" value={editingNode.prompt || ''} onChange={(e) => setEditingNode({ ...editingNode, prompt: e.target.value })} />
                               </label>
                             </>
                           )}
                           {editingNode.kind === 'tool' && (
+                            <>
+                              <label className="wf-field">
+                                直调工具名
+                                <select className="wf-select" value={editingNode.toolName || 'list_dir'} onChange={(e) => setEditingNode({ ...editingNode, toolName: e.target.value })}>
+                                  {TOOL_PRESET_NAMES.map((tn) => <option key={tn} value={tn}>{tn}</option>)}
+                                </select>
+                              </label>
+                              <label className="wf-field">
+                                工具参数 JSON（支持模板插值）
+                                <textarea className="wf-textarea" value={toolArgsDraft} onChange={(e) => setToolArgsDraft(e.target.value)} />
+                              </label>
+                            </>
+                          )}
+                          {editingNode.kind === 'condition' && (
+                            <>
+                              <label className="wf-field">
+                                判断操作符
+                                <select
+                                  className="wf-select"
+                                  value={(editingNode.condition && editingNode.condition.op) || 'contains'}
+                                  onChange={(e) => setEditingNode({ ...editingNode, condition: { ...(editingNode.condition || {}), op: e.target.value } })}
+                                >
+                                  <option value="contains">包含关键词 (contains)</option>
+                                  <option value="not_contains">不包含关键词 (not_contains)</option>
+                                  <option value="min_length">最小字数 (min_length)</option>
+                                  <option value="regex">正则匹配 (regex)</option>
+                                  <option value="always">恒真 (always)</option>
+                                </select>
+                              </label>
+                              <label className="wf-field">
+                                匹配值 / 阈值
+                                <input
+                                  className="wf-input"
+                                  value={(editingNode.condition && editingNode.condition.value) || ''}
+                                  onChange={(e) => setEditingNode({ ...editingNode, condition: { ...(editingNode.condition || {}), value: e.target.value } })}
+                                  placeholder="例如：HIGH_RISK 或 200"
+                                />
+                              </label>
+                            </>
+                          )}
+                          {editingNode.kind === 'human_gate' && (
+                            <>
+                              <label className="wf-field">
+                                拍板弹窗标题
+                                <input
+                                  className="wf-input"
+                                  value={(editingNode.gateConfig && editingNode.gateConfig.title) || ''}
+                                  onChange={(e) => setEditingNode({ ...editingNode, gateConfig: { ...(editingNode.gateConfig || {}), title: e.target.value } })}
+                                />
+                              </label>
+                              <label className="wf-field">
+                                选项列表（用逗号分隔）
+                                <input className="wf-input" value={gateOptionsDraft} onChange={(e) => setGateOptionsDraft(e.target.value)} />
+                              </label>
+                            </>
+                          )}
+                          {(editingNode.kind === 'merge' || editingNode.kind === 'artifact') && (
                             <label className="wf-field">
-                              工具名（如 list_dir / read_file / run_command）
-                              <input className="wf-input" value={editingNode.toolName || ''} onChange={(e) => setEditingNode({ ...editingNode, toolName: e.target.value })} />
+                              聚合 / 输出模板
+                              <textarea className="wf-textarea" value={editingNode.prompt || ''} onChange={(e) => setEditingNode({ ...editingNode, prompt: e.target.value })} placeholder="留空默认消费 {{upstream}}" />
                             </label>
                           )}
                         </>
                       ) : (
                         <>
-                          {selectedNode.prompt && (
-                            <div className="wf-field">
-                              <span>节点指令模板</span>
-                              <pre className="wf-output-pre">{selectedNode.prompt}</pre>
+                          <div className="wf-field">
+                            <span>连线拓扑（入边 {inEdges.length} · 出边 {outEdges.length}）</span>
+                            <div className="wf-edge-list">
+                              {outEdges.map((e) => {
+                                const targetNode = activeWf.nodes.find((x) => x.id === e.to)
+                                return (
+                                  <div key={e.id} className="wf-edge-row">
+                                    <span>⟶ {targetNode ? targetNode.label : e.to}{e.when !== 'always' ? ` [${e.when.toUpperCase()}]` : ''}</span>
+                                    <button type="button" className="wf-chip" style={{ padding: '1px 6px' }} onClick={() => handleRemoveEdge(e.id)}>×</button>
+                                  </div>
+                                )
+                              })}
+                              {connectableTargets.length > 0 && (
+                                <div className="wf-edge-add">
+                                  <select
+                                    className="wf-select"
+                                    style={{ flex: 1 }}
+                                    value={edgeTargetId || connectableTargets[0].id}
+                                    onChange={(e) => setEdgeTargetId(e.target.value)}
+                                    aria-label="选择连线下游节点"
+                                  >
+                                    {connectableTargets.map((n) => (
+                                      <option key={n.id} value={n.id}>连到「{n.label}」</option>
+                                    ))}
+                                  </select>
+                                  {selectedNode.kind === 'condition' && (
+                                    <select className="wf-select" style={{ width: 76 }} value={edgeWhen} onChange={(e) => setEdgeWhen(e.target.value)}>
+                                      <option value="true">TRUE</option>
+                                      <option value="false">FALSE</option>
+                                      <option value="always">总是</option>
+                                    </select>
+                                  )}
+                                  <button type="button" className="wf-chip" data-active="true" onClick={handleAddEdge}>+ 连线</button>
+                                </div>
+                              )}
                             </div>
-                          )}
-                          {selectedNode.kind === 'tool' && (
-                            <div className="wf-field">
-                              <span>直调工具配置</span>
-                              <pre className="wf-output-pre">{selectedNode.toolName}({JSON.stringify(selectedNode.toolArgs || {})})</pre>
-                            </div>
-                          )}
+                          </div>
+
                           <div className="wf-field">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span>实时运行输出</span>
@@ -385,7 +657,7 @@ export default function WorkflowPanel() {
                       )}
                     </>
                   ) : (
-                    <div style={{ color: 'var(--text-3)', fontSize: 12.5 }}>点击左侧画布任意节点查看或编辑配置。</div>
+                    <div style={{ color: 'var(--text-3)', fontSize: 12.5 }}>点击左侧画布任意节点查看、连线或编辑配置。</div>
                   )}
                 </aside>
               </div>

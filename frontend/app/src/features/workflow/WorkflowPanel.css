@@ -103,9 +103,33 @@
 
   .wf-split {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 310px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: 12px;
     align-items: start;
+  }
+  .wf-edge-list { display: flex; flex-direction: column; gap: 5px; }
+  .wf-edge-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+  .wf-edge-add { display: flex; gap: 5px; align-items: center; }
+  .wf-synth-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--primary);
+    background: var(--primary-soft);
+    flex-wrap: wrap;
   }
   .wf-inspector {
     padding: 13px 14px;

@@ -24,6 +24,7 @@ import {
   convertSessionToNormal,
   openArtifactCanvas,
   exportCurrentSessionMarkdown,
+  saveAtomicMemory,
   openModal,
   triggerFourActShowcase,
   pushToast,
@@ -32,7 +33,6 @@ import { siblingMeta } from '../../services/dag.js'
 import { shouldOfferResume } from '../../services/budgetAndResume.js'
 import { extractUiSpecsFromMarkdown } from '../../services/generative.js'
 import { extractArtifactsFromMarkdown } from '../../services/artifacts.js'
-import { appendMemory } from '../../services/bridge.js'
 import { copyText, readFileAsText } from '../../platform/dom.js'
 import { captureTriggerRect } from '../../platform/kinetic.js'
 import { estTokens, historyTokens } from '../../services/compaction.js'
@@ -213,16 +213,7 @@ export default function ChatPanel() {
     rewindSessionAt(sid, idx)
   }, [sid])
 
-  const saveOneSentenceMemory = useCallback(async (rawText) => {
-    const concise = String(rawText || '').replace(/```[\s\S]*?```/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
-    if (!concise) return
-    try {
-      await appendMemory({ text: concise, distill: true })
-      pushToast('已提炼为原子事实存入长期记忆', 'ok')
-    } catch (err) {
-      pushToast(`存入记忆失败：${err.message}`, 'err')
-    }
-  }, [])
+  const saveOneSentenceMemory = useCallback((rawText) => saveAtomicMemory(rawText), [])
 
   const messages = (session && Array.isArray(session.messages)) ? session.messages : []
   const ctxLimit = Number(settings.backendConfig.context_window) || 128000
