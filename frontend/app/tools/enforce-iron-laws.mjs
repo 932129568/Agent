@@ -132,6 +132,9 @@ for (const file of jsFiles) {
       if (mFeat && mFeat[1] !== myDomain) {
         fail('LAW-07', file, lineNoAt(clean, im.index), `禁止 features/${myDomain} 跨特征直连 features/${mFeat[1]}`)
       }
+      if (/services\/bridge\.js/.test(spec)) {
+        fail('LAW-14', file, lineNoAt(clean, im.index), `禁止 features/${myDomain} 绕过 state/ 切片直连 services/bridge.js`)
+      }
     }
   }
 }

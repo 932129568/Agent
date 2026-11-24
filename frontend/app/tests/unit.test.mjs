@@ -823,3 +823,29 @@ test('workflowEngine.js 一句话自然语言智能合成多节点并发 DAG + �
   const md = formatWorkflowRunMarkdown(resWf, run)
   assert.ok(md.includes('工作流执行报告'))
 })
+
+
+test('workflowEngine.js 自定义拖拽节点坐标持久化、画布自动扩边界与一键恢复自动拓扑排布', async () => {
+  const { analyzeWorkflowDag, resetWorkflowLayoutPositions } = await import('../src/services/workflowEngine.js')
+  const wf = {
+    id: 'wf_pos',
+    name: '拖拽布局测试',
+    nodes: [
+      { id: 'a', kind: 'input', label: 'A', pos: { x: 40, y: 50 } },
+      { id: 'b', kind: 'llm', label: 'B', pos: { x: 820, y: 390 } },
+    ],
+    edges: [{ from: 'a', to: 'b' }],
+  }
+  const dag = analyzeWorkflowDag(wf)
+  assert.equal(dag.ok, true)
+  assert.equal(dag.layout.positions.b.x, 820)
+  assert.equal(dag.layout.positions.b.y, 390)
+  assert.ok(dag.layout.width >= 820 + 196)
+  assert.ok(dag.layout.height >= 390 + 82)
+
+  const reset = resetWorkflowLayoutPositions(wf)
+  assert.equal(reset.nodes[0].pos, null)
+  assert.equal(reset.nodes[1].pos, null)
+  const autoDag = analyzeWorkflowDag(reset)
+  assert.notEqual(autoDag.layout.positions.b.x, 820)
+})

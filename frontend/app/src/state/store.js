@@ -2157,3 +2157,29 @@ export async function runActiveWorkflow({ workflowId = '', input = '', resume = 
   }
   return res
 }
+
+
+/* ---- R18 设置与专家市场领域切片统一门面再导出（LAW-14：零 feature 直连 bridge.js） ---- */
+export {
+  testModelEndpoint,
+  probeLocalEndpoints,
+  saveHybridSettings,
+  saveGuardTiersConfig,
+  saveSandboxSettings,
+  probeExternalSoftware,
+  runWebdavSyncAction,
+  downloadAppUpdate,
+  applyAppUpdate,
+  saveMcpServerConfig,
+  testMcpServerConfig,
+  deleteMcpServerConfig,
+  addLongTermMemory,
+  deleteLongTermMemory,
+} from './settingsSlice.js'
+
+export {
+  activateLocalExpertPackage,
+  previewLocalExpertSkills,
+  importLocalExpertDirectory,
+  toggleLocalExpertEnabled,
+} from './marketSlice.js'

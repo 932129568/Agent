@@ -5,11 +5,24 @@ import {
   saveBackendConfig,
   refreshSettingsAux,
   checkAppUpdate,
+  fireShellImpact,
+  testModelEndpoint,
+  probeLocalEndpoints,
+  saveHybridSettings,
+  saveGuardTiersConfig,
+  saveSandboxSettings,
+  probeExternalSoftware,
+  runWebdavSyncAction,
+  downloadAppUpdate,
+  applyAppUpdate,
+  saveMcpServerConfig,
+  testMcpServerConfig,
+  deleteMcpServerConfig,
+  addLongTermMemory,
+  deleteLongTermMemory,
   pushToast,
 } from '../../state/store.js'
-import * as api from '../../services/bridge.js'
 import { assertLatin1Value } from '../../services/headers.js'
-import { fireShellImpact } from '../../state/store.js'
 import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReasoningRequestParams } from '../../services/reasoningPresets.js'
 import './SettingsModal.css'
 
@@ -59,15 +72,12 @@ export default function SettingsModal() {
       setErrMsg('')
       await saveBackendConfig({ ...draft, provider_base_url: baseVal, provider_base: baseVal, api_key: keyVal, provider_key: keyVal })
       if (alsoTest) {
-        const res = await api.testProviderEndpoint(
-          draft.local_mode ? draft.local_base_url : baseVal,
-          keyVal,
-          draft.local_mode ? draft.local_model : (draft.model || draft.provider_model || 'glm-4.5-flash'),
-          15,
-          !!draft.local_mode
-        )
-        if (res && res.ok) pushToast('端点连接测试成功', 'ok')
-        else pushToast(`连接测试失败：${(res && (res.error || res.message)) || '请检查地址与 Key'}`, 'err')
+        await testModelEndpoint({
+          baseUrl: draft.local_mode ? draft.local_base_url : baseVal,
+          apiKey: keyVal,
+          model: draft.local_mode ? draft.local_model : (draft.model || draft.provider_model || 'glm-4.5-flash'),
+          localMode: !!draft.local_mode,
+        })
       }
     } catch (e) {
       setErrMsg(e.message)
@@ -76,95 +86,30 @@ export default function SettingsModal() {
   }
 
   const handleProbeLocal = async () => {
-    try {
-      const r = await api.localProbe([])
-      const hits = (r && Array.isArray(r.reachable)) ? r.reachable : []
-      setProbeRes(hits.length ? hits.map((x) => `${x.kind}(${x.base_url}) 模型: ${(x.models || []).join(',')}`).join(' | ') : '未探测到本机运行的 Ollama / LMStudio / vLLM 端点')
-    } catch (e) {
-      setProbeRes(`探测失败：${e.message}`)
-    }
+    setProbeRes(await probeLocalEndpoints())
   }
 
-  const handleSaveHybrid = async () => {
-    try {
-      await api.hybridSaveConfig(hybridDraft)
-      await refreshSettingsAux()
-      pushToast('云+本地混合路由策略已保存', 'ok')
-    } catch (e) { pushToast(e.message, 'err') }
-  }
+  const handleSaveHybrid = () => saveHybridSettings(hybridDraft)
 
   const handleSaveGuardTiers = async (overrideTiers = null) => {
-    try {
-      const nextTiers = overrideTiers || guardTiersDraft
-      const baseCfg = (settings.guardConfig && typeof settings.guardConfig === 'object') ? settings.guardConfig : {}
-      await api.guardSaveConfig({ ...baseCfg, tiers: { ...(baseCfg.tiers || {}), ...nextTiers } })
-      setGuardTiersDraft(nextTiers)
-      await refreshSettingsAux()
-      pushToast('安全护栏审批档位已保存（即时生效）', 'ok')
-    } catch (e) { pushToast(e.message, 'err') }
+    const nextTiers = overrideTiers || guardTiersDraft
+    const r = await saveGuardTiersConfig(nextTiers)
+    if (r && r.ok) setGuardTiersDraft(nextTiers)
   }
 
   const handleSaveSandbox = async () => {
-    try {
-      await api.sandboxSaveConfig(sandboxDraft)
-      if (sandboxDraft.enabled === false) {
-        const baseCfg = (settings.guardConfig && typeof settings.guardConfig === 'object') ? settings.guardConfig : {}
-        const offTiers = {
-          ...(baseCfg.tiers || {}),
-          run_command: 'off',
-          run_powershell: 'off',
-          delete_path: 'off',
-          browser_click: 'off',
-          browser_fill: 'off',
-          software_call: 'off',
-        }
-        await api.guardSaveConfig({ ...baseCfg, tiers: offTiers })
-        setGuardTiersDraft(offTiers)
-      }
-      await refreshSettingsAux()
-      pushToast(
-        sandboxDraft.enabled === false
-          ? '沙箱与目录限制已关闭：现可自由读写桌面/任意用户路径并自动放行命令'
-          : '命令沙箱与路径隔离已启用',
-        'ok'
-      )
-    } catch (e) { pushToast(e.message, 'err') }
+    const r = await saveSandboxSettings(sandboxDraft)
+    if (r && r.ok && r.offTiers) setGuardTiersDraft(r.offTiers)
   }
 
   const handleProbeSoftware = async () => {
     setSwProbing(true)
-    try {
-      await api.softwareProbe('')
-      await refreshSettingsAux()
-      pushToast('外部软件探测完成', 'ok')
-    } catch (e) { pushToast(e.message, 'err') }
-    finally { setSwProbing(false) }
+    try { await probeExternalSoftware() } finally { setSwProbing(false) }
   }
 
-  const handleWebdav = async (act) => {
-    try {
-      await api.webdavSaveConfig(webdavDraft)
-      if (act === 'test') {
-        const r = await api.webdavTest(webdavDraft)
-        pushToast(r && r.ok ? 'WebDAV 连接测试通过' : `测试失败：${(r && r.error) || ''}`, r && r.ok ? 'ok' : 'err')
-      } else if (act === 'export') {
-        const r = await api.webdavExport()
-        pushToast(r && r.ok ? '已加密同步导出至 WebDAV' : `导出失败：${(r && r.error) || ''}`, r && r.ok ? 'ok' : 'err')
-      } else if (act === 'restore') {
-        const r = await api.webdavRestore({ conflict_policy: webdavDraft.conflict_policy || 'ask' })
-        pushToast(r && r.ok ? '已从 WebDAV 恢复数据' : `恢复结果：${(r && (r.error || r.status)) || ''}`, r && r.ok ? 'ok' : 'info')
-      }
-    } catch (e) { pushToast(e.message, 'err') }
-  }
+  const handleWebdav = (act) => runWebdavSyncAction(act, webdavDraft)
 
-  const handleDownloadUpdate = async () => {
-    const u = runtime.updateInfo
-    if (!u || !u.url) return
-    try {
-      await api.startUpdateDownload(u.url, u.sha256 || '', u.latest || '')
-      pushToast('已启动后台更新下载（SHA256 校验）', 'ok')
-    } catch (e) { pushToast(e.message, 'err') }
-  }
+  const handleDownloadUpdate = () => downloadAppUpdate()
 
   return (
     <div className="st-shell">
@@ -404,10 +349,7 @@ export default function SettingsModal() {
                 <input className="st-input" style={{ width: 150 }} value={mcpName} onChange={(e) => setMcpName(e.target.value)} placeholder="服务名" />
                 <input className="st-input" style={{ flex: 1 }} value={mcpCmd} onChange={(e) => setMcpCmd(e.target.value)} placeholder="启动命令，如 npx -y @modelcontextprotocol/server-filesystem ." />
                 <button type="button" className="st-btn st-btn-primary" onClick={async () => {
-                  if (!mcpName.trim() || !mcpCmd.trim()) return
-                  const parts = mcpCmd.trim().split(/\s+/)
-                  await api.mcpSaveServer(mcpName.trim(), { command: parts[0], args: parts.slice(1), enabled: true })
-                  setMcpName(''); setMcpCmd(''); await refreshSettingsAux(); pushToast('MCP 已保存', 'ok')
+                  if (await saveMcpServerConfig(mcpName, mcpCmd)) { setMcpName(''); setMcpCmd('') }
                 }}>添加</button>
               </div>
               {(settings.mcpServers || []).map((srv, idx) => {
@@ -416,8 +358,8 @@ export default function SettingsModal() {
                   <div key={name} className="st-mem-row">
                     <span>{name}</span>
                     <div className="st-row">
-                      <button type="button" className="st-btn" onClick={async () => { const r = await api.mcpTestServer(name); pushToast(r && r.ok ? `${name} 测试通过` : '测试失败', r && r.ok ? 'ok' : 'err') }}>测试</button>
-                      <button type="button" className="st-btn" onClick={async () => { await api.mcpDeleteServer(name); await refreshSettingsAux() }}>删除</button>
+                      <button type="button" className="st-btn" onClick={() => testMcpServerConfig(name)}>测试</button>
+                      <button type="button" className="st-btn" onClick={() => deleteMcpServerConfig(name)}>删除</button>
                     </div>
                   </div>
                 )
@@ -455,15 +397,13 @@ export default function SettingsModal() {
               <div className="st-row">
                 <input className="st-input" style={{ flex: 1 }} value={newMem} onChange={(e) => setNewMem(e.target.value)} placeholder="输入一句偏好或项目规则…" />
                 <button type="button" className="st-btn st-btn-primary" onClick={async () => {
-                  if (!newMem.trim()) return
-                  await api.appendMemory({ text: newMem.trim(), distill: true })
-                  setNewMem(''); await refreshSettingsAux(); pushToast('已写入长期记忆', 'ok')
+                  if (await addLongTermMemory(newMem)) setNewMem('')
                 }}>添加记忆</button>
               </div>
               {(settings.memories || []).map((m, idx) => (
                 <div key={idx} className="st-mem-row">
                   <span>[{m.kind || 'fact'}] {m.text}</span>
-                  <button type="button" className="st-btn" onClick={async () => { await api.memoryDelete(idx); await refreshSettingsAux() }}>删除</button>
+                  <button type="button" className="st-btn" onClick={() => deleteLongTermMemory(idx)}>删除</button>
                 </div>
               ))}
             </div>
@@ -518,7 +458,7 @@ export default function SettingsModal() {
                 <div className="st-row">
                   <span style={{ color: 'var(--ok)', fontSize: 12.5 }}>新版本 v{runtime.updateInfo.latest} 可用</span>
                   <button type="button" className="st-btn st-btn-primary" onClick={handleDownloadUpdate}>下载更新包</button>
-                  <button type="button" className="st-btn" onClick={async () => { await api.applyUpdate(); pushToast('正在应用更新…', 'info') }}>立即安装重启</button>
+                  <button type="button" className="st-btn" onClick={() => applyAppUpdate()}>立即安装重启</button>
                 </div>
               )}
             </div>

@@ -945,14 +945,9 @@ try {
   await frameLoc.locator('#subbtn').click()
   await page.waitForTimeout(220)
   const nestedShellAfterForm = await frameLoc.locator('.hb-shell').count()
-  // 注意：提示必须在**点完链接之后**再读。
-  // 原实现在表单点击后就取值，而 `<button>` 无 type ⇒ 默认 submit；
-  // iframe 的 sandbox 是 "allow-scripts"（不含 allow-forms）⇒ 浏览器在提交**之前**
-  // 就拦掉了，submit 事件根本不触发，守卫自然无从通知 —— 那一刻取值必然为空。
-  // 「点链接被拦截并提示」才是可靠可断言的那条路径。
-  await frameLoc.locator('#rel').click()
-  await page.waitForTimeout(260)
   const guardNoticeText = await page.locator('.ac-notice').textContent().catch(() => '')
+  await frameLoc.locator('#rel').click()
+  await page.waitForTimeout(220)
   const nestedShellAfterLink = await frameLoc.locator('.hb-shell').count()
   record(
     'Suite-M',
@@ -1040,6 +1035,51 @@ try {
     '工作流工坊升级：一句话智能生成并发 DAG + 检视器直接增删拓扑连线',
     /智能生成/.test(genTitle || '') && edgesAfter === edgesBefore + 1,
     `genTitle=${(genTitle || '').trim().slice(0, 36)}, edges=${edgesBefore}->${edgesAfter}`
+  )
+
+  /* ======================================================================== *
+   * Suite N · R18 工作流可视化拖拽交互（节点自由拖拽定位 + 端口拖拽连线 + 自动排布复位）
+   * ======================================================================== */
+  const dragNode = page.locator('.wg-node').first()
+  const dragNodeId = await dragNode.getAttribute('data-node-id')
+  const beforeLeft = await dragNode.evaluate((el) => parseFloat(el.style.left || '0'))
+  const beforeTop = await dragNode.evaluate((el) => parseFloat(el.style.top || '0'))
+  const box = await dragNode.boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 72, box.y + box.height / 2 + 44, { steps: 6 })
+  await page.mouse.up()
+  await page.waitForTimeout(220)
+  const movedNode = page.locator(`.wg-node[data-node-id="${dragNodeId}"]`)
+  const afterLeft = await movedNode.evaluate((el) => parseFloat(el.style.left || '0'))
+  const afterTop = await movedNode.evaluate((el) => parseFloat(el.style.top || '0'))
+  await page.locator('.wf-meta-badges button:has-text("自动排布")').click()
+  await page.waitForTimeout(180)
+  const resetLeft = await movedNode.evaluate((el) => parseFloat(el.style.left || '0'))
+  record(
+    'Suite-N',
+    '可视化 DAG 节点鼠标自由拖拽定位 + 一键恢复自动拓扑排布',
+    afterLeft > beforeLeft + 40 && afterTop > beforeTop + 20 && Math.abs(resetLeft - beforeLeft) <= 2,
+    `left=${beforeLeft}->${afterLeft}->${resetLeft}, top=${beforeTop}->${afterTop}`
+  )
+
+  // N2: 端口鼠标拖拽建立连线（75% 缩放确保源/目标同屏可见，从 pro 输出口 ● 拖到同层并行节点 risk 建立合法无环连线）
+  await page.locator('.wf-meta-badges button:has-text("75%")').click()
+  await page.waitForTimeout(160)
+  const edgeCntBeforePort = await page.locator('.wg-edge-base').count()
+  const outPortBox = await page.locator('.wg-port-out[data-port-out="pro"]').boundingBox()
+  const targetNodeBox = await page.locator('.wg-node[data-node-id="risk"]').boundingBox()
+  await page.mouse.move(outPortBox.x + outPortBox.width / 2, outPortBox.y + outPortBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetNodeBox.x + targetNodeBox.width / 2, targetNodeBox.y + targetNodeBox.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(220)
+  const edgeCntAfterPort = await page.locator('.wg-edge-base').count()
+  record(
+    'Suite-N',
+    '可视化 DAG 端口鼠标拖拽实时拉线连接（自动拓扑环路校验 + 持久化）',
+    edgeCntAfterPort === edgeCntBeforePort + 1,
+    `edges=${edgeCntBeforePort}->${edgeCntAfterPort}`
   )
 
   // D4: 全程零未捕获页面异常

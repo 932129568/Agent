@@ -8,9 +8,11 @@
     background:
       radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 22px 22px,
       var(--surface-subtle);
-    min-height: 270px;
-    max-height: 430px;
+    min-height: 290px;
+    max-height: 450px;
+    user-select: none;
   }
+  .wg-zoom-wrap { position: relative; }
   .wg-canvas {
     position: relative;
     min-width: 100%;
@@ -42,15 +44,42 @@
     stroke-dasharray: 8 10;
     animation: wfEdgeFlow var(--dur-stream) linear infinite;
   }
+  .wg-edge-draft {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 2.5;
+    stroke-dasharray: 6 5;
+    animation: wfEdgeFlow var(--dur-stream) linear infinite;
+  }
   .wg-edge-label {
     font-size: 10px;
     font-weight: 600;
     fill: var(--text-3);
   }
+  .wg-edge-del {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    margin-top: -9px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-elevated);
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .wg-viewport:hover .wg-edge-del { opacity: 0.72; }
+  .wg-edge-del:hover { opacity: 1; border-color: var(--err); color: var(--err); }
 
   .wg-node {
     position: absolute;
-    padding: 9px 11px;
+    padding: 9px 12px;
     border-radius: var(--radius-md);
     border: 1.5px solid var(--border-strong);
     background: var(--card-elevated);
@@ -60,14 +89,23 @@
     justify-content: space-between;
     gap: 5px;
     text-align: left;
-    cursor: pointer;
+    cursor: grab;
+    touch-action: none;
     transition:
-      transform var(--dur-fast) var(--ease-spring),
       border-color var(--dur-fast) var(--ease-out),
       box-shadow var(--dur-fast) var(--ease-out);
   }
+  .wg-node[data-dragging="true"] {
+    cursor: grabbing;
+    border-color: var(--primary);
+    box-shadow: var(--elev-3);
+    z-index: var(--z-sticky);
+  }
+  .wg-node[data-drop-target="true"] {
+    border-color: var(--primary-2);
+    box-shadow: 0 0 0 3px rgba(18, 130, 200, 0.28), var(--elev-2);
+  }
   .wg-node:hover {
-    transform: translate3d(0, -2px, 0);
     border-color: var(--primary);
     box-shadow: var(--elev-2);
   }
@@ -93,6 +131,28 @@
   .wg-node[data-status="error"] {
     border-color: var(--err);
     background: var(--err-bg);
+  }
+
+  /* 可拖拽连线端口：左输入口 / 右输出口 */
+  .wg-port {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    margin-top: -7px;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--primary);
+    background: var(--card-elevated);
+    padding: 0;
+    cursor: crosshair;
+    transition: transform var(--dur-fast) var(--ease-spring), background-color var(--dur-fast) var(--ease-out);
+  }
+  .wg-port-in { left: -7px; border-color: var(--primary-2); }
+  .wg-port-out { right: -7px; background: var(--primary); border-color: var(--card-elevated); }
+  .wg-port:hover { transform: scale(1.28); }
+  .wg-node[data-drop-target="true"] .wg-port-in {
+    transform: scale(1.35);
+    background: var(--primary-2);
   }
 
   .wg-node-top {
@@ -142,5 +202,19 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .wg-hint {
+    position: sticky;
+    left: 10px;
+    bottom: 8px;
+    display: inline-block;
+    margin: 0 0 8px 10px;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    background: var(--card-elevated);
+    border: 1px solid var(--border);
+    font-size: 10.5px;
+    color: var(--text-3);
+    pointer-events: none;
   }
 }

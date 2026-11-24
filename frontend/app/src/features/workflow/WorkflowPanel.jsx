@@ -20,7 +20,7 @@ import {
   exportWorkflowRunReport,
   pushToast,
 } from '../../state/store.js'
-import { analyzeWorkflowDag, WORKFLOW_NODE_KINDS } from '../../services/workflowEngine.js'
+import { analyzeWorkflowDag, resetWorkflowLayoutPositions, WORKFLOW_NODE_KINDS } from '../../services/workflowEngine.js'
 import { REASONING_TIERS } from '../../services/reasoningPresets.js'
 import { SAMPLE_CUSTOM_PLUGIN_JSON } from '../../services/pluginRegistry.js'
 import { copyText, downloadTextFile } from '../../platform/dom.js'
@@ -141,6 +141,31 @@ export default function WorkflowPanel() {
     if (!activeWf) return
     const nextEdges = activeWf.edges.filter((e) => e.id !== edgeId)
     saveWorkflowDef({ ...activeWf, edges: nextEdges })
+  }
+
+  const handleMoveNode = (nodeId, pos) => {
+    if (!activeWf || !nodeId || !pos) return
+    const nextNodes = activeWf.nodes.map((n) => (n.id === nodeId ? { ...n, pos } : n))
+    saveWorkflowDef({ ...activeWf, nodes: nextNodes })
+  }
+
+  const handleConnectNodes = (fromId, toId) => {
+    if (!activeWf || !fromId || !toId || fromId === toId) return
+    if (activeWf.edges.some((e) => e.from === fromId && e.to === toId)) {
+      pushToast('两节点之间已存在连线', 'info')
+      return
+    }
+    const srcNode = activeWf.nodes.find((n) => n.id === fromId)
+    const when = srcNode && srcNode.kind === 'condition' ? 'true' : 'always'
+    const label = when === 'true' ? 'TRUE' : ''
+    const nextEdges = [...activeWf.edges, { id: `e_${fromId}_${toId}_${Date.now().toString(36)}`, from: fromId, to: toId, when, label }]
+    saveWorkflowDef({ ...activeWf, edges: nextEdges })
+  }
+
+  const handleResetLayout = () => {
+    if (!activeWf) return
+    saveWorkflowDef(resetWorkflowLayoutPositions(activeWf))
+    setZoom(1)
   }
 
   const handleAddNode = () => {
@@ -416,6 +441,9 @@ export default function WorkflowPanel() {
                         {Math.round(z * 100)}%
                       </button>
                     ))}
+                    <button type="button" className="wf-chip" style={{ padding: '2px 8px', fontSize: 11 }} onClick={handleResetLayout} title="清除手动位置并恢复拓扑自动排布">
+                      ⊞ 自动排布
+                    </button>
                   </div>
                   {!showEditMeta && (
                     <button
@@ -471,6 +499,9 @@ export default function WorkflowPanel() {
                   activeEdges={run.workflowId === (activeWf && activeWf.id) ? run.activeEdges : []}
                   selectedNodeId={effectiveSelectedId}
                   onSelectNode={(nid) => { setSelectedNodeId(nid); setEditingNode(null); setEdgeTargetId('') }}
+                  onMoveNode={handleMoveNode}
+                  onConnectNodes={handleConnectNodes}
+                  onRemoveEdge={handleRemoveEdge}
                 />
 
                 <aside className="wf-inspector" aria-label="节点属性、连线编排与实时输出检视器">

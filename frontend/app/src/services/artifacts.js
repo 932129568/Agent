@@ -14,7 +14,16 @@ var d=document,w=self;
 var notify=function(kind,detail){try{parent.postMessage({__harborArtifact:true,kind:kind,detail:String(detail||'')},'*')}catch(e){}};
 d.addEventListener('click',function(e){
   var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;
-  if(!a)return;
+  if(!a){
+    // iframe 的 sandbox 是 "allow-scripts"（不含 allow-forms）⇒ 浏览器在提交**之前**
+    // 就把表单拦掉了，submit 事件根本不会触发，守卫也就无从通知 —— 用户点提交按钮
+    // 会得到"什么都没发生"的观感。这里在点击阶段补上提示（preventDefault 同样必要，
+    // 否则在允许表单的宿主里会真的发起提交）。
+    var btn=e.target&&e.target.closest?e.target.closest('button,input[type=submit],input[type=image]'):null;
+    var f=btn&&btn.form?btn.form:(btn&&btn.closest?btn.closest('form'):null);
+    if(f){ e.preventDefault(); notify('form_blocked',(f.getAttribute&&f.getAttribute('action'))||'form-submit'); }
+    return;
+  }
   var href=(a.getAttribute('href')||'').trim();
   if(href.startsWith('#')){
     e.preventDefault();

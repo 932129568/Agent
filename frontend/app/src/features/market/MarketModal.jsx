@@ -9,10 +9,13 @@ import {
   setDockPreview,
   closeModal,
   setActivePanel,
+  activateLocalExpertPackage,
+  previewLocalExpertSkills,
+  importLocalExpertDirectory,
+  toggleLocalExpertEnabled,
   pushToast,
 } from '../../state/store.js'
 import { EXPERT_CATEGORIES, CURATED_INDUSTRY_PACKS, filterCuratedPacks } from '../../services/industryExperts.js'
-import * as api from '../../services/bridge.js'
 import ExpertTeamRunner from './ExpertTeamRunner.jsx'
 import './MarketModal.css'
 
@@ -77,71 +80,14 @@ export default function MarketModal() {
     pushToast(`已将「${pack.name}」加入群聊接力名册`, 'ok')
   }
 
-  const handleUseLocalExpert = async (pkg) => {
-    const md = pkg.metadata || {}
-    const name = pickZhText(md.displayName, pkg.name || pkg.id)
-    let promptText = pickZhText(md.description, `请以「${name}」专家身份回答。`)
-    try {
-      const detail = await api.expertGet(pkg.id, pkg.active_snapshot || '')
-      const firstAgent = detail && detail.package && Array.isArray(detail.package.agents) && detail.package.agents[0]
-      if (firstAgent && detail.package.snapshot_id) {
-        const res = await api.expertReadResource(detail.package.snapshot_id, firstAgent)
-        if (res && res.ok && typeof res.text === 'string' && res.text.trim()) {
-          promptText = res.text.replace(/^---[\s\S]*?---\s*/, '').trim().slice(0, 4000)
-        }
-      }
-    } catch {}
-    addComposerToken({
-      id: pkg.id,
-      name,
-      kind: pkg.kind || 'expert',
-      prompt: promptText,
-    })
-    closeModal('left')
-    setActivePanel('chat')
-    pushToast(`已将标准专家包「${name}」完整指令加入输入框胶囊`, 'ok')
-  }
+  const handleUseLocalExpert = (pkg) => activateLocalExpertPackage(pkg)
 
-  const handlePreviewPackageSkills = async (pkg) => {
-    try {
-      const detail = await api.expertGet(pkg.id, pkg.active_snapshot || '')
-      const p = detail && detail.package
-      if (!p || !p.snapshot_id) {
-        pushToast('未能读取专家包快照内容', 'err')
-        return
-      }
-      const sections = [`## 📦 ${pickZhText((p.metadata && p.metadata.displayName), pkg.id)} (\`${pkg.id}\` v${p.version || '1.0.0'})`]
-      for (const sk of (p.skills || []).slice(0, 4)) {
-        const rel = `${String(sk).replace(/\/+$/, '')}/SKILL.md`
-        const r = await api.expertReadResource(p.snapshot_id, rel).catch(() => null)
-        if (r && r.ok && r.text) {
-          sections.push(r.text.replace(/^---[\s\S]*?---\s*/, '').trim())
-        }
-      }
-      if (sections.length === 1 && Array.isArray(p.agents) && p.agents[0]) {
-        const r = await api.expertReadResource(p.snapshot_id, p.agents[0]).catch(() => null)
-        if (r && r.ok && r.text) sections.push(r.text.replace(/^---[\s\S]*?---\s*/, '').trim())
-      }
-      closeModal('left', true)
-      setDockPreview(sections.join('\n\n---\n\n'))
-    } catch (e) {
-      pushToast(`预览 SKILL 失败：${e.message}`, 'err')
-    }
-  }
+  const handlePreviewPackageSkills = (pkg) => previewLocalExpertSkills(pkg)
 
   const handleImport = async () => {
     if (!importPath.trim()) return
-    try {
-      const r = await api.expertImportDirectory(importPath.trim())
-      if (r && r.ok) {
-        setImportPath('')
-        await refreshMarket('')
-        pushToast('本地专家目录导入成功', 'ok')
-      } else {
-        pushToast((r && (r.error && r.error.message || r.error)) || '导入失败', 'err')
-      }
-    } catch (e) {
-      pushToast(e.message, 'err')
+    if (await importLocalExpertDirectory(importPath.trim())) {
+      setImportPath('')
     }
   }
 
@@ -277,10 +223,7 @@ export default function MarketModal() {
                       <button
                         type="button"
                         className="mk-btn"
-                        onClick={async () => {
-                          await api.expertSetEnabled(pkg.id, pkg.enabled === false, pkg.active_snapshot || '')
-                          await refreshMarket('')
-                        }}
+                        onClick={() => toggleLocalExpertEnabled(pkg)}
                       >
                         {pkg.enabled === false ? '启用' : '停用'}
                       </button>

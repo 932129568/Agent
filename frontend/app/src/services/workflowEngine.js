@@ -39,6 +39,9 @@ export function normalizeWorkflowDef(raw = {}) {
     toolArgs: (n && n.toolArgs && typeof n.toolArgs === 'object') ? n.toolArgs : {},
     gateConfig: (n && n.gateConfig && typeof n.gateConfig === 'object') ? n.gateConfig : null,
     condition: (n && n.condition && typeof n.condition === 'object') ? n.condition : null,
+    pos: (n && n.pos && Number.isFinite(Number(n.pos.x)) && Number.isFinite(Number(n.pos.y)))
+      ? { x: Math.max(12, Math.round(Number(n.pos.x))), y: Math.max(12, Math.round(Number(n.pos.y))) }
+      : null,
   }))
   const idSet = new Set(nodes.map((n) => n.id))
   const edges = (Array.isArray(w.edges) ? w.edges : [])
@@ -124,19 +127,19 @@ export function analyzeWorkflowDag(workflow) {
   const totalWidth = PAD_X * 2 + layers.length * NODE_W + Math.max(0, layers.length - 1) * COL_GAP
   const positions = {}
 
+  let maxRight = totalWidth
+  let maxBottom = totalHeight
   layers.forEach((layer, colIdx) => {
     const colH = layer.length * NODE_H + Math.max(0, layer.length - 1) * ROW_GAP
     const startY = Math.round((totalHeight - colH) / 2)
-    const x = PAD_X + colIdx * (NODE_W + COL_GAP)
+    const autoX = PAD_X + colIdx * (NODE_W + COL_GAP)
     layer.forEach((id, rowIdx) => {
-      positions[id] = {
-        x,
-        y: startY + rowIdx * (NODE_H + ROW_GAP),
-        width: NODE_W,
-        height: NODE_H,
-        col: colIdx,
-        row: rowIdx,
-      }
+      const node = nodesById.get(id)
+      const x = node && node.pos ? node.pos.x : autoX
+      const y = node && node.pos ? node.pos.y : (startY + rowIdx * (NODE_H + ROW_GAP))
+      positions[id] = { x, y, width: NODE_W, height: NODE_H, col: colIdx, row: rowIdx }
+      if (x + NODE_W + PAD_X > maxRight) maxRight = x + NODE_W + PAD_X
+      if (y + NODE_H + PAD_Y > maxBottom) maxBottom = y + NODE_H + PAD_Y
     })
   })
 
@@ -148,7 +151,7 @@ export function analyzeWorkflowDag(workflow) {
     nodesById,
     outgoing,
     incoming,
-    layout: { width: totalWidth, height: totalHeight, positions },
+    layout: { width: maxRight, height: maxBottom, positions },
   }
 }
 
@@ -646,4 +649,14 @@ export function formatWorkflowRunMarkdown(workflow, run) {
     lines.push(String(st.output || '（无输出）').trim(), '', '---', '')
   }
   return lines.join('\n')
+}
+
+
+/** 清除全部手动拖拽坐标，一键恢复 Kahn 拓扑自动分层排布。 */
+export function resetWorkflowLayoutPositions(workflow) {
+  const wf = normalizeWorkflowDef(workflow)
+  return {
+    ...wf,
+    nodes: wf.nodes.map((n) => ({ ...n, pos: null })),
+  }
 }
