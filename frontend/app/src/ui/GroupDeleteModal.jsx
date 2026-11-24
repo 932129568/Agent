@@ -1,22 +1,45 @@
 import { useEffect, useState } from 'react'
 import './GroupDeleteModal.css'
 
-/**
- * 删除群聊确认弹窗：让用户明确选择「仅删除群聊（保留本地群文件）」或「同时清空该群聊的专属群文件」。
- */
 export default function GroupDeleteModal({ request, onCancel, onConfirm }) {
   const [deleteFiles, setDeleteFiles] = useState(true)
+  const [closing, setClosing] = useState(false)
 
   useEffect(() => {
-    if (request) setDeleteFiles(true)
+    if (request) {
+      setDeleteFiles(true)
+      setClosing(false)
+    }
   }, [request && request.groupId])
+
+  const closeWith = (fn) => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      fn()
+    }, 145)
+  }
+
+  useEffect(() => {
+    if (!request) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        closeWith(onCancel)
+      }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [request && request.groupId, closing])
 
   if (!request) return null
 
   const fileCount = Number(request.fileCount) || 0
 
   return (
-    <div className="gd-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+    <div className="gd-backdrop" data-closing={String(closing)} onClick={(e) => { if (e.target === e.currentTarget) closeWith(onCancel) }}>
       <div className="gd-modal" role="dialog" aria-modal="true" aria-label="删除群聊确认">
         <header className="gd-head">
           <h3 className="gd-title">删除群聊「{request.title || '未命名群聊'}」</h3>
@@ -48,11 +71,11 @@ export default function GroupDeleteModal({ request, onCancel, onConfirm }) {
         </div>
 
         <footer className="gd-foot">
-          <button type="button" className="gd-btn" onClick={onCancel}>取消</button>
+          <button type="button" className="gd-btn" onClick={() => closeWith(onCancel)}>取消</button>
           <button
             type="button"
             className={deleteFiles ? 'gd-btn gd-btn-danger' : 'gd-btn gd-btn-primary'}
-            onClick={() => onConfirm({ groupId: request.groupId, deleteFiles })}
+            onClick={() => closeWith(() => onConfirm({ groupId: request.groupId, deleteFiles }))}
           >
             {deleteFiles ? '确认删除群聊与群文件' : '仅删除群聊（保留文件）'}
           </button>

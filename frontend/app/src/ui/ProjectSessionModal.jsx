@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 import './ProjectSessionModal.css'
 
-/**
- * 项目会话文件夹绑定弹窗（支持「新建项目会话」与「将当前普通会话转为项目会话 / 更换目录」）：
- * 纯展示组件，文件夹浏览与落盘回调由宿主经 props 注入（严格遵守铁律 LAW-03 / LAW-07）。
- */
 export default function ProjectSessionModal({
   request,
   recentFolders = [],
@@ -15,13 +11,37 @@ export default function ProjectSessionModal({
   const [dirPath, setDirPath] = useState('')
   const [title, setTitle] = useState('')
   const [picking, setPicking] = useState(false)
+  const [closing, setClosing] = useState(false)
 
   useEffect(() => {
     if (!request) return
     setDirPath(String(request.initialDir || ''))
     setTitle(String(request.initialTitle || ''))
     setPicking(false)
+    setClosing(false)
   }, [request && request.id])
+
+  const closeWith = (fn) => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      fn()
+    }, 145)
+  }
+
+  useEffect(() => {
+    if (!request) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        closeWith(onCancel)
+      }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [request && request.id, closing])
 
   if (!request) return null
 
@@ -47,12 +67,12 @@ export default function ProjectSessionModal({
   const handleSubmit = () => {
     const cleanDir = dirPath.trim()
     if (!cleanDir) return
-    onConfirm({
+    closeWith(() => onConfirm({
       mode: request.mode || 'create',
       sid: request.sid || '',
       workspaceDir: cleanDir,
       title: title.trim(),
-    })
+    }))
   }
 
   const normalizedRecent = (Array.isArray(recentFolders) ? recentFolders : [])
@@ -61,7 +81,7 @@ export default function ProjectSessionModal({
     .slice(0, 6)
 
   return (
-    <div className="pm-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+    <div className="pm-backdrop" data-closing={String(closing)} onClick={(e) => { if (e.target === e.currentTarget) closeWith(onCancel) }}>
       <div className="pm-modal" role="dialog" aria-modal="true" aria-label={isBind ? '设置项目工作文件夹' : '新建项目会话'}>
         <header className="pm-head">
           <span className="pm-kicker">📁 项目会话 · 专属工作文件夹隔离</span>
@@ -122,7 +142,7 @@ export default function ProjectSessionModal({
         </div>
 
         <footer className="pm-foot">
-          <button type="button" className="pm-btn" onClick={onCancel}>取消</button>
+          <button type="button" className="pm-btn" onClick={() => closeWith(onCancel)}>取消</button>
           <button type="button" className="pm-btn pm-btn-primary" disabled={!dirPath.trim()} onClick={handleSubmit}>
             {isBind ? '确认绑定项目文件夹' : '创建项目会话 →'}
           </button>

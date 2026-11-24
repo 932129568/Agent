@@ -19,6 +19,7 @@
     transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
   }
   .ss-new-btn:hover { background: var(--primary-hover); }
+  .ss-new-btn:active { transform: scale(0.97); }
   .ss-new-btn-proj {
     background: var(--card-elevated);
     border-color: var(--border-strong);
@@ -94,7 +95,20 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .ss-del { border: 0; background: transparent; color: var(--text-3); cursor: pointer; font-size: 13px; padding: 0 4px; flex-shrink: 0; }
+  .ss-del {
+    border: 0;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    opacity: 0.42;
+    transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  }
+  .ss-item:hover .ss-del,
+  .ss-item[data-active="true"] .ss-del { opacity: 1; }
+  .ss-del:active { transform: scale(0.88); }
   .ss-del:hover { color: var(--err); }
 
   .ss-panel { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; }

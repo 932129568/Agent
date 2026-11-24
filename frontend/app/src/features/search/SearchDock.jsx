@@ -1,27 +1,57 @@
-import { useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   useSlice,
   toggleSearchDock,
   runWebSearch,
   extractSearchUrl,
   appendComposerDraft,
+  fireShellImpact,
   pushToast,
 } from '../../state/store.js'
+import { playDrawerSlideIn, playDrawerSlideOut } from '../../platform/kinetic.js'
 import './SearchDock.css'
 
-/** 弹性分栏停靠搜索面板（与 MainStage 并排回流，绝不盖住正文） */
 export default function SearchDock() {
   const ui = useSlice('ui')
   const search = useSlice('search')
+  const settings = useSlice('settings')
   const [q, setQ] = useState(search.query || '')
+  const [mounted, setMounted] = useState(!!ui.searchDockOpen)
+  const panelRef = useRef(null)
+  const closingRef = useRef(false)
 
-  if (!ui.searchDockOpen) return null
+  useEffect(() => {
+    if (ui.searchDockOpen) {
+      closingRef.current = false
+      setMounted(true)
+    } else if (mounted && !closingRef.current) {
+      closingRef.current = true
+      playDrawerSlideOut(
+        panelRef.current,
+        settings.motion,
+        () => fireShellImpact('right', 'medium'),
+        () => {
+          closingRef.current = false
+          setMounted(false)
+        },
+        'nav-toolbox'
+      )
+    }
+  }, [ui.searchDockOpen])
+
+  useLayoutEffect(() => {
+    if (mounted && ui.searchDockOpen && panelRef.current) {
+      playDrawerSlideIn(panelRef.current, settings.motion)
+    }
+  }, [mounted, ui.searchDockOpen])
+
+  if (!mounted) return null
 
   return (
-    <aside className="sd-panel" aria-label="浏览器搜索停靠面板">
+    <aside ref={panelRef} className="sd-panel" aria-label="浏览器搜索停靠面板">
       <div className="sd-head">
-        <strong>浏览器搜索（分栏回流）</strong>
-        <button type="button" className="sd-btn" onClick={() => toggleSearchDock(false)}>×</button>
+        <strong>网页搜索</strong>
+        <button type="button" className="sd-btn" onClick={() => toggleSearchDock(false)} aria-label="关闭搜索">×</button>
       </div>
       <div className="sd-bar">
         <input className="sd-input" value={q} onChange={(e) => setQ(e.target.value)}

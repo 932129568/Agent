@@ -25,6 +25,7 @@ import {
   openArtifactCanvas,
   exportCurrentSessionMarkdown,
   saveAtomicMemory,
+  setActivePanel,
   openModal,
   triggerFourActShowcase,
   pushToast,
@@ -43,6 +44,7 @@ import MarkdownView from '../../ui/MarkdownView.jsx'
 import GenerativeView from '../../ui/GenerativeView.jsx'
 import LivingChamber from '../../ui/LivingChamber.jsx'
 import InlineApproval from '../../ui/InlineApproval.jsx'
+import DropdownMenu from '../../ui/DropdownMenu.jsx'
 import ComposerMenu, { buildComposerMenuItems } from './ComposerMenu.jsx'
 import './ChatPanel.css'
 
@@ -240,27 +242,22 @@ export default function ChatPanel() {
 
         {messages.length === 0 && run.phase === 'idle' ? (
           <div className="chat-welcome">
-            <h1>Harbor · React 19 全量真透色工作台</h1>
+            <h1>Harbor 智能工作台</h1>
             <p>
-              窗外实时材质：<strong>{settings.backdrop}</strong> · 模型：<strong>{settings.backendConfig.model || 'glm-4.5-flash'}</strong>。
-              支持输入 <code>/</code> 呼出快捷指令（<code>/compact</code>、<code>/sub</code>、<code>/plan</code>）或输入 <code>@</code> 引用专家与工作区文件。
+              当前模型：<strong>{settings.backendConfig.model || 'glm-4.5-flash'}</strong> · 输入 <code>/</code> 呼出快捷指令，输入 <code>@</code> 引用行业专家或项目文件。
             </p>
             <div className="chat-quick-grid">
-              <button type="button" className="chat-quick-card" onClick={() => triggerFourActShowcase(sid)}>
-                <strong>▶ 演练四幕动效 + 生成式 UI</strong>
-                <span>等待演进舱 → 思考波场 → 正文交棒 → 完成印章与仪表盘</span>
-              </button>
-              <button type="button" className="chat-quick-card" onClick={(e) => openModal('settings', captureTriggerRect(e))}>
-                <strong>⚙ 模型 / 混合路由 / 沙箱 / WebDAV</strong>
-                <span>全套 4 域设置中心 + 真窗外透色与非 ASCII 拦截</span>
-              </button>
               <button type="button" className="chat-quick-card" onClick={() => openProjectSessionModal('create')}>
-                <strong>📁 新建项目会话（绑定文件夹）</strong>
-                <span>为代码仓库或创作项目锁定独立工作目录与隔离上下文</span>
+                <strong>📁 新建项目会话</strong>
+                <span>绑定本地工作文件夹，直接在项目目录内读写与验证</span>
               </button>
-              <button type="button" className="chat-quick-card" onClick={(e) => openModal('market', captureTriggerRect(e))}>
-                <strong>✦ 专家市场与多专家团队编排</strong>
-                <span>专家胶囊直入输入框，或启动串行信箱团队编排</span>
+              <button type="button" className="chat-quick-card" onClick={() => setActivePanel('group')}>
+                <strong>👥 多角色群聊协作</strong>
+                <span>架构、设计、实现与审查多专家接力推进复杂任务</span>
+              </button>
+              <button type="button" className="chat-quick-card" onClick={() => setActivePanel('workflow')}>
+                <strong>⚡ 可视化插件工作流</strong>
+                <span>拖拽编排并行 DAG、AI 生图与短片导演流水线</span>
               </button>
             </div>
           </div>
@@ -430,19 +427,31 @@ export default function ChatPanel() {
             <div className="chat-composer-tools">
               <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleAttachFile} />
               <button type="button" className="chat-mini-btn" onClick={() => fileRef.current && fileRef.current.click()}>+ 附件</button>
-              <button type="button" className="chat-mini-btn" onClick={captureScreenshotToComposer}>📸 截屏</button>
               <button type="button" className="chat-mini-btn" onClick={(e) => openModal('market', captureTriggerRect(e))}>✦ 选专家</button>
-              <button type="button" className="chat-mini-btn" onClick={() => compactSessionNow(sid, true)}>🗜 压缩 /compact</button>
-              <button type="button" className="chat-mini-btn" onClick={() => exportCurrentSessionMarkdown(sid)} title="将当前对话一键导出为 Markdown 文档">⬇ 导出</button>
-              <button
-                type="button"
-                className="chat-mini-btn"
-                title="开启时：涉及视觉风格/交互效果/架构分叉前会先弹出可视化卡片让你拍板；关闭时 AI 直接自主发挥"
-                onClick={() => setAskBeforeDesign(!ui.askBeforeDesign)}
-              >
-                {ui.askBeforeDesign ? '🎯 效果先问我' : '⚡ 自主发挥'}
-              </button>
-              <button type="button" className="chat-mini-btn" onClick={() => triggerFourActShowcase(sid)}>▶ 预览四幕</button>
+              <DropdownMenu
+                align="left"
+                direction="up"
+                label="⋯ 更多"
+                ariaLabel="对话更多工具"
+                triggerClassName="chat-mini-btn"
+                items={[
+                  { section: '输入与协作偏好' },
+                  { id: 'c-shot', icon: '📸', label: '截屏附带到对话', onClick: () => captureScreenshotToComposer() },
+                  {
+                    id: 'c-ask',
+                    icon: ui.askBeforeDesign ? '🎯' : '⚡',
+                    label: ui.askBeforeDesign ? '效果先问我（已开启）' : '自主发挥模式',
+                    active: ui.askBeforeDesign,
+                    onClick: () => setAskBeforeDesign(!ui.askBeforeDesign),
+                  },
+                  { divider: true },
+                  { section: '会话整理与导出' },
+                  { id: 'c-compact', icon: '🗜', label: '压缩对话历史', hint: '/compact', onClick: () => compactSessionNow(sid, true) },
+                  { id: 'c-export', icon: '⬇', label: '导出 Markdown 纪要', hint: '/export', onClick: () => exportCurrentSessionMarkdown(sid) },
+                  { divider: true },
+                  { id: 'c-demo', icon: '▶', label: '体验交互动效演示', hint: '/demo', onClick: () => triggerFourActShowcase(sid) },
+                ]}
+              />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <ContextUsageRing

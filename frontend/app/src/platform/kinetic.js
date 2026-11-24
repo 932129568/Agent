@@ -240,21 +240,22 @@ export function playModalMorphIn(cardEl, backdropEl, sourceRect, fallbackEdge = 
   const k = motionScaleForTier(motionTier)
   if (!cardEl || k === 0 || typeof cardEl.animate !== 'function') return
   const { dx, dy } = computeTargetDelta(cardEl, sourceRect, fallbackEdge)
-  const sx = dx * 0.72 * k
-  const sy = dy * 0.72 * k
+  const sx = dx * 0.68 * k
+  const sy = dy * 0.68 * k
+  const tilt = dx < 0 ? -2.2 * k : (dx > 0 ? 2.2 * k : 0)
   if (backdropEl && typeof backdropEl.animate === 'function') {
     backdropEl.animate(
       [{ opacity: 0 }, { opacity: 1 }],
-      { duration: 220, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' }
+      { duration: 210, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' }
     )
   }
   cardEl.animate(
     [
-      { transform: `translate3d(${sx.toFixed(1)}px,${sy.toFixed(1)}px,0) scale(${(1 - 0.72 * k).toFixed(3)})`, opacity: 0, offset: 0 },
-      { transform: `translate3d(${(-dx * 0.014 * k).toFixed(1)}px,${(-dy * 0.014 * k).toFixed(1)}px,0) scale(${(1 + 0.016 * k).toFixed(3)})`, opacity: 1, offset: 0.72 },
-      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, offset: 1 },
+      { transform: `translate3d(${sx.toFixed(1)}px,${sy.toFixed(1)}px,0) scale(${(1 - 0.66 * k).toFixed(3)}) rotate(${tilt.toFixed(2)}deg)`, opacity: 0, offset: 0 },
+      { transform: `translate3d(${(-dx * 0.012 * k).toFixed(1)}px,${(-dy * 0.012 * k).toFixed(1)}px,0) scale(${(1 + 0.014 * k).toFixed(3)}) rotate(${(-tilt * 0.16).toFixed(2)}deg)`, opacity: 1, offset: 0.72 },
+      { transform: 'translate3d(0,0,0) scale(1) rotate(0deg)', opacity: 1, offset: 1 },
     ],
-    { duration: 320, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' }
+    { duration: 330, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' }
   )
 }
 
@@ -297,11 +298,12 @@ export function playModalFlyOut(cardEl, edge = 'left', motionTier = 'dynamic', o
     )
   }
 
+  const flyTilt = tx < 0 ? -3.2 * k : (tx > 0 ? 3.2 * k : 0)
   const anim = cardEl.animate(
     [
-      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, offset: 0 },
-      { transform: `translate3d(${(tx * 0.35).toFixed(1)}px,${(ty * 0.35).toFixed(1)}px,0) scale(0.84)`, opacity: 0.92, offset: 0.45 },
-      { transform: `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(0.22)`, opacity: 0, offset: 1 },
+      { transform: 'translate3d(0,0,0) scale(1) rotate(0deg)', opacity: 1, offset: 0 },
+      { transform: `translate3d(${(tx * 0.36).toFixed(1)}px,${(ty * 0.36).toFixed(1)}px,0) scale(0.84) rotate(${(flyTilt * 0.45).toFixed(2)}deg)`, opacity: 0.92, offset: 0.44 },
+      { transform: `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(0.20) rotate(${flyTilt.toFixed(2)}deg)`, opacity: 0, offset: 1 },
     ],
     { duration: dur, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
   )

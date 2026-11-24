@@ -2,29 +2,48 @@ import { useEffect, useState } from 'react'
 import './ClarifyModal.css'
 
 /**
- * 效果与需求拍板交互弹窗（普通会话 & 群聊统一使用）：
- * - 让用户在 AI 正式动手前可视化选择风格/交互/方案，并支持自定义补充；
- * - 也提供一键「交给 AI 自主发挥」快速放行，兼顾可控与效率。
+ * 效果与需求拍板交互弹窗（R20：支持 Escape 快捷放行 + 145ms 平滑退场动画）。
  */
 export default function ClarifyModal({ request, onResolve }) {
   const questions = (request && Array.isArray(request.questions)) ? request.questions : []
   const [selected, setSelected] = useState({})
   const [customNote, setCustomNote] = useState('')
+  const [closing, setClosing] = useState(false)
 
   useEffect(() => {
     if (!request) return
     const init = {}
     for (const q of (request.questions || [])) {
       const opts = Array.isArray(q.options) ? q.options : []
-      if (opts.length > 0 && !q.multi) {
-        init[q.id] = [opts[0].id]
-      } else {
-        init[q.id] = []
-      }
+      if (opts.length > 0 && !q.multi) init[q.id] = [opts[0].id]
+      else init[q.id] = []
     }
     setSelected(init)
     setCustomNote('')
+    setClosing(false)
   }, [request && request.id])
+
+  const finishWithAnim = (payload) => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      onResolve(payload)
+    }, 145)
+  }
+
+  useEffect(() => {
+    if (!request) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        finishWithAnim({ mode: 'autonomous', answers: {}, customNote: '', summary: '用户已授权 AI 自主发挥（本轮按最佳审美与工程方案直接落地）' })
+      }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [request && request.id, closing])
 
   if (!request) return null
 
@@ -50,7 +69,7 @@ export default function ClarifyModal({ request, onResolve }) {
     }
     const custom = customNote.trim()
     if (custom) summaryLines.push(`- 自定义补充要求：${custom}`)
-    onResolve({
+    finishWithAnim({
       mode: 'selected',
       answers,
       customNote: custom,
@@ -59,7 +78,7 @@ export default function ClarifyModal({ request, onResolve }) {
   }
 
   return (
-    <div className="cl-backdrop" role="presentation">
+    <div className="cl-backdrop" data-closing={String(closing)} role="presentation">
       <div className="cl-modal" role="dialog" aria-modal="true" aria-label={request.title || '方案与效果确认'}>
         <header className="cl-head">
           <span className="cl-kicker">🎯 效果与方向确认 · 落地前拍板</span>
@@ -119,7 +138,7 @@ export default function ClarifyModal({ request, onResolve }) {
           <button
             type="button"
             className="cl-btn"
-            onClick={() => onResolve({ mode: 'autonomous', answers: {}, customNote: '', summary: '用户已授权 AI 自主发挥（本轮按最佳审美与工程方案直接落地）' })}
+            onClick={() => finishWithAnim({ mode: 'autonomous', answers: {}, customNote: '', summary: '用户已授权 AI 自主发挥（本轮按最佳审美与工程方案直接落地）' })}
           >
             ⚡ 交给 AI 自主发挥
           </button>

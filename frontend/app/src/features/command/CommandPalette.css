@@ -6,23 +6,45 @@
     border: 0;
     border-bottom: 1px solid var(--border);
     background: transparent;
-    font-size: 15px;
+    font-size: 14.5px;
     outline: none;
   }
-  .cp-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .cp-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
   .cp-row {
+    position: relative;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 12px;
+    padding: 10px 14px;
     border-radius: var(--radius-sm);
-    border: 0;
+    border: 1px solid transparent;
     background: transparent;
     text-align: left;
     cursor: pointer;
-    font-size: 13.5px;
+    font-size: 13px;
     color: var(--text);
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-spring);
   }
-  .cp-row:hover, .cp-row[data-active="true"] { background: var(--primary-soft); color: var(--primary); }
-  .cp-hint { font-size: 11.5px; color: var(--text-3); font-family: var(--font-mono); }
+  .cp-row:hover, .cp-row[data-active="true"] {
+    background: var(--primary-soft);
+    border-color: rgba(212, 101, 62, 0.24);
+    color: var(--primary);
+  }
+  .cp-row[data-active="true"]::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: var(--radius-full);
+    background: var(--primary);
+  }
+  .cp-row:active { transform: scale(0.99); }
+  .cp-hint { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+  .cp-empty { padding: 28px 16px; text-align: center; font-size: 12.5px; color: var(--text-3); }
 }

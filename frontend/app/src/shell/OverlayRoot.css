@@ -6,9 +6,11 @@
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgba(10, 10, 12, 0.48);
+    background: rgba(10, 12, 18, 0.42);
+    backdrop-filter: blur(8px) saturate(1.12);
   }
   .ov-modal {
+    position: relative;
     width: min(920px, calc(100vw - 32px));
     height: min(84vh, 740px);
     display: flex;
@@ -20,9 +22,19 @@
     overflow: hidden;
     will-change: transform, opacity;
   }
+  .ov-modal::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+    pointer-events: none;
+  }
   .ov-modal[data-size="compact"] {
-    width: min(600px, calc(100vw - 32px));
-    height: min(64vh, 520px);
+    width: min(580px, calc(100vw - 32px));
+    height: min(62vh, 500px);
   }
   .ov-head {
     display: flex;
@@ -31,7 +43,7 @@
     padding: 14px 18px;
     border-bottom: 1px solid var(--border);
   }
-  .ov-title { margin: 0; font-size: 15.5px; font-weight: 600; }
+  .ov-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
   .ov-close {
     width: 30px;
     height: 30px;
@@ -40,8 +52,13 @@
     background: var(--surface-subtle);
     color: var(--text-2);
     cursor: pointer;
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-spring);
   }
-  .ov-close:hover { border-color: var(--primary); color: var(--text); }
+  .ov-close:hover { border-color: var(--primary); color: var(--text); transform: scale(1.06); }
+  .ov-close:active { transform: scale(0.94); }
 
   .ov-toasts {
     position: fixed;
@@ -54,19 +71,20 @@
     pointer-events: none;
   }
   .ov-toast {
-    /* 纯展示态：绝不能吃指针事件。
-       实测（e2e-r3 回归）：一条「议题识别为视频制作…」的 info toast 悬在右下，
-       正好盖住群聊的「■ 中止」按钮，Playwright 判定 pointer events 被拦截，
-       点击超时 —— 也就是**用户此刻也点不到中止**。容器已 none，但每条 auto 让它失效。 */
     pointer-events: none;
     padding: 10px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-strong);
+    border-left: 3px solid var(--primary-2);
     background: var(--card-elevated);
+    backdrop-filter: blur(16px);
     box-shadow: var(--elev-2);
     font-size: 12.5px;
+    color: var(--text);
+    max-width: 360px;
     animation: harborActionRise var(--dur-base) var(--ease-spring) both;
   }
-  .ov-toast[data-kind="err"] { border-color: var(--err); color: var(--err); }
-  .ov-toast[data-kind="ok"] { border-color: var(--ok); color: var(--ok); }
+  .ov-toast[data-kind="err"] { border-color: var(--err); border-left-color: var(--err); color: var(--err); }
+  .ov-toast[data-kind="ok"] { border-color: var(--ok); border-left-color: var(--ok); color: var(--ok); }
+  .ov-toast[data-kind="warn"] { border-color: var(--warn); border-left-color: var(--warn); color: var(--warn); }
 }

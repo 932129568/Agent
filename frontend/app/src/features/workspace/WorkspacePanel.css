@@ -1,5 +1,5 @@
 @layer components {
-  .ws-root { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; }
+  .ws-root { padding: 24px 28px; max-width: 1120px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; }
   .ws-card {
     padding: 16px;
     border-radius: var(--radius-md);
@@ -40,4 +40,6 @@
   .ws-input { flex: 1; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-subtle); }
   .ws-btn { padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--surface-subtle); cursor: pointer; font-size: 12.5px; }
   .ws-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  .ws-card { transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out); }
+  .ws-card:hover { border-color: var(--border-strong); box-shadow: var(--elev-2); }
 }

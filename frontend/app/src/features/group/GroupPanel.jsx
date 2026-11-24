@@ -31,6 +31,7 @@ import { extractArtifactsFromMarkdown } from '../../services/artifacts.js'
 import MarkdownView from '../../ui/MarkdownView.jsx'
 import RelayTrackStage from '../../ui/RelayTrackStage.jsx'
 import ContextUsageRing from '../../ui/ContextUsageRing.jsx'
+import DropdownMenu from '../../ui/DropdownMenu.jsx'
 import InlineApproval from '../../ui/InlineApproval.jsx'
 import './GroupPanel.css'
 
@@ -60,6 +61,19 @@ export default function GroupPanel() {
   const [newCapsTouched, setNewCapsTouched] = useState(false)
 
   useEffect(() => { refreshGroupFiles(group.activeGroupId).catch(() => {}) }, [group.activeGroupId])
+
+  useEffect(() => {
+    if (!activeDrawer) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        setActiveDrawer(null)
+      }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [activeDrawer])
 
   const pendingApproval = runtime.pendingApproval && runtime.pendingApproval.sid === 'group' ? runtime.pendingApproval : null
 
@@ -150,40 +164,56 @@ export default function GroupPanel() {
           >
             📁 本群文件 ({(group.files || []).length})
           </button>
-          {hasLongAssistant && (
-            <button
-              type="button"
-              className="gp-chip-btn"
-              onClick={() => {
-                const next = {}
-                for (const m of group.messages) if (m.role === 'assistant') next[m.id] = anyCollapsed
-                setExpandedMap(next)
-              }}
-            >
-              {anyCollapsed ? '展开全部' : '收起全部'}
-            </button>
-          )}
-          <button
-            type="button"
-            className="gp-chip-btn"
-            data-active={String(ui.askBeforeDesign)}
-            title="开启时：涉及风格与交互方案前会先弹窗询问；关闭时直接自主发挥"
-            onClick={() => setAskBeforeDesign(!ui.askBeforeDesign)}
-          >
-            {ui.askBeforeDesign ? '🎯 效果先问我' : '⚡ 自主发挥'}
-          </button>
-
-          {group.messages.length > 0 && (
-            <button type="button" className="gp-chip-btn" onClick={() => exportCurrentGroupMarkdown()} title="导出本群完整交接纪要为 Markdown">
-              ⬇ 导出纪要
-            </button>
-          )}
-          <button type="button" className="gp-chip-btn" onClick={() => convertGroupToWorkflow()} title="将当前群聊名册一键编译为可视化可编辑 DAG 工作流">
-            ⚡ 转 DAG 流
-          </button>
-          <button type="button" className="gp-chip-btn" onClick={() => { setActiveDrawer(null); triggerRelayShowcase() }}>
-            ▶ 预览光梭接力动画
-          </button>
+          <DropdownMenu
+            align="right"
+            direction="down"
+            label="⋯ 更多"
+            ariaLabel="群聊更多操作"
+            triggerClassName="gp-chip-btn"
+            items={[
+              { section: '协作设置' },
+              {
+                id: 'gp-ask',
+                icon: ui.askBeforeDesign ? '🎯' : '⚡',
+                label: ui.askBeforeDesign ? '效果先问我（已开启）' : '自主发挥模式',
+                active: ui.askBeforeDesign,
+                onClick: () => setAskBeforeDesign(!ui.askBeforeDesign),
+              },
+              {
+                id: 'gp-toggle-long',
+                icon: anyCollapsed ? '▾' : '▴',
+                label: anyCollapsed ? '展开全部交付' : '收起全部交付',
+                hidden: !hasLongAssistant,
+                onClick: () => {
+                  const next = {}
+                  for (const m of group.messages) if (m.role === 'assistant') next[m.id] = anyCollapsed
+                  setExpandedMap(next)
+                },
+              },
+              { divider: true },
+              { section: '流转与导出' },
+              {
+                id: 'gp-to-dag',
+                icon: '⚡',
+                label: '编译为 DAG 工作流',
+                onClick: () => convertGroupToWorkflow(),
+              },
+              {
+                id: 'gp-export',
+                icon: '⬇',
+                label: '导出群聊纪要 (.md)',
+                disabled: group.messages.length === 0,
+                onClick: () => exportCurrentGroupMarkdown(),
+              },
+              { divider: true },
+              {
+                id: 'gp-demo',
+                icon: '▶',
+                label: '预览光梭接力动画',
+                onClick: () => { setActiveDrawer(null); triggerRelayShowcase() },
+              },
+            ]}
+          />
         </div>
       </header>
 

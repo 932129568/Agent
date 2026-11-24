@@ -21,6 +21,7 @@
     outline: none;
   }
   .st-nav-btn {
+    position: relative;
     text-align: left;
     padding: 9px 12px;
     border-radius: var(--radius-sm);
@@ -30,6 +31,16 @@
     font-size: 13px;
     cursor: pointer;
     transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .st-nav-btn[data-active="true"]::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    border-radius: var(--radius-full);
+    background: var(--primary);
   }
   .st-nav-btn[data-active="true"] {
     background: var(--primary-soft);

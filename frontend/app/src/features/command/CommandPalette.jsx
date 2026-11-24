@@ -83,12 +83,23 @@ export default function CommandPalette() {
         placeholder="输入命令、切换透色、双模型协同或搜索最近会话…"
       />
       <div className="cp-list">
-        {filtered.map((c, i) => (
-          <button key={c.id} type="button" className="cp-row" data-active={String(i === activeIdx)} onClick={() => exec(c)}>
-            <span>{c.label}</span>
-            <span className="cp-hint">{c.hint}</span>
-          </button>
-        ))}
+        {filtered.length === 0 ? (
+          <div className="cp-empty">未找到匹配指令，试试输入「新建」「透色」「工作流」或「导出」</div>
+        ) : (
+          filtered.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              className="cp-row"
+              data-active={String(i === activeIdx)}
+              onMouseEnter={() => setIdx(i)}
+              onClick={() => exec(c)}
+            >
+              <span>{c.label}</span>
+              <span className="cp-hint">{c.hint}</span>
+            </button>
+          ))
+        )}
       </div>
     </div>
   )

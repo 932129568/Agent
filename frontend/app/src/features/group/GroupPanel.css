@@ -71,11 +71,14 @@
     transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   }
   .gp-chip-btn:hover { border-color: var(--primary); color: var(--text); }
+  .gp-chip-btn:active { transform: scale(0.96); }
   .gp-chip-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
   .gp-chip-btn[data-highlight="true"] { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); font-weight: 600; }
 
   /* 悬浮滑出抽屉（角色配置 / 群文件库）：绝不挤压下方消息流 */
   .gp-drawer-backdrop {
+    backdrop-filter: blur(6px);
+    animation: harborBackdropIn var(--dur-fast) var(--ease-out) both;
     position: absolute;
     inset: 0;
     z-index: var(--z-sticky);

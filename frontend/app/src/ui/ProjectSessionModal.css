@@ -7,8 +7,11 @@
     place-items: center;
     padding: 20px;
     background: rgba(12, 13, 18, 0.44);
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px) saturate(1.1);
+    animation: harborBackdropIn var(--dur-fast) var(--ease-out) both;
   }
+  .pm-backdrop[data-closing="true"] { animation: harborBackdropOut var(--dur-fast) var(--ease-exit) forwards; }
+  .pm-backdrop[data-closing="true"] .pm-modal { animation: harborModalOut var(--dur-fast) var(--ease-exit) forwards; }
   .pm-modal {
     width: min(520px, calc(100vw - 32px));
     border-radius: var(--radius-lg);

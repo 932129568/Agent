@@ -59,7 +59,7 @@ export default function ContextDock() {
   return (
     <aside ref={asideRef} className="dk-root" data-wide={String(isWide)} aria-label="右侧上下文工作台">
       <div className="dk-head">
-        <strong>上下文工作台（事件驱动 · 0 轮询）</strong>
+        <strong>上下文工作台</strong>
         <button type="button" className="dk-close" onClick={() => toggleDock()} aria-label="关闭">×</button>
       </div>
       <div className="dk-tabs" role="tablist">

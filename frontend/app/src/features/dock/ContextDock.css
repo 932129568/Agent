@@ -34,5 +34,18 @@
   .dk-kv { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
   .dk-k { color: var(--text-3); }
   .dk-v { color: var(--text); font-weight: 500; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dk-close { width: 28px; height: 28px; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface-subtle); cursor: pointer; }
+  .dk-tab:hover { background: var(--surface-hover); color: var(--text); }
+  .dk-tab:active { transform: scale(0.96); }
+  .dk-close {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  }
+  .dk-close:hover { border-color: var(--primary); color: var(--text); transform: scale(1.06); }
+  .dk-close:active { transform: scale(0.94); }
 }

@@ -56,7 +56,7 @@ export default function OverlayRoot() {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
         if (ui.activeModal) handleCloseModal()
         else if (ui.dockOpen) toggleDock()
       }

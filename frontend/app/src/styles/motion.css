@@ -1,10 +1,10 @@
-/* Harbor 唯一动效与降级中心（仅此处允许 fx-off 动效归零） */
+/* Harbor 唯一动效与降级中心（R20 发布级精调 · 仅此处允许 fx-off 动效归零） */
 @layer base {
   @keyframes harborChamberEnter {
     from {
       opacity: 0;
-      transform: translate3d(0, 26px, 0) scale(0.95);
-      clip-path: inset(12% 2% 0% 2% round 20px);
+      transform: translate3d(0, 22px, 0) scale(0.96);
+      clip-path: inset(10% 2% 0% 2% round 20px);
     }
     to {
       opacity: 1;
@@ -14,70 +14,97 @@
   }
 
   @keyframes harborWordRollIn {
-    from {
-      opacity: 0;
-      transform: translate3d(0, 14px, 0) rotateX(-38deg);
-    }
-    to {
-      opacity: 1;
-      transform: translate3d(0, 0, 0) rotateX(0deg);
-    }
+    from { opacity: 0; transform: translate3d(0, 12px, 0) rotateX(-32deg); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0deg); }
   }
 
   @keyframes harborToolCardIn {
-    from {
-      opacity: 0;
-      transform: translate3d(-14px, 10px, 0) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: translate3d(0, 0, 0) scale(1);
-    }
+    from { opacity: 0; transform: translate3d(-12px, 8px, 0) scale(0.96); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
 
   @keyframes harborAnswerHandoff {
-    from {
-      opacity: 0;
-      transform: translate3d(0, 24px, 0) scale(0.985);
-    }
-    to {
-      opacity: 1;
-      transform: translate3d(0, 0, 0) scale(1);
-    }
+    from { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.985); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
 
   @keyframes harborSheenSweep {
     0% { transform: translateX(-120%) skewX(-24deg); opacity: 0; }
-    20% { opacity: 0.9; }
+    22% { opacity: 0.85; }
     100% { transform: translateX(240%) skewX(-24deg); opacity: 0; }
   }
 
   @keyframes harborSealPop {
-    0% { transform: scale(0.55) rotate(-18deg); opacity: 0; }
-    60% { transform: scale(1.16) rotate(4deg); opacity: 1; }
+    0% { transform: scale(0.55) rotate(-16deg); opacity: 0; }
+    62% { transform: scale(1.14) rotate(3deg); opacity: 1; }
     100% { transform: scale(1) rotate(0deg); opacity: 1; }
   }
 
   @keyframes harborActionRise {
-    from { opacity: 0; transform: translate3d(0, 10px, 0); }
-    to { opacity: 1; transform: translate3d(0, 0, 0); }
-  }
-
-  @keyframes harborModalIn {
-    from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.95); }
+    from { opacity: 0; transform: translate3d(0, 9px, 0) scale(0.98); }
     to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
 
+  @keyframes harborMsgIn {
+    from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.988); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+
+  @keyframes harborBackdropIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes harborBackdropOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  @keyframes harborModalIn {
+    0% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.94); }
+    72% { opacity: 1; transform: translate3d(0, -2px, 0) scale(1.008); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+
+  @keyframes harborModalOut {
+    from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+    to { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.94); }
+  }
+
+  @keyframes harborMenuPopDown {
+    0% { opacity: 0; transform: translate3d(0, -6px, 0) scale(0.95); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+
+  @keyframes harborMenuPopUp {
+    0% { opacity: 0; transform: translate3d(0, 6px, 0) scale(0.95); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+
+  @keyframes harborMenuOut {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.95); }
+  }
+
+  @keyframes harborAccordionIn {
+    from { opacity: 0; transform: translate3d(0, -4px, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+
+  @keyframes harborPulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.82); }
+  }
+
   @keyframes harborDrawerIn {
-    from { opacity: 0; transform: translate3d(36px, 0, 0) scale(0.97); }
+    from { opacity: 0; transform: translate3d(32px, 0, 0) scale(0.975); }
     to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
 
   @keyframes harborStageEnter {
-    from { opacity: 0; transform: translate3d(14px, 0, 0) scale(0.992); }
+    from { opacity: 0; transform: translate3d(10px, 0, 0) scale(0.994); }
     to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
-
 
   @keyframes rtRadarRing {
     0% { transform: scale(0.88); opacity: 0.78; }

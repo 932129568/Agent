@@ -13,12 +13,22 @@
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
-  html[data-backdrop="none"],
-  html[data-backdrop="none"] body {
+  html[data-backdrop="none"], html[data-backdrop="none"] body {
     background: var(--bg-solid);
   }
-  button, input, textarea, select {
-    font: inherit;
-    color: inherit;
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
   }
+  code, pre { font-family: var(--font-mono); }
+
+  /* 极细玻璃态自定义滚动条（消除默认粗糙灰条，保留平滑触控体验） */
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: var(--radius-full);
+  }
+  *::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 }

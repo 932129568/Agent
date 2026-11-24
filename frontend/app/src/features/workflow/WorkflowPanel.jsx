@@ -27,6 +27,7 @@ import { REASONING_TIERS } from '../../services/reasoningPresets.js'
 import { SAMPLE_CUSTOM_PLUGIN_JSON } from '../../services/pluginRegistry.js'
 import { copyText, downloadTextFile } from '../../platform/dom.js'
 import WorkflowGraph from '../../ui/WorkflowGraph.jsx'
+import DropdownMenu from '../../ui/DropdownMenu.jsx'
 import './WorkflowPanel.css'
 
 const TOOL_PRESET_NAMES = ['list_dir', 'read_file', 'write_file', 'search_replace', 'run_command', 'browser_search', 'generate_image', 'generate_video', 'list_workflow_plugins']
@@ -268,8 +269,6 @@ export default function WorkflowPanel() {
               <button type="button" className="wf-chip" data-active={String(showSynthBox)} onClick={() => setShowSynthBox((v) => !v)}>
                 ✨ 一句话生成流
               </button>
-              <button type="button" className="wf-chip" onClick={() => createNewWorkflow()}>+ 空白流</button>
-              <button type="button" className="wf-chip" onClick={() => convertGroupToWorkflow()}>👥 群聊转 DAG</button>
               {activeWf && (
                 <button
                   type="button"
@@ -283,46 +282,65 @@ export default function WorkflowPanel() {
                   + 加节点
                 </button>
               )}
-              {activeWf && (
-                <button type="button" className="wf-chip" onClick={() => cloneCurrentWorkflow(activeWf.id)}>克隆</button>
-              )}
-              <button type="button" className="wf-chip" data-active={String(showImportWf)} onClick={() => setShowImportWf((v) => !v)}>
-                导入 JSON
-              </button>
-              {activeWf && (
-                <button
-                  type="button"
-                  className="wf-chip"
-                  onClick={() => {
-                    downloadTextFile(`${activeWf.id}.json`, JSON.stringify(activeWf, null, 2), 'application/json;charset=utf-8')
-                    pushToast(`已导出工作流 JSON：${activeWf.id}.json`, 'ok')
-                  }}
-                >
-                  ⬇ JSON
-                </button>
-              )}
               {run.lastArtifact && (
                 <button type="button" className="wf-chip" data-active="true" onClick={() => openArtifactCanvas(run.lastArtifact)}>
                   ✦ 打开画布
                 </button>
               )}
-              {run.status === 'done' && (
-                <button type="button" className="wf-chip" onClick={() => exportWorkflowRunReport()}>
-                  ⬇ 运行报告
-                </button>
-              )}
-              <button type="button" className="wf-chip" disabled={!(pluginsState.undoStack && pluginsState.undoStack.length)} onClick={() => undoWorkflowChange()} title="撤销上一步 DAG 编辑">
-                ↶ 撤销
+              <button type="button" className="wf-chip" disabled={!(pluginsState.undoStack && pluginsState.undoStack.length)} onClick={() => undoWorkflowChange()} title="撤销上一步 DAG 编辑" aria-label="撤销">
+                ↶
               </button>
-              <button type="button" className="wf-chip" disabled={!(pluginsState.redoStack && pluginsState.redoStack.length)} onClick={() => redoWorkflowChange()} title="重做 DAG 编辑">
-                ↷ 重做
+              <button type="button" className="wf-chip" disabled={!(pluginsState.redoStack && pluginsState.redoStack.length)} onClick={() => redoWorkflowChange()} title="重做 DAG 编辑" aria-label="重做">
+                ↷
               </button>
-              <button type="button" className="wf-chip" data-active={String(showHistory)} onClick={() => setShowHistory((v) => !v)}>
-                📜 历史 ({(pluginsState.runHistory || []).length})
-              </button>
-              <button type="button" className="wf-chip" onClick={() => triggerWorkflowShowcase()}>
-                ▶ 演练并发 DAG 动效
-              </button>
+              <DropdownMenu
+                align="right"
+                direction="down"
+                label="⋯ 更多"
+                ariaLabel="工作流更多操作"
+                triggerClassName="wf-chip"
+                items={[
+                  { section: '创建与来源' },
+                  { id: 'wf-new', icon: '+', label: '新建空白工作流', onClick: () => createNewWorkflow() },
+                  { id: 'wf-from-grp', icon: '👥', label: '从当前群聊编译 DAG', onClick: () => convertGroupToWorkflow() },
+                  { id: 'wf-clone', icon: '⧉', label: '克隆为自定义副本', disabled: !activeWf, onClick: () => activeWf && cloneCurrentWorkflow(activeWf.id) },
+                  { divider: true },
+                  { section: '导入、导出与记录' },
+                  { id: 'wf-import', icon: '⤴', label: '导入工作流 JSON…', onClick: () => setShowImportWf((v) => !v) },
+                  {
+                    id: 'wf-export-json',
+                    icon: '⬇',
+                    label: '导出工作流 JSON',
+                    disabled: !activeWf,
+                    onClick: () => {
+                      if (!activeWf) return
+                      downloadTextFile(`${activeWf.id}.json`, JSON.stringify(activeWf, null, 2), 'application/json;charset=utf-8')
+                      pushToast(`已导出工作流 JSON：${activeWf.id}.json`, 'ok')
+                    },
+                  },
+                  {
+                    id: 'wf-history',
+                    icon: '📜',
+                    label: `执行历史记录 (${(pluginsState.runHistory || []).length})`,
+                    active: showHistory,
+                    onClick: () => setShowHistory((v) => !v),
+                  },
+                  {
+                    id: 'wf-export-rep',
+                    icon: '📄',
+                    label: '导出本次运行报告 (.md)',
+                    disabled: run.status !== 'done',
+                    onClick: () => exportWorkflowRunReport(),
+                  },
+                  { divider: true },
+                  {
+                    id: 'wf-demo',
+                    icon: '▶',
+                    label: '演练并发 DAG 动效',
+                    onClick: () => triggerWorkflowShowcase(),
+                  },
+                ]}
+              />
             </>
           ) : (
             <button

@@ -501,7 +501,8 @@ try {
   /* ======================================================================== *
    * Suite B · 独立光梭接力动画（RelayTrackStage 视觉语言与动态验证）
    * ======================================================================== */
-  await page.locator('.gp-controls button:has-text("预览光梭接力动画")').click()
+  await page.locator('.gp-controls button[aria-label="群聊更多操作"]').click()
+  await page.locator('.dm-panel button:has-text("预览光梭接力动画")').click()
   await page.waitForSelector('.rt-stage[data-status="running"]', { timeout: 4000 })
 
   const waveDotCount = await page.locator('.rt-wave-dot').count()
@@ -549,7 +550,7 @@ try {
   /* ======================================================================== *
    * Suite C · 设置中心上下文长度 / 最大输出 / 8 档与自定义思考档位
    * ======================================================================== */
-  await page.locator('.hb-top-btn:has-text("透色与设置")').click()
+  await page.locator('.hb-rail-btn[title="系统设置"]').click()
   await page.waitForSelector('.ov-modal .st-shell', { timeout: 5000 })
 
   const reasoningCard = page.locator('.st-card:has(h3:has-text("上下文长度、最大输出与多级思考档位"))')
@@ -704,7 +705,7 @@ try {
   )
 
   // D3: 负控验证 — 切到「静息无障碍 (0×)」后点击撞击按钮必须严格 0 位移、无高光
-  await page.locator('.hb-top-btn:has-text("透色与设置")').click()
+  await page.locator('.hb-rail-btn[title="系统设置"]').click()
   await page.waitForSelector('.ov-modal .st-shell')
   await page.locator('.st-nav-btn:has-text("透色、动效与自动更新")').click()
   await page.locator('button.st-btn:has-text("静息无障碍")').click()
@@ -784,7 +785,7 @@ try {
    * Suite F · R6 真机新能力（安全护栏设置 / 群聊真工具调用 / 长文折叠收纳 / 群文件面板）
    * ======================================================================== */
   // F1: 安全护栏一键关闭命令拦截
-  await page.locator('.hb-top-btn:has-text("透色与设置")').click()
+  await page.locator('.hb-rail-btn[title="系统设置"]').click()
   await page.waitForSelector('.ov-modal .st-shell')
   await page.locator('.st-nav-btn:has-text("工具、MCP、沙箱与软件")').click()
   stubState.savedGuardConfigs.length = 0
@@ -1018,7 +1019,8 @@ try {
   const dagEdgeCount = await page.locator('.wg-edge-base').count()
 
   // L1: 侧边栏切换为「工作流目录」，可视化 DAG 节点图与 SVG 连线完整渲染，演练动效驱动并发拓扑
-  await page.locator('.wf-actions button:has-text("演练并发 DAG 动效")').click()
+  await page.locator('.wf-actions button[aria-label="工作流更多操作"]').click()
+  await page.locator('.dm-panel button:has-text("演练并发 DAG 动效")').click()
   await page.waitForTimeout(450)
   const hasRunningOrDone = (await page.locator('.wg-node[data-status="running"], .wg-node[data-status="done"]').count()) >= 1
   record(
@@ -1150,6 +1152,41 @@ try {
     `mediaHit=${mediaHit}, hasGallery=${Boolean(gallerySrc && gallerySrc.includes('class="media-card"'))}, hasImg=${Boolean(gallerySrc && /<img\s/.test(gallerySrc))}`
   )
   await page.locator('.dk-close').click()
+
+  /* ======================================================================== *
+   * Suite P · R20 对外发布级布局与二级菜单体系 + 弹窗 Escape 平滑退场动效验收
+   * ======================================================================== */
+  const primaryNavCnt = await page.locator('.hb-rail-btn[data-primary-nav="true"]').count()
+  await page.locator('.hb-rail-more-toggle').click()
+  await page.waitForSelector('.hb-rail-sublist', { timeout: 3000 })
+  const secondaryNavCnt = await page.locator('.hb-rail-sub-btn').count()
+  await page.locator('.hb-rail-more-toggle').click()
+
+  await page.locator('.hb-topbar button[title*="外观主题"]').click()
+  await page.waitForSelector('.dm-panel[aria-label="外观与透色菜单"]', { timeout: 3000 })
+  const appearanceHasBackdrop = (await page.locator('.dm-panel button:has-text("Acrylic")').count()) === 1
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.dm-panel[aria-label="外观与透色菜单"]', { state: 'detached', timeout: 3000 })
+  const appearanceClosed = (await page.locator('.dm-panel[aria-label="外观与透色菜单"]').count()) === 0
+
+  record(
+    'Suite-P',
+    '发布级一级/二级菜单层级：一级主导航克制为 4 核 + 二级折叠 4 项 + 外观二级菜单支持 Escape 平滑关闭',
+    primaryNavCnt === 4 && secondaryNavCnt === 4 && appearanceHasBackdrop && appearanceClosed,
+    `primary=${primaryNavCnt}, secondary=${secondaryNavCnt}, hasBackdrop=${appearanceHasBackdrop}, escClosed=${appearanceClosed}`
+  )
+
+  await page.locator('.ss-side[data-mode="sessions"] button:has-text("项目会话")').click()
+  await page.waitForSelector('.pm-modal', { timeout: 3000 })
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.pm-modal', { state: 'detached', timeout: 3000 })
+  const pmDetached = (await page.locator('.pm-modal').count()) === 0
+  record(
+    'Suite-P',
+    '二级弹窗交互与退场动画：ProjectSessionModal 按 Escape 平滑退场并干净卸载',
+    pmDetached,
+    `detached=${pmDetached}`
+  )
 
   // D4: 全程零未捕获页面异常
   record('Global', '全程零未捕获 pageerror', pageErrors.length === 0, pageErrors[0] || '0 errors')

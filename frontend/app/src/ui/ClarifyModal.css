@@ -7,8 +7,11 @@
     place-items: center;
     padding: 20px;
     background: rgba(12, 13, 18, 0.42);
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px) saturate(1.1);
+    animation: harborBackdropIn var(--dur-fast) var(--ease-out) both;
   }
+  .cl-backdrop[data-closing="true"] { animation: harborBackdropOut var(--dur-fast) var(--ease-exit) forwards; }
+  .cl-backdrop[data-closing="true"] .cl-modal { animation: harborModalOut var(--dur-fast) var(--ease-exit) forwards; }
   .cl-modal {
     width: min(640px, calc(100vw - 32px));
     max-height: min(82vh, 680px);

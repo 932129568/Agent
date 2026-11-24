@@ -18,6 +18,7 @@ import {
 } from '../state/store.js'
 import HarborLogo from '../ui/HarborLogo.jsx'
 import { NavIcon } from '../ui/Icons.jsx'
+import DropdownMenu from '../ui/DropdownMenu.jsx'
 import ChatPanel from '../features/chat/ChatPanel.jsx'
 import SidebarSessions from '../features/sessions/SidebarSessions.jsx'
 import SessionsPanel from '../features/sessions/SessionsPanel.jsx'
@@ -31,13 +32,18 @@ import SearchDock from '../features/search/SearchDock.jsx'
 import OverlayRoot from './OverlayRoot.jsx'
 import './AppShell.css'
 
+/** 一级核心导航（克制 4 项，直达最高频工作台） */
 const PRIMARY_NAV = [
   { id: 'chat', icon: 'chat', label: '智能对话' },
-  { id: 'sessions', icon: 'sessions', label: '会话总览' },
-  { id: 'workspace', icon: 'workspace', label: '工作空间' },
-  { id: 'workflow', icon: 'workflow', label: '工作流插件' },
-  { id: 'planning', icon: 'planning', label: '计划回滚' },
   { id: 'group', icon: 'group', label: '角色群聊' },
+  { id: 'workflow', icon: 'workflow', label: '工作流插件' },
+  { id: 'workspace', icon: 'workspace', label: '工作空间' },
+]
+
+/** 二级收纳导航（折叠于「更多功能」，保持一级界面清爽专注） */
+const SECONDARY_NAV = [
+  { id: 'sessions', icon: 'sessions', label: '会话总览' },
+  { id: 'planning', icon: 'planning', label: '计划回滚' },
   { id: 'collaboration', icon: 'collaboration', label: '双模协同' },
   { id: 'analytics', icon: 'analytics', label: '用量洞察' },
 ]
@@ -50,13 +56,13 @@ export default function AppShell() {
   const runtime = useSlice('runtime')
   const settings = useSlice('settings')
   const [compactRail, setCompactRail] = useState(false)
+  const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [impactEdge, setImpactEdge] = useState('')
   const shellRef = useRef(null)
   const mainRef = useRef(null)
 
   useEffect(() => { hydrateApp().catch(() => {}) }, [])
 
-  // Electron 桌面窗口打开/关闭同步过渡动画（从任务栏浮起展开 / 向任务栏柔和沉降收起，绝不闪开）
   useEffect(() => {
     const playShellTransition = (phase) => {
       const el = shellRef.current
@@ -65,18 +71,18 @@ export default function AppShell() {
       if (phase === 'open') {
         el.animate(
           [
-            { transform: `translate3d(0,${(20 * k).toFixed(1)}px,0) scale(${(1 - 0.024 * k).toFixed(3)})`, opacity: 0.05 },
+            { transform: `translate3d(0,${(18 * k).toFixed(1)}px,0) scale(${(1 - 0.022 * k).toFixed(3)})`, opacity: 0.05 },
             { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
           ],
-          { duration: 280, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' }
+          { duration: 270, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' }
         )
       } else if (phase === 'close') {
         el.animate(
           [
             { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
-            { transform: `translate3d(0,${(24 * k).toFixed(1)}px,0) scale(${(1 - 0.036 * k).toFixed(3)})`, opacity: 0 },
+            { transform: `translate3d(0,${(22 * k).toFixed(1)}px,0) scale(${(1 - 0.032 * k).toFixed(3)})`, opacity: 0 },
           ],
-          { duration: 195, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
+          { duration: 190, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
         )
       }
     }
@@ -85,17 +91,13 @@ export default function AppShell() {
     if (desktop && typeof desktop.onWindowLifecycle === 'function') {
       return desktop.onWindowLifecycle((ev) => {
         if (!ev) return
-        if (ev.phase === 'close') {
-          // Electron win.destroy() 不触发 beforeunload：窗口关闭动画启动瞬间立即同步落盘未保存会话
-          flushPersistSessions()
-        }
+        if (ev.phase === 'close') flushPersistSessions()
         if (ev.phase === 'open' || ev.phase === 'close') playShellTransition(ev.phase)
       })
     }
     return undefined
   }, [settings.motion])
 
-  // 校准后的物理撞击响应（峰值 4.6–5.8px + scale(0.988) + 140ms 弧形高光，收敛 275ms，残余 0px）
   useEffect(() => {
     const sig = ui.impactSignal
     const el = mainRef.current
@@ -103,7 +105,6 @@ export default function AppShell() {
     const isStrong = sig.strength === 'strong'
     const speed = isStrong ? 275 : 210
     const edge = sig.edge || 'left'
-    // 结合真实撞击矢量（窗口飞向归属按钮的纵横偏移），让主壳朝真实落点方向自然受冲微震
     const yBias = sig.dy ? Math.max(-68, Math.min(68, sig.dy * 0.22)) : (isStrong ? 32 : 18)
     const vx = edge === 'left' ? speed : (edge === 'right' ? -speed : 0)
     const vy = edge === 'top' ? speed * 0.78 : (edge === 'bottom' ? -speed * 0.78 : yBias)
@@ -151,6 +152,7 @@ export default function AppShell() {
 
   const isGroupPanel = ui.activePanel === 'group'
   const isWorkflowPanel = ui.activePanel === 'workflow'
+  const secondaryActive = SECONDARY_NAV.some((item) => item.id === ui.activePanel)
   const activeWorkflow = (pluginsState.workflows || []).find((w) => w.id === pluginsState.activeWorkflowId)
   const currentSession = sessionsState.items.find((s) => s.id === sessionsState.currentId)
   const curRun = currentSession && runtime.runsBySid[currentSession.id]
@@ -161,7 +163,7 @@ export default function AppShell() {
       : !!(curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase)))
   const activeModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
   const topTitle = isWorkflowPanel
-    ? (activeWorkflow ? activeWorkflow.name : '插件化工作流')
+    ? (activeWorkflow ? activeWorkflow.name : '工作流插件')
     : (isGroupPanel
       ? (group.title || '多角色群聊')
       : (currentSession ? currentSession.title : 'Harbor'))
@@ -173,6 +175,91 @@ export default function AppShell() {
   const split = runtime.hybridSplit || { localTokens: 0, cloudTokens: 0 }
   const savedYuan = ((split.localTokens / 1000) * 0.002).toFixed(2)
 
+  const toolboxItems = [
+    { section: '侧栏扩展工具' },
+    {
+      id: 'tb-dock',
+      icon: '◫',
+      label: '上下文副屏与实时画布',
+      hint: 'Ctrl+Alt+D',
+      active: ui.dockOpen,
+      onClick: () => toggleDock(),
+    },
+    {
+      id: 'tb-search',
+      icon: '⌕',
+      label: '网页搜索分栏',
+      active: ui.searchDockOpen,
+      onClick: () => toggleSearchDock(),
+    },
+  ]
+
+  const appearanceItems = [
+    { section: '主题模式' },
+    {
+      id: 'ap-light',
+      icon: '☀',
+      label: '明亮暖玻璃',
+      active: settings.theme === 'light',
+      onClick: () => updateVisualSettings({ theme: 'light' }),
+    },
+    {
+      id: 'ap-dark',
+      icon: '☾',
+      label: '深色磨砂玻璃',
+      active: settings.theme === 'dark',
+      onClick: () => updateVisualSettings({ theme: 'dark' }),
+    },
+    { divider: true },
+    { section: '窗外透色材质' },
+    {
+      id: 'ap-acrylic',
+      label: 'Acrylic · 实时透窗外',
+      active: settings.backdrop === 'acrylic',
+      onClick: () => updateVisualSettings({ backdrop: 'acrylic' }),
+    },
+    {
+      id: 'ap-mica',
+      label: 'Mica · 柔和桌面色调',
+      active: settings.backdrop === 'mica',
+      onClick: () => updateVisualSettings({ backdrop: 'mica' }),
+    },
+    {
+      id: 'ap-none',
+      label: '纯实色背景',
+      active: settings.backdrop === 'none',
+      onClick: () => updateVisualSettings({ backdrop: 'none' }),
+    },
+    { divider: true },
+    { section: '动效强度' },
+    {
+      id: 'ap-m-dyn',
+      label: '灵动动效 (1.0×)',
+      active: settings.motion === 'dynamic',
+      onClick: () => updateVisualSettings({ motion: 'dynamic' }),
+    },
+    {
+      id: 'ap-m-bal',
+      label: '轻盈平衡 (0.58×)',
+      active: settings.motion === 'balanced',
+      onClick: () => updateVisualSettings({ motion: 'balanced' }),
+    },
+    {
+      id: 'ap-m-red',
+      label: '静息无障碍 (0×)',
+      active: settings.motion === 'reduced',
+      onClick: () => updateVisualSettings({ motion: 'reduced' }),
+    },
+    { divider: true },
+    {
+      id: 'ap-settings',
+      icon: '⚙',
+      label: '透色与完整设置…',
+      hint: '设置中心',
+      onClick: (e) => openModal('settings', captureTriggerRect(e)),
+    },
+  ]
+
   return (
     <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)}>
       <nav className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
@@ -181,69 +268,138 @@ export default function AppShell() {
           <span className="hb-rail-title">Harbor</span>
         </div>
 
-        <div className="hb-rail-section">工作台</div>
-        {PRIMARY_NAV.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="hb-rail-btn"
-            title={item.label}
-            data-active={String(ui.activePanel === item.id)}
-            onClick={() => setActivePanel(item.id)}
-          >
-            <NavIcon name={item.icon} />
-            <span className="hb-rail-label">{item.label}</span>
-          </button>
-        ))}
+        <div className="hb-rail-group">
+          {PRIMARY_NAV.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="hb-rail-btn"
+              title={item.label}
+              data-primary-nav="true"
+              data-active={String(ui.activePanel === item.id)}
+              onClick={() => setActivePanel(item.id)}
+            >
+              <NavIcon name={item.icon} />
+              <span className="hb-rail-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
 
-        <div className="hb-rail-section">扩展与工具</div>
-        <button
-          ref={(el) => registerMotionAnchor('nav-market', el)}
-          type="button"
-          className="hb-rail-btn"
-          title="行业专家包与 Skill 市场"
-          data-active={String(ui.activeModal === 'market')}
-          onClick={(e) => openModal('market', captureTriggerRect(e))}
-        >
-          <NavIcon name="market" />
-          <span className="hb-rail-label">专家市场</span>
-        </button>
-        <button
-          ref={(el) => registerMotionAnchor('nav-search', el)}
-          type="button"
-          className="hb-rail-btn"
-          title="网页搜索分栏"
-          data-active={String(ui.searchDockOpen)}
-          onClick={() => toggleSearchDock()}
-        >
-          <NavIcon name="search" />
-          <span className="hb-rail-label">网页搜索</span>
-        </button>
-        <button
-          ref={(el) => registerMotionAnchor('nav-dock', el)}
-          type="button"
-          className="hb-rail-btn"
-          title="右侧上下文工作台"
-          data-active={String(ui.dockOpen)}
-          onClick={() => toggleDock()}
-        >
-          <NavIcon name="dock" />
-          <span className="hb-rail-label">上下文副屏</span>
-        </button>
+        <div className="hb-rail-divider" />
+
+        {compactRail ? (
+          <DropdownMenu
+            block
+            side="right"
+            ariaLabel="更多工作台"
+            items={SECONDARY_NAV.map((item) => ({
+              id: `sec_${item.id}`,
+              label: item.label,
+              active: ui.activePanel === item.id,
+              onClick: () => setActivePanel(item.id),
+            }))}
+            renderTrigger={({ open, toggle }) => (
+              <button
+                type="button"
+                className="hb-rail-btn"
+                title="更多功能"
+                aria-expanded={String(open)}
+                data-active={String(open || secondaryActive)}
+                onClick={toggle}
+              >
+                <NavIcon name="more" />
+              </button>
+            )}
+          />
+        ) : (
+          <div className="hb-rail-more">
+            <button
+              type="button"
+              className="hb-rail-btn hb-rail-more-toggle"
+              title="展开或收起更多功能"
+              aria-expanded={String(moreNavOpen || secondaryActive)}
+              data-active={String(secondaryActive && !moreNavOpen)}
+              onClick={() => setMoreNavOpen((v) => !v)}
+            >
+              <NavIcon name="more" />
+              <span className="hb-rail-label">更多功能</span>
+              <span className="hb-rail-chev" data-open={String(moreNavOpen || secondaryActive)}>
+                <NavIcon name="chevron" />
+              </span>
+            </button>
+            {(moreNavOpen || secondaryActive) && (
+              <div className="hb-rail-sublist" role="group" aria-label="二级功能菜单">
+                {SECONDARY_NAV.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="hb-rail-btn hb-rail-sub-btn"
+                    title={item.label}
+                    data-active={String(ui.activePanel === item.id)}
+                    onClick={() => setActivePanel(item.id)}
+                  >
+                    <NavIcon name={item.icon} />
+                    <span className="hb-rail-label">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="hb-rail-spacer" />
 
-        <button
-          ref={(el) => registerMotionAnchor('nav-settings', el)}
-          type="button"
-          className="hb-rail-btn"
-          title="设置中心"
-          data-active={String(ui.activeModal === 'settings')}
-          onClick={(e) => openModal('settings', captureTriggerRect(e))}
-        >
-          <NavIcon name="settings" />
-          <span className="hb-rail-label">系统设置</span>
-        </button>
+        <div className="hb-rail-divider" />
+
+        <div className="hb-rail-group">
+          <button
+            ref={(el) => registerMotionAnchor('nav-market', el)}
+            type="button"
+            className="hb-rail-btn"
+            title="行业专家包与 Skill 市场"
+            data-active={String(ui.activeModal === 'market')}
+            onClick={(e) => openModal('market', captureTriggerRect(e))}
+          >
+            <NavIcon name="market" />
+            <span className="hb-rail-label">专家市场</span>
+          </button>
+
+          <DropdownMenu
+            block
+            direction="up"
+            align="left"
+            side={compactRail ? 'right' : ''}
+            ariaLabel="侧栏工具箱"
+            items={toolboxItems}
+            renderTrigger={({ open, toggle }) => (
+              <button
+                ref={(el) => { registerMotionAnchor('nav-toolbox', el); registerMotionAnchor('nav-dock', el) }}
+                type="button"
+                className="hb-rail-btn"
+                title="工具箱（副屏画布 / 网页搜索）"
+                aria-expanded={String(open)}
+                data-active={String(open || ui.dockOpen || ui.searchDockOpen)}
+                onClick={toggle}
+              >
+                <NavIcon name="toolbox" />
+                <span className="hb-rail-label">工具箱</span>
+                {(ui.dockOpen || ui.searchDockOpen) && <span className="hb-rail-dot" />}
+              </button>
+            )}
+          />
+
+          <button
+            ref={(el) => registerMotionAnchor('nav-settings', el)}
+            type="button"
+            className="hb-rail-btn"
+            title="系统设置"
+            data-active={String(ui.activeModal === 'settings')}
+            onClick={(e) => openModal('settings', captureTriggerRect(e))}
+          >
+            <NavIcon name="settings" />
+            <span className="hb-rail-label">系统设置</span>
+          </button>
+        </div>
       </nav>
 
       {ui.sidebarOpen && !ui.zenMode && (
@@ -263,61 +419,64 @@ export default function AppShell() {
       <main ref={mainRef} className="hb-main" data-impact-edge={impactEdge}>
         <header className="hb-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <button type="button" className="hb-top-btn" onClick={toggleSidebar} title="展开/收起会话栏">
+            <button type="button" className="hb-top-btn hb-icon-btn" onClick={toggleSidebar} title={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'} aria-label={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>
               <NavIcon name="sidebar" />
-              <span>{ui.sidebarOpen ? '收起会话' : '展开会话'}</span>
             </button>
             <button
               type="button"
               className="hb-island"
               data-busy={String(busy)}
               onClick={(e) => openModal('settings', captureTriggerRect(e))}
-              title="点击直达模型与推理设置"
+              title="点击打开模型与推理设置"
             >
-              <span>{busy ? '◉' : '●'}</span>
+              <span className="hb-island-dot" data-busy={String(busy)} />
               <strong>{topTitle}</strong>
               <span>· {topSubStatus}</span>
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {runtime.updateInfo && (
-              <button type="button" className="hb-top-btn" onClick={() => openModal('settings')}>
+              <button type="button" className="hb-top-btn" onClick={(e) => openModal('settings', captureTriggerRect(e))}>
                 ⬆ v{runtime.updateInfo.latest}
               </button>
             )}
-            <button
-              type="button"
-              className="hb-top-btn"
-              data-active={String(!!ui.zenMode)}
-              onClick={() => toggleZenMode()}
-              title="专注模式（Ctrl+Shift+F）：隐藏导航栏与侧边栏，聚焦主对话与实时画布"
-            >
-              <span>{ui.zenMode ? '⊞ 退出专注' : '⊡ 专注'}</span>
-            </button>
-            <button
-              type="button"
-              className="hb-top-btn"
-              onClick={() => updateVisualSettings({ theme: settings.theme === 'light' ? 'dark' : 'light' })}
-              title="一键切换明亮/深色磨砂透色"
-            >
-              <NavIcon name={settings.theme === 'light' ? 'moon' : 'sun'} />
-              <span>{settings.theme === 'light' ? '深色玻璃' : '明亮玻璃'}</span>
-            </button>
             <button
               ref={(el) => registerMotionAnchor('btn-command', el)}
               type="button"
               className="hb-top-btn"
               onClick={(e) => openModal('command', captureTriggerRect(e))}
+              title="打开全局命令面板 (Ctrl+K)"
             >
               ⌘ Ctrl+K
             </button>
             <button
               type="button"
               className="hb-top-btn"
-              onClick={(e) => openModal('settings', captureTriggerRect(e))}
+              data-active={String(!!ui.zenMode)}
+              onClick={() => toggleZenMode()}
+              title="专注模式（Ctrl+Shift+F）：隐藏导航栏与侧边栏"
             >
-              透色与设置
+              <span>{ui.zenMode ? '⊞ 退出专注' : '⊡ 专注'}</span>
             </button>
+            <DropdownMenu
+              align="right"
+              direction="down"
+              ariaLabel="外观与透色菜单"
+              items={appearanceItems}
+              renderTrigger={({ open, toggle }) => (
+                <button
+                  type="button"
+                  className="hb-top-btn"
+                  aria-expanded={String(open)}
+                  data-active={String(open)}
+                  onClick={toggle}
+                  title="外观主题、窗外透色与动效强度"
+                >
+                  <NavIcon name="palette" />
+                  <span>外观</span>
+                </button>
+              )}
+            />
           </div>
         </header>
 
@@ -342,14 +501,14 @@ export default function AppShell() {
             type="button"
             className="hb-ribbon-btn"
             onClick={() => toggleDock('overview')}
-            title="点击打开右侧上下文工作台查看详细遥测"
+            title="点击打开上下文工作台查看详细遥测"
           >
-            后端：{runtime.serverHealth && runtime.serverHealth.ok ? 'Fastify 5 在线' : '离线模式'}
-            {' · '}窗外透色：{settings.backdrop} ({Math.round(settings.opacity * 100)}%)
+            {runtime.serverHealth && runtime.serverHealth.ok ? '● 服务就绪' : '○ 离线模式'}
+            {' · '}透色：{settings.backdrop} ({Math.round(settings.opacity * 100)}%)
             {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 && ` · 本轮缓存 ${runtime.cacheTotals.latestHitRate}% / 累计 ${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`}
             {(split.localTokens > 0 || split.cloudTokens > 0) && ` · 本地 ${split.localTokens.toLocaleString()} / 云端 ${split.cloudTokens.toLocaleString()} tok · 省 ≈¥${savedYuan}`}
           </button>
-          <span>Harbor · React 19 + Fastify 5</span>
+          <span>Harbor Desktop</span>
         </footer>
       </main>
 
