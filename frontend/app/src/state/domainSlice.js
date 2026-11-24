@@ -37,14 +37,22 @@ export function resolveEndpointConfig(preferLocal = false) {
       custom_effort: String(c.custom_effort || ''),
       system_prompt: c.system_prompt,
       tool_mode: c.tool_mode,
+      imageBaseUrl: c.image_base_url || c.local_base_url,
+      imageApiKey: c.image_api_key || c.provider_key || c.api_key || '',
+      imageModel: c.image_model || '',
+      videoBaseUrl: c.video_base_url || c.local_base_url,
+      videoApiKey: c.video_api_key || c.provider_key || c.api_key || '',
+      videoModel: c.video_model || '',
     }
   }
   const pickedModel = c.provider_model || c.model || 'glm-4.5-flash'
+  const mainBase = c.provider_base_url || c.provider_base || c.base_url || 'https://open.bigmodel.cn/api/paas/v4'
+  const mainKey = c.provider_key || c.api_key || ''
   return {
     isLocal: false,
     hasEnabledMcp,
-    baseUrl: c.provider_base_url || c.provider_base || c.base_url || 'https://open.bigmodel.cn/api/paas/v4',
-    apiKey: c.provider_key || c.api_key || '',
+    baseUrl: mainBase,
+    apiKey: mainKey,
     model: pickedModel === 'auto' ? 'glm-4.5-flash' : pickedModel,
     temperature: c.temperature,
     top_p: c.top_p,
@@ -55,6 +63,12 @@ export function resolveEndpointConfig(preferLocal = false) {
     custom_effort: String(c.custom_effort || ''),
     system_prompt: c.system_prompt,
     tool_mode: c.tool_mode,
+    imageBaseUrl: c.image_base_url || mainBase,
+    imageApiKey: c.image_api_key || mainKey,
+    imageModel: c.image_model || '',
+    videoBaseUrl: c.video_base_url || mainBase,
+    videoApiKey: c.video_api_key || mainKey,
+    videoModel: c.video_model || '',
   }
 }
 

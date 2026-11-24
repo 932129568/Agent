@@ -45,6 +45,7 @@ export const SUPPORTED_BUILTIN_TOOLS = Object.freeze([
   'browser_click', 'browser_fill', 'browser_screenshot', 'browser_close',
   'memory_write', 'memory_search', 'inspect_tool_schema', 'ask_user_options',
   'group_file_list', 'group_file_read', 'group_file_search',
+  'generate_image', 'generate_video',
 ])
 const SUPPORTED_BUILTIN_SET = new Set(SUPPORTED_BUILTIN_TOOLS)
 
@@ -172,7 +173,12 @@ function needsGuardCheck(name) {
   return WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name) || GUARDED_EXTRA_TOOLS.has(name) || name.startsWith('mcp__')
 }
 
-export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', pluginToolDispatcher = null, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', pluginToolDispatcher = null, mediaToolDispatcher = null, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+  // R19 多模态图片 / 视频生成原生工具（兼容云端多厂商与本地网关，生成后自动联动实时画布）
+  if ((name === 'generate_image' || name === 'generate_video') && typeof mediaToolDispatcher === 'function') {
+    const mediaRes = await mediaToolDispatcher(name, args, { sid, signal })
+    return typeof mediaRes === 'string' ? mediaRes : JSON.stringify(mediaRes)
+  }
   // R16 插件化工具分发：优先匹配由已启用插件声明的工具
   if (typeof pluginToolDispatcher === 'function') {
     const plugRes = await pluginToolDispatcher(name, args)
@@ -351,6 +357,7 @@ export async function runAgentConversation({
   pluginTools = [],
   pluginDirectives = '',
   pluginToolDispatcher = null,
+  mediaToolDispatcher = null,
   askBeforeDesign = true,
   forceToolProfile = '',
   maxRounds = 14,
@@ -667,7 +674,7 @@ export async function runAgentConversation({
         try {
           if (readKey) readFileSet.add(readKey)
           if (dirKey) listDirsSet.add(dirKey)
-          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, pluginToolDispatcher, requestApproval, requestClarify })
+          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, pluginToolDispatcher, mediaToolDispatcher, requestApproval, requestClarify })
           const takeover = detectTakeoverRequired(rawOut)
           if (takeover && typeof requestTakeover === 'function') {
             const action = await requestTakeover(takeover)

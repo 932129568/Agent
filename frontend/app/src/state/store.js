@@ -56,6 +56,8 @@ import {
   cloneWorkflowDef,
   importWorkflowJson,
   createWorkflowFromPrompt,
+  undoWorkflowEdit,
+  redoWorkflowEdit,
   stopWorkflowExecution,
   resetWorkflowRunState,
   runWorkflowWithHandlers,
@@ -67,6 +69,7 @@ import { spawnIsolatedSubagent, cancelAllSubagents, purgeSubagents } from '../se
 import { isResumableError } from '../services/budgetAndResume.js'
 import { COLLABORATION_DEFAULTS } from '../services/collaboration.js'
 import { formatWorkflowRunMarkdown } from '../services/workflowEngine.js'
+import { generateImageMedia, generateVideoMedia } from '../services/mediaGen.js'
 import { isAbort } from '../services/errors.js'
 import {
   fireShellImpact,
@@ -1174,6 +1177,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
         plugins: state.plugins.plugins,
         workflows: state.plugins.workflows,
       }),
+      mediaToolDispatcher: (toolName, args, ctx) => dispatchMediaTool(toolName, args, ctx),
       askBeforeDesign: state.ui.askBeforeDesign,
       signal: ctrl.signal,
       onEvent: (ev) => {
@@ -1754,6 +1758,12 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         endpointConfig: memberEp,
         workspacePath: state.workspace.rootPath,
         allowTools: canUseTools,
+        pluginTools: collectPluginTools(state.plugins.plugins),
+        pluginToolDispatcher: (toolName, args) => dispatchPluginTool(toolName, args, {
+          plugins: state.plugins.plugins,
+          workflows: state.plugins.workflows,
+        }),
+        mediaToolDispatcher: (toolName, args, ctx) => dispatchMediaTool(toolName, args, ctx),
         askBeforeDesign: !autonomous && i <= 1,
         maxRounds: canUseTools ? 8 : 1,
         skipMemoryRecall: true,
@@ -2081,6 +2091,65 @@ export function exportWorkflowRunReport() {
   return ok
 }
 
+export function undoWorkflowChange() {
+  if (undoWorkflowEdit()) pushToast('已撤销上一步工作流编排', 'info')
+}
+
+export function redoWorkflowChange() {
+  if (redoWorkflowEdit()) pushToast('已重做工作流编排', 'info')
+}
+
+async function dispatchMediaTool(toolName, args = {}, { signal } = {}) {
+  const ep = resolveEndpointConfig()
+  if (toolName === 'generate_image') {
+    const r = await generateImageMedia({
+      prompt: args.prompt || '',
+      model: args.model || ep.imageModel || '',
+      size: args.size || '',
+      aspectRatio: args.aspect_ratio || args.aspectRatio || '1:1',
+      style: args.style || '',
+      quality: args.quality || 'standard',
+      n: Number(args.n) || 1,
+      endpointConfig: ep,
+      signal,
+    })
+    if (r && r.artifact) openArtifactCanvas(r.artifact)
+    return JSON.stringify({
+      ok: true,
+      simulated: !!r.simulated,
+      provider: r.provider,
+      model: r.model,
+      aspectRatio: r.aspectRatio,
+      images: (r.items || []).map((x) => ({ url: x.url, revisedPrompt: x.revisedPrompt || '' })),
+      note: '成图已在右侧实时画布打开，你可在回答中用 Markdown 图片语法引用。',
+    })
+  }
+  if (toolName === 'generate_video') {
+    const r = await generateVideoMedia({
+      prompt: args.prompt || '',
+      model: args.model || ep.videoModel || '',
+      imageUrl: args.image_url || args.imageUrl || '',
+      duration: Number(args.duration) || 5,
+      aspectRatio: args.aspect_ratio || args.aspectRatio || '16:9',
+      resolution: args.resolution || '1080p',
+      withAudio: !!args.with_audio,
+      endpointConfig: ep,
+      signal,
+    })
+    if (r && r.artifact) openArtifactCanvas(r.artifact)
+    return JSON.stringify({
+      ok: true,
+      simulated: !!r.simulated,
+      provider: r.provider,
+      model: r.model,
+      duration: r.duration,
+      videos: r.items || [],
+      note: '视频已在右侧实时画布放映厅打开。',
+    })
+  }
+  return JSON.stringify({ ok: false, error: `未知媒体工具: ${toolName}` })
+}
+
 export function stopWorkflowRun() {
   stopWorkflowExecution()
   pushToast('已中止当前 DAG 工作流运行', 'info')
@@ -2094,13 +2163,15 @@ export function triggerWorkflowShowcase() {
   triggerWorkflowShowcaseRun((art) => openArtifactCanvas(art))
 }
 
-export async function runActiveWorkflow({ workflowId = '', input = '', resume = false } = {}) {
+export async function runActiveWorkflow({ workflowId = '', input = '', vars = {}, resume = false, runFromNodeId = '' } = {}) {
   const baseEp = resolveEndpointConfig()
   const wfSid = `wf_${workflowId || state.plugins.activeWorkflowId || 'default'}`
   const res = await runWorkflowWithHandlers({
     workflowId,
     input,
+    vars,
     resume,
+    runFromNodeId,
     runLlmNode: async ({ node, prompt, signal, onDelta }) => {
       const nodeEp = {
         ...baseEp,
@@ -2146,6 +2217,14 @@ export async function runActiveWorkflow({ workflowId = '', input = '', resume = 
         patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid: wfSid, ...req } })
       }),
       requestClarify: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
+    }),
+    runImageNode: async (params) => generateImageMedia({
+      ...params,
+      endpointConfig: baseEp,
+    }),
+    runVideoNode: async (params) => generateVideoMedia({
+      ...params,
+      endpointConfig: baseEp,
     }),
     requestHumanGate: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
     onArtifact: (art) => openArtifactCanvas(art),

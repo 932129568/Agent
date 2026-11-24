@@ -112,12 +112,57 @@ export const GROUP_FILE_TOOLS = Object.freeze([
   },
 ])
 
+/** 一等多模态媒体生成工具（兼容 GLM CogView/CogVideoX、OpenAI GPT-Image/Sora、SiliconFlow Flux、MiniMax 与本地网关） */
+export const GENERATE_IMAGE_TOOL = Object.freeze({
+  type: 'function',
+  function: {
+    name: 'generate_image',
+    description:
+      '调用已配置的图片生成模型（兼容 CogView-4 / GPT-Image-1 / FLUX / MiniMax / 本地 ComfyUI 网关）根据文字提示词生成高清图片，自动在右侧实时画布展示成图并返回图片地址。',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '详细画面描述（主体、光影、构图、质感、镜头风格）' },
+        aspect_ratio: { type: 'string', description: '画幅比例：1:1 / 16:9 / 9:16 / 4:3 / 3:4 / 21:9（默认 1:1）' },
+        size: { type: 'string', description: '可选精确像素尺寸，如 1024x1024 / 1344x768' },
+        style: { type: 'string', description: '可选美学风格，如 赛博朋克 / 胶片质感 / 极简扁平 / 3D 渲染' },
+        quality: { type: 'string', description: '画质档位：standard 或 hd' },
+        model: { type: 'string', description: '可选指定生图模型名（留空使用设置中心默认生图模型）' },
+      },
+      required: ['prompt'],
+    },
+  },
+})
+
+export const GENERATE_VIDEO_TOOL = Object.freeze({
+  type: 'function',
+  function: {
+    name: 'generate_video',
+    description:
+      '调用已配置的视频生成模型（兼容 CogVideoX-3 / Sora-2 / Wan2.1 / MiniMax video-01）生成短视频；传入 image_url 时自动切换为「图生视频 (I2V)」模式，自动轮询渲染并在右侧实时画布播放。',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '镜头运动、主体动作、光影节奏与氛围描述' },
+        image_url: { type: 'string', description: '可选首帧参考图 URL（传入后进入图生视频 I2V 模式）' },
+        duration: { type: 'integer', description: '视频时长（秒，常见 5 或 10）' },
+        aspect_ratio: { type: 'string', description: '画幅比例：16:9 / 9:16 / 1:1（默认 16:9）' },
+        resolution: { type: 'string', description: '分辨率档位：720p / 1080p / 4k' },
+        with_audio: { type: 'boolean', description: '是否同时生成环境音效（若模型支持）' },
+        model: { type: 'string', description: '可选指定视频模型名（留空使用设置中心默认视频模型）' },
+      },
+      required: ['prompt'],
+    },
+  },
+})
+
 export const TOOL_PROFILE_META = Object.freeze({
   chat: { id: 'chat', label: '轻量对话', desc: '仅挂载记忆与交互确认（省 ~90% 工具 Token）' },
   coding: { id: 'coding', label: '代码与文件', desc: '文件读写 + 终端命令 + 效果确认（省 ~60% 工具 Token）' },
   web: { id: 'web', label: '联网与调研', desc: '浏览器检索/抓取 + 文件保存 + 效果确认' },
+  media: { id: 'media', label: '视觉与视频创作', desc: '文生图 + 文生/图生视频 + 效果确认（省 ~80% 无关工具 Token）' },
   coding_web: { id: 'coding_web', label: '全栈研发+联网', desc: '文件/命令 + 联网检索 + 效果确认' },
-  full: { id: 'full', label: '全量桌面工具', desc: '全部文件/命令/浏览器/系统/MCP 工具' },
+  full: { id: 'full', label: '全量桌面工具', desc: '全部文件/命令/浏览器/系统/MCP/媒体工具' },
 })
 
 export function isAutonomousAuthorized(text = '') {
@@ -131,19 +176,16 @@ export function predictToolProfile(query = '', { hasEnabledMcp = false, forceFul
   if (forceFull) return 'full'
 
   const wantsDesktop = /截图|截屏|剪贴板|进程|杀进程|打开软件|打开应用|管理员|powershell\s+提权|ffmpeg|python\s+外部|software_call|mcp/i.test(q) || hasEnabledMcp
+  const wantsMedia = /画一张|画一幅|生图|文生图|图生图|生成图片|做海报|海报图|配图|封面图|插画|生成视频|文生视频|图生视频|拍一段|短片视频|分镜视频|cogview|cogvideo|sora|flux|dall-e|t2i|t2v|i2v/i.test(q)
   const wantsWeb = /上网|搜索|查一下|最新|官网|网页内容|抓取|爬取|打开网址|http:\/\/|https:\/\/|新闻|调研|竞品|行情|浏览器打开/i.test(q)
   const wantsCodeOrFile = /文件|目录|桌面|工作区|代码|重构|网页|页面|网站|项目|脚本|html|css|js|jsx|ts|tsx|json|md|python|node|react|sql|bug|报错|修复|写一个|做一个|创建|生成|修改|删除|运行|测试|构建|打包|钟摆|时钟|ui|界面|设计|动画|组件|工具/i.test(q)
 
-  // 区分"动作"与"只是提到了技术名词"：
-  // 原实现的 wantsCodeOrFile 把 react/js/ui 这类**裸名词**也当作代码意图，
-  // 于是「上网搜索一下最新的 React 19 发布说明」被判成 coding_web，
-  // 把文件/命令工具也塞进工具面 —— 与该模块"裁掉无用工具省 Token"的目标相反。
-  // 判据：联网意图存在时，必须出现**代码动作动词**才升级为 coding_web。
   const CODE_ACTION = /写|做|创建|生成|修改|重构|修复|运行|测试|构建|打包|实现|搭建|落盘|增删|改成|删掉|加上/i
   const codeIsAction = CODE_ACTION.test(q)
 
   let next = 'chat'
   if (wantsDesktop) next = 'full'
+  else if (wantsMedia && !/html|css|js|react|代码|网页|脚本/i.test(q)) next = 'media'
   else if (wantsCodeOrFile && wantsWeb) next = codeIsAction ? 'coding_web' : 'web'
   else if (wantsCodeOrFile) next = 'coding'
   else if (wantsWeb) next = 'web'
@@ -162,7 +204,10 @@ export function selectToolsForProfile(allTools = [], profile = 'coding', { inclu
   const list = Array.isArray(allTools) ? allTools : []
   const allowed = new Set(isolatedGroup ? ['ask_user_options'] : TOOL_GROUPS.core_chat)
 
-  if (profile === 'coding') {
+  if (profile === 'media') {
+    allowed.add('read_file')
+    allowed.add('write_file')
+  } else if (profile === 'coding') {
     for (const t of TOOL_GROUPS.files) allowed.add(t)
     for (const t of TOOL_GROUPS.shell) allowed.add(t)
   } else if (profile === 'web') {
@@ -195,6 +240,13 @@ export function selectToolsForProfile(allTools = [], profile = 'coding', { inclu
     for (const gt of GROUP_FILE_TOOLS) {
       if (!result.some((t) => ((t && t.function && t.function.name) || '') === gt.function.name)) {
         result.push(gt)
+      }
+    }
+  }
+  if (profile === 'media' || profile === 'full') {
+    for (const mt of [GENERATE_IMAGE_TOOL, GENERATE_VIDEO_TOOL]) {
+      if (!result.some((t) => ((t && t.function && t.function.name) || '') === mt.function.name)) {
+        result.push(mt)
       }
     }
   }

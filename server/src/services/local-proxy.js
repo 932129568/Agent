@@ -30,8 +30,27 @@ const KNOWN_LOCAL_PORTS = new Set([11434, 1234, 8000, 8080, 1919])
 const CLOUD_HOSTS = new Set([
   'open.bigmodel.cn', 'bigmodel.cn', 'api.deepseek.com', 'api.moonshot.cn',
   'dashscope.aliyuncs.com', 'models.github.ai', 'api.openai.com', 'api.anthropic.com',
+  'api.siliconflow.cn', 'api.minimaxi.com', 'api.minimax.chat',
+  'generativelanguage.googleapis.com', 'api.klingai.com', 'ark.cn-beijing.volces.com',
 ])
-const ALLOWED_PATHS = new Set(['/chat/completions', '/models', '/v1/models', '/api/tags', '/completions'])
+const ALLOWED_PATHS = new Set([
+  '/chat/completions', '/models', '/v1/models', '/api/tags', '/completions',
+  // R19 图片 / 视频生成与异步轮询白名单路径（兼容 OpenAI / GLM CogView & CogVideoX / SiliconFlow / MiniMax / DashScope / 本地 ComfyUI 网关）
+  '/images/generations', '/v1/images/generations', '/images/edits', '/images/variations',
+  '/videos/generations', '/v1/videos/generations', '/video_generation',
+  '/v1/video_generation', '/query/video_generation', '/files/retrieve',
+  '/services/aigc/text2image/image-synthesis', '/services/aigc/video-generation/video-synthesis',
+])
+const ALLOWED_DYNAMIC_PATH_RES = [
+  /^\/async-result\/[a-zA-Z0-9._-]{1,128}$/,
+  /^\/videos\/[a-zA-Z0-9._-]{1,128}(?:\/content)?$/,
+  /^\/v1\/videos\/[a-zA-Z0-9._-]{1,128}(?:\/content)?$/,
+  /^\/tasks\/[a-zA-Z0-9._-]{1,128}$/,
+  /^\/v1\/tasks\/[a-zA-Z0-9._-]{1,128}$/,
+]
+function isAllowedProxyPath(reqPath) {
+  return ALLOWED_PATHS.has(reqPath) || ALLOWED_DYNAMIC_PATH_RES.some((re) => re.test(reqPath))
+}
 const TRUSTED_ORIGINS = new Set(['null', 'harbor://app', 'file://'])
 const DYNAMIC_TTL_MS = 1000
 const FORWARD_TIMEOUT_MS = 300000
@@ -49,7 +68,7 @@ function dynamicAllow() {
     // R61e：前端 save_config 写的是 provider_base_url（主端点）、
     // local_base_url（本地端点）；旧实现只读 base_url/local_base_url，
     // 导致用户在设置里切换到自定义端点后，代理持续 403。
-    for (const key of ['provider_base_url', 'provider_base', 'local_base_url', 'base_url']) {
+    for (const key of ['provider_base_url', 'provider_base', 'local_base_url', 'base_url', 'image_base_url', 'video_base_url']) {
       try {
         const u = new URL(String(cfg[key] || '').trim())
         const host = (u.hostname || '').toLowerCase().replace(/^\[|\]$/g, '')
@@ -163,9 +182,12 @@ async function resolveUpstream(rawTarget, rawUrl) {
   if (!allowed) {
     return { status: 403, error: 'X-Harbor-Target 不是已登记的官方端点或本地模型端口' }
   }
-  const reqPath = String(rawUrl || '/').split('?')[0]
-  if (!ALLOWED_PATHS.has(reqPath)) {
-    return { status: 403, error: '仅允许转发模型接口路径（' + [...ALLOWED_PATHS].join(' / ') + '）' }
+  const rawStr = String(rawUrl || '/')
+  const qIdx = rawStr.indexOf('?')
+  const reqPath = qIdx >= 0 ? rawStr.slice(0, qIdx) : rawStr
+  const reqQuery = qIdx >= 0 ? rawStr.slice(qIdx) : ''
+  if (!isAllowedProxyPath(reqPath)) {
+    return { status: 403, error: '仅允许转发已登记的模型/图片/视频接口路径' }
   }
   if (!LOOPBACK_HOSTS.has(host)) {
     // DNS 重绑定进内网防护：解析成功且命中私网/保留段一律拒绝；解析失败时
@@ -179,7 +201,7 @@ async function resolveUpstream(rawTarget, rawUrl) {
   }
   const basePath = base.pathname.replace(/\/+$/, '')
   const suffix = basePath.endsWith(reqPath) ? '' : reqPath
-  return { url: new URL(base.origin + basePath + suffix) }
+  return { url: new URL(base.origin + basePath + suffix + reqQuery) }
 }
 
 async function relay(req, res) {

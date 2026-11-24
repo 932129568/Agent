@@ -4,6 +4,9 @@ import './WorkflowGraph.css'
 const KIND_BADGES = Object.freeze({
   input: 'IN',
   llm: 'LLM',
+  image_gen: 'IMG',
+  video_gen: 'VID',
+  loop: 'LOOP',
   tool: 'TOOL',
   human_gate: 'GATE',
   condition: 'IF',
@@ -238,9 +241,12 @@ export default function WorkflowGraph({
             if (!pos) return null
             const st = (nodeStates && nodeStates[n.id]) || { status: 'pending', ms: 0, summary: '' }
             const sub = st.summary
-              || (n.kind === 'tool' ? `工具：${n.toolName || '未配置'}`
-                : (n.kind === 'llm' ? (n.model || n.role || '继承默认模型')
-                  : (n.kind === 'condition' ? `${(n.condition && n.condition.op) || 'always'}` : n.kind)))
+              || (n.kind === 'image_gen' ? `生图 · ${(n.mediaConfig && n.mediaConfig.aspectRatio) || '1:1'} ${n.model || ''}`.trim()
+                : (n.kind === 'video_gen' ? `视频 · ${(n.mediaConfig && n.mediaConfig.duration) || 5}s ${(n.mediaConfig && n.mediaConfig.aspectRatio) || '16:9'}`
+                  : (n.kind === 'loop' ? `迭代 ≤${(n.loopConfig && n.loopConfig.maxIterations) || 3} 轮`
+                    : (n.kind === 'tool' ? `工具：${n.toolName || '未配置'}`
+                      : (n.kind === 'llm' ? (n.model || n.role || '继承默认模型')
+                        : (n.kind === 'condition' ? `${(n.condition && n.condition.op) || 'always'}` : n.kind))))))
             const isDragging = Boolean(dragPreview && dragPreview.nodeId === n.id)
             const isDropTarget = Boolean(wireDraft && wireDraft.hoverId === n.id)
             return (

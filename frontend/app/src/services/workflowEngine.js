@@ -16,11 +16,14 @@ import { isAbort } from './errors.js'
 export const WORKFLOW_NODE_KINDS = Object.freeze([
   { id: 'input', label: '入口输入', badge: 'IN', desc: '接收用户任务目标与初始变量' },
   { id: 'llm', label: '模型智能体', badge: 'LLM', desc: '调用大模型执行分析、设计、编码或审查' },
+  { id: 'image_gen', label: 'AI 生图', badge: 'IMG', desc: '调用文生图模型出图并同步送入实时画布' },
+  { id: 'video_gen', label: 'AI 视频', badge: 'VID', desc: '文生视频 / 图生视频（可衔接上游生图首帧）' },
+  { id: 'loop', label: '迭代精修环', badge: 'LOOP', desc: '有界多轮「生成 → 挑刺 → 精修」直到达标' },
   { id: 'tool', label: '直调工具', badge: 'TOOL', desc: '直接执行工作区或插件工具（零 Token）' },
   { id: 'human_gate', label: '人工拍板门', badge: 'GATE', desc: '暂停执行并弹出选项卡片由用户确认方向' },
   { id: 'condition', label: '条件分支', badge: 'IF', desc: '按声明式规则路由到不同下游分支' },
   { id: 'merge', label: '并行汇合', badge: 'JOIN', desc: '汇总多条并行分支产出供下游消费' },
-  { id: 'artifact', label: '画布产出', badge: 'UI', desc: '提取或封装 HTML/SVG 推送至实时交互画布' },
+  { id: 'artifact', label: '画布产出', badge: 'UI', desc: '提取或封装 HTML/SVG/媒体画廊推送实时画布' },
 ])
 
 /** 规范化任意工作流定义，确保节点/边结构完整。 */
@@ -39,6 +42,10 @@ export function normalizeWorkflowDef(raw = {}) {
     toolArgs: (n && n.toolArgs && typeof n.toolArgs === 'object') ? n.toolArgs : {},
     gateConfig: (n && n.gateConfig && typeof n.gateConfig === 'object') ? n.gateConfig : null,
     condition: (n && n.condition && typeof n.condition === 'object') ? n.condition : null,
+    mediaConfig: (n && n.mediaConfig && typeof n.mediaConfig === 'object') ? { ...n.mediaConfig } : null,
+    loopConfig: (n && n.loopConfig && typeof n.loopConfig === 'object') ? { ...n.loopConfig } : null,
+    retryCount: Math.max(0, Math.min(3, Math.round(Number(n && n.retryCount) || 0))),
+    timeoutMs: Math.max(0, Math.min(300000, Math.round(Number(n && n.timeoutMs) || 0))),
     pos: (n && n.pos && Number.isFinite(Number(n.pos.x)) && Number.isFinite(Number(n.pos.y)))
       ? { x: Math.max(12, Math.round(Number(n.pos.x))), y: Math.max(12, Math.round(Number(n.pos.y))) }
       : null,
@@ -60,6 +67,7 @@ export function normalizeWorkflowDef(raw = {}) {
     description: String(w.description || '').trim(),
     category: String(w.category || 'custom').trim(),
     builtin: Boolean(w.builtin),
+    variables: (w.variables && typeof w.variables === 'object' && !Array.isArray(w.variables)) ? { ...w.variables } : {},
     nodes,
     edges,
   }
@@ -207,14 +215,34 @@ export function evaluateConditionRule(rule, text = '') {
  * - 遇到 artifact 节点自动提取 HTML/SVG 推送至实时画布；
  * - 全程可中止，且支持断点恢复（resumeOutputs）。
  */
+/** 计算某节点及其全部下游可达子图（用于单节点/局部重跑）。 */
+export function collectDownstreamSet(workflow, startNodeId) {
+  const wf = normalizeWorkflowDef(workflow)
+  const out = new Set([startNodeId])
+  const queue = [startNodeId]
+  while (queue.length > 0) {
+    const cur = queue.shift()
+    for (const e of wf.edges) {
+      if (e.from === cur && !out.has(e.to)) {
+        out.add(e.to)
+        queue.push(e.to)
+      }
+    }
+  }
+  return out
+}
+
 export async function executeWorkflowDag({
   workflow,
   input = '',
   vars = {},
   resumeOutputs = null,
+  runFromNodeId = '',
   signal = null,
   runLlmNode,
   runToolNode,
+  runImageNode,
+  runVideoNode,
   requestHumanGate,
   onArtifact,
   onProgress,
@@ -232,10 +260,18 @@ export async function executeWorkflowDag({
   const logs = []
   let lastArtifact = null
 
+  const mergedVars = { ...(wf.variables || {}), ...(vars || {}) }
+  const rerunScope = runFromNodeId ? collectDownstreamSet(wf, runFromNodeId) : null
+
   for (const n of wf.nodes) {
-    if (resumeOutputs && Object.prototype.hasOwnProperty.call(resumeOutputs, n.id)) {
-      nodeStates[n.id] = { status: 'done', ms: 0, output: String(resumeOutputs[n.id] || ''), summary: '断点恢复已复用' }
-      outputs[n.id] = { output: String(resumeOutputs[n.id] || '') }
+    const canReuse = resumeOutputs
+      && Object.prototype.hasOwnProperty.call(resumeOutputs, n.id)
+      && (!rerunScope || !rerunScope.has(n.id))
+    if (canReuse) {
+      const prevRec = resumeOutputs[n.id]
+      const prevObj = (prevRec && typeof prevRec === 'object') ? prevRec : { output: String(prevRec || '') }
+      nodeStates[n.id] = { status: 'done', ms: 0, output: prevObj.output || '', imageUrl: prevObj.imageUrl || '', videoUrl: prevObj.videoUrl || '', summary: '断点/上游已复用' }
+      outputs[n.id] = { ...prevObj }
     } else {
       nodeStates[n.id] = { status: 'pending', ms: 0, output: '', summary: '' }
     }
@@ -285,7 +321,7 @@ export async function executeWorkflowDag({
         return `【来自 ${srcNode ? srcNode.label : e.from}】\n${outputs[e.from].output}`
       })
     const upstreamText = upstreamParts.join('\n\n---\n\n')
-    const tplCtx = { input, upstream: upstreamText, nodes: outputs, vars }
+    const tplCtx = { input, upstream: upstreamText, nodes: outputs, vars: mergedVars }
 
     const nodeT0 = Date.now()
     for (const e of inEdges) {
@@ -295,9 +331,163 @@ export async function executeWorkflowDag({
     emit()
 
     let outText = ''
+    let extraMeta = {}
+    const runWithRetry = async (fn) => {
+      const maxTries = 1 + (Number(node.retryCount) || 0)
+      let lastErr
+      for (let attempt = 1; attempt <= maxTries; attempt++) {
+        if (signal && signal.aborted) throw new Error('USER_PAUSED')
+        try {
+          if (node.timeoutMs > 0) {
+            return await Promise.race([
+              fn(attempt),
+              new Promise((_, rej) => setTimeout(() => rej(new Error(`节点执行超时（>${node.timeoutMs}ms）`)), node.timeoutMs)),
+            ])
+          }
+          return await fn(attempt)
+        } catch (e) {
+          lastErr = e
+          if (isAbort(e) || (signal && signal.aborted) || String(e && e.message) === 'USER_PAUSED' || attempt >= maxTries) {
+            throw e
+          }
+          pushLog(`↻ 节点「${node.label}」第 ${attempt} 次失败，准备重试（${attempt}/${maxTries - 1}）…`)
+          emit()
+        }
+      }
+      throw lastErr
+    }
+
     try {
       if (node.kind === 'input') {
         outText = String(input || '').trim()
+      } else if (node.kind === 'image_gen') {
+        const mc = node.mediaConfig || {}
+        const finalPrompt = interpolateTemplate(node.prompt || '{{upstream}}' || '{{input}}', tplCtx).trim() || String(input || '').trim()
+        const imgRes = await runWithRetry(() => (
+          typeof runImageNode === 'function'
+            ? runImageNode({
+              node,
+              prompt: finalPrompt,
+              aspectRatio: mc.aspectRatio || '1:1',
+              size: mc.size || '',
+              style: mc.style || '',
+              quality: mc.quality || 'standard',
+              model: node.model || mc.model || '',
+              signal,
+            })
+            : Promise.resolve({
+              ok: true,
+              simulated: true,
+              items: [{ url: `https://example.local/mock-image-${node.id}.png` }],
+            })
+        ))
+        const firstUrl = (imgRes && Array.isArray(imgRes.items) && imgRes.items[0] && imgRes.items[0].url) || ''
+        extraMeta = { imageUrl: firstUrl, mediaItems: (imgRes && imgRes.items) || [] }
+        if (imgRes && imgRes.artifact) {
+          lastArtifact = imgRes.artifact
+          if (typeof onArtifact === 'function') onArtifact(imgRes.artifact)
+        }
+        outText = firstUrl
+          ? `![${node.label}](${firstUrl})
+
+- **生图模型**：\`${(imgRes && imgRes.model) || node.model || 'auto'}\`（${(imgRes && imgRes.aspectRatio) || mc.aspectRatio || '1:1'}）
+- **生图提示词**：${finalPrompt.slice(0, 260)}`
+          : `图片生成完成（${finalPrompt.slice(0, 120)}）`
+      } else if (node.kind === 'video_gen') {
+        const mc = node.mediaConfig || {}
+        const finalPrompt = interpolateTemplate(node.prompt || '{{upstream}}' || '{{input}}', tplCtx).trim() || String(input || '').trim()
+        // 自动继承上游 image_gen 节点产出的首帧图（实现无缝 T2I → I2V 图生视频接力！）
+        const inheritedImg = inEdges
+          .map((e) => outputs[e.from] && outputs[e.from].imageUrl)
+          .find(Boolean) || ''
+        const refImg = interpolateTemplate(mc.imageUrl || '', tplCtx).trim() || inheritedImg
+        const vidRes = await runWithRetry(() => (
+          typeof runVideoNode === 'function'
+            ? runVideoNode({
+              node,
+              prompt: finalPrompt,
+              imageUrl: refImg,
+              duration: Number(mc.duration) || 5,
+              aspectRatio: mc.aspectRatio || '16:9',
+              resolution: mc.resolution || '1080p',
+              withAudio: !!mc.withAudio,
+              model: node.model || mc.model || '',
+              signal,
+              onProgress: (prog) => {
+                nodeStates[node.id] = {
+                  status: 'running',
+                  ms: Date.now() - nodeT0,
+                  output: String((prog && prog.message) || '视频渲染中…'),
+                  summary: String((prog && prog.message) || '视频渲染中…').slice(0, 68),
+                }
+                emit()
+              },
+            })
+            : Promise.resolve({
+              ok: true,
+              simulated: true,
+              items: [{ url: `https://example.local/mock-video-${node.id}.mp4`, coverUrl: refImg }],
+            })
+        ))
+        const firstVid = (vidRes && Array.isArray(vidRes.items) && vidRes.items[0] && vidRes.items[0].url) || ''
+        extraMeta = { videoUrl: firstVid, imageUrl: refImg, mediaItems: (vidRes && vidRes.items) || [] }
+        if (vidRes && vidRes.artifact) {
+          lastArtifact = vidRes.artifact
+          if (typeof onArtifact === 'function') onArtifact(vidRes.artifact)
+        }
+        outText = `🎬 **AI 视频渲染完成**（${refImg ? '图生视频 I2V' : '文生视频 T2V'} · ${(vidRes && vidRes.model) || node.model || 'auto'} · ${Number(mc.duration) || 5}s）
+- **视频地址**：${firstVid || '已在右侧实时画布打开'}
+- **分镜提示词**：${finalPrompt.slice(0, 260)}`
+      } else if (node.kind === 'loop') {
+        const lc = node.loopConfig || {}
+        const maxIter = Math.max(1, Math.min(5, Math.round(Number(lc.maxIterations) || 3)))
+        const stopKw = String(lc.stopKeyword || 'APPROVED').trim()
+        const basePrompt = interpolateTemplate(
+          // r19 这里是**单引号包了一个跨 4 行的字符串**（JS 非法）⇒ esbuild:
+          // "Unterminated string literal"，整个应用无法构建。改为模板字符串，
+          // 内容与 {{input}} / {{upstream}} 占位符逐字保留。
+          node.prompt || `请完成并迭代优化以下任务：
+{{input}}
+
+上游上下文：
+{{upstream}}`,
+          tplCtx
+        )
+        let currentDraft = ''
+        const traceLines = []
+        for (let iter = 1; iter <= maxIter; iter++) {
+          if (signal && signal.aborted) throw new Error('USER_PAUSED')
+          const iterPrompt = iter === 1
+            ? `${basePrompt}
+
+（当前为第 1/${maxIter} 轮精修：请输出高质量首稿，若已完全达标请在末尾写 ${stopKw}）`
+            : `【第 ${iter}/${maxIter} 轮自检与精修】
+请严格审查下方上一轮草稿中的逻辑漏洞、体验短板与细节瑕疵并直接输出升级后的完整终稿；若已达到生产交付水准，在末尾标注 ${stopKw}：
+
+${currentDraft}`
+          nodeStates[node.id] = {
+            status: 'running',
+            ms: Date.now() - nodeT0,
+            output: currentDraft || `第 ${iter}/${maxIter} 轮精修推演中…`,
+            summary: `精修循环 ${iter}/${maxIter} 轮…`,
+          }
+          emit()
+          const iterRes = await runWithRetry(() => (
+            typeof runLlmNode === 'function'
+              ? runLlmNode({ node, prompt: iterPrompt, upstream: upstreamText, input, signal })
+              : Promise.resolve({ content: `[Loop #${iter}] 已精修（${stopKw}）` })
+          ))
+          currentDraft = typeof iterRes === 'string' ? iterRes : String((iterRes && iterRes.content) || '')
+          traceLines.push(`第 ${iter} 轮（${currentDraft.length} 字）`)
+          pushLog(`🔁 循环节点「${node.label}」完成第 ${iter}/${maxIter} 轮精修`)
+          emit()
+          if (stopKw && currentDraft.toUpperCase().includes(stopKw.toUpperCase())) {
+            pushLog(`✓ 循环节点「${node.label}」于第 ${iter} 轮命中达标标记 ${stopKw}，提前收口`)
+            break
+          }
+        }
+        outText = currentDraft
+        extraMeta = { iterations: traceLines.length }
       } else if (node.kind === 'condition') {
         const subject = node.prompt ? interpolateTemplate(node.prompt, tplCtx) : (upstreamText || input)
         const passed = evaluateConditionRule(node.condition, subject)
@@ -401,11 +591,12 @@ export async function executeWorkflowDag({
       }
 
       const ms = Date.now() - nodeT0
-      outputs[node.id] = { output: outText }
+      outputs[node.id] = { output: outText, ...extraMeta }
       nodeStates[node.id] = {
         status: 'done',
         ms,
         output: outText,
+        ...extraMeta,
         summary: outText.replace(/\s+/g, ' ').trim().slice(0, 90),
       }
       pushLog(`✓ 节点「${node.label}」完成（${ms}ms）`)
@@ -456,7 +647,7 @@ export async function executeWorkflowDag({
   } catch (err) {
     const aborted = isAbort(err) || (signal && signal.aborted) || String(err && err.message) === 'USER_PAUSED'
     const completedOutputs = {}
-    for (const [nid, rec] of Object.entries(outputs)) completedOutputs[nid] = rec.output
+    for (const [nid, rec] of Object.entries(outputs)) completedOutputs[nid] = rec
     const status = aborted ? 'paused' : 'error'
     const errMsg = aborted ? '工作流已暂停（可从断点继续）' : String(err && err.message || err)
     emit({ status, error: errMsg })
@@ -514,9 +705,62 @@ export function compileGroupToWorkflow(group = {}) {
 export function synthesizeWorkflowFromPrompt(goalText = '') {
   const goal = String(goalText || '').trim()
   const titleSeed = goal.slice(0, 18) || '智能定制流水线'
+  const isVideo = /视频|短片|宣传片|片头|动画短片|分镜视频|sora|cogvideo|t2v|i2v|movie|film/i.test(goal)
+  const isImage = /画一张|生图|图片|海报|封面|插画|logo|视觉图|壁纸|配图|cogview|flux|poster/i.test(goal)
   const isResearch = /调研|研究|竞品|对比|分析|报告|swot|市场|趋势/i.test(goal)
   const isAudit = /审计|安全|漏洞|体检|重构|压测|review|bug|报错/i.test(goal)
-  const isContent = /文案|文章|视频|脚本|公众号|小红书|营销|宣传|海报/i.test(goal)
+  const isContent = /文案|文章|脚本|公众号|小红书|营销|宣传/i.test(goal)
+
+  if (isVideo) {
+    return normalizeWorkflowDef({
+      id: `wf_gen_${Date.now().toString(36)}`,
+      pluginId: 'custom',
+      name: `AI 视频流水线：${titleSeed}`,
+      description: `由「${goal}」自动编排的导演分镜 → 拍板 → 首帧概念生图 → 图生视频 (I2V) → 放映厅全链路。`,
+      category: 'media',
+      builtin: false,
+      nodes: [
+        { id: 'in', kind: 'input', label: '短片创意' },
+        { id: 'script', kind: 'llm', label: '导演分镜与提示词', role: 'AI 影片导演', prompt: `围绕「${goal}」（{{input}}）拆解 3 镜头节奏，并提炼 1 段精炼英文视觉首帧提示词与动态运镜描述。` },
+        { id: 'gate', kind: 'human_gate', label: '画幅与节奏拍板' },
+        { id: 'keyframe', kind: 'image_gen', label: '首帧关键图生成', prompt: '{{nodes.script.output}} · 风格：{{nodes.gate.output}}', mediaConfig: { aspectRatio: '16:9', quality: 'hd' } },
+        { id: 'clip', kind: 'video_gen', label: '图生视频渲染 (I2V)', prompt: '{{nodes.script.output}}', mediaConfig: { duration: 5, aspectRatio: '16:9', resolution: '1080p', withAudio: true } },
+      ],
+      edges: [
+        { from: 'in', to: 'script' },
+        { from: 'script', to: 'gate' },
+        { from: 'gate', to: 'keyframe' },
+        { from: 'keyframe', to: 'clip' },
+      ],
+    })
+  }
+
+  if (isImage) {
+    return normalizeWorkflowDef({
+      id: `wf_gen_${Date.now().toString(36)}`,
+      pluginId: 'custom',
+      name: `AI 视觉生图：${titleSeed}`,
+      description: `由「${goal}」自动编排的提示词总监 → 风格拍板 → 双风格并行出图流水线。`,
+      category: 'media',
+      builtin: false,
+      nodes: [
+        { id: 'in', kind: 'input', label: '画面需求' },
+        { id: 'art_dir', kind: 'llm', label: '视觉提示词总监', role: '资深视觉指导', prompt: `围绕「${goal}」（{{input}}）提炼高精度构图、光影与材质描述，便于生图模型直出大片。` },
+        { id: 'gate', kind: 'human_gate', label: '画幅与美学拍板' },
+        { id: 'img_a', kind: 'image_gen', label: '主视觉成图 A', prompt: '{{nodes.art_dir.output}} · 方向：{{nodes.gate.output}}', mediaConfig: { aspectRatio: '16:9', style: '电影光影写实', quality: 'hd' } },
+        { id: 'img_b', kind: 'image_gen', label: '创意变体 B', prompt: '{{nodes.art_dir.output}} · 方向：{{nodes.gate.output}}', mediaConfig: { aspectRatio: '16:9', style: '极简潮流艺术', quality: 'hd' } },
+        { id: 'join', kind: 'merge', label: '双图交付汇总' },
+      ],
+      edges: [
+        { from: 'in', to: 'art_dir' },
+        { from: 'art_dir', to: 'gate' },
+        { from: 'gate', to: 'img_a' },
+        { from: 'gate', to: 'img_b' },
+        { from: 'img_a', to: 'join' },
+        { from: 'img_b', to: 'join' },
+      ],
+    })
+  }
 
   if (isResearch) {
     return normalizeWorkflowDef({

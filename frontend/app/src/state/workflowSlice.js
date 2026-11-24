@@ -45,6 +45,9 @@ export function createInitialPluginsSlice() {
     workflows,
     activeWorkflowId: (workflows[0] && workflows[0].id) || '',
     viewTab: 'studio', // 'studio' | 'plugins'
+    undoStack: [],
+    redoStack: [],
+    runHistory: [],    // 最近 20 次工作流执行归档（供回溯复看与导出）
     run: {
       status: 'idle', // 'idle' | 'running' | 'paused' | 'done' | 'error'
       workflowId: '',
@@ -150,19 +153,64 @@ export function createBlankCustomWorkflow(name = '') {
   return wf
 }
 
-export function saveCustomWorkflowDef(rawWorkflow) {
+export function saveCustomWorkflowDef(rawWorkflow, { recordUndo = true } = {}) {
   const norm = normalizeWorkflowDef({ ...rawWorkflow, builtin: false })
   const check = analyzeWorkflowDag(norm)
   if (!check.ok) return { ok: false, error: check.error }
   const st = getState().plugins
+  const prevActive = st.workflows.find((w) => w.id === st.activeWorkflowId)
+  if (recordUndo && prevActive) {
+    patchSlice('plugins', (p) => ({
+      ...p,
+      undoStack: [...(p.undoStack || []).slice(-19), JSON.parse(JSON.stringify(prevActive))],
+      redoStack: [],
+    }))
+  }
   const existsInCustom = st.customWorkflows.some((w) => w.id === norm.id)
-  // 若编辑的是内置插件工作流，则自动克隆一份自定义副本（不破坏只读内置模板）
   const finalWf = (!existsInCustom && st.workflows.some((w) => w.id === norm.id && w.builtin))
     ? { ...norm, id: `${norm.id}_custom_${Date.now().toString(36)}`, name: `${norm.name}（自定义版）` }
     : norm
   const nextCustomWf = [finalWf, ...st.customWorkflows.filter((w) => w.id !== finalWf.id)]
   recomputeAndPersist(st.enabledMap, st.customPlugins, nextCustomWf, finalWf.id)
   return { ok: true, workflow: finalWf }
+}
+
+export function undoWorkflowEdit() {
+  const st = getState().plugins
+  const stack = Array.isArray(st.undoStack) ? st.undoStack : []
+  if (!stack.length) return false
+  const prevSnap = stack[stack.length - 1]
+  const curActive = st.workflows.find((w) => w.id === st.activeWorkflowId)
+  patchSlice('plugins', (p) => ({
+    ...p,
+    undoStack: stack.slice(0, -1),
+    redoStack: curActive ? [...(p.redoStack || []).slice(-19), JSON.parse(JSON.stringify(curActive))] : (p.redoStack || []),
+  }))
+  if (prevSnap.builtin) {
+    selectWorkflow(prevSnap.id)
+  } else {
+    saveCustomWorkflowDef(prevSnap, { recordUndo: false })
+  }
+  return true
+}
+
+export function redoWorkflowEdit() {
+  const st = getState().plugins
+  const stack = Array.isArray(st.redoStack) ? st.redoStack : []
+  if (!stack.length) return false
+  const nextSnap = stack[stack.length - 1]
+  const curActive = st.workflows.find((w) => w.id === st.activeWorkflowId)
+  patchSlice('plugins', (p) => ({
+    ...p,
+    redoStack: stack.slice(0, -1),
+    undoStack: curActive ? [...(p.undoStack || []).slice(-19), JSON.parse(JSON.stringify(curActive))] : (p.undoStack || []),
+  }))
+  if (nextSnap.builtin) {
+    selectWorkflow(nextSnap.id)
+  } else {
+    saveCustomWorkflowDef(nextSnap, { recordUndo: false })
+  }
+  return true
 }
 
 export function deleteCustomWorkflowDef(workflowId) {
@@ -264,9 +312,13 @@ export function resetWorkflowRunState() {
 export async function runWorkflowWithHandlers({
   workflowId = '',
   input = '',
+  vars = {},
   resume = false,
+  runFromNodeId = '',
   runLlmNode,
   runToolNode,
+  runImageNode,
+  runVideoNode,
   requestHumanGate,
   onArtifact,
 }) {
@@ -277,10 +329,18 @@ export async function runWorkflowWithHandlers({
   if (_wfAbortCtrl) _wfAbortCtrl.abort()
   _wfAbortCtrl = new AbortController()
 
-  const resumeOutputs = resume && st.run && st.run.checkpoint && st.run.checkpoint.workflowId === wf.id
-    ? st.run.checkpoint.completedOutputs
-    : null
-  const finalInput = String(input || (st.run && st.run.checkpoint && st.run.checkpoint.input) || '').trim()
+  let resumeOutputs = null
+  if (resume && st.run && st.run.checkpoint && st.run.checkpoint.workflowId === wf.id) {
+    resumeOutputs = st.run.checkpoint.completedOutputs
+  } else if (runFromNodeId && st.run && st.run.workflowId === wf.id && st.run.nodeStates) {
+    resumeOutputs = {}
+    for (const [nid, nst] of Object.entries(st.run.nodeStates)) {
+      if (nst && nst.status === 'done') {
+        resumeOutputs[nid] = { output: nst.output || '', imageUrl: nst.imageUrl || '', videoUrl: nst.videoUrl || '' }
+      }
+    }
+  }
+  const finalInput = String(input || (st.run && st.run.input) || (st.run && st.run.checkpoint && st.run.checkpoint.input) || '').trim()
 
   patchSlice('plugins', (p) => ({
     ...p,
@@ -303,10 +363,14 @@ export async function runWorkflowWithHandlers({
   const result = await executeWorkflowDag({
     workflow: wf,
     input: finalInput,
+    vars,
     resumeOutputs,
+    runFromNodeId,
     signal: _wfAbortCtrl.signal,
     runLlmNode,
     runToolNode,
+    runImageNode,
+    runVideoNode,
     requestHumanGate,
     onArtifact,
     onProgress: (prog) => {
@@ -321,8 +385,20 @@ export async function runWorkflowWithHandlers({
   })
 
   _wfAbortCtrl = null
+  const historyEntry = {
+    id: `wfr_${Date.now().toString(36)}`,
+    workflowId: wf.id,
+    workflowName: wf.name,
+    input: finalInput.slice(0, 80),
+    status: result.status,
+    totalMs: result.totalMs || 0,
+    at: Date.now(),
+    nodeStates: result.nodeStates,
+    lastArtifact: result.lastArtifact || null,
+  }
   patchSlice('plugins', (p) => ({
     ...p,
+    runHistory: [historyEntry, ...(p.runHistory || [])].slice(0, 20),
     run: {
       ...p.run,
       status: result.status,

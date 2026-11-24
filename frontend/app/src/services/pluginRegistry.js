@@ -1,25 +1,24 @@
 /**
- * Harbor 插件化架构总注册表（R16 全量重写 · 纯服务层，零 eval，100% 遵守 LAW-02/LAW-07）：
+ * Harbor 插件化架构总注册表（R19 全量升级 · 8 大内置生产级插件 + 无限热插拔 JSON 插件）：
  *
- * 每个插件（内置或用户热插拔 JSON 插件）均通过统一 Manifest 声明其贡献点：
- *   - contributes.panels          : 侧边主导航工作台面板
- *   - contributes.workflows       : 可视化 DAG 工作流定义
- *   - contributes.tools           : 注入给 Agent 的一等 OpenAI 函数工具
- *   - contributes.slashCommands   : 聊天输入框 `/` 斜杠指令
- *   - contributes.paletteCommands : Ctrl+K 命令面板动作
+ * 每个插件通过标准声明式 Manifest 贡献：
+ *   - contributes.workflows       : 可视化并发 DAG 工作流（支持 10 类节点含 AI 生图 / AI 视频 / 迭代精修环）
+ *   - contributes.tools           : 一等 OpenAI 函数工具（含 generate_image / generate_video / list_workflow_plugins）
+ *   - contributes.slashCommands   : 聊天输入框 `/` 斜杠指令（/wf /plugins /img /video /refine 等）
  *   - contributes.hooks           : 声明式生命周期钩子（beforePrompt / afterTool / afterTurn）
  */
 import { normalizeWorkflowDef, analyzeWorkflowDag } from './workflowEngine.js'
+import { GENERATE_IMAGE_TOOL, GENERATE_VIDEO_TOOL } from './toolRouter.js'
 
 export const BUILTIN_PLUGINS = Object.freeze([
   {
     id: 'core.workflow-studio',
     name: 'DAG 工作流引擎核心',
-    version: '2.0.0',
+    version: '2.2.0',
     category: 'core',
     builtin: true,
     locked: true,
-    description: '提供可视化 DAG 编排画布、并发拓扑执行器、人类拍板门与插件热插拔中心。',
+    description: '提供 10 类一等节点（含生图/视频/迭代精修环）、自由拖拽编排画布、断点续跑与插件热插拔内核。',
     contributes: {
       panels: [
         { id: 'workflow', icon: 'workflow', label: '工作流插件', order: 25 },
@@ -35,7 +34,7 @@ export const BUILTIN_PLUGINS = Object.freeze([
       tools: [
         {
           name: 'list_workflow_plugins',
-          description: '列出 Harbor 当前已启用的插件化 DAG 工作流清单，便于向用户推荐或编排复杂多步流水线。',
+          description: '列出 Harbor 当前已启用的插件化 DAG 工作流清单，便于向用户推荐或编排多步自动化流水线。',
           parameters: { type: 'object', properties: {} },
           handlerKind: 'list_workflows',
         },
@@ -45,19 +44,201 @@ export const BUILTIN_PLUGINS = Object.freeze([
     },
   },
   {
+    id: 'plugin.visual-image-studio',
+    name: 'AI 视觉与海报生图工坊',
+    version: '1.0.0',
+    category: 'media',
+    builtin: true,
+    description: '兼容 GLM CogView-4 / OpenAI GPT-Image / SiliconFlow FLUX / MiniMax / 本地生图网关，提供提示词润色 → 风格拍板 → 双风格并行出图闭环。',
+    contributes: {
+      slashCommands: [
+        { id: '/img', label: '/img', desc: '启动 AI 视觉与双风格并行生图工作流', action: 'run_workflow', workflowId: 'wf-visual-poster' },
+      ],
+      tools: [
+        {
+          ...GENERATE_IMAGE_TOOL.function,
+          handlerKind: 'media_image',
+        },
+      ],
+      workflows: [
+        {
+          id: 'wf-visual-poster',
+          pluginId: 'plugin.visual-image-studio',
+          name: 'AI 视觉海报（提示词总监 → 拍板 → 主视觉∥变体并行生图）',
+          description: '自动润色光影与构图提示词，经风格拍板后并行渲染 2 组视觉方案并推入实时画布对比。',
+          category: 'media',
+          builtin: true,
+          variables: { brand: 'Harbor', aspect_ratio: '16:9' },
+          nodes: [
+            { id: 'in', kind: 'input', label: '视觉需求输入' },
+            {
+              id: 'prompt_dir',
+              kind: 'llm',
+              label: '视觉提示词总监',
+              role: '资深商业美术指导',
+              prompt: '你是商业视觉提示词总监。请将以下需求润色为一段精确、高密度的画面描述（包含主体、景别、光影、材质、色彩层次，直接输出画面描述）：\n{{input}}',
+            },
+            {
+              id: 'style_gate',
+              kind: 'human_gate',
+              label: '美学风格与画幅拍板',
+              gateConfig: {
+                title: '选择图片生成美学方向',
+                subtitle: '确认后将并行渲染主视觉与创意变体两张高清成图',
+                questions: [
+                  {
+                    id: 'aesthetic',
+                    label: '视觉风格方向',
+                    options: [
+                      { id: 'cinematic', label: '电影级光影写实', desc: '体积光、景深虚化与高级胶片颗粒', tag: '推荐' },
+                      { id: 'glass3d', label: '玻璃拟态 3D 渲染', desc: '通透折射材质、柔和渐变与现代科技感', tag: '潮流' },
+                      { id: 'editorial', label: '极简平面海报风', desc: '大留白、强图形对比与精准视觉焦点', tag: '商业' },
+                    ],
+                  },
+                ],
+              },
+            },
+            {
+              id: 'img_main',
+              kind: 'image_gen',
+              label: '主视觉成图 A',
+              prompt: '{{nodes.prompt_dir.output}} · 风格：{{nodes.style_gate.output}}',
+              mediaConfig: { aspectRatio: '16:9', style: '电影光影大片', quality: 'hd' },
+            },
+            {
+              id: 'img_alt',
+              kind: 'image_gen',
+              label: '创意变体成图 B',
+              prompt: '{{nodes.prompt_dir.output}} · 风格：{{nodes.style_gate.output}}',
+              mediaConfig: { aspectRatio: '16:9', style: '极简艺术视觉', quality: 'hd' },
+            },
+            {
+              id: 'deliver',
+              kind: 'merge',
+              label: '视觉成品汇总',
+              prompt: '### 🎨 AI 视觉并行交付结果\n\n#### 方案 A（主视觉）\n{{nodes.img_main.output}}\n\n#### 方案 B（创意变体）\n{{nodes.img_alt.output}}',
+            },
+          ],
+          edges: [
+            { from: 'in', to: 'prompt_dir' },
+            { from: 'prompt_dir', to: 'style_gate' },
+            { from: 'style_gate', to: 'img_main' },
+            { from: 'style_gate', to: 'img_alt' },
+            { from: 'img_main', to: 'deliver' },
+            { from: 'img_alt', to: 'deliver' },
+          ],
+        },
+      ],
+      hooks: [
+        {
+          event: 'beforePrompt',
+          kind: 'append_directive',
+          text: '【视觉插件就绪】当用户明确要求画图/生图/海报/配图时，可直接调用 generate_image 工具出图并在画布预览。',
+        },
+      ],
+    },
+  },
+  {
+    id: 'plugin.ai-video-director',
+    name: 'AI 短片导演与文/图生视频引擎',
+    version: '1.0.0',
+    category: 'media',
+    builtin: true,
+    description: '兼容 GLM CogVideoX-3 / OpenAI Sora-2 / SiliconFlow Wan2.1 / MiniMax video-01，打通「导演分镜 → 首帧关键图 → 图生视频 (I2V) 异步轮询 → 放映厅」。',
+    contributes: {
+      slashCommands: [
+        { id: '/video', label: '/video', desc: '启动 AI 短片分镜与文/图生视频流水线', action: 'run_workflow', workflowId: 'wf-ai-video-film' },
+      ],
+      tools: [
+        {
+          ...GENERATE_VIDEO_TOOL.function,
+          handlerKind: 'media_video',
+        },
+      ],
+      workflows: [
+        {
+          id: 'wf-ai-video-film',
+          pluginId: 'plugin.ai-video-director',
+          name: 'AI 短片导演（分镜脚本 → 节奏拍板 → 首帧生图 → 图生视频 I2V）',
+          description: '上游生图首帧自动透传给下游视频节点，实现稳定可控的图生视频全链路。',
+          category: 'media',
+          builtin: true,
+          variables: { aspect_ratio: '16:9', duration: '5' },
+          nodes: [
+            { id: 'in', kind: 'input', label: '短片创意输入' },
+            {
+              id: 'director',
+              kind: 'llm',
+              label: '总导演分镜策划',
+              role: 'AI 广告与短片导演',
+              prompt: '你是资深 AI 视频导演。请围绕以下创意设计开场核心镜头（明确主体、运镜方式、光影变化与氛围节奏，输出可直接用于首帧出图与视频渲染的高密度描述）：\n{{input}}',
+            },
+            {
+              id: 'pace_gate',
+              kind: 'human_gate',
+              label: '画幅与运镜拍板',
+              gateConfig: {
+                title: '确认短片画幅与运镜风格',
+                subtitle: '确认后将先渲染首帧关键概念图，再无缝进入图生视频渲染',
+                questions: [
+                  {
+                    id: 'camera',
+                    label: '运镜节奏偏好',
+                    options: [
+                      { id: 'dolly', label: '缓慢推进电影感', desc: '稳定推镜、光影流动与高级史诗氛围', tag: '推荐' },
+                      { id: 'orbit', label: '360° 环绕展示', desc: '围绕核心主体流畅环绕，适合产品大片', tag: '产品' },
+                      { id: 'dynamic', label: '快节奏潮流转场', desc: '动感跟拍与高能视觉冲击', tag: '短剧' },
+                    ],
+                  },
+                ],
+              },
+            },
+            {
+              id: 'first_frame',
+              kind: 'image_gen',
+              label: '首帧关键概念图',
+              prompt: '{{nodes.director.output}} · 运镜：{{nodes.pace_gate.output}}',
+              mediaConfig: { aspectRatio: '16:9', style: '电影级宽银幕静帧', quality: 'hd' },
+            },
+            {
+              id: 'render_video',
+              kind: 'video_gen',
+              label: '图生视频渲染 (I2V)',
+              prompt: '{{nodes.director.output}} · 运镜：{{nodes.pace_gate.output}}',
+              mediaConfig: { duration: 5, aspectRatio: '16:9', resolution: '1080p', withAudio: true },
+            },
+          ],
+          edges: [
+            { from: 'in', to: 'director' },
+            { from: 'director', to: 'pace_gate' },
+            { from: 'pace_gate', to: 'first_frame' },
+            { from: 'first_frame', to: 'render_video' },
+          ],
+        },
+      ],
+      hooks: [
+        {
+          event: 'beforePrompt',
+          kind: 'append_directive',
+          text: '【视频插件就绪】当用户要求生成短视频/宣传片时，可先调用 generate_image 锁定首帧再调用 generate_video（传 image_url）实现高一致性图生视频。',
+        },
+      ],
+    },
+  },
+  {
     id: 'plugin.fullstack-pipeline',
     name: '全栈并行交付流水线',
-    version: '1.2.0',
+    version: '1.5.0',
     category: 'engineering',
     builtin: true,
-    description: '架构拆解后并行扇出「UI 视觉规范 ∥ 安全与边界基线」，经人工效果拍板门后由工程师落地并送入实时画布。',
+    description: '架构拆解后并行扇出「UI 视觉规范 ∥ 安全基线 ∥ 人工拍板」，汇合后经迭代精修落地并直推实时画布。',
     contributes: {
       workflows: [
         {
           id: 'wf-fullstack-delivery',
           pluginId: 'plugin.fullstack-pipeline',
-          name: '全栈并行交付（架构 → UI∥安全 → 拍板 → 落地）',
-          description: '典型并行扇出 + 人工拍板门 + 实时画布输出的现代 Agent 工程流水线。',
+          name: '全栈并行交付（架构 → UI∥安全∥拍板 → 精修落地 → 画布）',
+          description: '并行扇出 + 人工拍板门 + 实时交互画布输出的旗舰工程流水线。',
           category: 'engineering',
           builtin: true,
           nodes: [
@@ -115,6 +296,7 @@ export const BUILTIN_PLUGINS = Object.freeze([
               label: '全栈实现落地',
               role: '全栈实现工程师',
               allowTools: true,
+              retryCount: 1,
               prompt: '你是全栈实现工程师。严格依据下方汇合规范输出完整可运行的代码（若是网页请给出完整 ```html 代码块供实时画布渲染）：\n{{upstream}}',
             },
             {
@@ -147,12 +329,71 @@ export const BUILTIN_PLUGINS = Object.freeze([
     },
   },
   {
+    id: 'plugin.auto-qa-loop',
+    name: '有界迭代精修与自检引擎',
+    version: '1.0.0',
+    category: 'quality',
+    builtin: true,
+    description: '利用有界迭代循环节点（最多 3 轮自检→挑刺→精修）把方案/代码/文案自动打磨至 APPROVED 达标线再交付。',
+    contributes: {
+      slashCommands: [
+        { id: '/refine', label: '/refine', desc: '启动多轮自检迭代精修工作流', action: 'run_workflow', workflowId: 'wf-iterative-refine' },
+      ],
+      workflows: [
+        {
+          id: 'wf-iterative-refine',
+          pluginId: 'plugin.auto-qa-loop',
+          name: '有界迭代精修环（起草 → 最多 3 轮自检挑刺 → 达标验收）',
+          description: '内置 Loop 迭代节点，自动发现草稿缺陷并持续修订，命中 APPROVED 提前收口。',
+          category: 'quality',
+          builtin: true,
+          nodes: [
+            { id: 'in', kind: 'input', label: '精修目标' },
+            {
+              id: 'refine_loop',
+              kind: 'loop',
+              label: '3 轮自检精修环',
+              role: '首席质量精修官',
+              loopConfig: { maxIterations: 3, stopKeyword: 'APPROVED' },
+              prompt: '请高质量完成以下交付物，并在每轮自我挑刺补全细节：\n{{input}}',
+            },
+            {
+              id: 'check_pass',
+              kind: 'condition',
+              label: '验收达标判定',
+              condition: { op: 'contains', value: 'APPROVED' },
+            },
+            {
+              id: 'art_ok',
+              kind: 'artifact',
+              label: '达标终稿画布',
+              prompt: '{{nodes.refine_loop.output}}',
+            },
+            {
+              id: 'polish_final',
+              kind: 'llm',
+              label: '人工复核清单补齐',
+              role: '发布经理',
+              prompt: '精修已达最大轮次，请整理最终交付正文及 3 条待人工确认清单：\n{{nodes.refine_loop.output}}',
+            },
+          ],
+          edges: [
+            { from: 'in', to: 'refine_loop' },
+            { from: 'refine_loop', to: 'check_pass' },
+            { from: 'check_pass', to: 'art_ok', when: 'true', label: '已达标' },
+            { from: 'check_pass', to: 'polish_final', when: 'false', label: '需复核' },
+          ],
+        },
+      ],
+    },
+  },
+  {
     id: 'plugin.deep-research',
     name: '深度研究与反证报告引擎',
-    version: '1.1.0',
+    version: '1.4.0',
     category: 'research',
     builtin: true,
-    description: '并行拆解正方洞察与反方质疑，经条件门分流输出高颜值 HTML 可视化研究简报。',
+    description: '并行拆解正方洞察与芒格反向质疑，汇合产出高颜值 HTML 可视化交互研究简报。',
     contributes: {
       workflows: [
         {
@@ -213,7 +454,7 @@ export const BUILTIN_PLUGINS = Object.freeze([
   {
     id: 'plugin.code-audit',
     name: '代码体检与安全重构插件',
-    version: '1.0.0',
+    version: '1.3.0',
     category: 'security',
     builtin: true,
     description: '直调工作区目录扫描工具 → 静态与安全审计 → 风险条件分流 → 精准重构方案。',
@@ -223,7 +464,7 @@ export const BUILTIN_PLUGINS = Object.freeze([
           id: 'wf-code-audit',
           pluginId: 'plugin.code-audit',
           name: '代码安全体检（目录探测 → 审计 → 条件分支重构）',
-          description: '演示「确定性工具节点 + LLM 审计 + 条件分支」混合编排，零浪费 Token。',
+          description: '「确定性工具节点 + LLM 审计 + 条件分支」混合编排，零浪费 Token。',
           category: 'security',
           builtin: true,
           nodes: [
@@ -276,18 +517,18 @@ export const BUILTIN_PLUGINS = Object.freeze([
   },
   {
     id: 'plugin.content-studio',
-    name: '爆款内容并行创作工坊',
-    version: '1.0.0',
+    name: '图文并茂爆款内容工坊',
+    version: '1.4.0',
     category: 'creative',
     builtin: true,
-    description: '并行生成「开场钩子 ∥ 深度结构大纲」，汇合精修为多平台可直接发布的成品文案。',
+    description: '并行生成「开场钩子 ∥ 深度大纲 ∥ AI 封面配图」，汇合精修为图文并茂的多平台发布终稿。',
     contributes: {
       workflows: [
         {
           id: 'wf-content-studio',
           pluginId: 'plugin.content-studio',
-          name: '内容工坊（钩子 ∥ 大纲 → 精修成稿）',
-          description: '并行激发创意与逻辑双轨，快速产出高质量文章或视频脚本。',
+          name: '图文内容工坊（钩子 ∥ 大纲 ∥ AI 封面图 → 终稿）',
+          description: '三轨并行激发创意、逻辑与封面视觉，一键直出图文成品。',
           category: 'creative',
           builtin: true,
           nodes: [
@@ -307,18 +548,27 @@ export const BUILTIN_PLUGINS = Object.freeze([
               prompt: '为以下选题规划节奏紧凑的 4 段式论证结构与核心金句：\n{{input}}',
             },
             {
+              id: 'cover',
+              kind: 'image_gen',
+              label: 'AI 封面配图',
+              prompt: 'Editorial high-impact cover illustration for: {{input}}',
+              mediaConfig: { aspectRatio: '16:9', style: '杂志级精致插画', quality: 'hd' },
+            },
+            {
               id: 'polish',
               kind: 'llm',
-              label: '主编整合精修',
+              label: '主编整合图文终稿',
               role: '总编辑',
-              prompt: '挑选最强钩子并与大纲无缝融合，输出可直接发布的终稿：\n\n【钩子候选】\n{{nodes.hooks.output}}\n\n【内容大纲】\n{{nodes.outline.output}}',
+              prompt: '挑选最强钩子与大纲无缝融合，并将封面图嵌入文首输出可直接发布的图文终稿：\n\n【封面图】\n{{nodes.cover.output}}\n\n【钩子候选】\n{{nodes.hooks.output}}\n\n【内容大纲】\n{{nodes.outline.output}}',
             },
           ],
           edges: [
             { from: 'in', to: 'hooks' },
             { from: 'in', to: 'outline' },
+            { from: 'in', to: 'cover' },
             { from: 'hooks', to: 'polish' },
             { from: 'outline', to: 'polish' },
+            { from: 'cover', to: 'polish' },
           ],
         },
       ],
@@ -403,7 +653,6 @@ export function validateCustomPluginManifest(raw) {
   }
 }
 
-/** 合并内置插件与用户自定义插件，返回带 enabled 状态的完整注册表快照。 */
 export function resolveAllPlugins(enabledMap = {}, customPlugins = []) {
   const byId = new Map()
   for (const bp of BUILTIN_PLUGINS) {
@@ -476,7 +725,6 @@ export function collectPluginSlashCommands(plugins = []) {
   return out
 }
 
-/** 运行声明式插件生命周期钩子（fail-open，单个插件异常绝不阻塞核心流程）。 */
 export function runPluginBeforePromptHooks(plugins = []) {
   const directives = []
   for (const p of (Array.isArray(plugins) ? plugins : [])) {
@@ -490,12 +738,13 @@ export function runPluginBeforePromptHooks(plugins = []) {
   return directives.join('\n')
 }
 
-/** 执行插件声明式工具（安全无 eval）。 */
 export function dispatchPluginTool(toolName, args = {}, { plugins = [], workflows = [] } = {}) {
   const activeTools = collectPluginTools(plugins)
   const hit = activeTools.find((t) => t.function.name === toolName)
   if (!hit) return null
   const meta = hit._pluginMeta || {}
+  // 媒体工具交由 agentEngine 的原生 mediaToolDispatcher 走真实生成链路
+  if (meta.handlerKind === 'media_image' || meta.handlerKind === 'media_video') return null
   if (meta.handlerKind === 'list_workflows') {
     const summary = workflows.map((w) => ({
       id: w.id,
@@ -505,7 +754,6 @@ export function dispatchPluginTool(toolName, args = {}, { plugins = [], workflow
     }))
     return JSON.stringify({ ok: true, count: summary.length, workflows: summary })
   }
-  // 声明式模板响应工具
   let rendered = String(meta.responseTemplate || '{"ok":true}')
   for (const [k, v] of Object.entries(args || {})) {
     rendered = rendered.split(`{{${k}}}`).join(String(v ?? ''))
@@ -513,13 +761,12 @@ export function dispatchPluginTool(toolName, args = {}, { plugins = [], workflow
   return rendered
 }
 
-/** 给用户热插拔测试的一键示例插件 JSON 模板。 */
 export const SAMPLE_CUSTOM_PLUGIN_JSON = JSON.stringify({
   id: 'custom.prd-sprint',
   name: '敏捷 PRD 评审流水线（示例插件）',
   version: '1.0.0',
   category: 'product',
-  description: '用户自定义热插拔插件示例：需求拆解 → 人工确认门 → 交互式原型预览。',
+  description: '用户自定义热插拔插件示例：需求拆解 → 视觉概念图 → 交互式原型预览。',
   contributes: {
     slashCommands: [
       { id: '/prd', label: '/prd', desc: '启动自定义敏捷 PRD 流水线', action: 'run_workflow', workflowId: 'wf-custom-prd' },
@@ -530,8 +777,8 @@ export const SAMPLE_CUSTOM_PLUGIN_JSON = JSON.stringify({
     workflows: [
       {
         id: 'wf-custom-prd',
-        name: '自定义敏捷 PRD → 拍板 → 原型画布',
-        description: '热插拔安装后立即可运行的 3 步自定义 DAG 工作流。',
+        name: '自定义敏捷 PRD → 原型画布',
+        description: '热插拔安装后立即可运行的自定义 DAG 工作流。',
         nodes: [
           { id: 'in', kind: 'input', label: '产品想法' },
           { id: 'prd', kind: 'llm', label: 'PRD 拆解', role: '产品经理', prompt: '请输出核心用户故事与功能清单：\n{{input}}' },

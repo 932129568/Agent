@@ -12,6 +12,8 @@ import {
   importWorkflowFromJson,
   synthesizeWorkflowNow,
   convertGroupToWorkflow,
+  undoWorkflowChange,
+  redoWorkflowChange,
   runActiveWorkflow,
   stopWorkflowRun,
   resetWorkflowRun,
@@ -27,7 +29,7 @@ import { copyText, downloadTextFile } from '../../platform/dom.js'
 import WorkflowGraph from '../../ui/WorkflowGraph.jsx'
 import './WorkflowPanel.css'
 
-const TOOL_PRESET_NAMES = ['list_dir', 'read_file', 'write_file', 'search_replace', 'run_command', 'browser_search', 'list_workflow_plugins']
+const TOOL_PRESET_NAMES = ['list_dir', 'read_file', 'write_file', 'search_replace', 'run_command', 'browser_search', 'generate_image', 'generate_video', 'list_workflow_plugins']
 
 export default function WorkflowPanel() {
   const pluginsState = useSlice('plugins')
@@ -61,6 +63,7 @@ export default function WorkflowPanel() {
   const [pluginJsonDraft, setPluginJsonDraft] = useState(SAMPLE_CUSTOM_PLUGIN_JSON)
   const [showImportWf, setShowImportWf] = useState(false)
   const [importWfDraft, setImportWfDraft] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
 
   const dag = useMemo(
     () => (activeWf ? analyzeWorkflowDag(activeWf) : { ok: false, error: '暂无可用工作流', layers: [], layout: { width: 640, height: 240, positions: {} } }),
@@ -84,6 +87,9 @@ export default function WorkflowPanel() {
   const beginEditNode = (node) => {
     setEditingNode({
       ...node,
+      retryCount: Number(node.retryCount) || 0,
+      mediaConfig: node.mediaConfig ? { ...node.mediaConfig } : { aspectRatio: node.kind === 'video_gen' ? '16:9' : '1:1', duration: 5, resolution: '1080p', quality: 'hd', style: '' },
+      loopConfig: node.loopConfig ? { ...node.loopConfig } : { maxIterations: 3, stopKeyword: 'APPROVED' },
       condition: node.condition ? { ...node.condition } : { op: 'contains', value: '' },
       gateConfig: node.gateConfig ? JSON.parse(JSON.stringify(node.gateConfig)) : {
         title: `确认：${node.label}`,
@@ -177,9 +183,15 @@ export default function WorkflowPanel() {
       kind: newNodeKind,
       label: newNodeLabel.trim(),
       role: newNodeKind === 'llm' ? newNodeLabel.trim() : '',
-      prompt: newNodeKind === 'llm' ? `请以「${newNodeLabel.trim()}」身份处理：\n{{input}}\n\n前序结果：\n{{upstream}}` : '',
+      prompt: (newNodeKind === 'llm' || newNodeKind === 'loop')
+        ? `请以「${newNodeLabel.trim()}」身份处理：\n{{input}}\n\n前序结果：\n{{upstream}}`
+        : ((newNodeKind === 'image_gen' || newNodeKind === 'video_gen') ? '{{upstream}}' : ''),
       toolName: newNodeKind === 'tool' ? 'list_dir' : '',
       toolArgs: newNodeKind === 'tool' ? { path: '.' } : {},
+      mediaConfig: newNodeKind === 'image_gen'
+        ? { aspectRatio: '16:9', style: '电影光影', quality: 'hd' }
+        : (newNodeKind === 'video_gen' ? { duration: 5, aspectRatio: '16:9', resolution: '1080p', withAudio: false } : null),
+      loopConfig: newNodeKind === 'loop' ? { maxIterations: 3, stopKeyword: 'APPROVED' } : null,
       condition: newNodeKind === 'condition' ? { op: 'contains', value: 'PASS' } : null,
     }
     const nextEdges = parentId
@@ -299,6 +311,15 @@ export default function WorkflowPanel() {
                   ⬇ 运行报告
                 </button>
               )}
+              <button type="button" className="wf-chip" disabled={!(pluginsState.undoStack && pluginsState.undoStack.length)} onClick={() => undoWorkflowChange()} title="撤销上一步 DAG 编辑">
+                ↶ 撤销
+              </button>
+              <button type="button" className="wf-chip" disabled={!(pluginsState.redoStack && pluginsState.redoStack.length)} onClick={() => redoWorkflowChange()} title="重做 DAG 编辑">
+                ↷ 重做
+              </button>
+              <button type="button" className="wf-chip" data-active={String(showHistory)} onClick={() => setShowHistory((v) => !v)}>
+                📜 历史 ({(pluginsState.runHistory || []).length})
+              </button>
               <button type="button" className="wf-chip" onClick={() => triggerWorkflowShowcase()}>
                 ▶ 演练并发 DAG 动效
               </button>
@@ -397,6 +418,27 @@ export default function WorkflowPanel() {
                   placeholder="用一句话描述你要的流程（如：调研竞品定价并做红蓝反证，最后生成 HTML 简报）…"
                 />
                 <button type="button" className="wf-btn" onClick={handleSynthesize}>生成并载入 DAG →</button>
+              </div>
+            )}
+
+            {showHistory && (
+              <div className="wf-install-box">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: 13 }}>📜 最近工作流执行历史（共 {(pluginsState.runHistory || []).length} 条）</strong>
+                  <button type="button" className="wf-chip" onClick={() => setShowHistory(false)}>关闭 ×</button>
+                </div>
+                {(pluginsState.runHistory || []).length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-3)' }}>暂无执行记录，点击下方「▶ 运行 DAG 工作流」后自动归档。</div>
+                ) : (
+                  (pluginsState.runHistory || []).slice(0, 8).map((h) => (
+                    <div key={h.id} className="wf-edge-row">
+                      <span>{h.status === 'done' ? '✓' : '⚠'} <strong>{h.workflowName}</strong> · {h.input || '无输入'} · {h.totalMs}ms</span>
+                      {h.lastArtifact && (
+                        <button type="button" className="wf-chip" onClick={() => openArtifactCanvas(h.lastArtifact)}>✦ 画布</button>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             )}
 
@@ -521,7 +563,18 @@ export default function WorkflowPanel() {
                               <button type="button" className="wf-chip" onClick={() => setEditingNode(null)}>取消</button>
                             </>
                           ) : (
-                            <button type="button" className="wf-chip" onClick={() => beginEditNode(selectedNode)}>编辑</button>
+                            <>
+                              <button
+                                type="button"
+                                className="wf-chip"
+                                disabled={isRunning}
+                                title="复用上游已完成输出，仅从此节点向后局部重跑"
+                                onClick={() => activeWf && runActiveWorkflow({ workflowId: activeWf.id, input: goalInput, runFromNodeId: selectedNode.id })}
+                              >
+                                ▶ 从此跑
+                              </button>
+                              <button type="button" className="wf-chip" onClick={() => beginEditNode(selectedNode)}>编辑</button>
+                            </>
                           )}
                           <button type="button" className="wf-chip" onClick={handleDeleteSelectedNode}>删</button>
                         </div>
@@ -619,6 +672,135 @@ export default function WorkflowPanel() {
                                 <input className="wf-input" value={gateOptionsDraft} onChange={(e) => setGateOptionsDraft(e.target.value)} />
                               </label>
                             </>
+                          )}
+                          {editingNode.kind === 'image_gen' && (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                <label className="wf-field">
+                                  画幅比例
+                                  <select
+                                    className="wf-select"
+                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.aspectRatio) || '1:1'}
+                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), aspectRatio: e.target.value } })}
+                                  >
+                                    {['1:1', '16:9', '9:16', '4:3', '3:4', '21:9'].map((r) => <option key={r} value={r}>{r}</option>)}
+                                  </select>
+                                </label>
+                                <label className="wf-field">
+                                  画质档位
+                                  <select
+                                    className="wf-select"
+                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.quality) || 'hd'}
+                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), quality: e.target.value } })}
+                                  >
+                                    <option value="standard">standard（快速）</option>
+                                    <option value="hd">hd（高清）</option>
+                                  </select>
+                                </label>
+                              </div>
+                              <label className="wf-field">
+                                美学风格 / 生图模型覆写
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                  <input className="wf-input" value={(editingNode.mediaConfig && editingNode.mediaConfig.style) || ''} onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), style: e.target.value } })} placeholder="如：电影光影写实" />
+                                  <input className="wf-input" value={editingNode.model || ''} onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })} placeholder="模型留空继承设置" />
+                                </div>
+                              </label>
+                              <label className="wf-field">
+                                生图提示词模板（支持 {'{{input}}'} / {'{{upstream}}'}）
+                                <textarea className="wf-textarea" value={editingNode.prompt || ''} onChange={(e) => setEditingNode({ ...editingNode, prompt: e.target.value })} />
+                              </label>
+                            </>
+                          )}
+                          {editingNode.kind === 'video_gen' && (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                <label className="wf-field">
+                                  时长(秒)
+                                  <select
+                                    className="wf-select"
+                                    value={Number((editingNode.mediaConfig && editingNode.mediaConfig.duration) || 5)}
+                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), duration: Number(e.target.value) } })}
+                                  >
+                                    <option value={5}>5 秒</option>
+                                    <option value={10}>10 秒</option>
+                                  </select>
+                                </label>
+                                <label className="wf-field">
+                                  画幅
+                                  <select
+                                    className="wf-select"
+                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.aspectRatio) || '16:9'}
+                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), aspectRatio: e.target.value } })}
+                                  >
+                                    <option value="16:9">16:9 横屏</option>
+                                    <option value="9:16">9:16 竖屏</option>
+                                    <option value="1:1">1:1 方形</option>
+                                  </select>
+                                </label>
+                                <label className="wf-field">
+                                  分辨率
+                                  <select
+                                    className="wf-select"
+                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.resolution) || '1080p'}
+                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), resolution: e.target.value } })}
+                                  >
+                                    <option value="720p">720p</option>
+                                    <option value="1080p">1080p</option>
+                                    <option value="4k">4K</option>
+                                  </select>
+                                </label>
+                              </div>
+                              <label className="wf-field">
+                                首帧参考图 URL（留空自动继承上游 AI 生图节点产出）
+                                <input className="wf-input" value={(editingNode.mediaConfig && editingNode.mediaConfig.imageUrl) || ''} onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), imageUrl: e.target.value } })} placeholder="留空自动衔接上游首帧图（I2V）" />
+                              </label>
+                              <label className="wf-field">
+                                视频运镜与动态提示词
+                                <textarea className="wf-textarea" value={editingNode.prompt || ''} onChange={(e) => setEditingNode({ ...editingNode, prompt: e.target.value })} />
+                              </label>
+                            </>
+                          )}
+                          {editingNode.kind === 'loop' && (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                <label className="wf-field">
+                                  最大精修轮数 (1–5)
+                                  <input
+                                    className="wf-input"
+                                    type="number"
+                                    min="1"
+                                    max="5"
+                                    value={Number((editingNode.loopConfig && editingNode.loopConfig.maxIterations) || 3)}
+                                    onChange={(e) => setEditingNode({ ...editingNode, loopConfig: { ...(editingNode.loopConfig || {}), maxIterations: Number(e.target.value) || 3 } })}
+                                  />
+                                </label>
+                                <label className="wf-field">
+                                  提前达标关键词
+                                  <input
+                                    className="wf-input"
+                                    value={(editingNode.loopConfig && editingNode.loopConfig.stopKeyword) || 'APPROVED'}
+                                    onChange={(e) => setEditingNode({ ...editingNode, loopConfig: { ...(editingNode.loopConfig || {}), stopKeyword: e.target.value } })}
+                                  />
+                                </label>
+                              </div>
+                              <label className="wf-field">
+                                初始任务提示词
+                                <textarea className="wf-textarea" value={editingNode.prompt || ''} onChange={(e) => setEditingNode({ ...editingNode, prompt: e.target.value })} />
+                              </label>
+                            </>
+                          )}
+                          {(editingNode.kind === 'llm' || editingNode.kind === 'tool' || editingNode.kind === 'image_gen' || editingNode.kind === 'video_gen') && (
+                            <label className="wf-field">
+                              失败自动重试次数 (0–3)
+                              <input
+                                className="wf-input"
+                                type="number"
+                                min="0"
+                                max="3"
+                                value={Number(editingNode.retryCount) || 0}
+                                onChange={(e) => setEditingNode({ ...editingNode, retryCount: Math.max(0, Math.min(3, Number(e.target.value) || 0)) })}
+                              />
+                            </label>
                           )}
                           {(editingNode.kind === 'merge' || editingNode.kind === 'artifact') && (
                             <label className="wf-field">

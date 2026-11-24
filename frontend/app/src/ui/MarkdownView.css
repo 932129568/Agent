@@ -24,6 +24,14 @@
     background: var(--surface-subtle);
     border: 1px solid var(--border);
   }
+  .md-view img {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    margin: 0.55em 0;
+    display: block;
+    box-shadow: var(--elev-1);
+  }
   .md-view table {
     width: 100%;
     border-collapse: collapse;

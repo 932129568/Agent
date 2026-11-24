@@ -24,6 +24,7 @@ import {
 } from '../../state/store.js'
 import { assertLatin1Value } from '../../services/headers.js'
 import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReasoningRequestParams } from '../../services/reasoningPresets.js'
+import { MEDIA_PROVIDER_PRESETS } from '../../services/mediaGen.js'
 import './SettingsModal.css'
 
 const DOMAINS = [
@@ -227,6 +228,62 @@ export default function SettingsModal() {
               </div>
               <div className="st-row">
                 <button type="button" className="st-btn st-btn-primary" onClick={() => handleSaveModel(false)}>保存推理参数</button>
+              </div>
+            </div>
+
+            <div className="st-card">
+              <h3>🎨 图片与视频生成模型配置（兼容多厂商 + 本地代理转发）</h3>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                留空地址或 Key 时自动继承上方主模型端点与 API Key；支持 GLM CogView/CogVideoX、OpenAI GPT-Image/Sora、硅基流动 FLUX/Wan2.1、MiniMax 及本地网关。
+              </div>
+              <div className="st-row">
+                {MEDIA_PROVIDER_PRESETS.map((mp) => (
+                  <button
+                    key={mp.id}
+                    type="button"
+                    className="st-btn"
+                    onClick={() => setDraft({
+                      ...draft,
+                      image_base_url: mp.imageBaseUrl,
+                      image_model: mp.imageModel,
+                      video_base_url: mp.videoBaseUrl,
+                      video_model: mp.videoModel,
+                    })}
+                  >
+                    套用 {mp.name.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+              <div className="st-row">
+                <div className="st-field" style={{ flex: 2 }}>
+                  <label>图片生成端点 URL（可选，留空继承主端点）</label>
+                  <input className="st-input" value={draft.image_base_url || ''} onChange={(e) => setDraft({ ...draft, image_base_url: e.target.value })} placeholder="例如：https://open.bigmodel.cn/api/paas/v4" />
+                </div>
+                <div className="st-field" style={{ flex: 1 }}>
+                  <label>图片模型名</label>
+                  <input className="st-input" value={draft.image_model || ''} onChange={(e) => setDraft({ ...draft, image_model: e.target.value })} placeholder="cogview-4-250304 / gpt-image-1" />
+                </div>
+                <div className="st-field" style={{ flex: 1 }}>
+                  <label>独立生图 Key（可选）</label>
+                  <input className="st-input" type="password" value={draft.image_api_key || ''} onChange={(e) => setDraft({ ...draft, image_api_key: e.target.value })} placeholder="留空继承主 Key" />
+                </div>
+              </div>
+              <div className="st-row">
+                <div className="st-field" style={{ flex: 2 }}>
+                  <label>视频生成端点 URL（可选，留空继承主端点）</label>
+                  <input className="st-input" value={draft.video_base_url || ''} onChange={(e) => setDraft({ ...draft, video_base_url: e.target.value })} placeholder="例如：https://open.bigmodel.cn/api/paas/v4" />
+                </div>
+                <div className="st-field" style={{ flex: 1 }}>
+                  <label>视频模型名</label>
+                  <input className="st-input" value={draft.video_model || ''} onChange={(e) => setDraft({ ...draft, video_model: e.target.value })} placeholder="cogvideox-3 / sora-2 / video-01" />
+                </div>
+                <div className="st-field" style={{ flex: 1 }}>
+                  <label>独立视频 Key（可选）</label>
+                  <input className="st-input" type="password" value={draft.video_api_key || ''} onChange={(e) => setDraft({ ...draft, video_api_key: e.target.value })} placeholder="留空继承主 Key" />
+                </div>
+              </div>
+              <div className="st-row">
+                <button type="button" className="st-btn st-btn-primary" onClick={() => handleSaveModel(false)}>保存图片与视频端点配置</button>
               </div>
             </div>
 

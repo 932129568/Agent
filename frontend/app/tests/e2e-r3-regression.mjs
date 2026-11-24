@@ -88,6 +88,8 @@ const stubState = {
   triggerGroupToolOnce: false,
   triggerClarifyOnce: false,
   triggerArtifactOnce: false,
+  triggerImageToolOnce: false,
+  mediaRequests: [],
 }
 
 function readReqBody(req) {
@@ -213,6 +215,29 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  // 模拟多模态图片 / 视频生成与异步轮询端点（R19 Suite-O）
+  if (req.method === 'POST' && urlPath === '/images/generations') {
+    const raw = await readReqBody(req)
+    stubState.mediaRequests.push({ path: urlPath, body: JSON.parse(raw || '{}') })
+    const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#182038"/><text x="40" y="190" fill="#38bdf8" font-size="32">Harbor Generated Image</text></svg>')
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ data: [{ url: svg, revised_prompt: 'Harbor cinematic glass poster' }] }))
+    return
+  }
+  if (req.method === 'POST' && urlPath === '/videos/generations') {
+    const raw = await readReqBody(req)
+    stubState.mediaRequests.push({ path: urlPath, body: JSON.parse(raw || '{}') })
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ id: 'vid_task_r19', task_status: 'PROCESSING' }))
+    return
+  }
+  if (req.method === 'GET' && urlPath.startsWith('/async-result/')) {
+    stubState.mediaRequests.push({ path: urlPath })
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ task_status: 'SUCCESS', video_result: [{ url: 'https://example.invalid/harbor-demo.mp4', cover_image_url: '' }] }))
+    return
+  }
+
   // 模型 SSE 流式 Stub（用于测试群聊接力的真实模型传参、流式暂停与断点续跑）
   if (req.method === 'POST' && urlPath === '/chat/completions') {
     const raw = await readReqBody(req)
@@ -256,6 +281,15 @@ const server = http.createServer(async (req, res) => {
       return
     }
     const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
+    if (stubState.triggerImageToolOnce && !hasToolRole) {
+      stubState.triggerImageToolOnce = false
+      const imgArgs = JSON.stringify({ prompt: '赛博玻璃港口海报', aspect_ratio: '16:9', style: '电影光影' })
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_img_1', type: 'function', function: { name: 'generate_image', arguments: imgArgs } }] }, finish_reason: 'tool_calls' }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 900, completion_tokens: 40, total_tokens: 940, prompt_tokens_details: { cached_tokens: 800 } } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     if (stubState.triggerArtifactOnce) {
       stubState.triggerArtifactOnce = false
       const artContent = '已为你生成交互式卡片：\n\n```html\n<!doctype html><html><head><title>R15 交互画布测试</title></head><body><h1>Hello Artifact Canvas</h1><form id="f"><button id="subbtn">点击提交测试</button></form><a id="rel" href="index.html">回首页</a></body></html>\n```'
@@ -1081,6 +1115,41 @@ try {
     edgeCntAfterPort === edgeCntBeforePort + 1,
     `edges=${edgeCntBeforePort}->${edgeCntAfterPort}`
   )
+
+  /* ======================================================================== *
+   * Suite O · R19 多模态图片/视频生成工具闭环 + 升级内置插件（8 插件含 IMG/VID/LOOP 节点）
+   * ======================================================================== */
+  await page.locator('.ss-side[data-mode="workflow"] .ss-item[data-workflow-id="wf-ai-video-film"]').click()
+  await page.waitForTimeout(220)
+  const hasImgNode = (await page.locator('.wg-node[data-kind="image_gen"]').count()) >= 1
+  const hasVidNode = (await page.locator('.wg-node[data-kind="video_gen"]').count()) >= 1
+  const wfCountTotal = await page.locator('.ss-side[data-mode="workflow"] .ss-item').count()
+  record(
+    'Suite-O',
+    '内置插件与工作流升级：8 大内置插件就绪，AI 短片导演工作流包含 IMG + VID 节点',
+    hasImgNode && hasVidNode && wfCountTotal >= 7,
+    `hasImg=${hasImgNode}, hasVid=${hasVidNode}, totalWfs=${wfCountTotal}`
+  )
+
+  await page.locator('.hb-rail-btn[title="智能对话"]').click()
+  await page.waitForSelector('.chat-textarea')
+  stubState.triggerImageToolOnce = true
+  stubState.mediaRequests.length = 0
+  await page.locator('.chat-textarea').fill('帮我画一张赛博玻璃港口海报图')
+  await page.locator('.chat-send-btn').click()
+  await page.waitForSelector('.ac-frame', { timeout: 6000 })
+  const mediaHit = stubState.mediaRequests.some((r) => r.path === '/images/generations')
+  const gallerySrc = await page.locator('.ac-frame').getAttribute('srcdoc')
+  record(
+    'Suite-O',
+    '多模态生图工具闭环：generate_image 经本地代理调用并自动推入实时画布画廊展示',
+    // 判据用**结构标记**而不是文案：`media-card` 只出现在 buildMediaGalleryArtifact 产出的
+    // 画廊 HTML 里；而原先断言的 'Harbor Generated Image' 在产品里根本不存在
+    // （title 实际是提示词前 22 字）⇒ 那条断言永远不可能为真。
+    mediaHit && Boolean(gallerySrc && gallerySrc.includes('class="media-card"') && /<img\s/.test(gallerySrc)),
+    `mediaHit=${mediaHit}, hasGallery=${Boolean(gallerySrc && gallerySrc.includes('class="media-card"'))}, hasImg=${Boolean(gallerySrc && /<img\s/.test(gallerySrc))}`
+  )
+  await page.locator('.dk-close').click()
 
   // D4: 全程零未捕获页面异常
   record('Global', '全程零未捕获 pageerror', pageErrors.length === 0, pageErrors[0] || '0 errors')

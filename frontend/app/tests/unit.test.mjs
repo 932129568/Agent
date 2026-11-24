@@ -849,3 +849,115 @@ test('workflowEngine.js 自定义拖拽节点坐标持久化、画布自动扩�
   const autoDag = analyzeWorkflowDag(reset)
   assert.notEqual(autoDag.layout.positions.b.x, 820)
 })
+
+
+test('mediaGen.js 多厂商图片与视频协议兼容归一化（GLM CogView/CogVideoX / OpenAI / SiliconFlow / MiniMax）', async () => {
+  const {
+    detectMediaProvider,
+    normalizeImageRequest,
+    normalizeVideoRequest,
+    extractImageResults,
+    extractVideoResults,
+    generateImageMedia,
+    generateVideoMedia,
+  } = await import('../src/services/mediaGen.js')
+
+  assert.equal(detectMediaProvider('https://open.bigmodel.cn/api/paas/v4', 'cogview-4'), 'glm')
+  assert.equal(detectMediaProvider('https://api.siliconflow.cn/v1', 'FLUX.1-schnell'), 'siliconflow')
+  assert.equal(detectMediaProvider('https://api.minimaxi.com/v1', 'video-01'), 'minimax')
+
+  const imgReq = normalizeImageRequest({ prompt: '赛博霓虹雨夜', aspectRatio: '16:9', quality: 'hd', baseUrl: 'https://open.bigmodel.cn/api/paas/v4' })
+  assert.equal(imgReq.provider, 'glm')
+  assert.equal(imgReq.size, '1344x768')
+  assert.equal(imgReq.body.quality, 'hd')
+
+  const vidReq = normalizeVideoRequest({ prompt: '镜头缓慢推近', imageUrl: 'https://a.test/frame.png', duration: 10, baseUrl: 'https://open.bigmodel.cn/api/paas/v4' })
+  assert.equal(vidReq.provider, 'glm')
+  assert.equal(vidReq.body.image_url, 'https://a.test/frame.png')
+  assert.equal(vidReq.pollPathForId('task_123'), '/async-result/task_123')
+
+  const imgs = extractImageResults({ data: [{ url: 'https://cdn.test/1.png' }, { b64_json: 'AAAA' }] })
+  assert.equal(imgs.length, 2)
+  assert.ok(imgs[1].url.startsWith('data:image/png;base64,'))
+
+  const vPending = extractVideoResults({ id: 'vid_99', task_status: 'PROCESSING' })
+  assert.equal(vPending.status, 'pending')
+  assert.equal(vPending.taskId, 'vid_99')
+  const vDone = extractVideoResults({ task_status: 'SUCCESS', video_result: [{ url: 'https://cdn.test/out.mp4', cover_image_url: 'https://cdn.test/c.jpg' }] })
+  assert.equal(vDone.status, 'done')
+  assert.equal(vDone.items[0].url, 'https://cdn.test/out.mp4')
+
+  // 离线预览模式优雅输出概念画布产物，不崩溃
+  const dryImg = await generateImageMedia({ prompt: '极简玻璃建筑', dryRun: true })
+  assert.equal(dryImg.ok, true)
+  assert.ok(dryImg.artifact && dryImg.artifact.code.includes('data:image/svg+xml'))
+
+  const dryVid = await generateVideoMedia({ prompt: '星空延时摄影', imageUrl: dryImg.items[0].url, dryRun: true })
+  assert.equal(dryVid.ok, true)
+  assert.equal(dryVid.artifact.mediaKind, 'video')
+})
+
+test('workflowEngine.js 新节点 image_gen → video_gen 首帧无缝继承 + loop 有界精修环 + 失败自动重试 + 局部重跑', async () => {
+  const { executeWorkflowDag, synthesizeWorkflowFromPrompt } = await import('../src/services/workflowEngine.js')
+
+  const vidWf = synthesizeWorkflowFromPrompt('拍一段赛博都市宣传片视频短片')
+  assert.ok(vidWf.nodes.some((n) => n.kind === 'image_gen'))
+  assert.ok(vidWf.nodes.some((n) => n.kind === 'video_gen'))
+
+  let capturedI2VUrl = ''
+  let attempts = 0
+  const wf = {
+    id: 'wf_media_loop',
+    name: '多模态与精修测试',
+    nodes: [
+      { id: 'in', kind: 'input', label: '输入' },
+      { id: 'img', kind: 'image_gen', label: '首帧图', prompt: '{{input}}', retryCount: 1 },
+      { id: 'vid', kind: 'video_gen', label: '图生视频', prompt: '{{input}}' },
+      { id: 'lp', kind: 'loop', label: '精修环', loopConfig: { maxIterations: 3, stopKeyword: 'APPROVED' } },
+    ],
+    edges: [
+      { from: 'in', to: 'img' },
+      { from: 'img', to: 'vid' },
+      { from: 'vid', to: 'lp' },
+    ],
+  }
+  let loopCalls = 0
+  const res = await executeWorkflowDag({
+    workflow: wf,
+    input: '未来港口日出',
+    runImageNode: async () => {
+      attempts++
+      if (attempts === 1) throw new Error('transient_502')
+      return { ok: true, model: 'cogview-4', items: [{ url: 'https://cdn.test/keyframe.png' }] }
+    },
+    runVideoNode: async ({ imageUrl }) => {
+      capturedI2VUrl = imageUrl
+      return { ok: true, model: 'cogvideox-3', items: [{ url: 'https://cdn.test/clip.mp4' }] }
+    },
+    runLlmNode: async () => {
+      loopCalls++
+      return { content: loopCalls >= 2 ? '第二轮精修终稿 APPROVED' : '第一轮初稿' }
+    },
+  })
+  assert.equal(res.status, 'done')
+  assert.equal(attempts, 2, '首帧生图应自动重试 1 次成功')
+  assert.equal(capturedI2VUrl, 'https://cdn.test/keyframe.png', 'video_gen 应自动继承上游 image_gen 首帧图 URL')
+  assert.equal(loopCalls, 2, 'loop 节点应在命中 APPROVED 时提前收口')
+})
+
+test('toolRouter.js 与 pluginRegistry.js 支持 media 域自动挂载生图/视频工具且不破坏纯对话轻量工具面', async () => {
+  const { predictToolProfile, selectToolsForProfile } = await import('../src/services/toolRouter.js')
+  const { BUILTIN_PLUGINS, resolveAllPlugins, collectEnabledWorkflows } = await import('../src/services/pluginRegistry.js')
+  assert.equal(predictToolProfile('帮我画一张赛博朋克风格海报图'), 'media')
+  assert.equal(predictToolProfile('帮我生成视频短片宣传片'), 'media')
+
+  const mediaTools = selectToolsForProfile([], 'media')
+  const mNames = mediaTools.map((t) => t.function.name)
+  assert.ok(mNames.includes('generate_image') && mNames.includes('generate_video'))
+
+  assert.ok(BUILTIN_PLUGINS.length >= 8)
+  const wfs = collectEnabledWorkflows(resolveAllPlugins())
+  assert.ok(wfs.some((w) => w.id === 'wf-visual-poster'))
+  assert.ok(wfs.some((w) => w.id === 'wf-ai-video-film'))
+  assert.ok(wfs.some((w) => w.id === 'wf-iterative-refine'))
+})
