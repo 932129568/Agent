@@ -17,6 +17,7 @@ import {
   checkAppUpdate,
   triggerFourActShowcase,
   setWorkflowViewTab,
+  openOnboardingModal,
 } from '../../state/store.js'
 import './CommandPalette.css'
 
@@ -45,6 +46,8 @@ export default function CommandPalette() {
     { id: 'market', label: '打开「专家市场与多专家团队编排器」', hint: 'Market', run: () => openModal('market') },
     { id: 'dock', label: '开关右侧上下文工作台（Diff / 轨迹 / 预览）', hint: 'Ctrl+Alt+D', run: () => toggleDock() },
     { id: 'search', label: '开关浏览器分栏搜索面板', hint: 'Search', run: () => toggleSearchDock() },
+    { id: 'model-vault', label: '打开「模型保存中心」（自定义保存与切换多模型）', hint: 'Models', run: () => openModal('settings') },
+    { id: 'onboarding', label: '打开「Harbor 使用指南与核心特色」', hint: 'Guide', run: () => openOnboardingModal() },
     { id: 'settings', label: '打开设置中心（模型 / 混合路由 / 沙箱 / WebDAV / 软件）', hint: 'Settings', run: () => openModal('settings') },
     { id: 'update', label: '检查 Harbor 软件更新', hint: 'Update', run: () => checkAppUpdate(true) },
     { id: 'ws', label: '切换到「工作区与护栏」', hint: 'Panel', run: () => setActivePanel('workspace') },

@@ -382,6 +382,20 @@ export default function GroupPanel() {
                   <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>#{idx + 1}</span>
                   <input className="gp-field-sm" style={{ width: 116 }} value={m.name} onChange={(e) => updateGroupMember(m.id, { name: e.target.value })} placeholder="角色名" />
                   <input className="gp-field-sm" style={{ flex: 1, minWidth: 140 }} value={m.persona} onChange={(e) => updateGroupMember(m.id, { persona: e.target.value })} placeholder="人设与职责描述" />
+                  {(settings.savedModels || []).length > 0 && (
+                    <select
+                      className="gp-field-sm"
+                      style={{ maxWidth: 138 }}
+                      aria-label={`选择角色 ${m.name} 的保存模型`}
+                      value={(settings.savedModels || []).some((sm) => sm.id === m.model || sm.model === m.model) ? m.model : ''}
+                      onChange={(e) => updateGroupMember(m.id, { model: e.target.value })}
+                    >
+                      <option value="">继承全局模型</option>
+                      {(settings.savedModels || []).filter((sm) => !sm.kind || sm.kind === 'chat').map((sm) => (
+                        <option key={sm.id} value={sm.id}>{sm.label}</option>
+                      ))}
+                    </select>
+                  )}
                   <input className="gp-field-sm" style={{ width: 140 }} value={m.model || ''} onChange={(e) => updateGroupMember(m.id, { model: e.target.value })} placeholder="独立模型名（留空继承）" />
                   <select className="gp-field-sm" value={m.reasoningTier || 'auto'} onChange={(e) => updateGroupMember(m.id, { reasoningTier: e.target.value })} title="独立思考档位">
                     {REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => (

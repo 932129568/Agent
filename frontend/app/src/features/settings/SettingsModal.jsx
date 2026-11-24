@@ -6,6 +6,9 @@ import {
   refreshSettingsAux,
   checkAppUpdate,
   fireShellImpact,
+  saveModelProfile,
+  deleteModelProfile,
+  activateSavedModelGlobal,
   testModelEndpoint,
   probeLocalEndpoints,
   saveHybridSettings,
@@ -25,6 +28,7 @@ import {
 import { assertLatin1Value } from '../../services/headers.js'
 import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReasoningRequestParams } from '../../services/reasoningPresets.js'
 import { MEDIA_PROVIDER_PRESETS } from '../../services/mediaGen.js'
+import { MODEL_VAULT_PRESETS } from '../../services/modelVault.js'
 import './SettingsModal.css'
 
 const DOMAINS = [
@@ -50,6 +54,18 @@ export default function SettingsModal() {
   const [mcpName, setMcpName] = useState('')
   const [mcpCmd, setMcpCmd] = useState('')
   const [swProbing, setSwProbing] = useState(false)
+  const [vaultDraft, setVaultDraft] = useState({
+    id: '',
+    label: '',
+    model: '',
+    kind: 'chat',
+    baseUrl: '',
+    apiKey: '',
+    contextWindow: 128000,
+    maxTokens: 4096,
+    reasoningTier: 'auto',
+    notes: '',
+  })
 
   useEffect(() => { setDraft({ ...settings.backendConfig }) }, [settings.backendConfig])
   useEffect(() => { setHybridDraft({ ...settings.hybridConfig }) }, [settings.hybridConfig])
@@ -126,6 +142,157 @@ export default function SettingsModal() {
       <div className="st-body">
         {domain === 'model' && (
           <>
+            <div className="st-card" data-section="model-vault">
+              <div className="st-row" style={{ justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0 }}>🧠 模型保存中心（已保存 {(settings.savedModels || []).length} 个 · 全站随时切换）</h3>
+                <button
+                  type="button"
+                  className="st-btn"
+                  onClick={async () => {
+                    const mName = draft.model || draft.provider_model || 'glm-4.5-flash'
+                    await saveModelProfile({
+                      label: `${mName}（主力配置）`,
+                      model: mName,
+                      kind: 'chat',
+                      baseUrl: draft.provider_base_url || draft.provider_base || '',
+                      apiKey: draft.api_key || draft.provider_key || '',
+                      contextWindow: Number(draft.context_window) || 128000,
+                      maxTokens: Number(draft.max_tokens) || 4096,
+                      reasoningTier: draft.reasoning_effort || 'auto',
+                    })
+                  }}
+                >
+                  + 将当前主力配置存入中心
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                在此自定义添加并保存多套模型（对话 / 生图 / 视频，可各自绑定独立端点与 Key）；保存后可在顶部灵动岛、对话输入条、群聊角色、DAG 工作流与双模协同中一键切换。
+              </div>
+
+              <div className="st-row">
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>一键填模板：</span>
+                {MODEL_VAULT_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="st-btn"
+                    style={{ fontSize: 11.5, padding: '4px 10px' }}
+                    onClick={() => setVaultDraft({
+                      id: '',
+                      label: p.label,
+                      model: p.model,
+                      kind: p.kind,
+                      baseUrl: p.baseUrl,
+                      apiKey: '',
+                      contextWindow: p.contextWindow,
+                      maxTokens: p.maxTokens,
+                      reasoningTier: p.reasoningTier,
+                      notes: p.notes,
+                    })}
+                  >
+                    + {p.label.split('（')[0]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="st-row">
+                <input
+                  className="st-input"
+                  style={{ flex: 1.2, minWidth: 140 }}
+                  aria-label="保存模型显示名称"
+                  value={vaultDraft.label}
+                  onChange={(e) => setVaultDraft({ ...vaultDraft, label: e.target.value })}
+                  placeholder="自定义显示名称（如：DeepSeek 代码主力）"
+                />
+                <input
+                  className="st-input"
+                  style={{ flex: 1, minWidth: 130 }}
+                  aria-label="保存模型ID"
+                  value={vaultDraft.model}
+                  onChange={(e) => setVaultDraft({ ...vaultDraft, model: e.target.value })}
+                  placeholder="模型标识（如：deepseek-chat）"
+                />
+                <select
+                  className="st-btn"
+                  aria-label="保存模型类型"
+                  value={vaultDraft.kind}
+                  onChange={(e) => setVaultDraft({ ...vaultDraft, kind: e.target.value })}
+                >
+                  <option value="chat">对话模型</option>
+                  <option value="image">图片生成</option>
+                  <option value="video">视频生成</option>
+                </select>
+              </div>
+
+              <div className="st-row">
+                <input
+                  className="st-input"
+                  style={{ flex: 2, minWidth: 180 }}
+                  aria-label="保存模型端点URL"
+                  value={vaultDraft.baseUrl}
+                  onChange={(e) => setVaultDraft({ ...vaultDraft, baseUrl: e.target.value })}
+                  placeholder="Base URL（留空继承全局端点，如 https://api.deepseek.com/v1）"
+                />
+                <input
+                  className="st-input"
+                  style={{ flex: 1.3, minWidth: 130 }}
+                  type="password"
+                  aria-label="保存模型API Key"
+                  value={vaultDraft.apiKey}
+                  onChange={(e) => setVaultDraft({ ...vaultDraft, apiKey: e.target.value })}
+                  placeholder="独立 API Key（留空继承）"
+                />
+                <select
+                  className="st-btn"
+                  value={vaultDraft.reasoningTier || 'auto'}
+                  onChange={(e) => setVaultDraft({ ...vaultDraft, reasoningTier: e.target.value })}
+                  title="默认思考档位"
+                >
+                  {REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => (
+                    <option key={t.id} value={t.id}>思考:{t.label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="st-btn st-btn-primary"
+                  onClick={async () => {
+                    const r = await saveModelProfile(vaultDraft)
+                    if (r && r.ok) {
+                      setVaultDraft({
+                        id: '', label: '', model: '', kind: 'chat', baseUrl: '', apiKey: '',
+                        contextWindow: 128000, maxTokens: 4096, reasoningTier: 'auto', notes: '',
+                      })
+                    }
+                  }}
+                >
+                  {vaultDraft.id ? '更新已保存模型' : '+ 保存到模型中心'}
+                </button>
+              </div>
+
+              {(settings.savedModels || []).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {(settings.savedModels || []).map((m) => (
+                    <div key={m.id} className="st-mem-row" data-saved-model-id={m.id}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <strong style={{ fontSize: 12.5 }}>
+                          {m.kind === 'image' ? '🎨 ' : (m.kind === 'video' ? '🎬 ' : (m.isLocal ? '💻 ' : '☁ '))}
+                          {m.label}
+                        </strong>
+                        <span style={{ marginLeft: 8, fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                          {m.model}{m.baseUrl ? ` · ${m.baseUrl}` : ' · 继承主端点'}
+                        </span>
+                      </div>
+                      <div className="st-row">
+                        <button type="button" className="st-btn" onClick={() => activateSavedModelGlobal(m.id)}>设为默认</button>
+                        <button type="button" className="st-btn" onClick={() => setVaultDraft({ ...m })}>编辑</button>
+                        <button type="button" className="st-btn" onClick={() => deleteModelProfile(m.id)}>删除</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="st-card">
               <h3>云端 / OpenAI 兼容端点与会话预算</h3>
               <div className="st-field">

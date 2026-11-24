@@ -68,9 +68,19 @@ function dynamicAllow() {
     // R61e：前端 save_config 写的是 provider_base_url（主端点）、
     // local_base_url（本地端点）；旧实现只读 base_url/local_base_url，
     // 导致用户在设置里切换到自定义端点后，代理持续 403。
+    const rawUrls = []
     for (const key of ['provider_base_url', 'provider_base', 'local_base_url', 'base_url', 'image_base_url', 'video_base_url']) {
+      if (cfg[key]) rawUrls.push(cfg[key])
+    }
+    // R21 联动修复：模型保存中心中用户自定义的独立端点 URL 同步加入动态白名单，彻底杜绝切模型后代理报 403
+    if (Array.isArray(cfg.saved_models)) {
+      for (const sm of cfg.saved_models) {
+        if (sm && sm.baseUrl) rawUrls.push(sm.baseUrl)
+      }
+    }
+    for (const rawUrl of rawUrls) {
       try {
-        const u = new URL(String(cfg[key] || '').trim())
+        const u = new URL(String(rawUrl || '').trim())
         const host = (u.hostname || '').toLowerCase().replace(/^\[|\]$/g, '')
         if (!host) continue
         if (!hosts.includes(host)) hosts.push(host)

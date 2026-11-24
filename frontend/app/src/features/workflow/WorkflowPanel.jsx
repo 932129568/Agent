@@ -34,6 +34,8 @@ const TOOL_PRESET_NAMES = ['list_dir', 'read_file', 'write_file', 'search_replac
 
 export default function WorkflowPanel() {
   const pluginsState = useSlice('plugins')
+  const settings = useSlice('settings')
+  const savedModels = Array.isArray(settings.savedModels) ? settings.savedModels : []
   const workflows = Array.isArray(pluginsState.workflows) ? pluginsState.workflows : []
   const plugins = Array.isArray(pluginsState.plugins) ? pluginsState.plugins : []
   const activeWf = workflows.find((w) => w.id === pluginsState.activeWorkflowId) || workflows[0] || null
@@ -607,8 +609,21 @@ export default function WorkflowPanel() {
                           {editingNode.kind === 'llm' && (
                             <>
                               <label className="wf-field">
-                                独立模型名（留空继承全局）
-                                <input className="wf-input" value={editingNode.model || ''} onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })} placeholder="例如：deepseek-v4.1 / glm-4.5" />
+                                节点模型（可从模型保存中心选或手填）
+                                {savedModels.filter((sm) => !sm.kind || sm.kind === 'chat').length > 0 && (
+                                  <select
+                                    className="wf-select"
+                                    aria-label="选择工作流节点保存模型"
+                                    value={savedModels.some((sm) => sm.id === editingNode.model) ? editingNode.model : ''}
+                                    onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })}
+                                  >
+                                    <option value="">继承全局默认模型</option>
+                                    {savedModels.filter((sm) => !sm.kind || sm.kind === 'chat').map((sm) => (
+                                      <option key={sm.id} value={sm.id}>🧠 {sm.label} ({sm.model})</option>
+                                    ))}
+                                  </select>
+                                )}
+                                <input className="wf-input" value={editingNode.model || ''} onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })} placeholder="例如：deepseek-chat / glm-4.5-flash" />
                               </label>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'end' }}>
                                 <label className="wf-field">

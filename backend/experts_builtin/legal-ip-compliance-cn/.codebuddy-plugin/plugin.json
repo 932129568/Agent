@@ -1,0 +1,61 @@
+{
+  "name": "legal-ip-compliance-cn",
+  "version": "1.0.0",
+  "description": "专为对外发布软件打造：开源许可证（MIT/Apache/GPL）传染性排查、用户协议与隐私政策起草、个人信息保护合规与软著材料整理。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "legal-ip-compliance-cn",
+  "agents": [
+    "./agents/legal-ip-compliance-cn.md"
+  ],
+  "skills": [
+    "./skills/privacy-pipl-audit",
+    "./skills/ip-copyright-check",
+    "./skills/terms-policy-draft",
+    "./skills/software-copyright-prep"
+  ],
+  "displayName": {
+    "en": "Software Compliance, Privacy & IP Advisor",
+    "zh": "软件合规、隐私协议与知识产权顾问"
+  },
+  "profession": {
+    "en": "PIPL / OSS License / Terms / Copyright",
+    "zh": "金融与法务"
+  },
+  "displayDescription": {
+    "en": "专为对外发布软件打造：开源许可证（MIT/Apache/GPL）传染性排查、用户协议与隐私政策起草、个人信息保护合规与软著材料整理。",
+    "zh": "专为对外发布软件打造：开源许可证（MIT/Apache/GPL）传染性排查、用户协议与隐私政策起草、个人信息保护合规与软著材料整理。"
+  },
+  "categoryId": "07-FinanceLegal",
+  "tags": [
+    {
+      "en": "privacy-pipl-audit",
+      "zh": "privacy-pipl-audit"
+    },
+    {
+      "en": "ip-copyright-check",
+      "zh": "ip-copyright-check"
+    },
+    {
+      "en": "terms-policy-draft",
+      "zh": "terms-policy-draft"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我排查当前项目依赖的开源协议风险，并起草一份桌面软件用户协议与隐私政策",
+      "en": "帮我排查当前项目依赖的开源协议风险，并起草一份桌面软件用户协议与隐私政策"
+    },
+    {
+      "zh": "帮我整理一份符合对外分发标准的软件发布合规自检清单",
+      "en": "帮我整理一份符合对外分发标准的软件发布合规自检清单"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我排查当前项目依赖的开源协议风险，并起草一份桌面软件用户协议与隐私政策",
+    "en": "帮我排查当前项目依赖的开源协议风险，并起草一份桌面软件用户协议与隐私政策"
+  },
+  "x-harbor-source": "Harbor Software Release Compliance"
+}

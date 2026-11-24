@@ -3,8 +3,105 @@
  * 承接 SettingsModal 的全部后端持久化、探测、护栏、沙箱、MCP、WebDAV、记忆与更新动作，
  * 让 features/settings/SettingsModal.jsx 零直接依赖 services/bridge.js（遵守 LAW-14）。
  */
+import { readStorage, writeStorage } from '../platform/storage.js'
 import * as api from '../services/bridge.js'
-import { getState } from './kernel.js'
+import { assertLatin1Value } from '../services/headers.js'
+import { invalidateSessionPrefixCache } from '../services/agentEngine.js'
+import { normalizeSavedModel, upsertSavedModel, removeSavedModel, findSavedModel } from '../services/modelVault.js'
+import { getState, patchSlice } from './kernel.js'
+
+const SAVED_MODELS_KEY = 'harbor.v5.saved_models'
+
+export function loadInitialSavedModels() {
+  try {
+    const raw = readStorage(SAVED_MODELS_KEY, '')
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map(normalizeSavedModel).filter((m) => m.model) : []
+  } catch {
+    return []
+  }
+}
+
+async function syncSavedModelsToBackend(nextModels) {
+  try { writeStorage(SAVED_MODELS_KEY, JSON.stringify(nextModels)) } catch {}
+  const prevCfg = (getState().settings && getState().settings.backendConfig) || {}
+  const mergedCfg = { ...prevCfg, saved_models: nextModels }
+  patchSlice('settings', (s) => ({ ...s, savedModels: nextModels, backendConfig: mergedCfg }))
+  try { await api.saveConfig(mergedCfg) } catch {}
+}
+
+export async function saveModelProfile(rawProfile = {}) {
+  try {
+    if (rawProfile.baseUrl) assertLatin1Value('模型 Base URL', String(rawProfile.baseUrl).trim())
+    if (rawProfile.apiKey) assertLatin1Value('模型 API Key', String(rawProfile.apiKey).trim())
+  } catch (e) {
+    pushToast(e.message, 'err')
+    return { ok: false, error: e.message }
+  }
+  const cur = (getState().settings && getState().settings.savedModels) || []
+  const res = upsertSavedModel(cur, rawProfile)
+  if (!res.ok) {
+    pushToast(res.error || '保存模型失败', 'err')
+    return res
+  }
+  await syncSavedModelsToBackend(res.items)
+  pushToast(`已保存模型「${res.item.label}」到模型保存中心`, 'ok')
+  return res
+}
+
+export async function deleteModelProfile(profileId) {
+  const cur = (getState().settings && getState().settings.savedModels) || []
+  const target = findSavedModel(cur, profileId)
+  const next = removeSavedModel(cur, profileId)
+  await syncSavedModelsToBackend(next)
+  pushToast(`已移除保存的模型${target ? `「${target.label}」` : ''}`, 'info')
+  return { ok: true, items: next }
+}
+
+export async function activateSavedModelGlobal(profileId) {
+  const st = getState().settings
+  const hit = findSavedModel(st.savedModels || [], profileId)
+  if (!hit) return { ok: false, error: '未找到目标保存模型' }
+  const prev = st.backendConfig || {}
+  let patch = {}
+  if (hit.kind === 'image') {
+    patch = {
+      image_model: hit.model,
+      ...(hit.baseUrl ? { image_base_url: hit.baseUrl } : {}),
+      ...(hit.apiKey ? { image_api_key: hit.apiKey } : {}),
+    }
+  } else if (hit.kind === 'video') {
+    patch = {
+      video_model: hit.model,
+      ...(hit.baseUrl ? { video_base_url: hit.baseUrl } : {}),
+      ...(hit.apiKey ? { video_api_key: hit.apiKey } : {}),
+    }
+  } else {
+    const base = hit.baseUrl || prev.provider_base_url || prev.provider_base || 'https://open.bigmodel.cn/api/paas/v4'
+    const key = hit.apiKey || prev.provider_key || prev.api_key || ''
+    patch = {
+      active_saved_model_id: hit.id,
+      model: hit.model,
+      provider_model: hit.model,
+      provider_base_url: base,
+      provider_base: base,
+      api_key: key,
+      provider_key: key,
+      local_mode: !!hit.isLocal,
+      ...(hit.isLocal && hit.baseUrl ? { local_base_url: hit.baseUrl, local_model: hit.model } : {}),
+      context_window: hit.contextWindow || prev.context_window || 128000,
+      max_tokens: hit.maxTokens || prev.max_tokens || 4096,
+      ...(hit.reasoningTier && hit.reasoningTier !== 'auto' ? { reasoning_effort: hit.reasoningTier } : {}),
+    }
+  }
+  const merged = { ...prev, ...patch, saved_models: st.savedModels || [] }
+  invalidateSessionPrefixCache()
+  patchSlice('settings', (s) => ({ ...s, backendConfig: merged }))
+  try { await api.saveConfig(merged) } catch {}
+  pushToast(`已全局切换默认${hit.kind === 'image' ? '生图' : (hit.kind === 'video' ? '视频' : '')}模型为「${hit.label}」`, 'ok')
+  return { ok: true, model: hit }
+}
 import { pushToast } from './uiSlice.js'
 import { refreshSettingsAux } from './domainSlice.js'
 

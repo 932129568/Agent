@@ -219,10 +219,18 @@ export function applyKineticImpulse(el, {
       b.x = b.y = b.rot = b.sc = b.vx = b.vy = b.vrot = b.vsc = 0
       return
     }
+    const cx = softClamp(b.x, b.maxPx)
+    const cy = softClamp(b.y, b.maxPx)
+    const crot = softClamp(b.rot, b.maxRot)
+    const csc = softClamp(b.sc, b.maxSc)
+    // R21 真实感 3D 纵深微倾角：横向受冲产生微弱透视偏航 (rotateY)，纵向产生俯仰 (rotateX)，
+    // 保留 translate3d 精确像素量纲（零眩晕、不破坏阻尼曲线基准）
+    const ry = softClamp(cx * 0.22, 1.35)
+    const rx = softClamp(-cy * 0.18, 1.15)
     el.style.transform =
-      `translate3d(${softClamp(b.x, b.maxPx).toFixed(2)}px,${softClamp(b.y, b.maxPx).toFixed(2)}px,0)` +
-      ` rotate(${softClamp(b.rot, b.maxRot).toFixed(3)}deg)` +
-      ` scale(${(1 + softClamp(b.sc, b.maxSc)).toFixed(4)})`
+      `perspective(1200px) translate3d(${cx.toFixed(2)}px,${cy.toFixed(2)}px,0)` +
+      ` rotateY(${ry.toFixed(3)}deg) rotateX(${rx.toFixed(3)}deg) rotate(${crot.toFixed(3)}deg)` +
+      ` scale(${(1 + csc).toFixed(4)})`
     b.raf = requestAnimationFrame(tick)
   }
 
@@ -361,4 +369,28 @@ export function playDrawerSlideOut(el, motionTier = 'dynamic', onImpact, onFinis
   anim.onfinish = end
   anim.oncancel = end
   setTimeout(end, dur + 50)
+}
+
+
+/** 耦合反作用力微回弹：当窗口撞回左侧栏或顶栏时，承重边缘同步产生反向微压缩回弹，增强质量感。 */
+export function applySecondaryRecoil(el, { edge = 'left', strength = 'strong', motionTier = 'dynamic' } = {}) {
+  const k = motionScaleForTier(motionTier)
+  if (!el || k === 0 || typeof el.animate !== 'function') return false
+  const amp = (strength === 'strong' ? 3.2 : 2.0) * k
+  const dx = edge === 'left' ? -amp : (edge === 'right' ? amp : 0)
+  const dy = edge === 'top' ? -amp : (edge === 'bottom' ? amp : 0)
+  try {
+    el.animate(
+      [
+        { transform: 'translate3d(0,0,0) scale(1)', offset: 0 },
+        { transform: `translate3d(${dx.toFixed(2)}px,${dy.toFixed(2)}px,0) scale(${(1 - 0.008 * k).toFixed(4)})`, offset: 0.24 },
+        { transform: `translate3d(${(-dx * 0.34).toFixed(2)}px,${(-dy * 0.34).toFixed(2)}px,0) scale(${(1 + 0.003 * k).toFixed(4)})`, offset: 0.64 },
+        { transform: 'translate3d(0,0,0) scale(1)', offset: 1 },
+      ],
+      { duration: 290, easing: 'cubic-bezier(.22, 1, .36, 1)' }
+    )
+    return true
+  } catch {
+    return false
+  }
 }

@@ -1,0 +1,61 @@
+{
+  "name": "game-systems-narrative",
+  "version": "1.0.0",
+  "description": "兼顾核心战斗/经济数值公式建模、防通胀产出消耗闭环、多分支互动剧情树与短剧/游戏高张力节奏设计。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "game-systems-narrative",
+  "agents": [
+    "./agents/game-systems-narrative.md"
+  ],
+  "skills": [
+    "./skills/economy-balance-sim",
+    "./skills/branching-dialogue",
+    "./skills/level-pacing-curve",
+    "./skills/mechanics-spec"
+  ],
+  "displayName": {
+    "en": "Game Systems & Interactive Narrative Designer",
+    "zh": "游戏数值系统与互动叙事设计师"
+  },
+  "profession": {
+    "en": "Economy / Branching Story / Pacing",
+    "zh": "学术与文创"
+  },
+  "displayDescription": {
+    "en": "兼顾核心战斗/经济数值公式建模、防通胀产出消耗闭环、多分支互动剧情树与短剧/游戏高张力节奏设计。",
+    "zh": "兼顾核心战斗/经济数值公式建模、防通胀产出消耗闭环、多分支互动剧情树与短剧/游戏高张力节奏设计。"
+  },
+  "categoryId": "10-AcademicCreative",
+  "tags": [
+    {
+      "en": "economy-balance-sim",
+      "zh": "economy-balance-sim"
+    },
+    {
+      "en": "branching-dialogue",
+      "zh": "branching-dialogue"
+    },
+    {
+      "en": "level-pacing-curve",
+      "zh": "level-pacing-curve"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我设计一套肉鸽卡牌/RPG 游戏的成长数值曲线与防崩坏经济循环",
+      "en": "帮我设计一套肉鸽卡牌/RPG 游戏的成长数值曲线与防崩坏经济循环"
+    },
+    {
+      "zh": "帮我把这段故事大纲改成带关键抉择变量的多分支互动剧本",
+      "en": "帮我把这段故事大纲改成带关键抉择变量的多分支互动剧本"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我设计一套肉鸽卡牌/RPG 游戏的成长数值曲线与防崩坏经济循环",
+    "en": "帮我设计一套肉鸽卡牌/RPG 游戏的成长数值曲线与防崩坏经济循环"
+  },
+  "x-harbor-source": "Harbor Interactive Entertainment Lab"
+}

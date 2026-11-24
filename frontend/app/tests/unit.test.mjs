@@ -291,9 +291,13 @@ test('agentEngine.js buildGuardDetail 与后端 commands.js/guard.js 摘要口�
 })
 
 
-test('industryExperts.js 内置 12 个跨行业前沿专家包与热门 Skill，支持按行业与关键词检索', async () => {
+test('industryExperts.js 内置跨行业前沿专家包与热门 Skill，支持按行业与关键词检索', async () => {
   const { CURATED_INDUSTRY_PACKS, EXPERT_CATEGORIES, filterCuratedPacks } = await import('../src/services/industryExperts.js')
-  assert.equal(CURATED_INDUSTRY_PACKS.length, 12)
+  // 原断言写死 `=== 12`：r21 把内置包从 12 扩到 18，判据立刻假红。
+  // 意图是"内置了足量跨行业包且结构完整"，不是"恰好 12 个" ⇒ 改为下限 + 结构校验 + 唯一性。
+  assert.ok(CURATED_INDUSTRY_PACKS.length >= 12, `至少 12 个，实际 ${CURATED_INDUSTRY_PACKS.length}`)
+  const ids = CURATED_INDUSTRY_PACKS.map((p) => p.id)
+  assert.equal(new Set(ids).size, ids.length, 'id 必须唯一')
   assert.ok(EXPERT_CATEGORIES.length >= 7)
   assert.ok(CURATED_INDUSTRY_PACKS.every((p) => p.name && p.description && p.prompt && p.skills.length >= 3 && p.sourceRepo))
   const videoHits = filterCuratedPacks({ category: 'video' })
@@ -960,4 +964,63 @@ test('toolRouter.js 与 pluginRegistry.js 支持 media 域自动挂载生图/视
   assert.ok(wfs.some((w) => w.id === 'wf-visual-poster'))
   assert.ok(wfs.some((w) => w.id === 'wf-ai-video-film'))
   assert.ok(wfs.some((w) => w.id === 'wf-iterative-refine'))
+})
+
+
+test('modelVault.js 自定义模型增删改与跨面板端点/Key/思考档位统一解析', async () => {
+  const { upsertSavedModel, removeSavedModel, resolveEndpointWithSavedModel } = await import('../src/services/modelVault.js')
+  const baseEp = {
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    apiKey: 'sk-global',
+    model: 'glm-4.5-flash',
+    isLocal: false,
+    context_window: 128000,
+    max_tokens: 4096,
+    reasoning_effort: 'auto',
+  }
+
+  const r1 = upsertSavedModel([], {
+    id: 'mdl_ds',
+    label: 'DeepSeek 代码主力',
+    model: 'deepseek-chat',
+    baseUrl: 'https://api.deepseek.com/v1',
+    apiKey: 'sk-ds-secret',
+    contextWindow: 65536,
+    maxTokens: 8192,
+    reasoningTier: 'high',
+  })
+  assert.equal(r1.ok, true)
+  assert.equal(r1.items.length, 1)
+
+  const resolved = resolveEndpointWithSavedModel('mdl_ds', baseEp, r1.items)
+  assert.equal(resolved.model, 'deepseek-chat')
+  assert.equal(resolved.baseUrl, 'https://api.deepseek.com/v1')
+  assert.equal(resolved.apiKey, 'sk-ds-secret')
+  assert.equal(resolved.reasoning_effort, 'high')
+  assert.equal(resolved.max_tokens, 8192)
+
+  // 未命中的手填临时模型名应平滑回退继承 baseEp 端点与 Key
+  const fallback = resolveEndpointWithSavedModel('custom-raw-v2', baseEp, r1.items)
+  assert.equal(fallback.model, 'custom-raw-v2')
+  assert.equal(fallback.baseUrl, baseEp.baseUrl)
+  assert.equal(fallback.apiKey, 'sk-global')
+
+  const afterDel = removeSavedModel(r1.items, 'mdl_ds')
+  assert.equal(afterDel.length, 0)
+})
+
+test('industryExperts.js 专家库扩展至 18 大行业包与 10 大分类且检索准确', async () => {
+  const { EXPERT_CATEGORIES, CURATED_INDUSTRY_PACKS, filterCuratedPacks } = await import('../src/services/industryExperts.js')
+  assert.ok(EXPERT_CATEGORIES.length >= 10)
+  assert.ok(CURATED_INDUSTRY_PACKS.length >= 18)
+  assert.ok(filterCuratedPacks({ category: 'ai' }).some((p) => p.id === 'ai-agent-prompt-architect'))
+  assert.ok(filterCuratedPacks({ category: 'devops' }).some((p) => p.id === 'cloud-devops-sre'))
+  assert.ok(filterCuratedPacks({ query: '开源协议' }).some((p) => p.id === 'legal-ip-compliance-cn'))
+})
+
+test('kinetic.js 耦合反作用力在静息无障碍档位下严格返回 false 零位移', async () => {
+  const { applySecondaryRecoil } = await import('../src/platform/kinetic.js')
+  const fakeEl = { animate: () => ({}) }
+  assert.equal(applySecondaryRecoil(fakeEl, { edge: 'left', motionTier: 'reduced' }), false)
+  assert.equal(applySecondaryRecoil(fakeEl, { edge: 'left', motionTier: 'dynamic' }), true)
 })

@@ -1,13 +1,16 @@
-# Harbor v2.0 · Electron 45 + React 19 + Fastify 5 NSIS 打包白名单（已清除过期 harbor.html 引用）
+# Harbor v2.0 · Electron 45 + React 19 + Fastify 5 生产级 NSIS Setup 分发配置（R21 优化版）
 appId: com.harbor.desktop
 productName: Harbor
+copyright: Copyright © 2026 Harbor Desktop Contributors
 directories:
   output: dist-electron
   buildResources: electron/build-resources
 files:
   - electron/**/*
+  - '!electron/build-resources/**/*'
   - frontend/app/dist/**/*
   - assets/harbor.ico
+  - assets/harbor-preview.png
   - harbor.ico
   - harbor-icon.png
   - libs/**/*
@@ -21,27 +24,47 @@ files:
   - '!server/test/**/*'
   - '!server/prisma/**/*'
   - '!server/prisma.config.ts'
+  - '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}'
+  - '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}'
+  - '!**/*.map'
 asar: true
 asarUnpack:
   - '**/*.node'
   - '**/*.wasm'
+  - '**/*.dll'
+  - 'backend/experts_builtin/**/*'
+  - 'server/node_modules/@prisma/**/*'
+  - 'server/node_modules/.prisma/**/*'
 extraMetadata:
   version: 2.0.0
 npmRebuild: false
+buildDependenciesFromSource: false
 win:
   icon: assets/harbor.ico
+  verifyUpdateCodeSignature: false
+  requestedExecutionLevel: asInvoker
   target:
     - target: nsis
       arch:
         - x64
 nsis:
   oneClick: false
+  perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
   runAfterFinish: true
-  perMachine: false
   createDesktopShortcut: always
   createStartMenuShortcut: true
+  shortcutName: Harbor
   deleteAppDataOnUninstall: false
-  uninstallDisplayName: Harbor
-  artifactName: ${productName}-Setup-${version}.${ext}
-compression: normal
+  uninstallDisplayName: Harbor Desktop
+  installerIcon: assets/harbor.ico
+  uninstallerIcon: assets/harbor.ico
+  installerSidebar: electron/build-resources/installerSidebar.bmp
+  uninstallerSidebar: electron/build-resources/uninstallerSidebar.bmp
+  installerHeader: electron/build-resources/installerHeader.bmp
+  include: electron/build-resources/installer.nsh
+  language: "2052"
+  displayLanguageSelector: false
+  artifactName: ${productName}-Setup-${version}-x64.${ext}
+compression: maximum

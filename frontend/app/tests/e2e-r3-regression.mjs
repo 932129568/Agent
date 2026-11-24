@@ -428,6 +428,22 @@ try {
   await page.waitForSelector('.hb-shell', { timeout: 10000 })
 
   /* ======================================================================== *
+   * Suite 0 · R21 首次启动特色与使用指南弹窗自动弹出 + 切页 + 持久化关闭
+   * ======================================================================== */
+  await page.waitForSelector('.ob-modal', { timeout: 4000 })
+  await page.locator('.ob-tabs button:has-text("对话与模型中心")').click()
+  const obSlideTitle = await page.locator('.ob-slide-title').textContent()
+  await page.locator('.ob-head button[aria-label="跳过指南"]').click()
+  await page.waitForSelector('.ob-modal', { state: 'detached', timeout: 3000 })
+  const obSeenSaved = await page.evaluate(() => localStorage.getItem('harbor.v5.onboarding.seen') === '1')
+  record(
+    'Suite-0',
+    '首次打开自动展示软件特色与功能使用说明弹窗，支持切页与平滑关闭并持久化',
+    /模型保存中心/.test(obSlideTitle || '') && obSeenSaved,
+    `slide=${(obSlideTitle || '').trim().slice(0, 28)}, seenSaved=${obSeenSaved}`
+  )
+
+  /* ======================================================================== *
    * Suite A · 群聊能力路由、自定义角色/模型与暂停续跑三态
    * ======================================================================== */
   await page.locator('.hb-rail-btn[title="角色群聊"]').click()
@@ -860,8 +876,10 @@ try {
   const chatRingOk = Boolean(chatRingLabel && /\d+\.\d+%\s*·\s*\d+\.\d+K\s*\/\s*\d+\.\d+K\s*上下文已使用/.test(chatRingLabel))
   record(
     'Suite-G',
-    '行业专家市场（12大热门包/分类筛选/零裁切/直入胶囊）+ 普通对话上下文环形指示器',
-    totalCuratedCards === 12 && noHorizOverflow && officeCards >= 2 && chipAttached && chatRingOk,
+    '行业专家市场（热门包全量/分类筛选/零裁切/直入胶囊）+ 普通对话上下文环形指示器',
+    // 原断言 `=== 12`：r21 把内置包扩到 18，立刻假红。意图是"热门包全量渲染且零裁切"，
+    // 不是"恰好 12 张" ⇒ 改为下限（>=12）+ 零横向裁切 + 分类可用。
+    totalCuratedCards >= 12 && noHorizOverflow && officeCards >= 2 && chipAttached && chatRingOk,
     `cards=${totalCuratedCards}, office=${officeCards}, noOverflow=${noHorizOverflow}, chip=${chipAttached}, chatRing=${chatRingLabel}`
   )
 
@@ -1186,6 +1204,46 @@ try {
     '二级弹窗交互与退场动画：ProjectSessionModal 按 Escape 平滑退场并干净卸载',
     pmDetached,
     `detached=${pmDetached}`
+  )
+
+  /* ======================================================================== *
+   * Suite Q · R21 模型保存中心自定义添加 + 对话/顶栏随处切换 + 指南复开 + 18 大专家库
+   * ======================================================================== */
+  await page.locator('.hb-rail-btn[title="系统设置"]').click()
+  await page.waitForSelector('.ov-modal [data-section="model-vault"]', { timeout: 4000 })
+  await page.locator('input[aria-label="保存模型显示名称"]').fill('DeepSeek 旗舰代码')
+  await page.locator('input[aria-label="保存模型ID"]').fill('deepseek-r1-custom')
+  await page.locator('input[aria-label="保存模型端点URL"]').fill('https://api.deepseek.com/v1')
+  await page.locator('[data-section="model-vault"] button:has-text("保存到模型中心")').click()
+  await page.waitForSelector('[data-section="model-vault"] .st-mem-row:has-text("DeepSeek 旗舰代码")', { timeout: 4000 })
+  await page.locator('.ov-modal .ov-close').click()
+  await page.waitForSelector('.ov-modal', { state: 'detached', timeout: 4000 })
+
+  // Q1: 在智能对话输入模式条下拉直接切换刚保存的模型，顶部灵动岛同步更新
+  const chatModelSelect = page.locator('select[aria-label="切换本会话模型"]')
+  const savedOptVal = await chatModelSelect.locator('option:has-text("DeepSeek 旗舰代码")').getAttribute('value')
+  await chatModelSelect.selectOption(savedOptVal)
+  await page.waitForTimeout(160)
+  const islandAfterSwitch = await page.locator('.hb-island').textContent()
+  record(
+    'Suite-Q',
+    '模型保存中心：自定义添加模型后在对话页一键切换并同步更新顶栏状态岛',
+    Boolean(savedOptVal) && /DeepSeek 旗舰代码/.test(islandAfterSwitch || ''),
+    `optVal=${savedOptVal}, island=${(islandAfterSwitch || '').trim()}`
+  )
+
+  // Q2: 从顶栏「外观 ▾」菜单重新打开「功能说明与软件特色」并按 Escape 平滑关闭
+  await page.locator('.hb-topbar button[title*="外观主题"]').click()
+  await page.waitForSelector('.dm-panel button:has-text("功能说明与软件特色")', { timeout: 3000 })
+  await page.locator('.dm-panel button:has-text("功能说明与软件特色")').click()
+  await page.waitForSelector('.ob-modal', { timeout: 3000 })
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.ob-modal', { state: 'detached', timeout: 3000 })
+  record(
+    'Suite-Q',
+    '使用指南弹窗支持从二级菜单随时复开并按 Escape 平滑关闭',
+    (await page.locator('.ob-modal').count()) === 0,
+    'reopened_and_escaped=true'
   )
 
   // D4: 全程零未捕获页面异常

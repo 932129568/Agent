@@ -2,7 +2,10 @@
  * UI 图层、浮层互斥、动效撞击与 Toast 领域切片（R17 激进解耦）：
  * 仅依赖 state/kernel.js，零循环依赖，严守 LAW-05 / LAW-07。
  */
+import { writeStorage } from '../platform/storage.js'
 import { getState, patchSlice, syncRuntimeTelemetryForSid } from './kernel.js'
+
+const ONBOARDING_SEEN_KEY = 'harbor.v5.onboarding.seen'
 
 let impactSeq = 0
 
@@ -109,4 +112,16 @@ export function pushToast(message, kind = 'info') {
   const id = 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)
   patchSlice('ui', (u) => ({ ...u, toasts: [...u.toasts.slice(-3), { id, message: String(message || ''), kind }] }))
   setTimeout(() => dismissToast(id), 3800)
+}
+
+
+export function openOnboardingModal() {
+  patchSlice('ui', (u) => ({ ...u, onboardingOpen: true, activeModal: null }))
+}
+
+export function closeOnboardingModal(markSeen = true) {
+  if (markSeen) {
+    try { writeStorage(ONBOARDING_SEEN_KEY, '1') } catch {}
+  }
+  patchSlice('ui', (u) => ({ ...u, onboardingOpen: false }))
 }

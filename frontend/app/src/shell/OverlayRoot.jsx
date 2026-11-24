@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
-import { useSlice, closeModal, toggleDock, fireShellImpact, resolvePendingClarify, cancelDeleteGroup, confirmDeleteGroup, closeProjectSessionModal, confirmProjectSessionModal, browseProjectFolder } from '../state/store.js'
+import { useSlice, openModal, closeModal, toggleDock, fireShellImpact, resolvePendingClarify, cancelDeleteGroup, confirmDeleteGroup, closeProjectSessionModal, confirmProjectSessionModal, browseProjectFolder, closeOnboardingModal } from '../state/store.js'
 import { playModalMorphIn, playModalFlyOut, getMotionAnchorRect } from '../platform/kinetic.js'
 import ContextDock from '../features/dock/ContextDock.jsx'
 import SettingsModal from '../features/settings/SettingsModal.jsx'
@@ -8,6 +8,7 @@ import CommandPalette from '../features/command/CommandPalette.jsx'
 import ClarifyModal from '../ui/ClarifyModal.jsx'
 import GroupDeleteModal from '../ui/GroupDeleteModal.jsx'
 import ProjectSessionModal from '../ui/ProjectSessionModal.jsx'
+import OnboardingModal from '../ui/OnboardingModal.jsx'
 import './OverlayRoot.css'
 
 const MODAL_HOME = {
@@ -72,6 +73,11 @@ export default function OverlayRoot() {
   return (
     <>
       <ContextDock />
+      <OnboardingModal
+        open={!!ui.onboardingOpen}
+        onClose={closeOnboardingModal}
+        onOpenSettings={() => openModal('settings')}
+      />
       <ClarifyModal request={runtime.pendingClarify} onResolve={resolvePendingClarify} />
       <GroupDeleteModal request={runtime.pendingGroupDelete} onCancel={cancelDeleteGroup} onConfirm={confirmDeleteGroup} />
       <ProjectSessionModal

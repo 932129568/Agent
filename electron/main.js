@@ -18,6 +18,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const ROOT = path.join(__dirname, '..')
+const SERVER_SRC = path.join(ROOT, 'server', 'src')
 const APP_DIST = path.join(ROOT, 'frontend', 'app', 'dist')
 const HEADLESS = process.env.HARBOR_HEADLESS === '1'
 const SMOKE = process.env.HARBOR_SMOKE === '1'
@@ -91,6 +92,13 @@ function injectEnv() {
   if (!process.env.PORT) process.env.PORT = '0'
   if (!process.env.CORS_ORIGIN) {
     process.env.CORS_ORIGIN = USE_CUSTOM_PROTOCOL ? 'null,harbor://app' : 'null'
+  }
+  // R21 打包兜底：Electron ASAR 打包后，内置专家目录位于 app.asar.unpacked/backend/experts_builtin
+  if (!process.env.HARBOR_BUILTIN_EXPERTS_DIR) {
+    const unpackedExperts = path.join(ROOT.replace(/app\.asar$/i, 'app.asar.unpacked'), 'backend', 'experts_builtin')
+    if (ROOT.endsWith('app.asar') && fs.existsSync(unpackedExperts)) {
+      process.env.HARBOR_BUILTIN_EXPERTS_DIR = unpackedExperts
+    }
   }
 }
 

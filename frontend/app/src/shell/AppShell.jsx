@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyKineticImpulse, registerMotionAnchor, captureTriggerRect, motionScaleForTier } from '../platform/kinetic.js'
+import { applyKineticImpulse, applySecondaryRecoil, registerMotionAnchor, captureTriggerRect, motionScaleForTier } from '../platform/kinetic.js'
 import { desktopBridge } from '../platform/libs.js'
 import {
   useSlice,
@@ -9,6 +9,9 @@ import {
   toggleSidebar,
   toggleZenMode,
   openModal,
+  openOnboardingModal,
+  setSessionModelOverride,
+  activateSavedModelGlobal,
   toggleDock,
   toggleSearchDock,
   createNewSession,
@@ -19,6 +22,7 @@ import {
 import HarborLogo from '../ui/HarborLogo.jsx'
 import { NavIcon } from '../ui/Icons.jsx'
 import DropdownMenu from '../ui/DropdownMenu.jsx'
+import { findSavedModel } from '../services/modelVault.js'
 import ChatPanel from '../features/chat/ChatPanel.jsx'
 import SidebarSessions from '../features/sessions/SidebarSessions.jsx'
 import SessionsPanel from '../features/sessions/SessionsPanel.jsx'
@@ -58,7 +62,9 @@ export default function AppShell() {
   const [compactRail, setCompactRail] = useState(false)
   const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [impactEdge, setImpactEdge] = useState('')
+  const [impactY, setImpactY] = useState('50%')
   const shellRef = useRef(null)
+  const railRef = useRef(null)
   const mainRef = useRef(null)
 
   useEffect(() => { hydrateApp().catch(() => {}) }, [])
@@ -122,9 +128,15 @@ export default function AppShell() {
       motionTier: settings.motion,
     })
     if (!applied) return undefined
+    // 耦合反作用力：左侧主导航承重边缘吸收相反方向微回弹，增强真实质量撞击手感
+    if (edge === 'left' && railRef.current) {
+      applySecondaryRecoil(railRef.current, { edge, strength: sig.strength, motionTier: settings.motion })
+    }
+    const pct = sig.dy ? Math.max(16, Math.min(84, Math.round(50 + sig.dy * 0.12))) : 50
+    setImpactY(`${pct}%`)
     setImpactEdge('')
     const t1 = requestAnimationFrame(() => setImpactEdge(edge))
-    const t2 = setTimeout(() => setImpactEdge(''), 180)
+    const t2 = setTimeout(() => setImpactEdge(''), 240)
     return () => {
       cancelAnimationFrame(t1)
       clearTimeout(t2)
@@ -161,7 +173,11 @@ export default function AppShell() {
     : (isGroupPanel
       ? !!group.running
       : !!(curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase)))
-  const activeModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
+  const savedModels = Array.isArray(settings.savedModels) ? settings.savedModels : []
+  const chatSavedModels = savedModels.filter((m) => !m.kind || m.kind === 'chat')
+  const sessionSavedHit = currentSession && currentSession.modelProfileId ? findSavedModel(savedModels, currentSession.modelProfileId) : null
+  const globalModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
+  const activeModel = sessionSavedHit ? sessionSavedHit.label : ((currentSession && currentSession.modelProfileId) || globalModel)
   const topTitle = isWorkflowPanel
     ? (activeWorkflow ? activeWorkflow.name : '工作流插件')
     : (isGroupPanel
@@ -252,6 +268,13 @@ export default function AppShell() {
     },
     { divider: true },
     {
+      id: 'ap-guide',
+      icon: '📖',
+      label: '功能说明与软件特色',
+      hint: '指南',
+      onClick: () => openOnboardingModal(),
+    },
+    {
       id: 'ap-settings',
       icon: '⚙',
       label: '透色与完整设置…',
@@ -262,7 +285,7 @@ export default function AppShell() {
 
   return (
     <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)}>
-      <nav className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
+      <nav ref={railRef} className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
         <div className="hb-rail-brand" onClick={() => setCompactRail((v) => !v)} style={{ cursor: 'pointer' }} title="点击切换导航栏宽/窄形态">
           <HarborLogo size={26} />
           <span className="hb-rail-title">Harbor</span>
@@ -416,23 +439,60 @@ export default function AppShell() {
         </aside>
       )}
 
-      <main ref={mainRef} className="hb-main" data-impact-edge={impactEdge}>
+      <main ref={mainRef} className="hb-main" data-impact-edge={impactEdge} style={{ '--impact-y': impactY }}>
         <header className="hb-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <button type="button" className="hb-top-btn hb-icon-btn" onClick={toggleSidebar} title={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'} aria-label={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>
               <NavIcon name="sidebar" />
             </button>
-            <button
-              type="button"
-              className="hb-island"
-              data-busy={String(busy)}
-              onClick={(e) => openModal('settings', captureTriggerRect(e))}
-              title="点击打开模型与推理设置"
-            >
-              <span className="hb-island-dot" data-busy={String(busy)} />
-              <strong>{topTitle}</strong>
-              <span>· {topSubStatus}</span>
-            </button>
+            <DropdownMenu
+              align="left"
+              direction="down"
+              ariaLabel="快速切换保存的模型"
+              items={[
+                { section: '当前会话模型切换' },
+                {
+                  id: 'mdl-default',
+                  icon: '●',
+                  label: `跟随全局默认 (${globalModel})`,
+                  active: !(currentSession && currentSession.modelProfileId),
+                  onClick: () => currentSession && setSessionModelOverride(currentSession.id, ''),
+                },
+                ...chatSavedModels.map((m) => ({
+                  id: `mdl_${m.id}`,
+                  icon: m.isLocal ? '💻' : '☁',
+                  label: m.label,
+                  hint: m.model,
+                  active: Boolean(currentSession && currentSession.modelProfileId === m.id),
+                  onClick: () => {
+                    if (currentSession) setSessionModelOverride(currentSession.id, m.id)
+                    else activateSavedModelGlobal(m.id)
+                  },
+                })),
+                { divider: true },
+                {
+                  id: 'mdl-manage',
+                  icon: '🧠',
+                  label: `管理模型保存中心 (${savedModels.length})…`,
+                  hint: '添加/编辑',
+                  onClick: (e) => openModal('settings', captureTriggerRect(e)),
+                },
+              ]}
+              renderTrigger={({ open, toggle }) => (
+                <button
+                  type="button"
+                  className="hb-island"
+                  data-busy={String(busy)}
+                  aria-expanded={String(open)}
+                  onClick={toggle}
+                  title="点击快速切换已保存的模型，或进入模型保存中心"
+                >
+                  <span className="hb-island-dot" data-busy={String(busy)} />
+                  <strong>{topTitle}</strong>
+                  <span>· {topSubStatus}</span>
+                </button>
+              )}
+            />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {runtime.updateInfo && (

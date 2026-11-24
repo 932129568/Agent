@@ -1,0 +1,61 @@
+{
+  "name": "ecommerce-live-growth",
+  "version": "1.0.0",
+  "description": "覆盖爆品选品评分矩阵、直播间 3 分钟留人话术与逼单节奏、千川/信息流投流 ROI 诊断及详情页痛点转化重构。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "ecommerce-live-growth",
+  "agents": [
+    "./agents/ecommerce-live-growth.md"
+  ],
+  "skills": [
+    "./skills/product-selection-matrix",
+    "./skills/live-script-pacing",
+    "./skills/gmv-conversion-audit",
+    "./skills/ad-roi-optimizer"
+  ],
+  "displayName": {
+    "en": "E-Commerce & Live-Stream Growth Operator",
+    "zh": "电商选品与直播增长操盘手"
+  },
+  "profession": {
+    "en": "Selection / GMV Funnel / Live Script",
+    "zh": "产品与增长"
+  },
+  "displayDescription": {
+    "en": "覆盖爆品选品评分矩阵、直播间 3 分钟留人话术与逼单节奏、千川/信息流投流 ROI 诊断及详情页痛点转化重构。",
+    "zh": "覆盖爆品选品评分矩阵、直播间 3 分钟留人话术与逼单节奏、千川/信息流投流 ROI 诊断及详情页痛点转化重构。"
+  },
+  "categoryId": "03-ProductGrowth",
+  "tags": [
+    {
+      "en": "product-selection-matrix",
+      "zh": "product-selection-matrix"
+    },
+    {
+      "en": "live-script-pacing",
+      "zh": "live-script-pacing"
+    },
+    {
+      "en": "gmv-conversion-audit",
+      "zh": "gmv-conversion-audit"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我为这款新品写一套 5 分钟高转化直播间讲品与逼单脚本",
+      "en": "帮我为这款新品写一套 5 分钟高转化直播间讲品与逼单脚本"
+    },
+    {
+      "zh": "帮我诊断店铺点击率高但加购成交低的转化漏斗并给出详情页改版方案",
+      "en": "帮我诊断店铺点击率高但加购成交低的转化漏斗并给出详情页改版方案"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我为这款新品写一套 5 分钟高转化直播间讲品与逼单脚本",
+    "en": "帮我为这款新品写一套 5 分钟高转化直播间讲品与逼单脚本"
+  },
+  "x-harbor-source": "Harbor Commerce Growth Playbook"
+}

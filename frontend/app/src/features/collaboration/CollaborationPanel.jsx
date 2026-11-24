@@ -11,6 +11,8 @@ import './CollaborationPanel.css'
 
 export default function CollaborationPanel() {
   const collab = useSlice('collaboration')
+  const settings = useSlice('settings')
+  const savedChatModels = (settings.savedModels || []).filter((m) => !m.kind || m.kind === 'chat')
   const [goal, setGoal] = useState('')
   const cfg = collab.config
 
@@ -48,6 +50,26 @@ export default function CollaborationPanel() {
               <option value={2}>2 轮严格评审</option>
             </select>
           </label>
+          {savedChatModels.length > 0 && (
+            <>
+              <label style={{ fontSize: 12.5 }}>
+                云端规划模型：
+                <select className="co-btn" style={{ marginLeft: 6 }} value={cfg.cloud_model_id || ''}
+                  onChange={(e) => updateCollaborationConfig({ cloud_model_id: e.target.value })}>
+                  <option value="">默认云端端点</option>
+                  {savedChatModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 12.5 }}>
+                本地执行模型：
+                <select className="co-btn" style={{ marginLeft: 6 }} value={cfg.local_model_id || ''}
+                  onChange={(e) => updateCollaborationConfig({ local_model_id: e.target.value })}>
+                  <option value="">默认本地端点</option>
+                  {savedChatModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </label>
+            </>
+          )}
           <label style={{ fontSize: 12.5 }}>
             云端预算 (tok)：
             <input className="co-btn" style={{ width: 92, marginLeft: 6 }} type="number" min={6000} max={30000} step={2000}

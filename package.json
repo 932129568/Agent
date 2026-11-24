@@ -20,7 +20,9 @@
     "cleanup:exec": "node frontend/app/tools/cleanup-legacy.mjs --execute",
     "verify": "npm run iron-laws && npm run arch:backend && npm run build && npm run test:unit && npm run test:server",
     "desktop": "electron .",
-    "dist:win": "npm run build && electron-builder --win nsis --config electron-builder.yml"
+    "dist:check": "npm run build && node scripts/verify-dist-ready.mjs",
+    "dist:dir": "npm run dist:check && electron-builder --win --dir --config electron-builder.yml",
+    "dist:win": "npm run dist:check && electron-builder --win nsis --config electron-builder.yml"
   },
   "dependencies": {},
   "devDependencies": {

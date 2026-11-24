@@ -42,6 +42,7 @@ import {
   dispatchPluginTool,
   collectPluginSlashCommands,
 } from '../services/pluginRegistry.js'
+import { loadInitialSavedModels } from './settingsSlice.js'
 import {
   createInitialPluginsSlice,
   setWorkflowViewTab,
@@ -69,6 +70,7 @@ import { spawnIsolatedSubagent, cancelAllSubagents, purgeSubagents } from '../se
 import { isResumableError } from '../services/budgetAndResume.js'
 import { COLLABORATION_DEFAULTS } from '../services/collaboration.js'
 import { formatWorkflowRunMarkdown } from '../services/workflowEngine.js'
+import { resolveEndpointWithSavedModel, normalizeSavedModel } from '../services/modelVault.js'
 import { generateImageMedia, generateVideoMedia } from '../services/mediaGen.js'
 import { isAbort } from '../services/errors.js'
 import {
@@ -89,6 +91,8 @@ import {
   removeComposerToken,
   pushToast,
   dismissToast,
+  openOnboardingModal,
+  closeOnboardingModal,
 } from './uiSlice.js'
 import {
   resolveEndpointConfig,
@@ -190,6 +194,7 @@ const initialState = Object.freeze({
     activePanel: 'chat',       // 'chat' | 'sessions' | 'workspace' | 'planning' | 'group' | 'collaboration' | 'analytics'
     sidebarOpen: true,
     activeModal: null,         // 'settings' | 'market' | 'command' | null（强互斥）
+    onboardingOpen: readStorage('harbor.v5.onboarding.seen', '') !== '1',
     modalOriginRect: null,     // 触发按钮坐标（用于 FLIP 平滑展开）
     zenMode: false,
     dockOpen: false,
@@ -235,6 +240,7 @@ const initialState = Object.freeze({
   },
   settings: {
     ...initialVisual,
+    savedModels: loadInitialSavedModels(),
     backendConfig: {
       api_key: '',
       provider_base_url: 'https://open.bigmodel.cn/api/paas/v4',
@@ -376,6 +382,8 @@ export {
   removeComposerToken,
   pushToast,
   dismissToast,
+  openOnboardingModal,
+  closeOnboardingModal,
 }
 
 /* ---- 启动水合 ---- */
@@ -396,19 +404,29 @@ export async function hydrateApp() {
     const unifiedBase = raw.provider_base_url || raw.provider_base || raw.base_url || 'https://open.bigmodel.cn/api/paas/v4'
     const unifiedKey = raw.provider_key || raw.api_key || ''
     const unifiedModel = raw.provider_model || raw.model || 'glm-4.5-flash'
-    patchSlice('settings', (s) => ({
-      ...s,
-      backendConfig: {
-        ...s.backendConfig,
-        ...raw,
-        provider_base_url: unifiedBase,
-        provider_base: unifiedBase,
-        provider_key: unifiedKey,
-        api_key: unifiedKey,
-        provider_model: unifiedModel,
-        model: unifiedModel,
-      },
-    }))
+    patchSlice('settings', (s) => {
+      const mergedModels = [...(s.savedModels || [])]
+      if (Array.isArray(raw.saved_models)) {
+        for (const rm of raw.saved_models) {
+          const norm = normalizeSavedModel(rm)
+          if (norm.model && !mergedModels.some((x) => x.id === norm.id)) mergedModels.push(norm)
+        }
+      }
+      return {
+        ...s,
+        savedModels: mergedModels,
+        backendConfig: {
+          ...s.backendConfig,
+          ...raw,
+          provider_base_url: unifiedBase,
+          provider_base: unifiedBase,
+          provider_key: unifiedKey,
+          api_key: unifiedKey,
+          provider_model: unifiedModel,
+          model: unifiedModel,
+        },
+      }
+    })
   }
   if (sessRes.status === 'fulfilled' && Array.isArray(sessRes.value) && sessRes.value.length > 0) {
     const hydrated = sessRes.value.map((x) => {
@@ -615,6 +633,20 @@ function updateSessionById(sid, updater) {
   queuePersistSessions()
 }
 
+export function setSessionModelOverride(sid, modelProfileId = '') {
+  const targetId = sid || state.sessions.currentId
+  if (!targetId) return
+  const cleanId = String(modelProfileId || '').trim()
+  invalidateSessionPrefixCache(targetId)
+  updateSessionById(targetId, (s) => ({ ...s, modelProfileId: cleanId, updatedAt: Date.now() }))
+  if (cleanId) {
+    const hit = (state.settings.savedModels || []).find((m) => m.id === cleanId || m.model === cleanId)
+    pushToast(`本会话已切换模型为「${hit ? hit.label : cleanId}」`, 'ok')
+  } else {
+    pushToast('本会话已恢复跟随全局默认模型', 'info')
+  }
+}
+
 export function renameSession(sid, nextTitle) {
   const clean = String(nextTitle || '').trim()
   if (!sid || !clean) return
@@ -777,6 +809,7 @@ export async function saveBackendConfig(patch) {
     api_key: unifiedKey,
     provider_model: unifiedModel,
     model: unifiedModel,
+    saved_models: state.settings.savedModels || rawMerged.saved_models || [],
   }
   const prevCfg = state.settings.backendConfig || {}
   if (prevCfg.system_prompt !== merged.system_prompt || prevCfg.tool_mode !== merged.tool_mode) {
@@ -1143,7 +1176,11 @@ export async function runChatTurn(sid, userText, opts = {}) {
   const targetSession = state.sessions.items.find((x) => x.id === sid)
   if (!targetSession) return
 
-  const ep = resolveEndpointConfig()
+  const ep = resolveEndpointWithSavedModel(
+    targetSession.modelProfileId,
+    resolveEndpointConfig(),
+    state.settings.savedModels
+  )
   const ctrl = new AbortController()
   abortBySid.set(sid, ctrl)
   patchRun(sid, {
@@ -1723,13 +1760,13 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
 
       patchSlice('group', { activeIndex: i, handoffFrom: '', handoffTo: '', liveContent: '', liveReasoning: '', liveTools: [], cps: 0 })
 
+      const resolvedMemberEp = resolveEndpointWithSavedModel(m.model, baseEp, state.settings.savedModels)
       const memberEp = {
-        ...baseEp,
-        baseUrl: m.baseUrl || baseEp.baseUrl,
-        model: m.model || baseEp.model,
-        max_tokens: m.maxTokens > 0 ? m.maxTokens : baseEp.max_tokens,
-        reasoning_effort: (m.reasoningTier && m.reasoningTier !== 'auto') ? m.reasoningTier : baseEp.reasoning_effort,
-        thinking_budget: m.customThinkingBudget > 0 ? m.customThinkingBudget : baseEp.thinking_budget,
+        ...resolvedMemberEp,
+        baseUrl: m.baseUrl || resolvedMemberEp.baseUrl,
+        max_tokens: m.maxTokens > 0 ? m.maxTokens : resolvedMemberEp.max_tokens,
+        reasoning_effort: (m.reasoningTier && m.reasoningTier !== 'auto') ? m.reasoningTier : resolvedMemberEp.reasoning_effort,
+        thinking_budget: m.customThinkingBudget > 0 ? m.customThinkingBudget : resolvedMemberEp.thinking_budget,
       }
 
       const canUseTools = m.allowTools !== false && memberEp.tool_mode !== 'off'
@@ -2173,10 +2210,10 @@ export async function runActiveWorkflow({ workflowId = '', input = '', vars = {}
     resume,
     runFromNodeId,
     runLlmNode: async ({ node, prompt, signal, onDelta }) => {
+      const resolvedNodeEp = resolveEndpointWithSavedModel(node.model, baseEp, state.settings.savedModels)
       const nodeEp = {
-        ...baseEp,
-        model: node.model || baseEp.model,
-        reasoning_effort: (node.reasoningTier && node.reasoningTier !== 'auto') ? node.reasoningTier : baseEp.reasoning_effort,
+        ...resolvedNodeEp,
+        reasoning_effort: (node.reasoningTier && node.reasoningTier !== 'auto') ? node.reasoningTier : resolvedNodeEp.reasoning_effort,
       }
       return runAgentConversation({
         sid: `${wfSid}_${node.id}`,
@@ -2218,14 +2255,22 @@ export async function runActiveWorkflow({ workflowId = '', input = '', vars = {}
       }),
       requestClarify: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
     }),
-    runImageNode: async (params) => generateImageMedia({
-      ...params,
-      endpointConfig: baseEp,
-    }),
-    runVideoNode: async (params) => generateVideoMedia({
-      ...params,
-      endpointConfig: baseEp,
-    }),
+    runImageNode: async (params) => {
+      const resolved = resolveEndpointWithSavedModel(params.model, baseEp, state.settings.savedModels)
+      return generateImageMedia({
+        ...params,
+        model: resolved.model,
+        endpointConfig: { ...baseEp, imageBaseUrl: resolved.baseUrl || baseEp.imageBaseUrl, imageApiKey: resolved.apiKey || baseEp.imageApiKey, imageModel: resolved.model },
+      })
+    },
+    runVideoNode: async (params) => {
+      const resolved = resolveEndpointWithSavedModel(params.model, baseEp, state.settings.savedModels)
+      return generateVideoMedia({
+        ...params,
+        model: resolved.model,
+        endpointConfig: { ...baseEp, videoBaseUrl: resolved.baseUrl || baseEp.videoBaseUrl, videoApiKey: resolved.apiKey || baseEp.videoApiKey, videoModel: resolved.model },
+      })
+    },
     requestHumanGate: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
     onArtifact: (art) => openArtifactCanvas(art),
   })
@@ -2240,6 +2285,9 @@ export async function runActiveWorkflow({ workflowId = '', input = '', vars = {}
 
 /* ---- R18 设置与专家市场领域切片统一门面再导出（LAW-14：零 feature 直连 bridge.js） ---- */
 export {
+  saveModelProfile,
+  deleteModelProfile,
+  activateSavedModelGlobal,
   testModelEndpoint,
   probeLocalEndpoints,
   saveHybridSettings,

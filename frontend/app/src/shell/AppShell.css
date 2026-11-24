@@ -246,6 +246,7 @@
   }
   .hb-ribbon-btn:hover { color: var(--text); }
 
+  .hb-main::before,
   .hb-main::after {
     content: "";
     position: absolute;
@@ -255,20 +256,36 @@
     border-radius: inherit;
     z-index: var(--z-sticky);
   }
+  .hb-main[data-impact-edge="left"]::before {
+    background: radial-gradient(ellipse 16% 56% at 0% var(--impact-y, 50%), rgba(255, 248, 238, 0.85), rgba(212, 101, 62, 0.34) 44%, transparent 76%);
+    animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
+  }
   .hb-main[data-impact-edge="left"]::after {
-    background: radial-gradient(ellipse 14% 52% at 0% 50%, rgba(255, 244, 232, 0.72), rgba(224, 125, 90, 0.28) 46%, transparent 74%);
-    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+    background: radial-gradient(circle at 0% var(--impact-y, 50%), transparent 10%, rgba(212, 101, 62, 0.26) 22%, rgba(56, 189, 248, 0.14) 34%, transparent 48%);
+    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
+  }
+  .hb-main[data-impact-edge="right"]::before {
+    background: radial-gradient(ellipse 16% 56% at 100% var(--impact-y, 50%), rgba(255, 248, 238, 0.85), rgba(82, 180, 245, 0.34) 44%, transparent 76%);
+    animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
   }
   .hb-main[data-impact-edge="right"]::after {
-    background: radial-gradient(ellipse 14% 52% at 100% 50%, rgba(255, 244, 232, 0.72), rgba(82, 180, 245, 0.28) 46%, transparent 74%);
-    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+    background: radial-gradient(circle at 100% var(--impact-y, 50%), transparent 10%, rgba(82, 180, 245, 0.26) 22%, transparent 46%);
+    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
+  }
+  .hb-main[data-impact-edge="top"]::before {
+    background: radial-gradient(ellipse 52% 16% at 50% 0%, rgba(255, 248, 238, 0.85), rgba(82, 180, 245, 0.30) 44%, transparent 76%);
+    animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
   }
   .hb-main[data-impact-edge="top"]::after {
-    background: radial-gradient(ellipse 48% 14% at 50% 0%, rgba(255, 244, 232, 0.72), rgba(82, 180, 245, 0.26) 46%, transparent 74%);
-    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+    background: radial-gradient(circle at 50% 0%, transparent 10%, rgba(82, 180, 245, 0.24) 24%, transparent 46%);
+    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
+  }
+  .hb-main[data-impact-edge="bottom"]::before {
+    background: radial-gradient(ellipse 52% 16% at 50% 100%, rgba(255, 248, 238, 0.85), rgba(212, 101, 62, 0.30) 44%, transparent 76%);
+    animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
   }
   .hb-main[data-impact-edge="bottom"]::after {
-    background: radial-gradient(ellipse 48% 14% at 50% 100%, rgba(255, 244, 232, 0.72), rgba(224, 125, 90, 0.26) 46%, transparent 74%);
-    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+    background: radial-gradient(circle at 50% 100%, transparent 10%, rgba(212, 101, 62, 0.24) 24%, transparent 46%);
+    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
   }
 }

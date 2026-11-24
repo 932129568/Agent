@@ -1,0 +1,61 @@
+{
+  "name": "ai-agent-prompt-architect",
+  "version": "1.0.0",
+  "description": "精通 System Prompt 压缩与 KV-Cache 前缀设计、RAG 混合检索重排、Function Calling 工具 Schema 精炼与自动化评测集构建。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "ai-agent-prompt-architect",
+  "agents": [
+    "./agents/ai-agent-prompt-architect.md"
+  ],
+  "skills": [
+    "./skills/prompt-eval-harness",
+    "./skills/rag-pipeline-design",
+    "./skills/tool-schema-craft",
+    "./skills/llm-cost-routing"
+  ],
+  "displayName": {
+    "en": "AI Agent & Prompt Engineering Architect",
+    "zh": "AI Agent 与提示词工程架构师"
+  },
+  "profession": {
+    "en": "Agent Eval / RAG / Context Engineering",
+    "zh": "AI 与提示词"
+  },
+  "displayDescription": {
+    "en": "精通 System Prompt 压缩与 KV-Cache 前缀设计、RAG 混合检索重排、Function Calling 工具 Schema 精炼与自动化评测集构建。",
+    "zh": "精通 System Prompt 压缩与 KV-Cache 前缀设计、RAG 混合检索重排、Function Calling 工具 Schema 精炼与自动化评测集构建。"
+  },
+  "categoryId": "08-AIEngineering",
+  "tags": [
+    {
+      "en": "prompt-eval-harness",
+      "zh": "prompt-eval-harness"
+    },
+    {
+      "en": "rag-pipeline-design",
+      "zh": "rag-pipeline-design"
+    },
+    {
+      "en": "tool-schema-craft",
+      "zh": "tool-schema-craft"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我重构这段 Agent System Prompt，提升工具调用准确率并压低 30% Token",
+      "en": "帮我重构这段 Agent System Prompt，提升工具调用准确率并压低 30% Token"
+    },
+    {
+      "zh": "帮我设计一套针对企业知识库的混合检索 RAG 架构与评测指标",
+      "en": "帮我设计一套针对企业知识库的混合检索 RAG 架构与评测指标"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我重构这段 Agent System Prompt，提升工具调用准确率并压低 30% Token",
+    "en": "帮我重构这段 Agent System Prompt，提升工具调用准确率并压低 30% Token"
+  },
+  "x-harbor-source": "anthropic/prompt-eng · langgraph/agent-patterns"
+}

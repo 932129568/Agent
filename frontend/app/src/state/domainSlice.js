@@ -8,6 +8,7 @@ import * as api from '../services/bridge.js'
 import { invalidateSessionPrefixCache } from '../services/agentEngine.js'
 import { runExpertTeam } from '../services/expertTeam.js'
 import { normalizeCollaborationConfig, runDualModelCollaboration } from '../services/collaboration.js'
+import { resolveEndpointWithSavedModel } from '../services/modelVault.js'
 import { isAbort } from '../services/errors.js'
 import { getState, patchSlice } from './kernel.js'
 import { pushToast } from './uiSlice.js'
@@ -298,8 +299,10 @@ export async function startCollaborationRun(goal) {
   collabAbortCtrl = new AbortController()
   patchSlice('collaboration', (c) => ({ ...c, running: true, events: [], finalAnswer: '' }))
   try {
-    const cloudEp = resolveEndpointConfig(false)
-    const localEp = resolveEndpointConfig(true)
+    const savedModels = (getState().settings && getState().settings.savedModels) || []
+    const collabCfg = getState().collaboration.config || {}
+    const cloudEp = resolveEndpointWithSavedModel(collabCfg.cloud_model_id, resolveEndpointConfig(false), savedModels)
+    const localEp = resolveEndpointWithSavedModel(collabCfg.local_model_id, resolveEndpointConfig(true), savedModels)
     const res = await runDualModelCollaboration({
       goal,
       config: getState().collaboration.config,

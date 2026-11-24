@@ -1,0 +1,61 @@
+{
+  "name": "cloud-devops-sre",
+  "version": "1.0.0",
+  "description": "专注多阶段 Dockerfile 瘦身加固、GitHub Actions 零停机发布、Kubernetes 排障、Prometheus/OTel 可观测性与容量压测。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "cloud-devops-sre",
+  "agents": [
+    "./agents/cloud-devops-sre.md"
+  ],
+  "skills": [
+    "./skills/dockerfile-hardening",
+    "./skills/ci-cd-pipeline",
+    "./skills/k8s-troubleshooting",
+    "./skills/observability-slo"
+  ],
+  "displayName": {
+    "en": "Cloud-Native DevOps & SRE Architect",
+    "zh": "云原生 DevOps 与 SRE 稳定性专家"
+  },
+  "profession": {
+    "en": "Docker / K8s / CI-CD / Observability",
+    "zh": "云原生运维"
+  },
+  "displayDescription": {
+    "en": "专注多阶段 Dockerfile 瘦身加固、GitHub Actions 零停机发布、Kubernetes 排障、Prometheus/OTel 可观测性与容量压测。",
+    "zh": "专注多阶段 Dockerfile 瘦身加固、GitHub Actions 零停机发布、Kubernetes 排障、Prometheus/OTel 可观测性与容量压测。"
+  },
+  "categoryId": "09-DevOpsSRE",
+  "tags": [
+    {
+      "en": "dockerfile-hardening",
+      "zh": "dockerfile-hardening"
+    },
+    {
+      "en": "ci-cd-pipeline",
+      "zh": "ci-cd-pipeline"
+    },
+    {
+      "en": "k8s-troubleshooting",
+      "zh": "k8s-troubleshooting"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我审查并优化这份 Dockerfile 与 GitHub Actions，实现镜像瘦身和构建提速",
+      "en": "帮我审查并优化这份 Dockerfile 与 GitHub Actions，实现镜像瘦身和构建提速"
+    },
+    {
+      "zh": "帮我定位 Kubernetes 集群中服务偶发 502 与内存缓慢泄漏的排查清单",
+      "en": "帮我定位 Kubernetes 集群中服务偶发 502 与内存缓慢泄漏的排查清单"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我审查并优化这份 Dockerfile 与 GitHub Actions，实现镜像瘦身和构建提速",
+    "en": "帮我审查并优化这份 Dockerfile 与 GitHub Actions，实现镜像瘦身和构建提速"
+  },
+  "x-harbor-source": "cncf/best-practices · github/actions-toolkit"
+}

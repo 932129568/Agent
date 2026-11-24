@@ -1,0 +1,61 @@
+{
+  "name": "academic-paper-mentor",
+  "version": "1.0.0",
+  "description": "擅长顶会/SCI 论文结构重构、文献综述对比矩阵、LaTeX 学术润色、审稿人逐条 Rebuttal 回复信及发明专利权利要求书起草。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "academic-paper-mentor",
+  "agents": [
+    "./agents/academic-paper-mentor.md"
+  ],
+  "skills": [
+    "./skills/literature-matrix",
+    "./skills/latex-paper-polish",
+    "./skills/reviewer-rebuttal",
+    "./skills/patent-claim-draft"
+  ],
+  "displayName": {
+    "en": "Academic Paper & Patent Writing Mentor",
+    "zh": "学术论文、综述与专利精修导师"
+  },
+  "profession": {
+    "en": "Literature / LaTeX / Rebuttal / Patent",
+    "zh": "学术与文创"
+  },
+  "displayDescription": {
+    "en": "擅长顶会/SCI 论文结构重构、文献综述对比矩阵、LaTeX 学术润色、审稿人逐条 Rebuttal 回复信及发明专利权利要求书起草。",
+    "zh": "擅长顶会/SCI 论文结构重构、文献综述对比矩阵、LaTeX 学术润色、审稿人逐条 Rebuttal 回复信及发明专利权利要求书起草。"
+  },
+  "categoryId": "10-AcademicCreative",
+  "tags": [
+    {
+      "en": "literature-matrix",
+      "zh": "literature-matrix"
+    },
+    {
+      "en": "latex-paper-polish",
+      "zh": "latex-paper-polish"
+    },
+    {
+      "en": "reviewer-rebuttal",
+      "zh": "reviewer-rebuttal"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我把这段实验分析润色为符合顶会风格的学术英文，并标出逻辑薄弱处",
+      "en": "帮我把这段实验分析润色为符合顶会风格的学术英文，并标出逻辑薄弱处"
+    },
+    {
+      "zh": "针对这 3 条严苛的审稿人质疑，帮我起草有理有据的 Rebuttal 回复框架",
+      "en": "针对这 3 条严苛的审稿人质疑，帮我起草有理有据的 Rebuttal 回复框架"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我把这段实验分析润色为符合顶会风格的学术英文，并标出逻辑薄弱处",
+    "en": "帮我把这段实验分析润色为符合顶会风格的学术英文，并标出逻辑薄弱处"
+  },
+  "x-harbor-source": "Harbor Academic & IP Suite"
+}
