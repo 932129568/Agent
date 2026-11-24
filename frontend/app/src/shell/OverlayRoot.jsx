@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
-import { useSlice, closeModal, toggleDock, fireShellImpact, resolvePendingClarify } from '../state/store.js'
+import { useSlice, closeModal, toggleDock, fireShellImpact, resolvePendingClarify, cancelDeleteGroup, confirmDeleteGroup } from '../state/store.js'
 import { playModalMorphIn, playModalFlyOut, getMotionAnchorRect } from '../platform/kinetic.js'
 import ContextDock from '../features/dock/ContextDock.jsx'
 import SettingsModal from '../features/settings/SettingsModal.jsx'
 import MarketModal from '../features/market/MarketModal.jsx'
 import CommandPalette from '../features/command/CommandPalette.jsx'
 import ClarifyModal from '../ui/ClarifyModal.jsx'
+import GroupDeleteModal from '../ui/GroupDeleteModal.jsx'
 import './OverlayRoot.css'
 
 const MODAL_HOME = {
@@ -70,6 +71,7 @@ export default function OverlayRoot() {
     <>
       <ContextDock />
       <ClarifyModal request={runtime.pendingClarify} onResolve={resolvePendingClarify} />
+      <GroupDeleteModal request={runtime.pendingGroupDelete} onCancel={cancelDeleteGroup} onConfirm={confirmDeleteGroup} />
 
       {ui.activeModal && (
         <div ref={backdropRef} className="ov-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleCloseModal() }}>

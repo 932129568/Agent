@@ -160,6 +160,7 @@ export const groupFilesList = (groupId, groupName = '', opt) => callJsApi('group
 export const groupFilesWrite = (groupId, groupName, member, title, content, meta = {}, opt) =>
   callJsApi('group_files_write', [groupId, groupName, member, title, content, JSON.stringify(meta)], opt)
 export const groupFilesRead = (filePath, opt) => callJsApi('group_files_read', [filePath], opt)
+export const groupFilesSearch = (groupId, query, limit = 8, opt) => callJsApi('group_files_search', [groupId, query, limit], opt)
 export const groupFilesDelete = (groupId, name, opt) => callJsApi('group_files_delete', [groupId, name], opt)
 export const groupFilesOpenDir = (groupId, opt) => callJsApi('group_files_open_dir', [groupId], opt)
 

@@ -479,3 +479,36 @@ test('agentEngine.js ask_user_options 工具触发前端效果拍板回调并原
   assert.equal(parsed.ok, true)
   assert.ok(parsed.summary.includes('黄铜机械复古') && parsed.summary.includes('加真实滴答音效'))
 })
+
+
+test('groupStore.js 多群聊严格隔离：每个新建群聊唯一 ID、删除后自动建全新隔离群且不复用旧 ID', async () => {
+  const { createIsolatedGroup, removeGroupFromCollection, stripGlobalMemoryForIsolatedGroup } = await import('../src/services/groupStore.js')
+  const g1 = createIsolatedGroup({ title: '群聊A' })
+  const g2 = createIsolatedGroup({ title: '群聊B' })
+  assert.notEqual(g1.id, g2.id)
+  assert.notEqual(g1.id, 'grp_default')
+  assert.equal(g1.messages.length, 0)
+
+  // 删除最后一个群聊时，自动创建一个全新的独立群聊 ID（绝不回退旧 ID）
+  const afterDel = removeGroupFromCollection([g1], g1.id, g1.id)
+  assert.equal(afterDel.items.length, 1)
+  assert.equal(afterDel.createdReplacement, true)
+  assert.notEqual(afterDel.activeGroupId, g1.id)
+
+  // 群聊系统提示词剥离全局长期记忆，防止已删除会话串味
+  const rawSys = '你是 Harbor 助手。\n\n用户长期记忆（仅作偏好与约束参考）：\n- 旧群聊做了钟摆网页\n\n【长期记忆·扩展】\n- 旧会话规则'
+  const stripped = stripGlobalMemoryForIsolatedGroup(rawSys)
+  assert.ok(!stripped.includes('钟摆网页') && !stripped.includes('旧会话规则'))
+})
+
+test('toolRouter.js 群聊隔离模式剔除全局 memory 工具并仅注入本群专属 group_file_* 工具', async () => {
+  const { selectToolsForProfile } = await import('../src/services/toolRouter.js')
+  const mockAll = ['read_file', 'write_file', 'memory_search', 'memory_write', 'append_memory'].map((name) => ({
+    type: 'function',
+    function: { name },
+  }))
+  const grpTools = selectToolsForProfile(mockAll, 'coding', { includeAskUser: true, isolatedGroup: true })
+  const names = grpTools.map((t) => t.function.name)
+  assert.ok(!names.includes('memory_search') && !names.includes('memory_write') && !names.includes('append_memory'))
+  assert.ok(names.includes('group_file_list') && names.includes('group_file_read') && names.includes('group_file_search'))
+})

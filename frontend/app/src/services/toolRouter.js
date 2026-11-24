@@ -71,6 +71,47 @@ const TOOL_GROUPS = Object.freeze({
   ]),
 })
 
+/** 群聊专属群文件只读工具（仅在群聊会话中挂载，且强制锁死在当前 groupId 独立目录内） */
+export const GROUP_FILE_TOOLS = Object.freeze([
+  {
+    type: 'function',
+    function: {
+      name: 'group_file_list',
+      description: '列出「当前群聊」专属群文件目录中的交接文档清单（与其他群聊完全隔离，不可跨群访问）。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'group_file_read',
+      description: '读取「当前群聊」专属群文件中的指定文档全文（仅限本群文件，传 group_file_list 返回的 name）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '本群文件的文件名（由 group_file_list 返回）' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'group_file_search',
+      description: '在「当前群聊」专属群文件中按关键词检索片段（仅检索本群，不访问其他群聊）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '检索关键词' },
+          limit: { type: 'integer', description: '返回条数上限（默认 6）' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+])
+
 export const TOOL_PROFILE_META = Object.freeze({
   chat: { id: 'chat', label: '轻量对话', desc: '仅挂载记忆与交互确认（省 ~90% 工具 Token）' },
   coding: { id: 'coding', label: '代码与文件', desc: '文件读写 + 终端命令 + 效果确认（省 ~60% 工具 Token）' },
@@ -117,9 +158,9 @@ export function predictToolProfile(query = '', { hasEnabledMcp = false, forceFul
   return next
 }
 
-export function selectToolsForProfile(allTools = [], profile = 'coding', { includeAskUser = true } = {}) {
+export function selectToolsForProfile(allTools = [], profile = 'coding', { includeAskUser = true, isolatedGroup = false } = {}) {
   const list = Array.isArray(allTools) ? allTools : []
-  const allowed = new Set(TOOL_GROUPS.core_chat)
+  const allowed = new Set(isolatedGroup ? ['ask_user_options'] : TOOL_GROUPS.core_chat)
 
   if (profile === 'coding') {
     for (const t of TOOL_GROUPS.files) allowed.add(t)
@@ -142,10 +183,25 @@ export function selectToolsForProfile(allTools = [], profile = 'coding', { inclu
       return name && (allowed.has(name) || name.startsWith('mcp__'))
     })
 
-  if (includeAskUser && !filtered.some((t) => ((t && t.function && t.function.name) || '') === 'ask_user_options')) {
-    filtered.push(ASK_USER_OPTIONS_TOOL)
+  // 群聊强隔离：剔除跨会话全局记忆工具，注入仅绑定当前群聊 ID 的专属群文件工具
+  const result = isolatedGroup
+    ? filtered.filter((t) => {
+      const n = String((t && t.function && t.function.name) || '')
+      return n !== 'memory_search' && n !== 'memory_write' && n !== 'append_memory'
+    })
+    : filtered
+
+  if (isolatedGroup) {
+    for (const gt of GROUP_FILE_TOOLS) {
+      if (!result.some((t) => ((t && t.function && t.function.name) || '') === gt.function.name)) {
+        result.push(gt)
+      }
+    }
   }
-  return filtered
+  if (includeAskUser && !result.some((t) => ((t && t.function && t.function.name) || '') === 'ask_user_options')) {
+    result.push(ASK_USER_OPTIONS_TOOL)
+  }
+  return result
 }
 
 export function buildClarifyDirective({ autonomous = false, askBeforeDesign = true } = {}) {

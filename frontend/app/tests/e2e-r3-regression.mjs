@@ -80,7 +80,8 @@ const stubState = {
   },
   savedConfigs: [],
   savedGuardConfigs: [],
-  groupFiles: [],
+  groupFilesByGid: {},
+  purgedGroupIds: [],
   writtenFiles: [],
   chatRequests: [],
   triggerGroupToolOnce: false,
@@ -162,20 +163,34 @@ const server = http.createServer(async (req, res) => {
     else if (method === 'webdav_get_config') out = { url: '', username: '', remote_path: '/harbor-backup', conflict_policy: 'ask' }
     else if (method === 'software_list') out = []
     else if (method === 'check_update') out = { update_available: false }
-    else if (method === 'group_files_list') out = { ok: true, dir: 'C:/harbor-test/group_files', files: stubState.groupFiles }
+    else if (method === 'group_files_list') {
+      const gid = String(args[0] || 'default')
+      const arr = stubState.groupFilesByGid[gid] || []
+      out = { ok: true, dir: `C:/harbor-test/group_files/${gid}`, files: arr }
+    }
     else if (method === 'group_files_write') {
-      const name = `handoff_${stubState.groupFiles.length + 1}.md`
-      const entry = { name, path: `C:/harbor-test/group_files/${name}`, title: String(args[3] || name), member: String(args[2] || '主持人'), content: String(args[4] || ''), size: String(args[4] || '').length, mtime: Date.now() / 1000 }
-      stubState.groupFiles.unshift(entry)
+      const gid = String(args[0] || 'default')
+      const arr = stubState.groupFilesByGid[gid] || (stubState.groupFilesByGid[gid] = [])
+      const name = `handoff_${arr.length + 1}.md`
+      const entry = { name, path: `C:/harbor-test/group_files/${gid}/${name}`, title: String(args[3] || name), member: String(args[2] || '主持人'), content: String(args[4] || ''), size: String(args[4] || '').length, mtime: Date.now() / 1000 }
+      arr.unshift(entry)
       out = { ok: true, name, path: entry.path }
     }
     else if (method === 'group_files_read') {
-      const hit = stubState.groupFiles.find((f) => f.path === args[0] || f.name === args[0])
-      out = { ok: true, content: hit ? hit.content : '# 交接文档内容' }
+      const all = Object.values(stubState.groupFilesByGid).flat()
+      const hit = all.find((f) => f.path === args[0] || f.name === args[0])
+      out = { ok: true, text: hit ? hit.content : '# 交接文档内容' }
     }
     else if (method === 'group_files_delete') {
-      stubState.groupFiles = stubState.groupFiles.filter((f) => f.name !== args[1])
-      out = { ok: true }
+      const gid = String(args[0] || 'default')
+      if (args[1] === '__PURGE_ALL__') {
+        delete stubState.groupFilesByGid[gid]
+        stubState.purgedGroupIds.push(gid)
+        out = { ok: true, purged: true, group_id: gid }
+      } else {
+        stubState.groupFilesByGid[gid] = (stubState.groupFilesByGid[gid] || []).filter((f) => f.name !== args[1])
+        out = { ok: true }
+      }
     }
     else if (method === 'group_files_open_dir') out = { ok: true }
     else if (method === 'build_system_prompt') out = 'STATIC_CHARTER_PREFIX' + (args[0] ? '|DYN_QUERY:' + args[0] : '')
@@ -810,6 +825,44 @@ try {
     '效果拍板交互弹窗：用户选定风格 + 自定义补充实时回灌模型无缝续跑',
     sawUserChoice,
     `sawUserChoice=${sawUserChoice}`
+  )
+
+  /* ======================================================================== *
+   * Suite I · R12 多群聊严格隔离 + 群文件按群隔离 + 删除群聊可选清空群文件
+   * ======================================================================== */
+  await page.locator('.hb-rail-btn[title="角色群聊"]').click()
+  await page.waitForSelector('.gp-root')
+  const oldGroupId = await page.locator('.gp-select').inputValue()
+  const oldFilesBtnText = await page.locator('.gp-controls button:has-text("本群文件")').textContent()
+
+  // I1: 点击「+ 新建群聊」→ 新群 ID 与旧群不同，且本群文件严格归零（绝不串读旧群）
+  await page.locator('.gp-head-left button:has-text("新建群聊")').click()
+  await page.waitForTimeout(220)
+  const newGroupId = await page.locator('.gp-select').inputValue()
+  const newFilesBtnText = await page.locator('.gp-controls button:has-text("本群文件")').textContent()
+  const isolatedEmpty = newGroupId !== oldGroupId && /本群文件\s*\(0\)/.test(newFilesBtnText || '')
+  record(
+    'Suite-I',
+    '新建群聊拥有独立群 ID 且本群文件严格归零（与旧群彻底隔离）',
+    isolatedEmpty,
+    `old=${oldGroupId}(${(oldFilesBtnText || '').trim()}), new=${newGroupId}(${(newFilesBtnText || '').trim()})`
+  )
+
+  // I2: 切回旧群 → 点「🗑 删除群聊」→ 弹窗可选「同时删除该群聊的全部群文件」→ 确认后后端触发 __PURGE_ALL__
+  await page.locator('.gp-select').selectOption(oldGroupId)
+  await page.waitForTimeout(220)
+  await page.locator('.gp-head-left button:has-text("删除群聊")').click()
+  await page.waitForSelector('.gd-modal', { timeout: 4000 })
+  await page.locator('.gd-foot button:has-text("确认删除群聊与群文件")').click()
+  await page.waitForSelector('.gd-modal', { state: 'detached', timeout: 4000 })
+  await page.waitForTimeout(220)
+  const purgedOld = stubState.purgedGroupIds.includes(oldGroupId)
+  const remainingIds = await page.locator('.gp-select option').evaluateAll((els) => els.map((o) => o.value))
+  record(
+    'Suite-I',
+    '删除群聊弹窗支持选择清空群文件，确认后彻底清理旧群目录并移除列表',
+    purgedOld && !remainingIds.includes(oldGroupId),
+    `purged=${purgedOld}, remaining=${JSON.stringify(remainingIds)}`
   )
 
   // D4: 全程零未捕获页面异常

@@ -18,7 +18,9 @@ import {
   applyGroupPreset,
   setGroupRoutingMode,
   setAskBeforeDesign,
-  clearGroupSession,
+  createNewGroup,
+  selectGroup,
+  requestDeleteGroup,
   pushToast,
 } from '../../state/store.js'
 import { CAPABILITY_CATALOG, GROUP_ROSTER_PRESETS, inferMemberCapabilities } from '../../services/capabilityRouter.js'
@@ -56,7 +58,7 @@ export default function GroupPanel() {
   const [newCaps, setNewCaps] = useState(['text'])
   const [newCapsTouched, setNewCapsTouched] = useState(false)
 
-  useEffect(() => { refreshGroupFiles().catch(() => {}) }, [])
+  useEffect(() => { refreshGroupFiles(group.activeGroupId).catch(() => {}) }, [group.activeGroupId])
 
   const pendingApproval = runtime.pendingApproval && runtime.pendingApproval.sid === 'group' ? runtime.pendingApproval : null
 
@@ -115,7 +117,25 @@ export default function GroupPanel() {
     <section className="gp-root">
       <header className="gp-head">
         <div className="gp-head-left">
-          <h2 className="gp-title">多角色群聊接力</h2>
+          <h2 className="gp-title">多角色群聊</h2>
+          <select
+            className="gp-select"
+            aria-label="切换隔离群聊"
+            value={group.activeGroupId}
+            onChange={(e) => selectGroup(e.target.value)}
+          >
+            {(group.items || []).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.title || '未命名群聊'} ({(g.messages || []).length} 条)
+              </option>
+            ))}
+          </select>
+          <button type="button" className="gp-chip-btn" data-active="true" onClick={() => createNewGroup()}>
+            + 新建群聊
+          </button>
+          <button type="button" className="gp-chip-btn" onClick={() => requestDeleteGroup(group.activeGroupId)} title="删除当前群聊（可选是否同时清空本群文件）">
+            🗑 删除群聊
+          </button>
           <div className="gp-seg" role="group" aria-label="路由模式">
             <button type="button" className="gp-seg-btn" data-active={String(group.routingMode === 'smart')} onClick={() => setGroupRoutingMode('smart')}>
               🎙 主持人智能调度
@@ -145,7 +165,7 @@ export default function GroupPanel() {
               refreshGroupFiles().catch(() => {})
             }}
           >
-            📁 群文件 ({(group.files || []).length})
+            📁 本群文件 ({(group.files || []).length})
           </button>
           {hasLongAssistant && (
             <button
@@ -169,11 +189,7 @@ export default function GroupPanel() {
           >
             {ui.askBeforeDesign ? '🎯 效果先问我' : '⚡ 自主发挥'}
           </button>
-          {group.messages.length > 0 && !group.running && (
-            <button type="button" className="gp-chip-btn" onClick={() => clearGroupSession()}>
-              清空重开
-            </button>
-          )}
+
           <button type="button" className="gp-chip-btn" onClick={() => { setActiveDrawer(null); triggerRelayShowcase() }}>
             ▶ 预览光梭接力动画
           </button>
@@ -406,7 +422,7 @@ export default function GroupPanel() {
           <div className="gp-files-panel" role="dialog" aria-label="群文件与交接文档库">
             <div className="gp-member-row" style={{ justifyContent: 'space-between' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <strong style={{ fontSize: 13.5 }}>📁 群文件与交接文档（{(group.files || []).length} 份）</strong>
+                <strong style={{ fontSize: 13.5 }}>📁 「{group.title || '当前群聊'}」专属群文件（{(group.files || []).length} 份 · 与其他群聊完全隔离）</strong>
                 {group.filesDir && (
                   <div className="gp-file-sub" style={{ marginTop: 2 }}>目录：{group.filesDir}</div>
                 )}

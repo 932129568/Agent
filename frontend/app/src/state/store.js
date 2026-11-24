@@ -3,6 +3,11 @@ import { readVisualPrefs, applyVisualPrefs } from '../platform/theme.js'
 import { readStorage, writeStorage } from '../platform/storage.js'
 import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers, buildModeratorPrompt, parseModeratorPlan } from '../services/capabilityRouter.js'
 import { isAutonomousAuthorized } from '../services/toolRouter.js'
+import {
+  createIsolatedGroup,
+  hydrateGroupCollection,
+  removeGroupFromCollection,
+} from '../services/groupStore.js'
 import * as api from '../services/bridge.js'
 import {
   ensureTree,
@@ -23,6 +28,7 @@ import { isAbort } from '../services/errors.js'
 
 const initialVisual = readVisualPrefs()
 const GROUP_MEMBERS_KEY = 'harbor.v3.group.members'
+const GROUPS_STORAGE_KEY = 'harbor.v4.groups'
 const DISABLED_CURATED_KEY = 'harbor.v3.disabled_curated'
 const ASK_BEFORE_DESIGN_KEY = 'harbor.v3.ask_before_design'
 
@@ -49,6 +55,26 @@ function loadSavedGroupMembers() {
 
 function saveGroupMembers(list) {
   try { writeStorage(GROUP_MEMBERS_KEY, JSON.stringify(list)) } catch {}
+}
+
+const initialGroupHydrated = hydrateGroupCollection(readStorage(GROUPS_STORAGE_KEY, ''), loadSavedGroupMembers())
+const initialActiveGroup = initialGroupHydrated.items.find((g) => g.id === initialGroupHydrated.activeGroupId) || initialGroupHydrated.items[0]
+
+function persistGroups(items, activeGroupId) {
+  try {
+    const compact = (Array.isArray(items) ? items : []).map((g) => ({
+      id: g.id,
+      title: g.title,
+      createdAt: g.createdAt,
+      updatedAt: g.updatedAt,
+      routingMode: g.routingMode,
+      members: g.members,
+      messages: (g.messages || []).slice(-60),
+      relayWireHistory: (g.relayWireHistory || []).slice(-80),
+      lastArchivedName: g.lastArchivedName || '',
+    }))
+    writeStorage(GROUPS_STORAGE_KEY, JSON.stringify({ activeGroupId, items: compact }))
+  } catch {}
 }
 
 function makeSession(title = '新对话', kind = 'chat') {
@@ -95,9 +121,12 @@ const initialState = Object.freeze({
     subagentsBySid: {},        // sid -> [{ id, task, status, summary }]
     pendingApproval: null,
     pendingClarify: null,
+    pendingGroupDelete: null,  // { groupId, title, fileCount }
     pendingTakeover: null,     // { sid, takeoverId, url, message }
     pendingBudgetPause: null,  // { sid, kind, detail }
     activeToolProfile: null,   // { id, label, activeCount, totalCount }
+    toolProfileBySid: {},
+    cacheTotalsBySid: {},
     hybridSplit: { localTokens: 0, cloudTokens: 0 },
     cacheTotals: {
       promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
@@ -178,14 +207,16 @@ const initialState = Object.freeze({
     finalAnswer: '',
   },
   group: {
-    activeGroupId: 'grp_default',
-    routingMode: 'smart',      // 'smart'（按能力路由） | 'all'（全员按序接力）
-    members: loadSavedGroupMembers(),
-    messages: [],
-    relayWireHistory: [],
+    items: initialGroupHydrated.items,
+    activeGroupId: initialActiveGroup.id,
+    title: initialActiveGroup.title,
+    routingMode: initialActiveGroup.routingMode,
+    members: initialActiveGroup.members,
+    messages: initialActiveGroup.messages,
+    relayWireHistory: initialActiveGroup.relayWireHistory,
     files: [],
     filesDir: '',
-    lastArchivedName: '',
+    lastArchivedName: initialActiveGroup.lastArchivedName, 
     status: 'idle',            // 'idle' | 'running' | 'paused' | 'done'
     running: false,
     activeIndex: -1,
@@ -396,10 +427,26 @@ if (typeof globalThis !== 'undefined' && typeof globalThis.addEventListener === 
   globalThis.addEventListener('beforeunload', () => { flushPersistSessions() })
 }
 
+const EMPTY_CACHE_TOTALS = Object.freeze({
+  promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
+  turnPromptTokens: 0, turnCachedTokens: 0,
+  latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
+  prefixHash: '', prefixLocked: false,
+})
+
+function syncRuntimeTelemetryForSid(targetSid) {
+  patchSlice('runtime', (r) => ({
+    ...r,
+    cacheTotals: (targetSid && r.cacheTotalsBySid && r.cacheTotalsBySid[targetSid]) || { ...EMPTY_CACHE_TOTALS },
+    activeToolProfile: (targetSid && r.toolProfileBySid && r.toolProfileBySid[targetSid]) || null,
+  }))
+}
+
 export function createNewSession(title = '新对话') {
   const s = makeSession(title)
   patchSlice('sessions', (st) => ({ ...st, items: [s, ...st.items], currentId: s.id }))
   patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
+  syncRuntimeTelemetryForSid(s.id)
   api.setCurrentSid(s.id).catch(() => {})
   queuePersistSessions()
   return s
@@ -409,16 +456,36 @@ export function selectSession(sid) {
   if (!state.sessions.items.some((x) => x.id === sid)) return
   patchSlice('sessions', (st) => ({ ...st, currentId: sid }))
   patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
+  syncRuntimeTelemetryForSid(sid)
   api.setCurrentSid(sid).catch(() => {})
 }
 
 export function deleteSession(sid) {
   stopSessionRun(sid)
+  invalidateSessionPrefixCache(sid)
+  let nextCurrentId = ''
   patchSlice('sessions', (st) => {
     const rest = st.items.filter((x) => x.id !== sid)
     const items = rest.length ? rest : [makeSession('新对话')]
-    const currentId = st.currentId === sid ? items[0].id : st.currentId
-    return { ...st, items, currentId }
+    nextCurrentId = st.currentId === sid ? items[0].id : st.currentId
+    return { ...st, items, currentId: nextCurrentId }
+  })
+  patchSlice('runtime', (r) => {
+    const runsBySid = { ...r.runsBySid }; delete runsBySid[sid]
+    const queuesBySid = { ...r.queuesBySid }; delete queuesBySid[sid]
+    const subagentsBySid = { ...r.subagentsBySid }; delete subagentsBySid[sid]
+    const cacheTotalsBySid = { ...(r.cacheTotalsBySid || {}) }; delete cacheTotalsBySid[sid]
+    const toolProfileBySid = { ...(r.toolProfileBySid || {}) }; delete toolProfileBySid[sid]
+    return {
+      ...r,
+      runsBySid,
+      queuesBySid,
+      subagentsBySid,
+      cacheTotalsBySid,
+      toolProfileBySid,
+      cacheTotals: cacheTotalsBySid[nextCurrentId] || { ...EMPTY_CACHE_TOTALS },
+      activeToolProfile: toolProfileBySid[nextCurrentId] || null,
+    }
   })
   api.sessionPurge(sid, []).catch(() => {})
   queuePersistSessions()
@@ -651,24 +718,192 @@ function openClarifyPrompt(req) {
   })
 }
 
-export function clearGroupSession() {
-  abortGroupRelay()
+function _syncActiveGroupIntoItems(patchFields = {}) {
+  let savedItems = state.group.items
+  let savedActiveId = state.group.activeGroupId
+  patchSlice('group', (g) => {
+    const merged = { ...g, ...patchFields }
+    const now = Date.now()
+    const items = (g.items || []).map((item) => (
+      item.id === merged.activeGroupId
+        ? {
+          ...item,
+          title: merged.title || item.title,
+          routingMode: merged.routingMode,
+          members: merged.members,
+          messages: merged.messages,
+          relayWireHistory: merged.relayWireHistory,
+          lastArchivedName: merged.lastArchivedName || '',
+          updatedAt: now,
+        }
+        : item
+    ))
+    savedItems = items
+    savedActiveId = merged.activeGroupId
+    return { ...merged, items }
+  })
+  persistGroups(savedItems, savedActiveId)
+}
+
+export function createNewGroup(title = '') {
+  if (state.group.running) abortGroupRelay()
+  const count = (state.group.items || []).length + 1
+  const fresh = createIsolatedGroup({
+    title: String(title || '').trim() || `新群聊 ${count}`,
+    members: state.group.members,
+    routingMode: state.group.routingMode,
+  })
+  const nextItems = [fresh, ...(state.group.items || [])]
   patchSlice('group', {
+    items: nextItems,
+    activeGroupId: fresh.id,
+    title: fresh.title,
+    routingMode: fresh.routingMode,
+    members: fresh.members,
     messages: [],
     relayWireHistory: [],
+    files: [],
+    filesDir: '',
+    lastArchivedName: '',
     status: 'idle',
     running: false,
     activeIndex: -1,
+    activeMembers: [],
     handoffFrom: '',
     handoffTo: '',
     liveContent: '',
     liveReasoning: '',
     liveTools: [],
     cps: 0,
-    checkpoint: null,
+    lastIntent: null,
     routingWarning: '',
+    checkpoint: null,
   })
-  pushToast('已开启全新群聊上下文', 'info')
+  persistGroups(nextItems, fresh.id)
+  syncRuntimeTelemetryForSid(fresh.id)
+  refreshGroupFiles(fresh.id).catch(() => {})
+  pushToast(`已创建全新隔离群聊「${fresh.title}」（专属空白群文件空间）`, 'ok')
+  return fresh
+}
+
+export function selectGroup(groupId) {
+  const target = (state.group.items || []).find((x) => x.id === groupId)
+  if (!target || target.id === state.group.activeGroupId) return
+  if (state.group.running) abortGroupRelay()
+  _syncActiveGroupIntoItems()
+  patchSlice('group', {
+    activeGroupId: target.id,
+    title: target.title,
+    routingMode: target.routingMode,
+    members: target.members,
+    messages: target.messages || [],
+    relayWireHistory: target.relayWireHistory || [],
+    files: [],
+    filesDir: '',
+    lastArchivedName: target.lastArchivedName || '',
+    status: 'idle',
+    running: false,
+    activeIndex: -1,
+    activeMembers: [],
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    liveReasoning: '',
+    liveTools: [],
+    cps: 0,
+    lastIntent: null,
+    routingWarning: '',
+    checkpoint: null,
+  })
+  persistGroups(state.group.items, target.id)
+  syncRuntimeTelemetryForSid(target.id)
+  refreshGroupFiles(target.id).catch(() => {})
+}
+
+export async function requestDeleteGroup(groupId = '') {
+  const gid = groupId || state.group.activeGroupId
+  const target = (state.group.items || []).find((x) => x.id === gid)
+  if (!target) return
+  let fileCount = gid === state.group.activeGroupId ? (state.group.files || []).length : 0
+  try {
+    const res = await api.groupFilesList(gid, target.title)
+    if (res && Array.isArray(res.files)) fileCount = res.files.length
+  } catch {}
+  patchSlice('runtime', {
+    pendingGroupDelete: { groupId: gid, title: target.title, fileCount },
+  })
+}
+
+export function cancelDeleteGroup() {
+  patchSlice('runtime', { pendingGroupDelete: null })
+}
+
+export async function confirmDeleteGroup({ groupId, deleteFiles = true } = {}) {
+  const gid = groupId || (state.runtime.pendingGroupDelete && state.runtime.pendingGroupDelete.groupId) || state.group.activeGroupId
+  patchSlice('runtime', { pendingGroupDelete: null })
+  if (!gid) return
+
+  if (state.group.activeGroupId === gid && state.group.running) abortGroupRelay()
+  invalidateSessionPrefixCache(gid)
+
+  if (deleteFiles) {
+    try {
+      await api.groupFilesDelete(gid, '__PURGE_ALL__')
+    } catch {}
+  }
+  api.sessionPurge(gid, []).catch(() => {})
+
+  const nextCol = removeGroupFromCollection(state.group.items, state.group.activeGroupId, gid, state.group.members)
+  const nextActive = nextCol.items.find((x) => x.id === nextCol.activeGroupId) || nextCol.items[0]
+
+  patchSlice('group', {
+    items: nextCol.items,
+    activeGroupId: nextActive.id,
+    title: nextActive.title,
+    routingMode: nextActive.routingMode,
+    members: nextActive.members,
+    messages: nextActive.messages || [],
+    relayWireHistory: nextActive.relayWireHistory || [],
+    files: [],
+    filesDir: '',
+    lastArchivedName: nextActive.lastArchivedName || '',
+    status: 'idle',
+    running: false,
+    activeIndex: -1,
+    activeMembers: [],
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    liveReasoning: '',
+    liveTools: [],
+    cps: 0,
+    lastIntent: null,
+    routingWarning: '',
+    checkpoint: null,
+  })
+  patchSlice('runtime', (r) => {
+    const cacheTotalsBySid = { ...(r.cacheTotalsBySid || {}) }; delete cacheTotalsBySid[gid]
+    const toolProfileBySid = { ...(r.toolProfileBySid || {}) }; delete toolProfileBySid[gid]
+    return {
+      ...r,
+      cacheTotalsBySid,
+      toolProfileBySid,
+      cacheTotals: cacheTotalsBySid[nextActive.id] || { ...EMPTY_CACHE_TOTALS },
+      activeToolProfile: toolProfileBySid[nextActive.id] || null,
+    }
+  })
+  persistGroups(nextCol.items, nextActive.id)
+  await refreshGroupFiles(nextActive.id)
+  pushToast(
+    deleteFiles
+      ? '已彻底删除该群聊及其专属群文件，并切换至全新隔离群聊'
+      : '已删除该群聊（本地群文件已留存原归档目录，新群聊完全隔离）',
+    'ok'
+  )
+}
+
+export function clearGroupSession() {
+  return createNewGroup()
 }
 
 export function resolvePendingTakeover(action) {
@@ -771,7 +1006,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
   })
 
   try {
-    _beginCacheTurn()
+    _beginCacheTurn(sid)
     const result = await runAgentConversation({
       sid,
       session: targetSession,
@@ -786,8 +1021,14 @@ export async function runChatTurn(sid, userText, opts = {}) {
       signal: ctrl.signal,
       onEvent: (ev) => {
         patchRun(sid, ev)
-        if (ev && ev.toolProfile) patchSlice('runtime', { activeToolProfile: ev.toolProfile })
-        if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
+        if (ev && ev.toolProfile) {
+          patchSlice('runtime', (r) => ({
+            ...r,
+            toolProfileBySid: { ...(r.toolProfileBySid || {}), [sid]: ev.toolProfile },
+            activeToolProfile: ev.toolProfile,
+          }))
+        }
+        if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats, sid)
       },
       requestApproval: (req) => new Promise((resolve) => {
         approvalResolver = resolve
@@ -1122,21 +1363,21 @@ export async function checkAppUpdate(manual = true) {
 }
 
 export function setGroupRoutingMode(mode) {
-  patchSlice('group', { routingMode: mode === 'all' ? 'all' : 'smart' })
+  _syncActiveGroupIntoItems({ routingMode: mode === 'all' ? 'all' : 'smart' })
 }
 
 export function addGroupMember(memberInput) {
   const next = normalizeGroupMember(memberInput, state.group.members.length)
   const list = [...state.group.members, next]
   saveGroupMembers(list)
-  patchSlice('group', { members: list })
+  _syncActiveGroupIntoItems({ members: list })
   pushToast(`已添加角色「${next.name}」`, 'ok')
 }
 
 export function updateGroupMember(id, patch) {
   const list = state.group.members.map((m, idx) => (m.id === id ? normalizeGroupMember({ ...m, ...patch, id }, idx) : m))
   saveGroupMembers(list)
-  patchSlice('group', { members: list })
+  _syncActiveGroupIntoItems({ members: list })
 }
 
 export function removeGroupMember(id) {
@@ -1146,7 +1387,7 @@ export function removeGroupMember(id) {
   }
   const list = state.group.members.filter((m) => m.id !== id)
   saveGroupMembers(list)
-  patchSlice('group', { members: list })
+  _syncActiveGroupIntoItems({ members: list })
 }
 
 export function applyGroupPreset(presetKey) {
@@ -1154,7 +1395,7 @@ export function applyGroupPreset(presetKey) {
   if (!preset) return
   const list = preset.members.map((m, i) => normalizeGroupMember(m, i))
   saveGroupMembers(list)
-  patchSlice('group', { members: list, routingWarning: '' })
+  _syncActiveGroupIntoItems({ members: list, routingWarning: '' })
   pushToast(`已切换名册模板：${preset.name}`, 'ok')
 }
 
@@ -1203,30 +1444,24 @@ function _formatPct1(hit, total) {
   return 100
 }
 
-function _beginCacheTurn() {
-  patchSlice('runtime', (r) => ({
-    ...r,
-    cacheTotals: {
-      ...(r.cacheTotals || {
-        promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
-        latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
-        prefixHash: '', prefixLocked: false,
-      }),
-      turnPromptTokens: 0,
-      turnCachedTokens: 0,
-    },
-  }))
+function _beginCacheTurn(scopeSid = '') {
+  const key = String(scopeSid || state.sessions.currentId || 'default')
+  patchSlice('runtime', (r) => {
+    const prev = (r.cacheTotalsBySid && r.cacheTotalsBySid[key]) || { ...EMPTY_CACHE_TOTALS }
+    const next = { ...prev, turnPromptTokens: 0, turnCachedTokens: 0 }
+    return {
+      ...r,
+      cacheTotalsBySid: { ...(r.cacheTotalsBySid || {}), [key]: next },
+      cacheTotals: next,
+    }
+  })
 }
 
-function _recordCacheStats(cs) {
+function _recordCacheStats(cs, scopeSid = '') {
   if (!cs) return
+  const key = String(scopeSid || state.sessions.currentId || 'default')
   patchSlice('runtime', (r) => {
-    const prev = r.cacheTotals || {
-      promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
-      turnPromptTokens: 0, turnCachedTokens: 0,
-      latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
-      prefixHash: '', prefixLocked: false,
-    }
+    const prev = (r.cacheTotalsBySid && r.cacheTotalsBySid[key]) || { ...EMPTY_CACHE_TOTALS }
     const addPt = Number(cs.promptTokens) || 0
     const addCt = Number(cs.cachedTokens) || 0
     const addWt = Number(cs.cacheWriteTokens) || 0
@@ -1236,21 +1471,23 @@ function _recordCacheStats(cs) {
     const tPt = (prev.turnPromptTokens || 0) + addPt
     const tCt = (prev.turnCachedTokens || 0) + addCt
     const turnHit = tPt > 0 ? _formatPct1(tCt, tPt) : prev.latestHitRate
+    const next = {
+      promptTokens: pt,
+      cachedTokens: ct,
+      cacheWriteTokens: wt,
+      hitRate: pt > 0 ? _formatPct1(ct, pt) : prev.hitRate,
+      turnPromptTokens: tPt,
+      turnCachedTokens: tCt,
+      latestHitRate: turnHit,
+      latestPromptTokens: addPt || prev.latestPromptTokens,
+      latestCachedTokens: addCt,
+      prefixHash: cs.prefixHash || prev.prefixHash,
+      prefixLocked: !!cs.prefixLocked,
+    }
     return {
       ...r,
-      cacheTotals: {
-        promptTokens: pt,
-        cachedTokens: ct,
-        cacheWriteTokens: wt,
-        hitRate: pt > 0 ? _formatPct1(ct, pt) : prev.hitRate,
-        turnPromptTokens: tPt,
-        turnCachedTokens: tCt,
-        latestHitRate: turnHit,
-        latestPromptTokens: addPt || prev.latestPromptTokens,
-        latestCachedTokens: addCt,
-        prefixHash: cs.prefixHash || prev.prefixHash,
-        prefixLocked: !!cs.prefixLocked,
-      },
+      cacheTotalsBySid: { ...(r.cacheTotalsBySid || {}), [key]: next },
+      cacheTotals: next,
     }
   })
 }
@@ -1260,7 +1497,8 @@ export async function runGroupRelay(topic) {
   if (!clean || state.group.running) return
   while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
 
-  _beginCacheTurn()
+  const groupSid = state.group.activeGroupId
+  _beginCacheTurn(groupSid)
 
   const recentGroupText = (state.group.messages || [])
     .slice(-4)
@@ -1270,13 +1508,16 @@ export async function runGroupRelay(topic) {
   const isSmart = state.group.routingMode !== 'all'
   const autonomous = isAutonomousAuthorized(clean) || !state.ui.askBeforeDesign
   const fallbackRouted = routeGroupMembers(clean, state.group.members, state.group.routingMode, recentGroupText)
+  const autoTitle = (!state.group.messages.length && /^新群聊/.test(state.group.title || ''))
+    ? clean.slice(0, 20)
+    : state.group.title
 
-  patchSlice('group', (g) => ({
-    ...g,
+  _syncActiveGroupIntoItems({
+    title: autoTitle,
     lastIntent: fallbackRouted.intent,
     routingWarning: isSmart ? '' : fallbackRouted.missingCapabilityWarning,
-    messages: [...g.messages, { id: 'gm_' + Date.now(), author: '我（发起人）', role: 'user', content: clean }],
-  }))
+    messages: [...state.group.messages, { id: 'gm_' + Date.now(), author: '我（发起人）', role: 'user', content: clean }],
+  })
 
   let plannedMembers = fallbackRouted.selected.map((m) => ({ ...m, taskBrief: m.persona }))
   let intentLabel = fallbackRouted.intent.label
@@ -1286,7 +1527,6 @@ export async function runGroupRelay(topic) {
 
   if (isSmart && state.group.members.length > 0) {
     const baseEp = resolveEndpointConfig()
-    const groupSid = state.sessions.currentId || state.group.activeGroupId
     groupAbortReason = ''
     groupAbortCtrl = new AbortController()
 
@@ -1309,6 +1549,7 @@ export async function runGroupRelay(topic) {
       const modHistory = [...relayContext, { role: 'user', content: modPrompt }]
       const modRes = await runAgentConversation({
         sid: groupSid,
+        isolatedGroupId: groupSid,
         userQuery: clean,
         historyMessages: modHistory,
         endpointConfig: { ...baseEp, max_tokens: Math.min(1200, Number(baseEp.max_tokens) || 1200) },
@@ -1320,8 +1561,14 @@ export async function runGroupRelay(topic) {
         skipSelfCheck: true,
         signal: groupAbortCtrl.signal,
         onEvent: (ev) => {
-          if (ev && ev.toolProfile) patchSlice('runtime', { activeToolProfile: ev.toolProfile })
-          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
+          if (ev && ev.toolProfile) {
+            patchSlice('runtime', (r) => ({
+              ...r,
+              toolProfileBySid: { ...(r.toolProfileBySid || {}), [groupSid]: ev.toolProfile },
+              activeToolProfile: ev.toolProfile,
+            }))
+          }
+          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats, groupSid)
           if (ev && typeof ev.cps === 'number') patchSlice('group', { cps: ev.cps })
         },
       })
@@ -1416,7 +1663,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
     const fresh = state.group.members.find((m) => m.id === pm.id)
     return fresh ? { ...fresh, taskBrief: pm.taskBrief || fresh.persona } : pm
   })
-  const groupSid = state.sessions.currentId || state.group.activeGroupId
+  const groupSid = state.group.activeGroupId
 
   groupAbortReason = ''
   groupAbortCtrl = new AbortController()
@@ -1484,6 +1731,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       const turnHistory = [...relayContext, roleBatonMsg]
       const res = await runAgentConversation({
         sid: groupSid,
+        isolatedGroupId: groupSid,
         userQuery: i === 0 ? topic : '',
         historyMessages: turnHistory,
         endpointConfig: memberEp,
@@ -1495,8 +1743,14 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         skipSelfCheck: true,
         signal: groupAbortCtrl.signal,
         onEvent: (ev) => {
-          if (ev && ev.toolProfile) patchSlice('runtime', { activeToolProfile: ev.toolProfile })
-          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
+          if (ev && ev.toolProfile) {
+            patchSlice('runtime', (r) => ({
+              ...r,
+              toolProfileBySid: { ...(r.toolProfileBySid || {}), [groupSid]: ev.toolProfile },
+              activeToolProfile: ev.toolProfile,
+            }))
+          }
+          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats, groupSid)
           if (ev && typeof ev.answer === 'string') livePartial = ev.answer
           patchSlice('group', (g) => ({
             ...g,
@@ -1554,11 +1808,11 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       const handoff = `【交接文档】\n议题：${topic}\n\n` + assistantSections.join('\n\n---\n\n')
       let archivedName = ''
       try {
-        const w = await api.groupFilesWrite(state.group.activeGroupId, '默认群聊', '主持人', topic.slice(0, 32), handoff)
+        const w = await api.groupFilesWrite(groupSid, state.group.title || '群聊', '主持人', topic.slice(0, 32), handoff)
         archivedName = (w && (w.name || (w.file && w.file.name))) || ''
       } catch {}
-      await refreshGroupFiles()
-      patchSlice('group', {
+      await refreshGroupFiles(groupSid)
+      _syncActiveGroupIntoItems({
         running: false,
         status: 'done',
         activeIndex: latestMembers.length,
@@ -1676,9 +1930,11 @@ export function triggerRelayShowcase() {
   }))
 }
 
-export async function refreshGroupFiles() {
+export async function refreshGroupFiles(explicitGroupId = '') {
+  const gid = explicitGroupId || state.group.activeGroupId
   try {
-    const res = await api.groupFilesList(state.group.activeGroupId, '默认群聊')
+    const res = await api.groupFilesList(gid, state.group.title || '群聊')
+    if (gid !== state.group.activeGroupId) return
     const files = (res && (res.files || res.items)) || (Array.isArray(res) ? res : [])
     const filesDir = (res && (res.dir || res.root)) || ''
     patchSlice('group', { files, filesDir })
@@ -1689,7 +1945,7 @@ export async function openGroupFileInDock(fileObj) {
   if (!fileObj || !fileObj.path) return
   try {
     const res = await api.groupFilesRead(fileObj.path)
-    const content = (res && typeof res.content === 'string') ? res.content : (typeof res === 'string' ? res : JSON.stringify(res, null, 2))
+    const content = (res && typeof res.text === 'string') ? res.text : ((res && typeof res.content === 'string') ? res.content : (typeof res === 'string' ? res : JSON.stringify(res, null, 2)))
     setDockPreview(`### 📁 群文件 · ${fileObj.title || fileObj.name}\n\n${content}`)
   } catch (e) {
     pushToast(`读取群文件失败：${e.message}`, 'err')

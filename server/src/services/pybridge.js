@@ -963,9 +963,20 @@ export async function groupFilesSearch(group_id, query, limit = 8) {
 }
 
 export async function groupFilesDelete(group_id, name) {
-  const fname = path.basename(String(name || ''))
-  if (!fname.endsWith('.md') || fname === '.' || fname === '..') return errJson('文件名不合法')
+  const rawName = String(name || '').trim()
   const d = _gfGroupDir(group_id)
+  // R12：删除群聊且用户勾选「同时删除群文件」时，安全清空该群聊专属目录（绝不波及其他群）
+  if (rawName === '__PURGE_ALL__') {
+    const root = path.resolve(_gfRoot())
+    const absDir = path.resolve(d)
+    if (absDir === root || !absDir.startsWith(root + path.sep)) return errJson('路径越界')
+    if (fs.existsSync(absDir)) {
+      try { fs.rmSync(absDir, { recursive: true, force: true }) } catch (e) { return errJson('清空群文件目录失败：' + String(e).slice(0, 80)) }
+    }
+    return okR({ ok: true, purged: true, group_id: String(group_id || '') })
+  }
+  const fname = path.basename(rawName)
+  if (!fname.endsWith('.md') || fname === '.' || fname === '..') return errJson('文件名不合法')
   const fp = path.join(d, fname)
   if (!fp.startsWith(d + path.sep) && fp !== path.join(d, fname)) return errJson('路径越界')
   if (!fs.existsSync(fp)) return errJson('文件不存在或已删除')

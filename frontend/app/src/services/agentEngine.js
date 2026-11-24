@@ -12,6 +12,7 @@ import { isAbort } from './errors.js'
 import { createCostDefense, detectTakeoverRequired } from './budgetAndResume.js'
 import { runSelfCheckAfterWrites } from './selfCheck.js'
 import { detectProviderKind } from './reasoningPresets.js'
+import { stripGlobalMemoryForIsolatedGroup } from './groupStore.js'
 import {
   predictToolProfile,
   selectToolsForProfile,
@@ -43,6 +44,7 @@ export const SUPPORTED_BUILTIN_TOOLS = Object.freeze([
   'browser_navigate', 'browser_extract', 'browser_snapshot',
   'browser_click', 'browser_fill', 'browser_screenshot', 'browser_close',
   'memory_write', 'memory_search', 'inspect_tool_schema', 'ask_user_options',
+  'group_file_list', 'group_file_read', 'group_file_search',
 ])
 const SUPPORTED_BUILTIN_SET = new Set(SUPPORTED_BUILTIN_TOOLS)
 
@@ -161,7 +163,33 @@ function needsGuardCheck(name) {
   return WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name) || GUARDED_EXTRA_TOOLS.has(name) || name.startsWith('mcp__')
 }
 
-export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+  // 群聊专属群文件工具（严格锁死在当前 isolatedGroupId 独立目录内，跨群路径一律拒绝）
+  if (name === 'group_file_list' || name === 'group_file_read' || name === 'group_file_search') {
+    if (!isolatedGroupId) {
+      return JSON.stringify({ ok: false, error: '当前不是群聊会话，无法访问群文件' })
+    }
+    if (name === 'group_file_list') {
+      const res = await api.groupFilesList(isolatedGroupId, '', { sid, signal }).catch((e) => ({ ok: false, error: e.message }))
+      const files = (res && Array.isArray(res.files)) ? res.files.map((f) => ({ name: f.name, title: f.title, member: f.member, size: f.size })) : []
+      return JSON.stringify({ ok: true, group_id: isolatedGroupId, count: files.length, files })
+    }
+    if (name === 'group_file_search') {
+      const res = await api.groupFilesSearch(isolatedGroupId, String(args.query || ''), Number(args.limit) || 6, { sid, signal }).catch((e) => ({ ok: false, error: e.message }))
+      return JSON.stringify(res || { ok: true, hits: [] })
+    }
+    // group_file_read：先查本群文件白名单，只允许读取真正归属于本群的文件，杜绝跨群越权！
+    const want = String(args.name || args.path || '').trim()
+    const listed = await api.groupFilesList(isolatedGroupId, '', { sid, signal }).catch(() => ({ files: [] }))
+    const files = (listed && Array.isArray(listed.files)) ? listed.files : []
+    const hit = files.find((f) => f && (f.name === want || f.path === want || (want && f.name.endsWith(want))))
+    if (!hit) {
+      return JSON.stringify({ ok: false, error: `权限拒绝或文件不存在：仅允许读取当前群聊（${isolatedGroupId}）专属群文件` })
+    }
+    const readRes = await api.groupFilesRead(hit.path, { sid, signal }).catch((e) => ({ ok: false, error: e.message }))
+    return JSON.stringify(readRes || { ok: false, error: '读取群文件失败' })
+  }
+
   if (name === 'ask_user_options') {
     const questions = Array.isArray(args.questions) ? args.questions : []
     if (typeof requestClarify !== 'function' || !questions.length) {
@@ -303,6 +331,7 @@ export async function runAgentConversation({
   sessionBudgetRmb = 0,
   correctiveDirective = '',
   allowTools = true,
+  isolatedGroupId = '',
   askBeforeDesign = true,
   forceToolProfile = '',
   maxRounds = 14,
@@ -333,7 +362,7 @@ export async function runAgentConversation({
     forceFull: endpointConfig.tool_mode === 'full',
     prevProfile: existingFrozen ? existingFrozen.toolProfile : '',
   })
-  const prefixScopeKey = `${workspacePath || ''}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
+  const prefixScopeKey = `${workspacePath || ''}|${isolatedGroupId || 'chat'}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
 
   let systemPrompt = endpointConfig.system_prompt || '你是 Harbor 桌面智能工程助手，请始终用简体中文清晰回答。'
   let tools = []
@@ -352,6 +381,12 @@ export async function runAgentConversation({
       const sysRes = await api.buildSystemPrompt('', { sid, signal })
       if (typeof sysRes === 'string' && sysRes.trim()) systemPrompt = sysRes
     } catch {}
+    // 群聊强隔离：剥离跨会话全局长期记忆并写入明确群聊边界，确保新建群聊绝不串读已删除群聊/其他会话
+    if (isolatedGroupId) {
+      systemPrompt = `${stripGlobalMemoryForIsolatedGroup(systemPrompt)}
+
+【会话隔离边界】当前为独立群聊（ID: ${isolatedGroupId}）。请只依据本群聊上下文与本群专属群文件（group_file_list / group_file_read / group_file_search）协同作业，绝不引用或臆测其他会话或已删除群聊的内容。`
+    }
     if (toolsOn) {
       const cacheKey = `${sid || ''}|full|${includeMcp}|${isGlm}`
       let rawFullTools = []
@@ -369,7 +404,10 @@ export async function runAgentConversation({
       }
       totalAvailableTools = rawFullTools.length
       if (rawFullTools.length > 4) {
-        tools = selectToolsForProfile(rawFullTools, predictedProfile, { includeAskUser: true })
+        tools = selectToolsForProfile(rawFullTools, predictedProfile, {
+          includeAskUser: true,
+          isolatedGroup: Boolean(isolatedGroupId),
+        })
       } else {
         tools = rawFullTools
       }
@@ -598,7 +636,7 @@ export async function runAgentConversation({
         try {
           if (readKey) readFileSet.add(readKey)
           if (dirKey) listDirsSet.add(dirKey)
-          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, requestApproval, requestClarify })
+          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, requestApproval, requestClarify })
           const takeover = detectTakeoverRequired(rawOut)
           if (takeover && typeof requestTakeover === 'function') {
             const action = await requestTakeover(takeover)
