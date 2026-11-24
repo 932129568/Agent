@@ -226,12 +226,13 @@ async function boot() {
   }
   const iconFile = path.join(ROOT, 'assets', 'harbor.ico')
   // 铁律 LAW-11：Windows 下只用 backgroundColor:'#00000000' + backgroundMaterial:'acrylic'，绝不混写 transparent:true
+  // 窗口丝滑入场：先 show:false 避免未首绘闪白/闪黑，等 ready-to-show 再平滑淡入并同步触发壳层上升过渡
   win = new BrowserWindow({
     width: 1320,
     height: 840,
     minWidth: 920,
     minHeight: 620,
-    show: !SMOKE,
+    show: false,
     autoHideMenuBar: true,
     ...(fs.existsSync(iconFile) ? { icon: iconFile } : {}),
     backgroundColor: '#00000000',
@@ -242,6 +243,72 @@ async function boot() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  let opacityTimer = null
+  const animateWinOpacity = (targetWin, from, to, durationMs, onDone) => {
+    if (opacityTimer) { clearInterval(opacityTimer); opacityTimer = null }
+    if (!targetWin || targetWin.isDestroyed() || typeof targetWin.setOpacity !== 'function') {
+      if (typeof onDone === 'function') onDone()
+      return
+    }
+    const steps = Math.max(1, Math.round(durationMs / 16))
+    let step = 0
+    try { targetWin.setOpacity(from) } catch {}
+    opacityTimer = setInterval(() => {
+      if (!targetWin || targetWin.isDestroyed()) {
+        clearInterval(opacityTimer); opacityTimer = null
+        if (typeof onDone === 'function') onDone()
+        return
+      }
+      step += 1
+      const p = Math.min(1, step / steps)
+      // 打开用 easeOutCubic（轻盈浮起），关闭用 easeInCubic（干脆回落任务栏）
+      const eased = to > from ? (1 - Math.pow(1 - p, 3)) : Math.pow(p, 2.2)
+      const val = Math.max(0, Math.min(1, from + (to - from) * eased))
+      try { targetWin.setOpacity(val) } catch {}
+      if (p >= 1) {
+        clearInterval(opacityTimer); opacityTimer = null
+        if (typeof onDone === 'function') onDone()
+      }
+    }, 16)
+  }
+
+  let revealedOnce = false
+  const revealWindowSmoothly = () => {
+    if (revealedOnce || SMOKE || !win || win.isDestroyed()) return
+    revealedOnce = true
+    try { win.setOpacity(0) } catch {}
+    win.show()
+    try { win.webContents.send('harbor:window-lifecycle', { phase: 'open' }) } catch {}
+    animateWinOpacity(win, 0, 1, 220)
+  }
+  win.once('ready-to-show', revealWindowSmoothly)
+  win.on('restore', () => {
+    if (!win || win.isDestroyed()) return
+    try { win.webContents.send('harbor:window-lifecycle', { phase: 'open' }) } catch {}
+    animateWinOpacity(win, 0.2, 1, 180)
+  })
+
+  let forceClosing = false
+  let closingAnim = false
+  win.on('close', (event) => {
+    if (SMOKE || HEADLESS || forceClosing) return
+    event.preventDefault()
+    if (closingAnim) return
+    closingAnim = true
+    const currentWin = win
+    const finishClose = () => {
+      if (forceClosing) return
+      forceClosing = true
+      if (opacityTimer) { clearInterval(opacityTimer); opacityTimer = null }
+      try { if (currentWin && !currentWin.isDestroyed()) currentWin.hide() } catch {}
+      try { if (currentWin && !currentWin.isDestroyed()) currentWin.destroy() } catch {}
+    }
+    try { currentWin.webContents.send('harbor:window-lifecycle', { phase: 'close' }) } catch {}
+    animateWinOpacity(currentWin, 1, 0, 195, finishClose)
+    // 兜底上限 320ms，确保任何情况下绝不卡死退出
+    setTimeout(finishClose, 320)
   })
 
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -283,6 +350,7 @@ async function boot() {
     await win.loadFile(path.join(APP_DIST, 'index.html'))
   }
   __mark('window-loaded')
+  if (!SMOKE) setTimeout(revealWindowSmoothly, 80)
   console.log('[harbor] React 19 window loaded; bridge base =', process.env.HARBOR_API_BASE, '| backdrop =', currentBackdrop)
 
   if (SMOKE) {

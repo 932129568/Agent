@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyKineticImpulse, registerMotionAnchor, captureTriggerRect } from '../platform/kinetic.js'
+import { applyKineticImpulse, registerMotionAnchor, captureTriggerRect, motionScaleForTier } from '../platform/kinetic.js'
+import { desktopBridge } from '../platform/libs.js'
 import {
   useSlice,
   hydrateApp,
@@ -42,9 +43,44 @@ export default function AppShell() {
   const settings = useSlice('settings')
   const [compactRail, setCompactRail] = useState(false)
   const [impactEdge, setImpactEdge] = useState('')
+  const shellRef = useRef(null)
   const mainRef = useRef(null)
 
   useEffect(() => { hydrateApp().catch(() => {}) }, [])
+
+  // Electron 桌面窗口打开/关闭同步过渡动画（从任务栏浮起展开 / 向任务栏柔和沉降收起，绝不闪开）
+  useEffect(() => {
+    const playShellTransition = (phase) => {
+      const el = shellRef.current
+      const k = motionScaleForTier(settings.motion)
+      if (!el || k === 0 || typeof el.animate !== 'function') return
+      if (phase === 'open') {
+        el.animate(
+          [
+            { transform: `translate3d(0,${(20 * k).toFixed(1)}px,0) scale(${(1 - 0.024 * k).toFixed(3)})`, opacity: 0.05 },
+            { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
+          ],
+          { duration: 280, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' }
+        )
+      } else if (phase === 'close') {
+        el.animate(
+          [
+            { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
+            { transform: `translate3d(0,${(24 * k).toFixed(1)}px,0) scale(${(1 - 0.036 * k).toFixed(3)})`, opacity: 0 },
+          ],
+          { duration: 195, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
+        )
+      }
+    }
+    playShellTransition('open')
+    const desktop = desktopBridge()
+    if (desktop && typeof desktop.onWindowLifecycle === 'function') {
+      return desktop.onWindowLifecycle((ev) => {
+        if (ev && (ev.phase === 'open' || ev.phase === 'close')) playShellTransition(ev.phase)
+      })
+    }
+    return undefined
+  }, [settings.motion])
 
   // 校准后的物理撞击响应（峰值 4.6–5.8px + scale(0.988) + 140ms 弧形高光，收敛 275ms，残余 0px）
   useEffect(() => {
@@ -103,7 +139,7 @@ export default function AppShell() {
   const activeModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
 
   return (
-    <div className="hb-shell">
+    <div ref={shellRef} className="hb-shell">
       <nav className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
         <div className="hb-rail-brand" onClick={() => setCompactRail((v) => !v)} style={{ cursor: 'pointer' }} title="点击切换导航栏宽/窄形态">
           <HarborLogo size={26} />

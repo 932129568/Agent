@@ -12,6 +12,7 @@ import { sanitizeMessagesForApi } from './dag.js'
 import { isAbort } from './errors.js'
 import { createCostDefense, detectTakeoverRequired } from './budgetAndResume.js'
 import { runSelfCheckAfterWrites } from './selfCheck.js'
+import { detectProviderKind } from './reasoningPresets.js'
 import {
   canonicalizeTools,
   computePrefixFingerprint,
@@ -383,9 +384,18 @@ export async function runAgentConversation({
       }
     }
 
-    const tcAssistantMsg = { role: 'assistant', content: res.content || '', tool_calls: res.toolCalls }
+    // DeepSeek / GLM 思考模型在同轮工具循环中回传 reasoning_content，防止推理前缀重算（拉升至 95%+ 命中率）；
+    // 跨用户轮次（wireTrail）仍按官方规范剥离 reasoning_content，避免污染后续新提问。
+    const providerKind = detectProviderKind(endpointConfig.baseUrl, endpointConfig.model)
+    const keepIntraTurnReasoning = (providerKind === 'deepseek' || providerKind === 'glm') && Boolean(res.reasoning)
+    const tcAssistantMsg = {
+      role: 'assistant',
+      content: res.content || '',
+      tool_calls: res.toolCalls,
+      ...(keepIntraTurnReasoning ? { reasoning_content: res.reasoning } : {}),
+    }
     workingMsgs.push(tcAssistantMsg)
-    wireTrail.push(tcAssistantMsg)
+    wireTrail.push({ role: 'assistant', content: res.content || '', tool_calls: res.toolCalls })
 
     for (const tc of res.toolCalls) {
       if (signal && signal.aborted) break
@@ -438,7 +448,7 @@ export async function runAgentConversation({
       if (diff) allDiffs.unshift(diff)
       emit({ phase: 'thinking', tools: [...allTools], diffs: [...allDiffs] })
 
-      const toolMsg = { role: 'tool', tool_call_id: tc.id, content: cleanJson.slice(0, 24000) }
+      const toolMsg = { role: 'tool', tool_call_id: tc.id, content: cleanJson.slice(0, 14000) }
       workingMsgs.push(toolMsg)
       wireTrail.push(toolMsg)
     }

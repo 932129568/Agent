@@ -1,18 +1,65 @@
 @layer components {
   .gp-root {
-    padding: 18px 24px;
+    position: relative;
+    padding: 14px 20px 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     height: 100%;
+    width: 100%;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
-  .gp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; flex-shrink: 0; }
-  .gp-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* 极简单行顶栏：清爽无压迫感，绝不横向裁切 */
+  .gp-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .gp-head-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .gp-title { margin: 0; font-size: 16px; font-weight: 700; white-space: nowrap; }
+  .gp-seg {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-subtle);
+    gap: 2px;
+  }
+  .gp-seg-btn {
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    border: 0;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 11.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .gp-seg-btn[data-active="true"] {
+    background: var(--card-elevated);
+    color: var(--primary);
+    font-weight: 600;
+    box-shadow: var(--elev-1);
+  }
+
+  .gp-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
 
   .gp-chip-btn {
-    padding: 5px 12px;
+    padding: 5px 11px;
     border-radius: var(--radius-full);
     border: 1px solid var(--border-strong);
     background: var(--card-bg);
@@ -24,21 +71,34 @@
   }
   .gp-chip-btn:hover { border-color: var(--primary); color: var(--text); }
   .gp-chip-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .gp-chip-btn[data-highlight="true"] { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); font-weight: 600; }
 
+  /* 悬浮滑出抽屉（角色配置 / 群文件库）：绝不挤压下方消息流 */
+  .gp-drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-sticky);
+    background: rgba(15, 16, 20, 0.14);
+    display: flex;
+    justify-content: flex-end;
+    padding: 58px 20px 72px;
+  }
   .gp-roster-panel,
   .gp-files-panel {
-    padding: 13px 15px;
-    border-radius: var(--radius-md);
+    width: min(620px, 100%);
+    max-height: 100%;
+    padding: 14px 16px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-strong);
-    background: var(--card-bg);
-    box-shadow: var(--elev-1);
+    background: var(--card-elevated);
+    box-shadow: var(--elev-3);
     display: flex;
     flex-direction: column;
     gap: 10px;
-    max-height: 290px;
     overflow-y: auto;
-    flex-shrink: 0;
+    animation: harborDrawerIn var(--dur-base) var(--ease-spring) both;
   }
+
   .gp-member-card {
     padding: 10px 12px;
     border-radius: var(--radius-sm);
@@ -53,22 +113,18 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 8px 11px;
+    padding: 9px 12px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface-subtle);
     font-size: 12.5px;
-  }
-  .gp-file-meta {
-    display: flex;
-    flex-direction: column;
     min-width: 0;
-    gap: 2px;
   }
+  .gp-file-meta { display: flex; flex-direction: column; min-width: 0; gap: 2px; flex: 1; }
   .gp-file-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gp-file-sub { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .gp-member-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gp-member-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
   .gp-field-sm {
     padding: 6px 10px;
     border-radius: var(--radius-sm);
@@ -76,11 +132,12 @@
     background: var(--card-bg);
     font-size: 12px;
     outline: none;
+    min-width: 0;
   }
   .gp-field-sm:focus { border-color: var(--primary); }
 
   .gp-warn {
-    padding: 9px 13px;
+    padding: 8px 12px;
     border-radius: var(--radius-sm);
     border-left: 3px solid var(--warn);
     background: var(--warn-bg);
@@ -89,63 +146,115 @@
     flex-shrink: 0;
   }
 
-  .gp-feed { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  /* 宽敞干净的消息主区（居中有序，告别杂乱） */
+  .gp-feed {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 2px 4px 6px 0;
+  }
+  .gp-empty {
+    margin: auto;
+    max-width: 620px;
+    padding: 22px 24px;
+    border-radius: var(--radius-lg);
+    border: 1px dashed var(--border-strong);
+    background: var(--card-bg);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+  .gp-empty-roster {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
   .gp-msg {
-    padding: 12px 15px;
+    width: 100%;
+    max-width: 920px;
+    margin: 0 auto;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--card-bg);
     box-shadow: var(--elev-1);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
   }
-  .gp-author {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--primary);
+  .gp-msg[data-role="user"] {
+    background: var(--primary-soft);
+    border-color: rgba(212, 101, 62, 0.34);
+  }
+
+  .gp-msg-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    background: var(--surface-subtle);
   }
-  .gp-author-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .gp-author-actions { display: flex; align-items: center; gap: 6px; }
-  .gp-model-tag { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); font-weight: 400; }
+  .gp-msg[data-role="user"] .gp-msg-head { background: transparent; border-bottom-color: rgba(212, 101, 62, 0.18); }
+
+  .gp-author-left { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
+  .gp-author-name { font-size: 13px; font-weight: 700; color: var(--primary); }
+  .gp-author-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .gp-model-tag { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); }
   .gp-stat-pill {
     font-size: 11px;
     font-family: var(--font-mono);
     padding: 1px 8px;
     border-radius: var(--radius-full);
-    background: var(--surface-subtle);
+    background: var(--card-bg);
     border: 1px solid var(--border);
     color: var(--text-2);
-    font-weight: 500;
   }
   .gp-tool-badge { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
 
-  /* 交付卡片折叠容器：默认收纳长文与大段代码，避免撑爆视野；一键展开或送右侧副屏 */
-  .gp-body-wrap { position: relative; }
-  .gp-body-wrap[data-collapsed="true"] {
-    max-height: 112px;
-    overflow: hidden;
-  }
-  .gp-body-fade {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 46px;
+  .gp-msg-content {
+    padding: 12px 15px;
     display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 4px;
-    background: linear-gradient(to bottom, transparent, var(--card-elevated) 78%);
-    cursor: pointer;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
   }
+  /* 折叠预览区与下方按钮栏严格分离，绝不压字重叠 */
+  .gp-body-wrap[data-collapsed="true"] {
+    max-height: 92px;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+  }
+  .gp-expand-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-top: 1px dashed var(--border);
+    background: var(--surface-subtle);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 600;
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+  .gp-expand-bar:hover { background: var(--primary-soft); }
 
   .gp-pause-bar {
+    max-width: 920px;
+    width: 100%;
+    margin: 0 auto;
     padding: 10px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--warn);
@@ -157,9 +266,19 @@
     flex-shrink: 0;
   }
 
-  .gp-bar { display: flex; gap: 8px; align-items: center; flex-shrink: 0; padding-top: 2px; }
+  .gp-bar {
+    max-width: 920px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: 0;
+  }
   .gp-input {
     flex: 1;
+    min-width: 0;
     padding: 10px 14px;
     border-radius: var(--radius-full);
     border: 1px solid var(--border-strong);
@@ -177,6 +296,7 @@
     font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
   }
   .gp-btn-warn { background: var(--warn); border-color: var(--warn); color: #171614; }
   .gp-btn-err { background: var(--err); border-color: var(--err); color: #fff; }

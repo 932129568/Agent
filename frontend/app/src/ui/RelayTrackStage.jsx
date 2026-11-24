@@ -4,11 +4,12 @@ import './RelayTrackStage.css'
 const BAR_COUNT = 16
 
 /**
- * 群聊接力专属「横向轨道 + 实体光梭交棒 + 16 柱频谱示波器」动画舞台。
- * 刻意与主对话 <LivingChamber> 的暖色液态流体波区分开（冷色调多节点轨道语言），彻底消除视觉疲劳。
+ * 群聊接力专属「横向轨道 + 实体光梭交棒 + 16 柱示波器」舞台：
+ * - 运行/暂停期间展示完整轨道与实时流；
+ * - 完成后自动收束为 40px 精致单行摘要条，把宝贵垂直空间全部让给交付消息流（点按钮可随时展开复看轨道）。
  */
 export default function RelayTrackStage({
-  status = 'idle',        // 'idle' | 'running' | 'paused' | 'done'
+  status = 'idle',
   members = [],
   activeIndex = -1,
   handoffFrom = '',
@@ -21,8 +22,12 @@ export default function RelayTrackStage({
   motionTier = 'dynamic',
 }) {
   const [bars, setBars] = useState(() => Array.from({ length: BAR_COUNT }, () => 4))
+  const [expandDone, setExpandDone] = useState(false)
 
-  // 实时响应 cps 出字速度的 16 柱示波器（暂停/完成后立刻停止，0% 后台空转）
+  useEffect(() => {
+    if (status === 'running') setExpandDone(false)
+  }, [status])
+
   useEffect(() => {
     if (status !== 'running' || motionTier === 'reduced') {
       setBars(Array.from({ length: BAR_COUNT }, () => (status === 'paused' ? 6 : 4)))
@@ -36,7 +41,7 @@ export default function RelayTrackStage({
       for (let i = 0; i < BAR_COUNT; i++) {
         const wave = 0.5 + 0.5 * Math.sin(phase + i * 0.55) * Math.cos(phase * 0.6 - i * 0.3)
         const boost = Math.min(1.0, 0.38 + (Number(cps) || 14) / 70)
-        next.push(Math.round(4 + wave * 22 * boost * ampScale))
+        next.push(Math.round(4 + wave * 20 * boost * ampScale))
       }
       setBars(next)
     }, 90)
@@ -47,30 +52,46 @@ export default function RelayTrackStage({
 
   const activeMember = members[activeIndex] || null
   const isHandoff = Boolean(handoffFrom && handoffTo)
+  const isCompactDone = status === 'done' && !expandDone
   const previewText = liveContent || liveReasoning || (activeMember ? `正在唤醒「${activeMember.name}」分析前序上下文…` : '')
 
   const statusText = {
     running: isHandoff
-      ? `光梭交棒中：${handoffFrom} ⟶ ${handoffTo}`
-      : (activeMember ? `正在接力：${activeMember.name}（第 ${activeIndex + 1}/${members.length} 棒）` : '接力推进中'),
-    paused: `接力已暂停于第 ${Math.min(members.length, Math.max(1, activeIndex + 1))}/${members.length} 棒（可随时继续）`,
-    done: `全员接力完成（共 ${members.length} 棒交付完毕）`,
+      ? `光梭交棒：${handoffFrom} ⟶ ${handoffTo}`
+      : (activeMember ? `第 ${activeIndex + 1}/${members.length} 棒 · ${activeMember.name}` : '接力推进中'),
+    paused: `已暂停于第 ${Math.min(members.length, Math.max(1, activeIndex + 1))}/${members.length} 棒`,
+    done: `全员接力完成（${members.length} 棒）`,
   }[status] || ''
 
   return (
-    <section className="rt-stage" data-status={status} aria-live="polite">
+    <section className="rt-stage" data-status={status} data-compact={String(isCompactDone)} aria-live="polite">
       <div className="rt-top">
-        <span className="rt-badge">
-          <span>{status === 'done' ? '✓' : status === 'paused' ? '⏸' : '⚡'}</span>
-          <span>{statusText}</span>
-        </span>
-        <span className="rt-meta">
-          {intentLabel ? `能力路由：${intentLabel}` : ''}
-          {status === 'running' && cps > 0 ? ` · ${Math.round(cps)} 字/秒` : ''}
-        </span>
+        <div className="rt-top-left">
+          <span className="rt-badge">
+            <span>{status === 'done' ? '✓' : status === 'paused' ? '⏸' : '⚡'}</span>
+            <span>{statusText}</span>
+          </span>
+          {isCompactDone && (
+            <span className="rt-route-summary">
+              {members.map((m) => m.name).join(' ⟶ ')}
+            </span>
+          )}
+        </div>
+        <div className="rt-top-right">
+          <span className="rt-meta">
+            {intentLabel || ''}
+            {status === 'running' && cps > 0 ? ` · ${Math.round(cps)} 字/秒` : ''}
+          </span>
+          {status === 'done' && (
+            <button type="button" className="rt-toggle-btn" onClick={() => setExpandDone((v) => !v)}>
+              {expandDone ? '收起轨道 ▴' : '查看轨道 ▾'}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="rt-track">
+      {/* 完成收束态仍保留语义化节点供可访问性与状态核验，展开时以完整横向轨道呈现 */}
+      <div className="rt-track" style={isCompactDone ? { display: 'none' } : undefined}>
         {members.map((m, idx) => {
           const done = status === 'done' || idx < activeIndex
           const active = status === 'running' && idx === activeIndex
@@ -129,7 +150,7 @@ export default function RelayTrackStage({
                 ))}
               </div>
             )}
-            <div className="rt-stream-preview">{previewText.slice(-360)}</div>
+            <div className="rt-stream-preview">{previewText.slice(-320)}</div>
           </div>
         </div>
       )}

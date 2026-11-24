@@ -365,7 +365,7 @@ try {
       && savedRoster[3].model === 'tts-director-v2',
     `members=${savedRoster.length}, m1=${savedRoster[0]?.model}, m4=${savedRoster[3]?.name}/${savedRoster[3]?.model}`
   )
-  await page.locator('.gp-controls button:has-text("自定义角色与模型")').click() // 收起编辑器
+  await page.locator('.gp-roster-panel button:has-text("完成")').click() // 收起悬浮抽屉
 
   // A3: 真实接力中点击「⏸ 暂停」→ 验证暂停断点 → 补充纠偏点「▶ 继续接力」→ 验证独立模型路由与无预警
   stubState.chatRequests.length = 0
@@ -700,13 +700,18 @@ try {
 
   const wroteHtml = stubState.writtenFiles.some((f) => f.path === 'index.html')
   const collapsedCount = await page.locator('.gp-body-wrap[data-collapsed="true"]').count()
+  const compactDoneTrack = await page.locator('.rt-stage[data-compact="true"]').count()
+  const gpNoOverflow = await page.locator('.gp-root').evaluate((el) => el.scrollWidth <= el.clientWidth + 2)
+  await page.locator('.gp-controls button:has-text("群文件")').click()
+  await page.waitForSelector('.gp-files-panel', { timeout: 3000 })
   const filesPanelVisible = await page.locator('.gp-files-panel').isVisible()
   const fileRowCount = await page.locator('.gp-file-row').count()
+  await page.locator('.gp-files-panel button:has-text("×")').click()
   record(
     'Suite-F',
-    '群聊真工具写文件 + 长交付自动折叠收纳 + 群文件面板自动呈现交接文档',
-    wroteHtml && collapsedCount > 0 && filesPanelVisible && fileRowCount > 0,
-    `wroteHtml=${wroteHtml}, collapsedCards=${collapsedCount}, filesPanel=${filesPanelVisible}, files=${fileRowCount}`
+    '群聊真工具写文件 + 长交付无遮挡折叠 + 完成轨道自动收束 + 群文件悬浮抽屉零裁切',
+    wroteHtml && collapsedCount > 0 && compactDoneTrack === 1 && gpNoOverflow && filesPanelVisible && fileRowCount > 0,
+    `wroteHtml=${wroteHtml}, collapsed=${collapsedCount}, compactTrack=${compactDoneTrack}, noOverflow=${gpNoOverflow}, files=${fileRowCount}`
   )
 
   /* ======================================================================== *

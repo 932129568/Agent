@@ -1299,7 +1299,8 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       if (res && Array.isArray(res.wireTrail) && res.wireTrail.length) {
         for (const step of res.wireTrail) relayContext.push(step)
       }
-      relayContext.push({ role: 'assistant', content: `【${m.name} (${memberEp.model})】\n${reply}` })
+      // 严守 Append-Only 前缀缓存铁律：assistant 回复 100% 原样落入 relayContext，绝不前置改写角色头打穿 KV-Cache！
+      relayContext.push({ role: 'assistant', content: reply })
 
       patchSlice('group', (g) => ({
         ...g,
@@ -1323,9 +1324,10 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
     }
 
     if (!groupAbortCtrl.signal.aborted) {
-      const assistantSections = relayContext
-        .filter((x) => x && x.role === 'assistant' && x.content && !x.tool_calls)
-        .map((x) => x.content)
+      const assistantSections = (state.group.messages || [])
+        .slice(-latestMembers.length)
+        .filter((x) => x && x.role === 'assistant' && x.content)
+        .map((x) => `【${x.author}${x.model ? ` (${x.model})` : ''}】\n${x.content}`)
       const handoff = `【交接文档】\n议题：${topic}\n\n` + assistantSections.join('\n\n---\n\n')
       let archivedName = ''
       try {

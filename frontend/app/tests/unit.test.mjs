@@ -305,3 +305,19 @@ test('kinetic.js computeTargetDelta 按目标按钮坐标计算真实撞击飞�
   assert.equal(delta.dx, -540)
   assert.equal(delta.dy, 360)
 })
+
+
+test('promptCache.js extractCacheUsage 修正聚合网关同时返回 prompt_tokens 与 cache_read_input_tokens 导致 49% 误算', async () => {
+  const { extractCacheUsage } = await import('../src/services/promptCache.js')
+  // 聚合网关（同时给 prompt_tokens 与 cache_read_input_tokens）：分母不得重复相加！
+  const agg = extractCacheUsage({ prompt_tokens: 10000, cache_read_input_tokens: 9500 })
+  assert.equal(agg.promptTokens, 10000)
+  assert.equal(agg.hitRate, 95)
+  // DeepSeek hit + miss 口径
+  const ds = extractCacheUsage({ prompt_tokens: 10000, prompt_cache_hit_tokens: 9400, prompt_cache_miss_tokens: 600 })
+  assert.equal(ds.hitRate, 94)
+  // 原生 Anthropic（无 prompt_tokens，仅 input_tokens + cache_read + cache_creation）
+  const ant = extractCacheUsage({ input_tokens: 500, cache_read_input_tokens: 9500, cache_creation_input_tokens: 0 })
+  assert.equal(ant.promptTokens, 10000)
+  assert.equal(ant.hitRate, 95)
+})

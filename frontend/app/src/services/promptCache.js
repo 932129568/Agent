@@ -211,13 +211,32 @@ export function extractCacheUsage(usage) {
       || Number(details.cache_creation_tokens)
       || 0
   )
+  const missTokens = Math.max(0, Number(usage.prompt_cache_miss_tokens) || 0)
+  const hasOpenAiPrompt = usage.prompt_tokens !== undefined && usage.prompt_tokens !== null
+  const isNativeAnthropic = !hasOpenAiPrompt && usage.input_tokens !== undefined && usage.cache_read_input_tokens !== undefined
   const rawPrompt = Math.max(0, Number(usage.prompt_tokens) || Number(usage.input_tokens) || 0)
-  // Anthropic 的 input_tokens 不包含 cache_read_input_tokens，需合并作为分母
-  const denominator = usage.cache_read_input_tokens !== undefined
-    ? rawPrompt + cachedTokens + cacheWriteTokens
-    : Math.max(rawPrompt, cachedTokens)
+
+  // 关键修正：
+  // 1) DeepSeek 同时返回 hit + miss 时，hit + miss 为精确总输入分母；
+  // 2) OpenAI 兼容网关（含同时透传 prompt_tokens 与 cache_read_input_tokens 的聚合网关）中，
+  //    prompt_tokens 已包含 cachedTokens，绝不能重复相加（否则 95% 会被算成 48.7% ≈ 49%！）；
+  // 3) 仅原生 Anthropic（无 prompt_tokens、只有 input_tokens）才需要 input_tokens + read + write。
+  let denominator = 0
+  if (usage.prompt_cache_hit_tokens !== undefined && usage.prompt_cache_miss_tokens !== undefined) {
+    denominator = Math.max(rawPrompt, cachedTokens + missTokens)
+  } else if (isNativeAnthropic) {
+    denominator = rawPrompt + cachedTokens + cacheWriteTokens
+  } else {
+    denominator = Math.max(rawPrompt, cachedTokens)
+  }
+
   const hitRate = denominator > 0 ? Math.min(100, Math.round((cachedTokens / denominator) * 100)) : 0
-  const hasCacheData = cachedTokens > 0 || cacheWriteTokens > 0 || details.cached_tokens !== undefined || usage.prompt_cache_hit_tokens !== undefined || usage.cache_read_input_tokens !== undefined
+  const hasCacheData = cachedTokens > 0
+    || cacheWriteTokens > 0
+    || missTokens > 0
+    || details.cached_tokens !== undefined
+    || usage.prompt_cache_hit_tokens !== undefined
+    || usage.cache_read_input_tokens !== undefined
   return {
     promptTokens: denominator,
     cachedTokens,

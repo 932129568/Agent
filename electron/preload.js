@@ -10,4 +10,10 @@ contextBridge.exposeInMainWorld('HarborDesktop', Object.freeze({
   apiBase: base,
   setBackdrop: (mode) => ipcRenderer.invoke('harbor:set-backdrop', String(mode || 'acrylic')),
   getBackdrop: () => ipcRenderer.invoke('harbor:get-backdrop'),
+  onWindowLifecycle: (cb) => {
+    if (typeof cb !== 'function') return () => {}
+    const handler = (_evt, payload) => { try { cb(payload) } catch {} }
+    ipcRenderer.on('harbor:window-lifecycle', handler)
+    return () => ipcRenderer.removeListener('harbor:window-lifecycle', handler)
+  },
 }))
