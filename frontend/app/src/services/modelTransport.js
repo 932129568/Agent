@@ -9,6 +9,7 @@ import { HarborError, isAbort } from './errors.js'
 import { assertLatin1Headers, assertLatin1Value } from './headers.js'
 import { getLocalProxy } from './bridge.js'
 import { buildReasoningRequestParams } from './reasoningPresets.js'
+import { applyProviderCacheControl, extractCacheUsage } from './promptCache.js'
 
 const sleepAbortable = (ms, signal) => new Promise((resolve, reject) => {
   if (signal && signal.aborted) return reject(new HarborError('USER_PAUSED', '已中止'))
@@ -69,6 +70,8 @@ export async function streamChatCompletion({
   reasoningEffort = 'auto',
   thinkingBudget = 0,
   customEffort = '',
+  sid = '',
+  promptCacheEnabled = true,
   harnessMeta = null,
   signal = null,
   onDelta = null,
@@ -80,16 +83,25 @@ export async function streamChatCompletion({
     throw new HarborError('MISSING_API_KEY', '尚未填写 API Key，请点右上角「设置」填写模型 API Key')
   }
 
-  const body = {
+  const cacheApplied = applyProviderCacheControl({
+    baseUrl,
     model: String(model || 'glm-4.5-flash'),
     messages,
+    tools,
+    sid,
+    enabled: promptCacheEnabled !== false,
+  })
+  const body = {
+    model: String(model || 'glm-4.5-flash'),
+    messages: cacheApplied.messages,
     stream: true,
     temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : 0.7,
     top_p: Number.isFinite(Number(topP)) ? Number(topP) : 0.9,
     max_tokens: Number(maxTokens) > 0 ? Number(maxTokens) : 4096,
+    ...cacheApplied.extraBody,
   }
-  if (Array.isArray(tools) && tools.length) {
-    body.tools = tools
+  if (Array.isArray(cacheApplied.tools) && cacheApplied.tools.length) {
+    body.tools = cacheApplied.tools
     body.tool_choice = 'auto'
   }
   const { bodyPatch } = buildReasoningRequestParams({
@@ -156,6 +168,7 @@ export async function streamChatCompletion({
       reasoning: String(msg.reasoning_content || ''),
       toolCalls: Array.isArray(msg.tool_calls) ? msg.tool_calls : [],
       usage: data && data.usage || null,
+      cacheUsage: extractCacheUsage(data && data.usage),
       finishReason: (choice && choice.finish_reason) || 'stop',
     }
   }
@@ -238,6 +251,7 @@ export async function streamChatCompletion({
     reasoning,
     toolCalls: [...tcMap.values()],
     usage,
+    cacheUsage: extractCacheUsage(usage),
     finishReason,
   }
 }

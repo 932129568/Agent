@@ -42,6 +42,14 @@ export default function ContextDock() {
             <div className="dk-kv"><span className="dk-k">消息数 / 估算 Token</span><span className="dk-v">{msgs.length} 条 · ~{approxTokens}</span></div>
             <div className="dk-kv"><span className="dk-k">当前运行阶段</span><span className="dk-v">{run.phase}</span></div>
             <div className="dk-kv"><span className="dk-k">模型</span><span className="dk-v">{settings.backendConfig.model || 'glm-4.5-flash'}</span></div>
+            <div className="dk-kv">
+              <span className="dk-k">前缀缓存命中</span>
+              <span className="dk-v">
+                {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0
+                  ? `${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`
+                  : (runtime.cacheTotals && runtime.cacheTotals.prefixLocked ? `已锁定 #${runtime.cacheTotals.prefixHash}` : '首轮预热中')}
+              </span>
+            </div>
             <div className="dk-kv"><span className="dk-k">窗外透色材质</span><span className="dk-v">{settings.backdrop} ({Math.round(settings.opacity * 100)}%)</span></div>
             <div className="dk-kv"><span className="dk-k">本地 Fastify</span><span className="dk-v">{runtime.serverHealth && runtime.serverHealth.ok ? '在线' : '离线'}</span></div>
           </>

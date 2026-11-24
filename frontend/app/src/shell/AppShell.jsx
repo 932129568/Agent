@@ -61,12 +61,12 @@ export default function AppShell() {
       vx,
       vy,
       vrot,
-      vsc: isStrong ? -0.42 : -0.26,
+      vsc: isStrong ? -0.62 : -0.34,
       omega: 24,
       zeta: 0.44,
       maxPx: isStrong ? 6.0 : 4.8,
       maxRot: isStrong ? 0.38 : 0.24,
-      maxSc: isStrong ? 0.014 : 0.009,
+      maxSc: isStrong ? 0.016 : 0.010,
       motionTier: settings.motion,
     })
     if (!applied) return undefined
@@ -205,6 +205,7 @@ export default function AppShell() {
           <span>
             后端：{runtime.serverHealth && runtime.serverHealth.ok ? 'Fastify 5 在线' : '离线模式'}
             {' · '}窗外透色：{settings.backdrop} ({Math.round(settings.opacity * 100)}%)
+            {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 && ` · 缓存命中 ${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`}
             {(split.localTokens > 0 || split.cloudTokens > 0) && ` · 本地 ${split.localTokens.toLocaleString()} / 云端 ${split.cloudTokens.toLocaleString()} tok · 省 ≈¥${savedYuan}`}
           </span>
           <span>Harbor · React 19 + Fastify 5</span>

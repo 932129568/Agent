@@ -11,13 +11,26 @@ import { sanitizeMessagesForApi } from './dag.js'
 import { isAbort } from './errors.js'
 import { createCostDefense, detectTakeoverRequired } from './budgetAndResume.js'
 import { runSelfCheckAfterWrites } from './selfCheck.js'
+import {
+  canonicalizeTools,
+  computePrefixFingerprint,
+  buildDynamicTurnReminder,
+  attachReminderToLatestUserTurn,
+} from './promptCache.js'
 
 export const WRITE_TOOLS = new Set([
   'write_file', 'append_file', 'search_replace', 'delete_path', 'move_path', 'copy_path', 'make_dir',
 ])
 export const SHELL_TOOLS = new Set(['run_command', 'run_powershell'])
 const _toolsCache = new Map()
+const _frozenPrefixBySid = new Map() // sid -> { key, systemPrompt, tools, hash }
 const TOOLS_CACHE_TTL_MS = 30000
+
+/** 显式失效会话冻结前缀（仅在切换工作区或手动 /compact 时调用） */
+export function invalidateSessionPrefixCache(sid) {
+  if (sid) _frozenPrefixBySid.delete(String(sid))
+  else _frozenPrefixBySid.clear()
+}
 
 export function normCachePath(p) {
   return String(p || '').replace(/\\/g, '/').toLowerCase()
@@ -148,37 +161,69 @@ export async function runAgentConversation({
 
   emit({ phase: 'waiting', stageLabel: '装配工作区规范、长期记忆与工具面' })
 
+  // 前沿 KV-Cache 策略 1：会话级冻结静态前缀（传空 query 调 buildSystemPrompt('')，杜绝动态记忆污染 messages[0]）
+  const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
+  const includeMcp = !!endpointConfig.hasEnabledMcp
+  const prefixScopeKey = `${workspacePath || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
+  const existingFrozen = sid ? _frozenPrefixBySid.get(String(sid)) : null
+
   let systemPrompt = endpointConfig.system_prompt || '你是 Harbor 桌面智能工程助手，请始终用简体中文清晰回答。'
   let tools = []
-  try {
-    const sysRes = await api.buildSystemPrompt(userQuery, { sid, signal })
-    if (typeof sysRes === 'string' && sysRes.trim()) systemPrompt = sysRes
-  } catch {}
-  if (expertPrompt) systemPrompt = `${systemPrompt}\n\n【当前激活专家指令】\n${expertPrompt}`
-  if (endpointConfig.tool_mode !== 'off') {
-    const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
-    const includeMcp = !!endpointConfig.hasEnabledMcp
-    const cacheKey = `${sid || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}`
-    const hit = _toolsCache.get(cacheKey)
-    if (hit && hit.exp > Date.now()) {
-      tools = hit.tools
-    } else {
-      try {
-        const built = await api.buildTools('full', includeMcp, true, isGlm, { sid, signal, timeoutMs: 8000 })
-        if (Array.isArray(built)) tools = built
-        else if (built && Array.isArray(built.tools)) tools = built.tools
-        _toolsCache.set(cacheKey, { tools, exp: Date.now() + TOOLS_CACHE_TTL_MS })
-      } catch {}
+  let prefixHash = ''
+  let prefixLocked = false
+
+  if (existingFrozen && existingFrozen.key === prefixScopeKey) {
+    systemPrompt = existingFrozen.systemPrompt
+    tools = existingFrozen.tools
+    prefixHash = existingFrozen.hash
+    prefixLocked = true
+  } else {
+    try {
+      const sysRes = await api.buildSystemPrompt('', { sid, signal })
+      if (typeof sysRes === 'string' && sysRes.trim()) systemPrompt = sysRes
+    } catch {}
+    if (endpointConfig.tool_mode !== 'off') {
+      const cacheKey = `${sid || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}`
+      const hit = _toolsCache.get(cacheKey)
+      if (hit && hit.exp > Date.now()) {
+        tools = hit.tools
+      } else {
+        try {
+          const built = await api.buildTools('full', includeMcp, true, isGlm, { sid, signal, timeoutMs: 8000 })
+          if (Array.isArray(built)) tools = built
+          else if (built && Array.isArray(built.tools)) tools = built.tools
+          tools = canonicalizeTools(tools)
+          _toolsCache.set(cacheKey, { tools, exp: Date.now() + TOOLS_CACHE_TTL_MS })
+        } catch {}
+      }
+    }
+    tools = canonicalizeTools(tools)
+    prefixHash = computePrefixFingerprint(systemPrompt, tools)
+    if (sid) {
+      _frozenPrefixBySid.set(String(sid), { key: prefixScopeKey, systemPrompt, tools, hash: prefixHash })
     }
   }
 
+  // 前沿 KV-Cache 策略 2：动态按 query 检索的记忆不进 messages[0]，后置到最新一轮用户消息的 <system-reminder>
+  let dynamicMemories = []
+  if (String(userQuery || '').trim()) {
+    try {
+      const mRes = await api.memorySearch(String(userQuery).trim(), 3, { sid, signal })
+      const rawItems = (mRes && (mRes.items || mRes.results)) || (Array.isArray(mRes) ? mRes : [])
+      if (Array.isArray(rawItems)) dynamicMemories = rawItems
+    } catch {}
+  }
+
+  const tailReminder = buildDynamicTurnReminder({
+    memories: dynamicMemories,
+    expertPrompt,
+    readonlyMode: false,
+    correctiveDirective,
+  })
   const workingMsgs = [
     { role: 'system', content: systemPrompt },
-    ...sanitizeMessagesForApi(historyMessages),
+    ...attachReminderToLatestUserTurn(sanitizeMessagesForApi(historyMessages), tailReminder),
   ]
-  if (correctiveDirective) {
-    workingMsgs.push({ role: 'system', content: `【用户续跑纠偏指令】${correctiveDirective}` })
-  }
 
   const readFileSet = new Set()
   const listDirsSet = new Set()
@@ -187,7 +232,7 @@ export async function runAgentConversation({
   const allDiffs = []
   let finalContent = ''
   let finalReasoning = ''
-  let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cached_tokens: 0, cache_write_tokens: 0 }
   let wroteFiles = false
   let selfCheckDone = false
   let readonlyMode = false
@@ -204,7 +249,11 @@ export async function runAgentConversation({
         emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent || '已按预算上限暂停会话。', cps: 0 })
         return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true }
       }
-      if (dec.action === 'readonly') readonlyMode = true
+      if (dec.action === 'readonly') {
+        readonlyMode = true
+        // Manus 状态掩码策略：绝不删改 tools 数组破坏前缀缓存，改为尾部追加只读状态掩码
+        workingMsgs.push({ role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) })
+      }
     }
 
     emit({ phase: round === 0 ? 'waiting' : 'thinking', stageLabel: round === 0 ? '正在连接模型并唤醒深度推演' : `第 ${round + 1} 轮分析与执行中` })
@@ -214,14 +263,16 @@ export async function runAgentConversation({
       apiKey: endpointConfig.apiKey,
       model: endpointConfig.model,
       messages: workingMsgs,
-      tools: readonlyMode ? tools.filter((t) => !WRITE_TOOLS.has((t.function && t.function.name) || '')) : tools,
+      // 严守前缀冻结铁律：即使进入 readonlyMode 也保持 tools 数组 100% 逐字节不变（靠状态掩码 + 执行器拦截）
+      tools,
+      sid,
       temperature: endpointConfig.temperature,
       topP: endpointConfig.top_p,
       maxTokens: endpointConfig.max_tokens,
       reasoningEffort: endpointConfig.reasoning_effort,
       thinkingBudget: endpointConfig.thinking_budget,
       customEffort: endpointConfig.custom_effort,
-      harnessMeta: { v: 2, phase: 'execute', workspace: workspacePath },
+      harnessMeta: { v: 2, phase: 'execute', workspace: workspacePath, prefixHash },
       signal,
       onDelta: ({ reasoning, content, cps, hasReasoning, hasContent }) => {
         const mergedReasoning = finalReasoning ? `${finalReasoning}\n${reasoning}` : reasoning
@@ -234,6 +285,17 @@ export async function runAgentConversation({
       totalUsage.prompt_tokens += Number(res.usage.prompt_tokens) || 0
       totalUsage.completion_tokens += Number(res.usage.completion_tokens) || 0
       totalUsage.total_tokens += Number(res.usage.total_tokens) || 0
+    }
+    if (res.cacheUsage) {
+      totalUsage.cached_tokens += res.cacheUsage.cachedTokens || 0
+      totalUsage.cache_write_tokens += res.cacheUsage.cacheWriteTokens || 0
+      emit({
+        cacheStats: {
+          ...res.cacheUsage,
+          prefixHash,
+          prefixLocked,
+        },
+      })
     }
     if (res.reasoning) finalReasoning = finalReasoning ? `${finalReasoning}\n\n${res.reasoning}` : res.reasoning
     finalContent = res.content || ''
@@ -268,7 +330,11 @@ export async function runAgentConversation({
         emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent || '已触发循环熔断并暂停。', cps: 0 })
         return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true }
       }
-      if (dec.action === 'readonly') readonlyMode = true
+      if (dec.action === 'readonly') {
+        readonlyMode = true
+        // Manus 状态掩码策略：绝不删改 tools 数组破坏前缀缓存，改为尾部追加只读状态掩码
+        workingMsgs.push({ role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) })
+      }
     }
 
     workingMsgs.push({ role: 'assistant', content: res.content || '', tool_calls: res.toolCalls })

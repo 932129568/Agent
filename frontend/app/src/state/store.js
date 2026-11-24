@@ -11,7 +11,7 @@ import {
   rewindWithSnapshot,
   undoRewind,
 } from '../services/dag.js'
-import { runAgentConversation } from '../services/agentEngine.js'
+import { runAgentConversation, invalidateSessionPrefixCache } from '../services/agentEngine.js'
 import { streamChatCompletion } from '../services/modelTransport.js'
 import { compactSessionHistory } from '../services/compaction.js'
 import { spawnIsolatedSubagent, cancelAllSubagents } from '../services/subagent.js'
@@ -84,6 +84,7 @@ const initialState = Object.freeze({
     pendingTakeover: null,     // { sid, takeoverId, url, message }
     pendingBudgetPause: null,  // { sid, kind, detail }
     hybridSplit: { localTokens: 0, cloudTokens: 0 },
+    cacheTotals: { promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0, prefixHash: '', prefixLocked: false },
     updateInfo: null,          // { latest, url, sha256, notes }
     updateProgress: null,
   },
@@ -389,11 +390,13 @@ export function compactSessionNow(sid, force = true) {
     level: c.saver_level || 'std',
     localMode: !!c.local_mode || Number(c.context_window) > 0,
     localCtxWindow: Number(c.context_window) || 128000,
+    cacheHitRate: Number((state.runtime.cacheTotals && state.runtime.cacheTotals.hitRate) || 0),
   })
   if (!res.compacted) {
     if (force) pushToast('当前消息条数较少，无需压缩', 'info')
     return false
   }
+  invalidateSessionPrefixCache(sid)
   updateSessionById(sid, () => ensureTree(res.session))
   pushToast(`已压缩 ${res.removedCount} 条历史为锚点摘要（${res.beforeTokens} → ${res.afterTokens} tok）`, 'ok')
   return true
@@ -673,7 +676,28 @@ export async function runChatTurn(sid, userText, opts = {}) {
       sessionBudgetRmb: Number(state.settings.backendConfig.session_budget) || 0,
       correctiveDirective: opts.correctiveDirective || '',
       signal: ctrl.signal,
-      onEvent: (ev) => patchRun(sid, ev),
+      onEvent: (ev) => {
+        patchRun(sid, ev)
+        if (ev && ev.cacheStats) {
+          patchSlice('runtime', (r) => {
+            const prev = r.cacheTotals || { promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0, prefixHash: '', prefixLocked: false }
+            const pt = prev.promptTokens + (ev.cacheStats.promptTokens || 0)
+            const ct = prev.cachedTokens + (ev.cacheStats.cachedTokens || 0)
+            const wt = prev.cacheWriteTokens + (ev.cacheStats.cacheWriteTokens || 0)
+            return {
+              ...r,
+              cacheTotals: {
+                promptTokens: pt,
+                cachedTokens: ct,
+                cacheWriteTokens: wt,
+                hitRate: pt > 0 ? Math.min(100, Math.round((ct / pt) * 100)) : prev.hitRate,
+                prefixHash: ev.cacheStats.prefixHash || prev.prefixHash,
+                prefixLocked: !!ev.cacheStats.prefixLocked,
+              },
+            }
+          })
+        }
+      },
       requestApproval: (req) => new Promise((resolve) => {
         approvalResolver = resolve
         patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid, ...req } })
@@ -904,12 +928,14 @@ export async function refreshWorkspace() {
 }
 
 export async function setWorkspacePath(dirPath) {
+  invalidateSessionPrefixCache(state.sessions.currentId)
   await api.setSessionWs(state.sessions.currentId, dirPath, true)
   await refreshWorkspace()
   pushToast(`工作区已切换至 ${dirPath}`, 'ok')
 }
 
 export async function toggleWorkspaceEnabled(enabled) {
+  invalidateSessionPrefixCache(state.sessions.currentId)
   await api.setWsEnabled(state.sessions.currentId, enabled)
   await refreshWorkspace()
 }

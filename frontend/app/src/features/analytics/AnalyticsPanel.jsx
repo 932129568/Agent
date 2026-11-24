@@ -5,6 +5,7 @@ import './AnalyticsPanel.css'
 
 export default function AnalyticsPanel() {
   const sessionsState = useSlice('sessions')
+  const runtime = useSlice('runtime')
   const [audit, setAudit] = useState([])
 
   useEffect(() => {
@@ -30,6 +31,15 @@ export default function AnalyticsPanel() {
         <div className="an-kpi"><div style={{ fontSize: 12, color: 'var(--text-3)' }}>累计会话</div><div className="an-kpi-val">{sessionsState.items.length}</div></div>
         <div className="an-kpi"><div style={{ fontSize: 12, color: 'var(--text-3)' }}>累计消息</div><div className="an-kpi-val">{totalMsgs}</div></div>
         <div className="an-kpi"><div style={{ fontSize: 12, color: 'var(--text-3)' }}>估算 Token 总量</div><div className="an-kpi-val">{totalTokens.toLocaleString()}</div></div>
+        <div className="an-kpi">
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>KV 前缀缓存命中率</div>
+          <div className="an-kpi-val" style={{ color: 'var(--ok)' }}>
+            {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 ? `${runtime.cacheTotals.hitRate}%` : '预热中'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+            已命中 {(runtime.cacheTotals ? runtime.cacheTotals.cachedTokens : 0).toLocaleString()} tok
+          </div>
+        </div>
       </div>
 
       <div className="an-card">

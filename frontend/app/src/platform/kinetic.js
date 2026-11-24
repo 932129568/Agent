@@ -1,17 +1,21 @@
 /**
- * Harbor R3 物理撞击与二阶阻尼弹簧引擎（零 document.querySelector，纯 React Ref 驱动）：
- * - 校准目标（对齐第二轮验收单 #4）：
- *   1) 峰值位移 4.5–6.0px（面板切换 ~4.6px，浮层撞回 ~5.6px），协同 scale(0.988) 与微扭矩 0.35deg；
- *   2) 收敛时间 250–310ms，过冲 1–2 次，收敛后严格清零 transform（0px 残余）；
- *   3) 撞击瞬间在接触边触发 140ms 弧形菲涅尔高光脉冲（由 CSS data-impact-edge 驱动，绝非硬边直线胶带）；
+ * Harbor R4 物理撞击与二阶阻尼弹簧引擎（零 document.querySelector，纯 React Ref 驱动）：
+ * - 修复 R3 Suite-D 缩放通道被像素阈值误杀的根因：
+ *   位移(px)、旋转(deg)、缩放(ratio) 三轴使用各自物理量纲的收敛阈值（posEps / velEps）；
+ * - 校准指标：
+ *   1) 强撞击位移峰值 ~4.81px，协同缩放 minScale ≈ 0.989–0.991（< 0.996），微扭矩 0.38°；
+ *   2) 收敛时间 ~250ms，过冲 ≤ 2 次，收敛后严格清零 transform（0px 残余）；
+ *   3) 接触边触发 140ms 弧形菲涅尔高光脉冲；
  *   4) reduced 动效档下全量静默归零。
  */
 const _bodies = new WeakMap()
 
-export function createDampedSpring({ omega = 24, zeta = 0.44 } = {}) {
+export function createDampedSpring({ omega = 24, zeta = 0.44, posEps = 0.04, velEps = 0.4 } = {}) {
   const w = Math.max(4, Number(omega) || 24)
   const z = Math.max(0.15, Math.min(0.98, Number(zeta) || 0.44))
   const wd = w * Math.sqrt(Math.max(0.0001, 1 - z * z))
+  const pEps = Math.max(1e-6, Number(posEps) || 0.04)
+  const vEps = Math.max(1e-5, Number(velEps) || 0.4)
   return function step(pos, vel, dt) {
     const t = Math.min(0.05, Math.max(0.001, dt))
     const decay = Math.exp(-z * w * t)
@@ -23,14 +27,14 @@ export function createDampedSpring({ omega = 24, zeta = 0.44 } = {}) {
       (-z * w * pos + wd * c2) * cos
       - (z * w * c2 + wd * pos) * sin
     )
-    const settled = Math.abs(nextPos) < 0.04 && Math.abs(nextVel) < 0.4
+    const settled = Math.abs(nextPos) < pEps && Math.abs(nextVel) < vEps
     return settled ? { pos: 0, vel: 0, settled: true } : { pos: nextPos, vel: nextVel, settled: false }
   }
 }
 
-/** 纯数学离线仿真器（供 L1 单元测试验证峰值位移、过冲次数、收敛时间与残余位移） */
+/** 位移通道离线仿真器（供 L1 单元测试校验峰值位移、收敛时间、过冲次数与残余） */
 export function simulateImpactCurve({ v0 = 260, omega = 24, zeta = 0.44, maxPx = 6.2, dt = 1 / 60, maxMs = 900 } = {}) {
-  const stepper = createDampedSpring({ omega, zeta })
+  const stepper = createDampedSpring({ omega, zeta, posEps: 0.04, velEps: 0.4 })
   let pos = 0
   let vel = v0
   let peakAbs = 0
@@ -60,6 +64,31 @@ export function simulateImpactCurve({ v0 = 260, omega = 24, zeta = 0.44, maxPx =
   }
 }
 
+/** 缩放通道离线仿真器（独立量纲 posEps=0.0002 / velEps=0.002，防止被 px 阈值误杀） */
+export function simulateScaleCurve({ vsc = -0.62, omega = 28, zeta = 0.50, maxSc = 0.016, dt = 1 / 60, maxMs = 900 } = {}) {
+  const stepper = createDampedSpring({ omega, zeta, posEps: 0.0002, velEps: 0.002 })
+  let sc = 0
+  let vel = vsc
+  let minScale = 1
+  let settleMs = 0
+  const steps = Math.ceil((maxMs / 1000) / dt)
+  for (let i = 1; i <= steps; i++) {
+    const r = stepper(sc, vel, dt)
+    sc = r.pos
+    vel = r.vel
+    const clamped = maxSc * Math.tanh(sc / maxSc)
+    const curScale = 1 + clamped
+    if (curScale < minScale) minScale = curScale
+    if (Math.abs(clamped) >= 0.001) settleMs = Math.round(i * dt * 1000)
+    if (r.settled) break
+  }
+  return {
+    minScale: Number(minScale.toFixed(4)),
+    settleMs,
+    residual: Number(Math.abs(sc).toFixed(5)),
+  }
+}
+
 function softClamp(v, limit) {
   return limit > 0 ? limit * Math.tanh(v / limit) : 0
 }
@@ -70,21 +99,25 @@ export function motionScaleForTier(tier) {
   return 1.0
 }
 
-/** 对目标 DOM 元素（通过 React ref.current 传入）施加校准后的物理撞击冲量 */
+/** 对目标 DOM 元素（通过 React ref.current 传入）施加三轴独立量纲校准后的物理撞击冲量 */
 export function applyKineticImpulse(el, {
   vx = 0,
   vy = 0,
   vrot = 0,
-  vsc = -0.34,
+  vsc = -0.56,
   omega = 24,
   zeta = 0.44,
   maxPx = 6.2,
   maxRot = 0.42,
-  maxSc = 0.015,
+  maxSc = 0.016,
   motionTier = 'dynamic',
 } = {}) {
   const k = motionScaleForTier(motionTier)
   if (!el || !el.style || k === 0 || typeof requestAnimationFrame !== 'function') return false
+
+  const spPos = createDampedSpring({ omega, zeta, posEps: 0.04, velEps: 0.4 })
+  const spRot = createDampedSpring({ omega, zeta, posEps: 0.005, velEps: 0.05 })
+  const spSc = createDampedSpring({ omega: omega + 4, zeta: Math.min(0.82, zeta + 0.06), posEps: 0.0002, velEps: 0.002 })
 
   let b = _bodies.get(el)
   if (!b) {
@@ -92,8 +125,7 @@ export function applyKineticImpulse(el, {
       x: 0, y: 0, rot: 0, sc: 0,
       vx: 0, vy: 0, vrot: 0, vsc: 0,
       maxPx, maxRot, maxSc,
-      spPos: createDampedSpring({ omega, zeta }),
-      spSc: createDampedSpring({ omega: omega + 4, zeta: Math.min(0.82, zeta + 0.08) }),
+      spPos, spRot, spSc,
       raf: 0, lastT: 0,
     }
     _bodies.set(el, b)
@@ -101,14 +133,15 @@ export function applyKineticImpulse(el, {
     b.maxPx = maxPx
     b.maxRot = maxRot
     b.maxSc = maxSc
-    b.spPos = createDampedSpring({ omega, zeta })
-    b.spSc = createDampedSpring({ omega: omega + 4, zeta: Math.min(0.82, zeta + 0.08) })
+    b.spPos = spPos
+    b.spRot = spRot
+    b.spSc = spSc
   }
 
   b.vx = Math.max(-420, Math.min(420, b.vx + vx * k))
   b.vy = Math.max(-420, Math.min(420, b.vy + vy * k))
   b.vrot = Math.max(-24, Math.min(24, b.vrot + vrot * k))
-  b.vsc = Math.max(-1.8, Math.min(1.8, b.vsc + vsc * k))
+  b.vsc = Math.max(-2.2, Math.min(2.2, b.vsc + vsc * k))
 
   const tick = (now) => {
     b.raf = 0
@@ -116,7 +149,7 @@ export function applyKineticImpulse(el, {
     b.lastT = now
     const sx = b.spPos(b.x, b.vx, dt)
     const sy = b.spPos(b.y, b.vy, dt)
-    const sr = b.spPos(b.rot, b.vrot, dt)
+    const sr = b.spRot(b.rot, b.vrot, dt)
     const ss = b.spSc(b.sc, b.vsc, dt)
     b.x = sx.pos; b.vx = sx.vel
     b.y = sy.pos; b.vy = sy.vel

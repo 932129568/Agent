@@ -176,3 +176,62 @@ test('kinetic.js 校准后的物理撞击曲线：峰值 4.5–6.2px、收敛 <=
   assert.ok(strong.overshoots >= 1 && strong.overshoots <= 2, `overshoots=${strong.overshoots}`)
   assert.equal(strong.residual, 0)
 })
+
+
+test('kinetic.js 缩放通道独立量纲收敛阈值：minScale < 0.996 且残余 0（修复 R3 Suite-D）', async () => {
+  const { simulateScaleCurve } = await import('../src/platform/kinetic.js')
+  const sc = simulateScaleCurve({ vsc: -0.62, omega: 28, zeta: 0.50, maxSc: 0.016 })
+  assert.ok(sc.minScale < 0.996 && sc.minScale > 0.980, `minScale=${sc.minScale}`)
+  assert.equal(sc.residual, 0)
+})
+
+test('promptCache.js 确定性工具排序、前缀指纹稳定、动态提醒后置与多厂商缓存遥测', async () => {
+  const {
+    canonicalizeTools,
+    computePrefixFingerprint,
+    buildDynamicTurnReminder,
+    attachReminderToLatestUserTurn,
+    applyProviderCacheControl,
+    extractCacheUsage,
+  } = await import('../src/services/promptCache.js')
+
+  const tA = [
+    { type: 'function', function: { name: 'write_file', parameters: { b: 2, a: 1 } } },
+    { type: 'function', function: { name: 'read_file', parameters: { x: 1 } } },
+  ]
+  const tB = [
+    { function: { parameters: { x: 1 }, name: 'read_file' }, type: 'function' },
+    { function: { parameters: { a: 1, b: 2 }, name: 'write_file' }, type: 'function' },
+  ]
+  assert.equal(canonicalizeTools(tA)[0].function.name, 'read_file')
+  assert.equal(computePrefixFingerprint('STATIC_SYS', tA), computePrefixFingerprint('STATIC_SYS', tB))
+
+  const rem = buildDynamicTurnReminder({ memories: ['偏好 TypeScript'], readonlyMode: true })
+  const msgs = [
+    { role: 'system', content: 'STATIC_SYS' },
+    { role: 'user', content: 'Turn 1' },
+    { role: 'assistant', content: 'Ans 1' },
+    { role: 'user', content: 'Turn 2' },
+  ]
+  const attached = attachReminderToLatestUserTurn(msgs, rem)
+  assert.equal(attached[0].content, 'STATIC_SYS')
+  assert.equal(attached[1].content, 'Turn 1')
+  assert.ok(attached[3].content.includes('<system-reminder>') && attached[3].content.includes('偏好 TypeScript'))
+
+  const ant = applyProviderCacheControl({ baseUrl: 'https://api.anthropic.com/v1', model: 'claude-3-7', messages: attached, tools: tA, sid: 's1' })
+  assert.equal(ant.breakpoints, 3)
+  assert.equal(ant.tools[ant.tools.length - 1].cache_control.type, 'ephemeral')
+  assert.equal(ant.messages[0].content[0].cache_control.type, 'ephemeral')
+  assert.equal(ant.messages[2].content[0].cache_control.type, 'ephemeral')
+
+  const oai = applyProviderCacheControl({ baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1', messages: attached, tools: tA, sid: 's_abc' })
+  assert.equal(oai.extraBody.prompt_cache_key, 'harbor_s_abc')
+  assert.equal(oai.extraBody.stream_options.include_usage, true)
+
+  const glm = applyProviderCacheControl({ baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.5', messages: attached, tools: tA, sid: 's1' })
+  assert.equal(glm.extraBody.prompt_cache_key, undefined)
+
+  assert.equal(extractCacheUsage({ prompt_tokens: 10000, prompt_tokens_details: { cached_tokens: 8500 } }).hitRate, 85)
+  assert.equal(extractCacheUsage({ prompt_tokens: 10000, prompt_cache_hit_tokens: 9000 }).hitRate, 90)
+  assert.equal(extractCacheUsage({ input_tokens: 1000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0 }).hitRate, 90)
+})

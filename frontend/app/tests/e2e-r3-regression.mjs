@@ -150,6 +150,12 @@ const server = http.createServer(async (req, res) => {
     else if (method === 'check_update') out = { update_available: false }
     else if (method === 'group_files_list') out = { ok: true, files: [] }
     else if (method === 'group_files_write') out = { ok: true }
+    else if (method === 'build_system_prompt') out = 'STATIC_CHARTER_PREFIX' + (args[0] ? '|DYN_QUERY:' + args[0] : '')
+    else if (method === 'build_tools') out = [
+      { type: 'function', function: { name: 'write_file', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
+      { type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
+    ]
+    else if (method === 'memory_search') out = { items: [{ text: '动态回忆:' + String(args[0] || '').slice(0, 12) }] }
     else if (method === 'get_local_proxy') out = { ok: true, port: server.address().port, base_url: serverBase }
 
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -169,6 +175,8 @@ const server = http.createServer(async (req, res) => {
       thinking: body.thinking,
       target: req.headers['x-harbor-target'] || '',
       messagesCount: Array.isArray(body.messages) ? body.messages.length : 0,
+      systemContent: Array.isArray(body.messages) && body.messages[0] ? body.messages[0].content : '',
+      toolNames: Array.isArray(body.tools) ? body.tools.map((t) => t && t.function && t.function.name) : [],
       lastUser: Array.isArray(body.messages) ? String((body.messages[body.messages.length - 1] || {}).content || '') : '',
     })
 
@@ -191,7 +199,7 @@ const server = http.createServer(async (req, res) => {
       await new Promise((r) => setTimeout(r, 95))
     }
     if (!closed) {
-      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 } })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 80, total_tokens: 1080, prompt_tokens_details: { cached_tokens: 880 } } })}\n\n`)
       res.write('data: [DONE]\n\n')
       res.end()
     }
@@ -569,6 +577,37 @@ try {
     '负控：静息无障碍档位下撞击位移与边缘高光严格归零',
     d3.peakAbs === 0 && d3.sawEdge === '',
     JSON.stringify(d3)
+  )
+
+  /* ======================================================================== *
+   * Suite E · 前沿 KV-Cache 前缀冻结、工具字典序锁定与实时缓存命中率遥测
+   * ======================================================================== */
+  await page.locator('.ov-modal .ov-close').click()
+  await page.waitForTimeout(220)
+  await page.locator('.hb-rail-btn[title="智能对话"]').click()
+  await page.waitForSelector('.chat-textarea')
+  stubState.chatRequests.length = 0
+
+  await page.locator('.chat-textarea').fill('第一轮测试前缀锁定')
+  await page.locator('.chat-send-btn').click()
+  await page.waitForSelector('.lc-chamber[data-phase="done"]', { timeout: 8000 })
+
+  await page.locator('.chat-textarea').fill('第二轮切换全新问题检验缓存前缀零漂移')
+  await page.locator('.chat-send-btn').click()
+  await page.waitForTimeout(900)
+  await page.waitForSelector('.lc-chamber[data-phase="done"]', { timeout: 8000 })
+
+  const chatReqs = stubState.chatRequests.slice(-2)
+  const sys1 = JSON.stringify(chatReqs[0] && chatReqs[0].systemContent)
+  const sys2 = JSON.stringify(chatReqs[1] && chatReqs[1].systemContent)
+  const toolsSorted = JSON.stringify(chatReqs[1] && chatReqs[1].toolNames) === JSON.stringify(['read_file', 'write_file'])
+  const dynInTail = Boolean(chatReqs[1] && chatReqs[1].lastUser.includes('<system-reminder>'))
+  const ribbonTxt = await page.locator('.hb-ribbon').textContent()
+  record(
+    'Suite-E',
+    '多轮前缀绝对冻结（System 逐字节一致 + 工具字典序 + 动态记忆后置 + 88% 命中率上屏）',
+    chatReqs.length === 2 && sys1 === sys2 && !sys2.includes('DYN_QUERY') && toolsSorted && dynInTail && /缓存命中\s*88%/.test(ribbonTxt || ''),
+    `sysEqual=${sys1 === sys2}, toolsSorted=${toolsSorted}, dynInTail=${dynInTail}, ribbon=${(ribbonTxt || '').slice(0, 60)}`
   )
 
   // D4: 全程零未捕获页面异常
