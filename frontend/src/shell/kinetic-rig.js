@@ -79,6 +79,12 @@ const HarborKineticRig = (function () {
   function closeWithCollision(overlayEl, cardEl, triggerEl, onHidden) {
     const k = _intensity();
     const mainShell = (typeof document !== 'undefined') ? document.querySelector('.main') : null;
+    // 位移目标与闪光类目标分开：
+    //  · .main 上挂 kin-impact-* 是为了让 ::after 画边缘闪光（伪元素，不受 transform 动画影响）；
+    //  · 但 .main 的 transform 被 v4ChipIn(fill:both) 覆盖，写在上面的冲量**不会显示**。
+    //    所以位移统一落在 #mainStage（它没有常驻动画）。
+    const impactEl = (typeof document !== 'undefined')
+      ? (document.getElementById('mainStage') || mainShell) : null;
     const rail = (typeof document !== 'undefined') ? document.getElementById('rail') : null;
     if (!cardEl || k === 0 || typeof cardEl.animate !== 'function') {
       if (typeof onHidden === 'function') onHidden();
@@ -112,13 +118,13 @@ const HarborKineticRig = (function () {
       if (rail && edge === 'left') applyImpulse(rail, { vx: -56, vsc: -0.16, preset: { omega: 24, zeta: 0.50, maxPx: 4, maxSc: 0.018 } });
       if (mainShell) {
         if (edge === 'center') {
-          applyImpulse(mainShell, { vy: 36, vsc: -0.20, preset: { omega: 17, zeta: 0.46, maxPx: 5, maxSc: 0.014 } });
+          applyImpulse(impactEl || mainShell, { vy: 36, vsc: -0.20, preset: { omega: 17, zeta: 0.46, maxPx: 5, maxSc: 0.014 } });
         } else {
           const dist = Math.max(1, Math.hypot(dx, dy));
           const nx = dx / dist, ny = dy / dist;
           const mr = mainShell.getBoundingClientRect();
           const eccY = ((cy + dy) - (mr.top + mr.height / 2)) / Math.max(1, mr.height / 2);
-          applyImpulse(mainShell, {
+          applyImpulse(impactEl || mainShell, {
             vx: nx * 92, vy: ny * 48, vrot: -nx * eccY * 6.5, vsc: -0.14,
             preset: { omega: 17, zeta: 0.46, maxPx: 5.5, maxRot: 0.55, maxSc: 0.012 },
           });
