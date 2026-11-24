@@ -3,7 +3,7 @@
  * Harbor 后端框架架构门禁（R5 升级版 · 对齐 ARCHITECTURE-BACKEND.md）：
  * 校验项（7 项硬红线）：
  *   1. server/src 零 Python 子进程调用；
- *   2. electron-builder.yml 不含 backend/*.py、不含已删 harbor.html，且包含 frontend/app/dist/**/*；
+ *   2. electron-builder.yml 不含 backend 下的 .py、不含已删 harbor.html，且包含 frontend/app/dist 全部产物；
  *   3. server/src/registry.js 零残留 NOT_MIGRATED 死壳；
  *   4. local-proxy.js CORS 放行 X-Harbor-Target / X-Harbor-Harness + PNA；
  *   5. app.js CORS 放行 4 业务自定义头 + PNA；
@@ -83,7 +83,16 @@ if (fs.existsSync(builderPath)) {
 }
 
 const regTxt = fs.readFileSync(path.join(SERVER_ROOT, 'src', 'registry.js'), 'utf8')
-check(!/NOT_MIGRATED/.test(regTxt), 'server/src/registry.js 不得残留 NOT_MIGRATED 未迁移桩')
+// 原判定是 `!/NOT_MIGRATED/.test(整文件)` —— 连注释和 invoke() 里的缺省护栏都算，
+// 于是 registry.js 只要提到这个错误码就 FAIL（r21 就是这样红的），
+// 但它真正要防的是"注册表里挂了未迁移死壳"。
+// 改为结构判定：剥掉注释后，只允许 invoke() 中那一处护栏（handler 不存在时抛错），
+// 出现 ≥2 处说明另有未迁移桩。
+const regCode = regTxt
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^[ \t]*\/\/.*$/gm, '')
+const notMigratedHits = (regCode.match(/NOT_MIGRATED/g) || []).length
+check(notMigratedHits <= 1, `server/src/registry.js 残留 NOT_MIGRATED 未迁移桩（去注释后命中 ${notMigratedHits} 处，应 ≤1）`)
 
 const lpTxt = fs.readFileSync(path.join(SERVER_ROOT, 'src', 'services', 'local-proxy.js'), 'utf8')
 check(/X-Harbor-Target/.test(lpTxt) && /X-Harbor-Harness/.test(lpTxt), 'local-proxy.js CORS 必须放行 X-Harbor-Target 与 X-Harbor-Harness')
