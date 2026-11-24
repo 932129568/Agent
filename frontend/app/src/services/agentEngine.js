@@ -18,6 +18,7 @@ import {
   selectToolsForProfile,
   isAutonomousAuthorized,
   buildClarifyDirective,
+  buildWebSearchDirective,
   TOOL_PROFILE_META,
 } from './toolRouter.js'
 import {
@@ -173,7 +174,7 @@ function needsGuardCheck(name) {
   return WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name) || GUARDED_EXTRA_TOOLS.has(name) || name.startsWith('mcp__')
 }
 
-export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', pluginToolDispatcher = null, mediaToolDispatcher = null, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', webSearchMode = 'auto', pluginToolDispatcher = null, mediaToolDispatcher = null, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
   // R19 多模态图片 / 视频生成原生工具（兼容云端多厂商与本地网关，生成后自动联动实时画布）
   if ((name === 'generate_image' || name === 'generate_video') && typeof mediaToolDispatcher === 'function') {
     const mediaRes = await mediaToolDispatcher(name, args, { sid, signal })
@@ -316,11 +317,18 @@ export async function dispatchSingleTool({ name, args = {}, sid, signal, readonl
   }
 
   // 4) 浏览器、外部软件、记忆与元工具族（11 项全齐）
-  if (name === 'browser_search') return callRaw('browser_search', [args, token], { ...callOpt, timeoutMs: 90000 })
-  if (name === 'browser_open') return callRaw('browser_open', [args], { ...callOpt, timeoutMs: 90000 })
+  if (name === 'browser_search') {
+    const mode = args.mode === 'visible' || webSearchMode === 'visible' ? 'visible' : 'hidden'
+    const nextArgs = { ...args, mode, ...(mode === 'visible' && args.keep_open === undefined ? { keep_open: true } : {}) }
+    return callRaw('browser_search', [nextArgs, token], { ...callOpt, timeoutMs: 90000 })
+  }
+  if (name === 'browser_open') {
+    const nextArgs = webSearchMode === 'visible' && !args.display_mode ? { ...args, display_mode: 'visible', keep_open: true } : args
+    return callRaw('browser_open', [nextArgs], { ...callOpt, timeoutMs: 90000 })
+  }
   if (name === 'software_call') return callRaw('software_call', [args, token], { ...callOpt, timeoutMs: 300000 })
   if (name === 'browser_navigate') {
-    return callRaw('browser_navigate', [args.url || '', args.wait_selector || '', args.timeout || 25, args.mode || 'hidden', token], { ...callOpt, timeoutMs: 90000 })
+    return callRaw('browser_navigate', [args.url || '', args.wait_selector || '', args.timeout || 25, args.mode || (webSearchMode === 'visible' ? 'visible' : 'hidden'), token], { ...callOpt, timeoutMs: 90000 })
   }
   if (name === 'browser_extract') return callRaw('browser_extract', [args.selector || '', args.mode || 'markdown', token], callOpt)
   if (name === 'browser_snapshot') return callRaw('browser_snapshot', [args.selector || '', args.max_chars || 8000, token], callOpt)
@@ -358,6 +366,7 @@ export async function runAgentConversation({
   pluginDirectives = '',
   pluginToolDispatcher = null,
   mediaToolDispatcher = null,
+  webSearchMode = 'auto',
   askBeforeDesign = true,
   forceToolProfile = '',
   maxRounds = 14,
@@ -378,9 +387,9 @@ export async function runAgentConversation({
   // 智能工具域预判 + 会话级单调粘性锁：
   // 1) 按任务语义仅装配真正需要的工具子集（chat / coding / web / coding_web / full），省掉 55%–85% 无用工具 Schema Token；
   // 2) 同一 sid 内单调锁死工具集，即使主持人步骤 allowTools=false 也不删改 tools[]，100% 保护多轮 KV-Cache 前缀！
-  const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
   const includeMcp = !!endpointConfig.hasEnabledMcp
   const toolsOn = endpointConfig.tool_mode !== 'off'
+  const effectiveWebMode = ['auto', 'visible', 'off'].includes(webSearchMode) ? webSearchMode : 'auto'
   const blockToolDispatch = allowTools === false
   const existingFrozen = sid ? _frozenPrefixBySid.get(String(sid)) : null
   const predictedProfile = forceToolProfile || predictToolProfile(userQuery, {
@@ -389,7 +398,7 @@ export async function runAgentConversation({
     prevProfile: existingFrozen ? existingFrozen.toolProfile : '',
   })
   const plugToolSig = Array.isArray(pluginTools) ? pluginTools.map((t) => (t && t.function && t.function.name) || '').join(',') : ''
-  const prefixScopeKey = `${workspacePath || ''}|${isolatedGroupId || 'chat'}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${isGlm}|${plugToolSig}|${endpointConfig.system_prompt || ''}`
+  const prefixScopeKey = `${workspacePath || ''}|${isolatedGroupId || 'chat'}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${effectiveWebMode}|${plugToolSig}|${endpointConfig.system_prompt || ''}`
 
   let systemPrompt = endpointConfig.system_prompt || '你是 Harbor 桌面智能工程助手，请始终用简体中文清晰回答。'
   let tools = []
@@ -415,14 +424,15 @@ export async function runAgentConversation({
 【会话隔离边界】当前为独立群聊（ID: ${isolatedGroupId}）。请只依据本群聊上下文与本群专属群文件（group_file_list / group_file_read / group_file_search）协同作业，绝不引用或臆测其他会话或已删除群聊的内容。`
     }
     if (toolsOn) {
-      const cacheKey = `${sid || ''}|full|${includeMcp}|${isGlm}`
+      // R22：统一对所有端点（含智谱 GLM）开放本地受控 browser_search / browser_open 工具，彻底消除 GLM 无网搜索盲区
+      const cacheKey = `${sid || ''}|full|${includeMcp}|unified`
       let rawFullTools = []
       const hit = _toolsCache.get(cacheKey)
       if (hit && hit.exp > Date.now()) {
         rawFullTools = hit.tools
       } else {
         try {
-          const built = await api.buildTools('full', includeMcp, true, isGlm, { sid, signal, timeoutMs: 8000 })
+          const built = await api.buildTools('full', includeMcp, true, false, { sid, signal, timeoutMs: 8000 })
           if (Array.isArray(built)) rawFullTools = built
           else if (built && Array.isArray(built.tools)) rawFullTools = built.tools
           rawFullTools = canonicalizeTools(rawFullTools)
@@ -434,6 +444,7 @@ export async function runAgentConversation({
         tools = selectToolsForProfile(rawFullTools, predictedProfile, {
           includeAskUser: true,
           isolatedGroup: Boolean(isolatedGroupId),
+          webSearchMode: effectiveWebMode,
         })
       } else {
         tools = rawFullTools
@@ -497,9 +508,17 @@ export async function runAgentConversation({
   const clarifyHint = (!blockToolDispatch && hasAskUserTool && String(userQuery || '').trim())
     ? buildClarifyDirective({ autonomous: autonomousNow, askBeforeDesign })
     : ''
+  const hasWebTool = tools.some((t) => {
+    const n = (t && t.function && t.function.name) || ''
+    return n === 'browser_search' || n === 'browser_open' || n === 'browser_navigate'
+  })
+  const webDirective = (!blockToolDispatch && (hasWebTool || effectiveWebMode === 'off'))
+    ? buildWebSearchDirective(effectiveWebMode)
+    : ''
   const combinedDirective = [
     correctiveDirective,
     pluginDirectives,
+    webDirective,
     clarifyHint,
     blockToolDispatch ? '【本步指令约束】本步骤仅做任务分析、角色分工与交接规划，严禁调用任何工具，请直接输出最终结果。' : '',
   ].filter(Boolean).join('\n')
@@ -529,6 +548,8 @@ export async function runAgentConversation({
   const defense = createCostDefense({ sessionBudgetRmb })
   const allTools = []
   const allDiffs = []
+  const webSources = []
+  const seenSourceUrls = new Set()
   let finalContent = ''
   let finalReasoning = ''
   let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cached_tokens: 0, cache_write_tokens: 0 }
@@ -616,8 +637,8 @@ export async function runAgentConversation({
           continue
         }
       }
-      emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs] })
-      return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
+      emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs], webSources: [...webSources] })
+      return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, webSources, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
     }
 
     const sig = JSON.stringify(res.toolCalls.map((tc) => [tc.function && tc.function.name, tc.function && tc.function.arguments]))
@@ -652,14 +673,40 @@ export async function runAgentConversation({
       const tName = (tc.function && tc.function.name) || ''
       const args = parseToolArgs(tc.function && tc.function.arguments)
 
+      const isWebTool = tName === 'browser_search' || tName === 'browser_open' || tName === 'browser_navigate'
+      const runMode = (args.mode === 'visible' || effectiveWebMode === 'visible') ? 'visible' : 'hidden'
+      const actId = tc.id || `tool_${allTools.length}`
       const rec = {
-        id: tc.id || `tool_${allTools.length}`,
+        id: actId,
         name: tName,
         detail: String(args.path || args.file_path || args.cmd || args.command || args.query || args.url || args.target || '').slice(0, 64),
+        mode: isWebTool ? runMode : undefined,
         status: 'running',
       }
       allTools.push(rec)
-      emit({ phase: 'thinking', stageLabel: `正在执行工具：${tName}`, tools: [...allTools] })
+      const stageLabel = tName === 'browser_search'
+        ? (runMode === 'visible' ? `👁 正在前台浏览器检索「${rec.detail}」` : `🌐 正在后台静默检索「${rec.detail}」`)
+        : ((tName === 'browser_open' || tName === 'browser_navigate')
+          ? `${runMode === 'visible' ? '👁 前台打开' : '📄 后台阅读'} ${rec.detail}`
+          : `正在执行工具：${tName}`)
+      emit({
+        phase: 'thinking',
+        stageLabel,
+        tools: [...allTools],
+        ...(isWebTool ? {
+          webActivity: {
+            id: actId,
+            sid,
+            kind: tName === 'browser_search' ? 'search' : (tName === 'browser_open' ? 'open' : 'navigate'),
+            query: String(args.query || ''),
+            url: String(args.url || ''),
+            mode: runMode,
+            status: 'running',
+            results: [],
+            at: Date.now(),
+          },
+        } : {}),
+      })
 
       let rawOut = ''
       const resolvedPath = args.path || args.file_path || args.filename || ''
@@ -674,12 +721,26 @@ export async function runAgentConversation({
         try {
           if (readKey) readFileSet.add(readKey)
           if (dirKey) listDirsSet.add(dirKey)
-          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, pluginToolDispatcher, mediaToolDispatcher, requestApproval, requestClarify })
+          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, webSearchMode: effectiveWebMode, pluginToolDispatcher, mediaToolDispatcher, requestApproval, requestClarify })
           const takeover = detectTakeoverRequired(rawOut)
           if (takeover && typeof requestTakeover === 'function') {
+            emit({
+              webActivity: {
+                id: actId,
+                sid,
+                kind: 'captcha',
+                query: String(args.query || ''),
+                url: String(args.url || ''),
+                mode: 'visible',
+                status: 'captcha',
+                error: takeover.message || '需要人工完成网页验证',
+                at: Date.now(),
+              },
+            })
             const action = await requestTakeover(takeover)
             if (takeover.takeoverId) {
-              rawOut = JSON.stringify(await api.browserTakeover(takeover.takeoverId, action || 'resume', { sid, signal }))
+              const mappedAct = (action === 'cancel' || action === 'abort') ? 'abort' : 'continue'
+              rawOut = JSON.stringify(await api.browserTakeover(takeover.takeoverId, mappedAct, { sid, signal }))
             }
           }
         } catch (err) {
@@ -695,8 +756,60 @@ export async function runAgentConversation({
       }
       invalidateCachesAfterTool(readFileSet, listDirsSet, tName, args, ok)
       rec.status = ok ? 'done' : 'fail'
+      let finishedWebActivity = null
+      if (isWebTool) {
+        let parsedWeb = null
+        try { parsedWeb = JSON.parse(cleanJson) } catch {}
+        const rawList = (parsedWeb && Array.isArray(parsedWeb.results)) ? parsedWeb.results : []
+        const normItems = rawList.slice(0, 8).map((it) => {
+          const u = String((it && it.url) || '').trim()
+          let dom = String((it && it.domain) || '').trim()
+          if (!dom && u) { try { dom = new URL(u).hostname.replace(/^www\./i, '') } catch {} }
+          return { title: String((it && it.title) || dom || u).trim(), url: u, domain: dom, snippet: String((it && it.snippet) || '').slice(0, 220) }
+        }).filter((it) => it.url)
+        if (tName === 'browser_search') {
+          rec.sourceCount = normItems.length
+          for (const it of normItems) {
+            if (!seenSourceUrls.has(it.url)) {
+              seenSourceUrls.add(it.url)
+              webSources.push(it)
+            }
+          }
+        } else if ((tName === 'browser_open' || tName === 'browser_navigate') && parsedWeb && (parsedWeb.url || args.url)) {
+          const u = String(parsedWeb.url || args.url || '').trim()
+          let dom = ''
+          try { dom = new URL(u).hostname.replace(/^www\./i, '') } catch {}
+          if (u && !seenSourceUrls.has(u)) {
+            seenSourceUrls.add(u)
+            webSources.push({ title: String(parsedWeb.title || dom || u), url: u, domain: dom, snippet: String(parsedWeb.content || '').replace(/\[UNTRUSTED DATA[^\]]*\]/g, '').trim().slice(0, 200) })
+          }
+        }
+        finishedWebActivity = {
+          id: actId,
+          sid,
+          kind: tName === 'browser_search' ? 'search' : (tName === 'browser_open' ? 'open' : 'navigate'),
+          query: String(args.query || ''),
+          url: String((parsedWeb && parsedWeb.url) || args.url || ''),
+          title: String((parsedWeb && parsedWeb.title) || ''),
+          mode: String((parsedWeb && parsedWeb.mode) || runMode),
+          channel: String((parsedWeb && parsedWeb.channel) || ''),
+          cached: Boolean(parsedWeb && parsedWeb.cached),
+          status: ok ? 'done' : 'fail',
+          count: normItems.length,
+          results: normItems,
+          excerpt: String((parsedWeb && parsedWeb.content) || '').replace(/\[UNTRUSTED DATA[^\]]*\]/g, '').trim().slice(0, 320),
+          error: ok ? '' : String((parsedWeb && parsedWeb.error && (parsedWeb.error.message || parsedWeb.error)) || '检索失败'),
+          at: Date.now(),
+        }
+      }
       if (diff) allDiffs.unshift(diff)
-      emit({ phase: 'thinking', tools: [...allTools], diffs: [...allDiffs] })
+      emit({
+        phase: 'thinking',
+        tools: [...allTools],
+        diffs: [...allDiffs],
+        webSources: [...webSources],
+        ...(finishedWebActivity ? { webActivity: finishedWebActivity } : {}),
+      })
 
       const toolMsg = { role: 'tool', tool_call_id: tc.id, content: cleanJson.slice(0, 14000) }
       workingMsgs.push(toolMsg)
@@ -726,6 +839,6 @@ export async function runAgentConversation({
   if (!finalContent && allTools.length > 0 && !(signal && signal.aborted)) {
     finalContent = `已达到单轮最大工具执行轮次上限（${maxRounds} 轮，共执行 ${allTools.length} 次工具调用）。如需继续推进，请回复「继续」。`
   }
-  emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs] })
-  return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
+  emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs], webSources: [...webSources] })
+  return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, webSources, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
 }

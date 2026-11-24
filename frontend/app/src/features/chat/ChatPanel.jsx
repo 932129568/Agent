@@ -26,8 +26,11 @@ import {
   exportCurrentSessionMarkdown,
   saveAtomicMemory,
   setSessionModelOverride,
+  setWebSearchMode,
   setActivePanel,
   openModal,
+  toggleSearchDock,
+  openSourceInForeground,
   triggerFourActShowcase,
   pushToast,
 } from '../../state/store.js'
@@ -93,6 +96,27 @@ const ChatMessageItem = memo(function ChatMessageItem({
           <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
         )}
       </div>
+
+      {msg.role !== 'user' && Array.isArray(msg.webSources) && msg.webSources.length > 0 && (
+        <div className="chat-sources-bar" aria-label="联网参考来源">
+          <button type="button" className="chat-source-pill chat-source-head" onClick={() => toggleSearchDock(true)}>
+            🌐 已联网参考 {msg.webSources.length} 个来源 ↗
+          </button>
+          {msg.webSources.slice(0, 4).map((src, sIdx) => (
+            <button
+              key={src.url || sIdx}
+              type="button"
+              className="chat-source-pill"
+              title={`${src.title}
+${src.url}
+点击在前台浏览器打开查看`}
+              onClick={() => openSourceInForeground(src.url)}
+            >
+              {src.domain || src.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="chat-msg-bar">
         {sib && (
@@ -309,8 +333,8 @@ export default function ChatPanel() {
             <div className="chat-banner-row">
               <strong>需要人工接管浏览器验证：{pendingTakeover.message}</strong>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" className="chat-mini-btn" onClick={() => resolvePendingTakeover('resume')}>已完成验证，继续执行</button>
-                <button type="button" className="chat-mini-btn" onClick={() => resolvePendingTakeover('cancel')}>取消接管</button>
+                <button type="button" className="chat-mini-btn" onClick={() => resolvePendingTakeover('continue')}>已完成验证，继续执行</button>
+                <button type="button" className="chat-mini-btn" onClick={() => resolvePendingTakeover('abort')}>取消接管</button>
               </div>
             </div>
           </div>
@@ -455,6 +479,47 @@ export default function ChatPanel() {
               <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleAttachFile} />
               <button type="button" className="chat-mini-btn" onClick={() => fileRef.current && fileRef.current.click()}>+ 附件</button>
               <button type="button" className="chat-mini-btn" onClick={(e) => openModal('market', captureTriggerRect(e))}>✦ 选专家</button>
+              <DropdownMenu
+                align="left"
+                direction="up"
+                label={ui.webSearchMode === 'visible' ? '👁 前台搜' : (ui.webSearchMode === 'off' ? '⊘ 离线' : '🌐 自动联网')}
+                ariaLabel="AI 自主联网模式"
+                triggerClassName="chat-mini-btn"
+                triggerActive={ui.webSearchMode !== 'off'}
+                items={[
+                  { section: 'AI 自主联网策略（模型按需调用）' },
+                  {
+                    id: 'ws-auto',
+                    icon: '🌐',
+                    label: '自动后台静默搜索（推荐）',
+                    hint: '零打扰',
+                    active: (ui.webSearchMode || 'auto') === 'auto',
+                    onClick: () => setWebSearchMode('auto'),
+                  },
+                  {
+                    id: 'ws-visible',
+                    icon: '👁',
+                    label: '前台可视浏览器搜索',
+                    hint: '实时观看',
+                    active: ui.webSearchMode === 'visible',
+                    onClick: () => setWebSearchMode('visible'),
+                  },
+                  {
+                    id: 'ws-off',
+                    icon: '⊘',
+                    label: '关闭联网（纯离线）',
+                    active: ui.webSearchMode === 'off',
+                    onClick: () => setWebSearchMode('off'),
+                  },
+                  { divider: true },
+                  {
+                    id: 'ws-dock',
+                    icon: '📡',
+                    label: '打开 Agent 联网动态与来源',
+                    onClick: () => toggleSearchDock(true),
+                  },
+                ]}
+              />
               <DropdownMenu
                 align="left"
                 direction="up"

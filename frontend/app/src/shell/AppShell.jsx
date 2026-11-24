@@ -203,8 +203,8 @@ export default function AppShell() {
     },
     {
       id: 'tb-search',
-      icon: '⌕',
-      label: '网页搜索分栏',
+      icon: '🌐',
+      label: 'Agent 联网动态与来源',
       active: ui.searchDockOpen,
       onClick: () => toggleSearchDock(),
     },
@@ -399,7 +399,7 @@ export default function AppShell() {
                 ref={(el) => { registerMotionAnchor('nav-toolbox', el); registerMotionAnchor('nav-dock', el) }}
                 type="button"
                 className="hb-rail-btn"
-                title="工具箱（副屏画布 / 网页搜索）"
+                title="工具箱（副屏画布 / Agent 联网动态）"
                 aria-expanded={String(open)}
                 data-active={String(open || ui.dockOpen || ui.searchDockOpen)}
                 onClick={toggle}

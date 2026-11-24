@@ -1024,3 +1024,25 @@ test('kinetic.js 耦合反作用力在静息无障碍档位下严格返回 false
   assert.equal(applySecondaryRecoil(fakeEl, { edge: 'left', motionTier: 'reduced' }), false)
   assert.equal(applySecondaryRecoil(fakeEl, { edge: 'left', motionTier: 'dynamic' }), true)
 })
+
+
+test('toolRouter.js R22 前沿 Agent 自主联网策略（auto 后台 / visible 前台 / off 离线）且不破坏默认契约', async () => {
+  const { selectToolsForProfile, buildWebSearchDirective } = await import('../src/services/toolRouter.js')
+  const mockAll = [
+    'read_file', 'write_file', 'browser_search', 'browser_open', 'browser_navigate', 'browser_click',
+  ].map((name) => ({ type: 'function', function: { name } }))
+
+  const autoNames = selectToolsForProfile(mockAll, 'chat', { webSearchMode: 'auto' }).map((t) => t.function.name)
+  assert.ok(autoNames.includes('browser_search') && autoNames.includes('browser_open'))
+  assert.ok(!autoNames.includes('browser_click'))
+
+  const visNames = selectToolsForProfile(mockAll, 'chat', { webSearchMode: 'visible' }).map((t) => t.function.name)
+  assert.ok(visNames.includes('browser_search') && visNames.includes('browser_navigate') && visNames.includes('browser_click'))
+
+  const offNames = selectToolsForProfile(mockAll, 'web', { webSearchMode: 'off' }).map((t) => t.function.name)
+  assert.ok(!offNames.includes('browser_search') && !offNames.includes('browser_open'))
+
+  assert.match(buildWebSearchDirective('auto'), /后台静默/)
+  assert.match(buildWebSearchDirective('visible'), /mode="visible"/)
+  assert.match(buildWebSearchDirective('off'), /离线模式/)
+})

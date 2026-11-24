@@ -89,6 +89,8 @@ const stubState = {
   triggerClarifyOnce: false,
   triggerArtifactOnce: false,
   triggerImageToolOnce: false,
+  triggerWebSearchOnce: false,
+  browserSearchCalls: [],
   mediaRequests: [],
 }
 
@@ -204,10 +206,30 @@ const server = http.createServer(async (req, res) => {
     else if (method === 'group_files_open_dir') out = { ok: true }
     else if (method === 'build_system_prompt') out = 'STATIC_CHARTER_PREFIX' + (args[0] ? '|DYN_QUERY:' + args[0] : '')
     else if (method === 'build_tools') out = [
+      // r22 的 Suite R 需要模型调用 browser_search；桩原先只声明 read_file/write_file，
+      // 应用按声明过滤工具 ⇒ 该调用被丢弃、来源条永不出现（超时）。
+      // 这里补声明，并保持字典序（Suite E 的 toolsSorted 判据要求严格非降序）。
+      { type: 'function', function: { name: 'browser_search', parameters: { type: 'object', properties: { query: { type: 'string' } } } } },
       { type: 'function', function: { name: 'write_file', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
       { type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
     ]
     else if (method === 'memory_search') out = { items: [{ text: '动态回忆:' + String(args[0] || '').slice(0, 12) }] }
+    else if (method === 'browser_search') {
+      const p = args[0] || {}
+      stubState.browserSearchCalls.push(p)
+      out = {
+        ok: true,
+        query: p.query || '',
+        mode: p.mode || 'hidden',
+        channel: 'http-fast',
+        results: [
+          { title: '4399 官方小游戏大厅', url: 'https://www.4399.com/', domain: '4399.com', snippet: '经典休闲网页小游戏与热门榜单汇总。' },
+          { title: '4399 维基百科介绍', url: 'https://zh.wikipedia.org/wiki/4399', domain: 'zh.wikipedia.org', snippet: '中国知名在线休闲游戏平台。' },
+        ],
+        count: 2,
+      }
+    }
+    else if (method === 'browser_sessions') out = { ok: true, version: 1, sessions: [] }
     else if (method === 'get_local_proxy') out = { ok: true, port: server.address().port, base_url: serverBase }
 
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -281,6 +303,18 @@ const server = http.createServer(async (req, res) => {
       return
     }
     const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
+    // 原条件带 `&& !hasToolRole`：一旦本轮会话历史上出现过 tool 消息（前面 Suite K/O 打过工具），
+    // 桩就不再返回 tool_call ⇒ 应用根本没机会执行 browser_search（实测 searchCalls=0）。
+    // 标记本身是一次性的（触发即置 false），`!hasToolRole` 是多余且会误伤的守卫，改为只认标记 + 本轮用户问句。
+    if (stubState.triggerWebSearchOnce && /4399|热门小游戏/.test(String((body.messages || []).filter((m) => m && m.role === 'user').slice(-1)[0]?.content || ''))) {
+      stubState.triggerWebSearchOnce = false
+      const wsArgs = JSON.stringify({ query: '4399 最新热门小游戏' })
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_ws_1', type: 'function', function: { name: 'browser_search', arguments: wsArgs } }] }, finish_reason: 'tool_calls' }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 900, completion_tokens: 30, total_tokens: 930, prompt_tokens_details: { cached_tokens: 820 } } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     if (stubState.triggerImageToolOnce && !hasToolRole) {
       stubState.triggerImageToolOnce = false
       const imgArgs = JSON.stringify({ prompt: '赛博玻璃港口海报', aspect_ratio: '16:9', style: '电影光影' })
@@ -1244,6 +1278,44 @@ try {
     '使用指南弹窗支持从二级菜单随时复开并按 Escape 平滑关闭',
     (await page.locator('.ob-modal').count()) === 0,
     'reopened_and_escaped=true'
+  )
+
+  /* ======================================================================== *
+   * Suite R · R22 前沿 Agent 自主后台联网检索 + 内联来源卡片 + 联网观测台（零手动搜索框）
+   * ======================================================================== */
+  await page.locator('.hb-rail-btn[title="智能对话"]').click()
+  await page.waitForSelector('.chat-textarea')
+  stubState.triggerWebSearchOnce = true
+  stubState.browserSearchCalls.length = 0
+  await page.locator('.chat-textarea').fill('帮我查一下 4399 现在有什么热门小游戏')
+  await page.locator('.chat-send-btn').click()
+  // 超时不要整条套件崩掉：先记录诊断值（搜索有没有被调用、助手消息有没有产出），
+  // 再由下面的 record 判 PASS/FAIL —— 否则一次超时会把后面所有用例一起带走。
+  let sourcesShown = true
+  try {
+    await page.waitForSelector('.chat-sources-bar', { timeout: 6000 })
+  } catch {
+    sourcesShown = false
+  }
+  const diagSearchCalls = stubState.browserSearchCalls.length
+  const diagAssistantMsgs = await page.locator('.chat-msg').count().catch(() => -1)
+  const bgSearchMode = stubState.browserSearchCalls[0] && stubState.browserSearchCalls[0].mode
+  // 后续读取全部容错：来源条没出现时也不要抛，让 record 把诊断值打出来
+  const sourceBarText = await page.locator('.chat-sources-bar').last().textContent().catch(() => '')
+  await page.locator('.chat-sources-bar .chat-source-head').last().click({ timeout: 2000 }).catch(() => {})
+  await page.waitForSelector('.sd-panel .sd-act', { timeout: 4000 }).catch(() => {})
+  const hasManualInput = (await page.locator('.sd-panel input').count().catch(() => 0)) > 0
+  const dockSourceCnt = await page.locator('.sd-panel .sd-source').count().catch(() => 0)
+  await page.locator('.sd-mode-bar button:has-text("前台可视")').click({ timeout: 2000 }).catch(() => {})
+  const visibleSelected = await page.locator('.sd-mode-bar button:has-text("前台可视")').getAttribute('data-active').catch(() => null)
+  await page.locator('.sd-mode-bar button:has-text("自动后台")').click({ timeout: 2000 }).catch(() => {})
+  await page.locator('.sd-head button[aria-label="关闭联网观测台"]').click({ timeout: 2000 }).catch(() => {})
+  await page.waitForSelector('.sd-panel', { state: 'detached', timeout: 3000 }).catch(() => {})
+  record(
+    'Suite-R',
+    '前沿 Agent 自主联网：模型后台静默检索 → 内联来源卡 + 联网观测台实时沉淀（零手动搜索框）+ 前台模式可切换',
+    sourcesShown && bgSearchMode === 'hidden' && /2 个来源/.test(sourceBarText || '') && !hasManualInput && dockSourceCnt >= 2 && visibleSelected === 'true',
+    `shown=${sourcesShown}, searchCalls=${diagSearchCalls}, msgs=${diagAssistantMsgs}, mode=${bgSearchMode}, manualInput=${hasManualInput}, sources=${dockSourceCnt}, vis=${visibleSelected}`
   )
 
   // D4: 全程零未捕获页面异常

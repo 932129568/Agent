@@ -20,7 +20,163 @@ import {
 const sessions = new Map()
 const takeovers = new Map()
 const urlCache = new Map()
+const searchCache = new Map()
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000
 const MAX_SESSIONS = 3
+const HTTP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+
+function decodeHtmlEntities(str = '') {
+  return String(str || '')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&nbsp;/gi, ' ')
+}
+
+function stripTags(html = '') {
+  return decodeHtmlEntities(String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+}
+
+function cleanTargetUrl(rawUrl = '') {
+  const s = decodeHtmlEntities(String(rawUrl || '').trim())
+  if (!/^https?:\/\//i.test(s)) return ''
+  try {
+    const u = new URL(s)
+    if (u.hostname.includes('duckduckgo.com') && u.searchParams.get('uddg')) {
+      const real = decodeURIComponent(u.searchParams.get('uddg'))
+      if (/^https?:\/\//i.test(real)) return real
+    }
+    if (u.hostname.includes('bing.com') && u.pathname.startsWith('/ck/a')) {
+      const enc = u.searchParams.get('u') || ''
+      if (enc.startsWith('a1') && enc.length > 6) {
+        const b64 = enc.slice(2).replace(/-/g, '+').replace(/_/g, '/')
+        const decoded = Buffer.from(b64, 'base64').toString('utf8')
+        if (/^https?:\/\//i.test(decoded)) return decoded
+      }
+    }
+    return u.href
+  } catch {
+    return ''
+  }
+}
+
+function domainOf(rawUrl = '') {
+  try { return new URL(rawUrl).hostname.replace(/^www\./i, '') } catch { return '' }
+}
+
+function parseBingHtmlResults(html = '', limit = 8) {
+  const out = []
+  const seen = new Set()
+  const blocks = String(html || '').split(/<li[^>]+class="[^"]*\bb_algo\b[^"]*"[^>]*>/i).slice(1)
+  for (const blk of blocks) {
+    if (out.length >= limit) break
+    const chunk = blk.split(/<\/li>/i)[0] || blk
+    const h2m = chunk.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i)
+    const am = (h2m ? h2m[1] : chunk).match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i)
+    if (!am) continue
+    const url = cleanTargetUrl(am[1])
+    const title = stripTags(am[2])
+    if (!url || !title || seen.has(url)) continue
+    seen.add(url)
+    const pm = chunk.match(/<p[^>]*>([\s\S]*?)<\/p>/i) || chunk.match(/<div[^>]+class="[^"]*b_caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+    const snippet = pm ? stripTags(pm[1]).slice(0, 320) : ''
+    out.push({ title, url, domain: domainOf(url), snippet })
+  }
+  return out
+}
+
+function parseDdgHtmlResults(html = '', limit = 8) {
+  const out = []
+  const seen = new Set()
+  const blocks = String(html || '').split(/class="result\s+results_links/i).slice(1)
+  for (const blk of blocks) {
+    if (out.length >= limit) break
+    const am = blk.match(/class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i)
+      || blk.match(/href="([^"]+)"[^>]*class="result__a"[^>]*>([\s\S]*?)<\/a>/i)
+    if (!am) continue
+    const url = cleanTargetUrl(am[1])
+    const title = stripTags(am[2])
+    if (!url || !title || seen.has(url)) continue
+    seen.add(url)
+    const sm = blk.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|div|span)>/i)
+    const snippet = sm ? stripTags(sm[1]).slice(0, 320) : ''
+    out.push({ title, url, domain: domainOf(url), snippet })
+  }
+  return out
+}
+
+async function fetchHtmlQuick(url, timeoutMs = 9000) {
+  await validateUrl(url)
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': HTTP_UA,
+        'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+    })
+    if (!resp.ok) return { ok: false, status: resp.status, html: '', finalUrl: resp.url || url }
+    const html = await resp.text()
+    return { ok: true, status: resp.status, html, finalUrl: resp.url || url }
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+/** R22 前沿 Agent 后台静默极速多引擎搜索（Bing CN → Bing Global → DuckDuckGo HTML，零弹窗秒出结果） */
+async function fastHttpBackgroundSearch(query, { maxResults = 8, site = '', filetype = '', engine = 'auto' } = {}) {
+  const fullQ = [
+    String(query || '').trim(),
+    site ? `site:${String(site).trim()}` : '',
+    filetype ? `filetype:${String(filetype).trim()}` : '',
+  ].filter(Boolean).join(' ')
+  const cap = Math.max(1, Math.min(12, Number(maxResults) || 8))
+  const candidates = engine === 'duckduckgo'
+    ? [{ name: 'duckduckgo', url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fullQ)}`, parse: parseDdgHtmlResults }]
+    : [
+      { name: 'bing-cn', url: `https://cn.bing.com/search?q=${encodeURIComponent(fullQ)}&setlang=zh-Hans`, parse: parseBingHtmlResults },
+      { name: 'bing', url: `https://www.bing.com/search?q=${encodeURIComponent(fullQ)}`, parse: parseBingHtmlResults },
+      { name: 'duckduckgo', url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fullQ)}`, parse: parseDdgHtmlResults },
+    ]
+  for (const c of candidates) {
+    try {
+      const r = await fetchHtmlQuick(c.url, 8500)
+      if (!r.ok || !r.html) continue
+      const items = c.parse(r.html, cap)
+      if (items.length > 0) {
+        return { ok: true, engine: c.name, results: items }
+      }
+    } catch { /* 单引擎网络受限，静默回落下一引擎 */ }
+  }
+  return { ok: false, engine: 'none', results: [] }
+}
+
+function extractReadableTextFromHtml(html = '', baseUrl = '', maxChars = 14000) {
+  const raw = String(html || '')
+  const titleM = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  const title = titleM ? stripTags(titleM[1]) : domainOf(baseUrl)
+  const bodyM = raw.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+    || raw.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+    || raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+  const cleaned = (bodyM ? bodyM[1] : raw)
+    .replace(/<(script|style|noscript|svg|iframe|nav|footer|header)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|tr|br|section|article)>/gi, '\n')
+  const text = decodeHtmlEntities(cleaned.replace(/<[^>]+>/g, ' '))
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  const truncated = text.length > maxChars
+  return { title, content: truncated ? text.slice(0, maxChars) : text, truncated }
+}
 const IDLE_MS = 60000
 // P0-3：浏览器游标 per-sid（A 的 extract 不落到 B 的页面）；池全局共享上限 3 不变
 const cursors = registerSidContainer('cursors', new Map())   // sid -> sessionId
@@ -398,13 +554,42 @@ export async function browserSetMode(mode, sessionId = '') {
 export async function browserOpen(params) {
   const input = parse(params)
   if (!input.url) return fail('BAD_PARAMS', '缺少 url')
+  const urlStr = String(input.url).trim()
+  const isVisible = input.display_mode === 'visible' || input.window_mode === 'visible'
+  const maxChars = Math.max(800, Math.min(40000, Number(input.max_chars) || 14000))
+  if (!isVisible && !input.selector && !input.wait_selector && process.env.HARBOR_BROWSER_ALLOW_LOOPBACK !== 'true') {
+    try {
+      const r = await fetchHtmlQuick(urlStr, Math.min(12000, (Number(input.timeout) || 12) * 1000))
+      if (r.ok && r.html && !captchaText(r.html)) {
+        const parsed = extractReadableTextFromHtml(r.html, r.finalUrl || urlStr, maxChars)
+        if (parsed.content.length >= 160) {
+          const finalUrl = r.finalUrl || urlStr
+          const wrapped = wrapUntrusted(parsed.content, finalUrl, 'http-fast')
+          return json({
+            ok: true,
+            mode: input.mode || 'markdown',
+            content: wrapped,
+            markdown: wrapped,
+            url: finalUrl,
+            final_url: finalUrl,
+            title: parsed.title,
+            char_count: parsed.content.length,
+            truncated: parsed.truncated,
+            channel: 'http-fast',
+            untrusted: true,
+            source: provenance(finalUrl, 'http-fast'),
+          })
+        }
+      }
+    } catch { /* SPA/强反爬页面自动回落 Playwright 真实渲染 */ }
+  }
   let id = ''
   try {
-    const entry = await newSession(String(input.url), 'hidden', input.timeout || 45, input.wait_selector || '')
+    const entry = await newSession(urlStr, isVisible ? 'visible' : 'hidden', input.timeout || 45, input.wait_selector || '')
     id = entry.id
     const result = await extractPage(entry, input.selector || '', input.mode || 'markdown')
-    await closeOne(id)
-    return json(result)
+    if (!isVisible || input.keep_open !== true) await closeOne(id)
+    return json({ ...result, ...(isVisible ? { window_mode: 'visible' } : {}) })
   } catch (error) { if (id) await closeOne(id); return asError(error) }
 }
 async function searchResults(page, searchHost = '') {
@@ -434,26 +619,75 @@ async function searchResults(page, searchHost = '') {
 }
 export async function browserSearch(params, token = null) {
   const input = parse(params); const query = String(input.query || '').trim()
-  // legacy service 校验口径（P0-1b B5）：文案+hint 逐字
   if (!query) return fail('BAD_PARAMS', 'query 不能为空（1-500 字符的检索词）', '例如 {"query": "python 教程"}')
   const refusal = await guard('web_search', { query: query.slice(0, 120) }, token)
   if (refusal) return refusal
-  const url = input.search_url || `https://www.bing.com/search?q=${encodeURIComponent(query)}`
+
+  const wantVisible = input.mode === 'visible'
+  const maxResults = Math.max(1, Math.min(12, Number(input.max_results) || 8))
+  const cacheKey = `${query.toLowerCase()}|${input.site || ''}|${input.filetype || ''}|${input.engine || 'auto'}|${maxResults}`
+
+  // 1) 后台静默极速通道（对齐 Perplexity / Claude / ChatGPT：零弹窗、5 分钟缓存、多引擎容灾）
+  if (!wantVisible && !input.search_url) {
+    const cached = searchCache.get(cacheKey)
+    if (cached && cached.exp > Date.now()) {
+      return json({
+        ok: true, query, results: cached.results, count: cached.results.length,
+        real_time: true, cached: true, mode: 'hidden', channel: 'http-fast', source: 'cache', untrusted: true,
+        provenance: cached.provenance,
+      })
+    }
+    const fast = await fastHttpBackgroundSearch(query, {
+      maxResults,
+      site: input.site || '',
+      filetype: input.filetype || '',
+      engine: input.engine || 'auto',
+    })
+    if (fast.ok && fast.results.length > 0) {
+      const prov = {
+        engine: fast.engine,
+        query_sha256: crypto.createHash('sha256').update(query).digest('hex').slice(0, 16),
+        fetched_at: new Date().toISOString(),
+      }
+      if (searchCache.size > 80) searchCache.clear()
+      searchCache.set(cacheKey, { results: fast.results, provenance: prov, exp: Date.now() + SEARCH_CACHE_TTL_MS })
+      return json({
+        ok: true, query, results: fast.results, count: fast.results.length,
+        real_time: true, mode: 'hidden', channel: 'http-fast', source: 'live', untrusted: true,
+        provenance: prov,
+      })
+    }
+  }
+
+  // 2) 前台可视观看通道（mode='visible'）或显式 search_url / Playwright 兜底渲染通道
+  const fullQuery = [query, input.site ? `site:${input.site}` : '', input.filetype ? `filetype:${input.filetype}` : ''].filter(Boolean).join(' ')
+  const url = input.search_url || `https://cn.bing.com/search?q=${encodeURIComponent(fullQuery)}&setlang=zh-Hans`
   let entry
   try {
-    entry = await newSession(url, input.mode === 'visible' ? 'visible' : 'hidden', input.timeout || 45)
+    entry = await newSession(url, wantVisible ? 'visible' : 'hidden', input.timeout || 45)
     const body = await entry.page.locator('body').innerText()
     if (captchaText(body)) {
       const takeoverId = `tk_${crypto.randomBytes(6).toString('hex')}`
+      if (!wantVisible && !process.env.HARBOR_HEADLESS && process.env.HARBOR_BROWSER_ALLOW_LOOPBACK !== 'true') {
+        try {
+          await closeOne(entry.id)
+          entry = await newSession(url, 'visible', input.timeout || 45)
+        } catch {}
+      }
       takeovers.set(takeoverId, { id: takeoverId, sessionId: entry.id, query, retry: 0 })
       return fail('CAPTCHA_REQUIRED', '搜索页需要人工完成验证', '', { takeover_id: takeoverId })
     }
-    const results = await searchResults(entry.page, new URL(url).host)
-    // R49-N4 修复：成功路径也关会话（对照 browserOpen）——原仅 error 路径关，
-    // 每次搜索遗留 Chromium 进程常驻至下次导航/退出。CAPTCHA 分支保留会话
-    //（takeover 接管需要它，终态 browserTakeover 已有 closeOne）。
-    await closeOne(entry.id)
+    const rawResults = await searchResults(entry.page, new URL(url).host)
+    const results = rawResults.slice(0, maxResults).map((r) => ({
+      ...r,
+      url: cleanTargetUrl(r.url) || r.url,
+      domain: r.domain || domainOf(cleanTargetUrl(r.url) || r.url),
+    }))
+    if (!wantVisible || input.keep_open !== true) {
+      await closeOne(entry.id)
+    }
     return json({ ok: true, query, results, count: results.length, session_id: entry.id,
+      mode: wantVisible ? 'visible' : 'hidden', channel: 'playwright',
       real_time: true, source: 'live', untrusted: true,
       provenance: { engine: input.engine || 'bing', query_sha256: crypto.createHash('sha256').update(query).digest('hex').slice(0, 16), fetched_at: new Date().toISOString() } })
   } catch (error) { if (entry) await closeOne(entry.id); return asError(error) }

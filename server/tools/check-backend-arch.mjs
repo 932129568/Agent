@@ -83,11 +83,9 @@ if (fs.existsSync(builderPath)) {
 }
 
 const regTxt = fs.readFileSync(path.join(SERVER_ROOT, 'src', 'registry.js'), 'utf8')
-// 原判定是 `!/NOT_MIGRATED/.test(整文件)` —— 连注释和 invoke() 里的缺省护栏都算，
-// 于是 registry.js 只要提到这个错误码就 FAIL（r21 就是这样红的），
-// 但它真正要防的是"注册表里挂了未迁移死壳"。
-// 改为结构判定：剥掉注释后，只允许 invoke() 中那一处护栏（handler 不存在时抛错），
-// 出现 ≥2 处说明另有未迁移桩。
+// 原判定是 `!/NOT_MIGRATED/.test(整文件)` —— 连注释与 invoke() 里的缺省护栏都算，
+// 于是只要提到该错误码就 FAIL。真正要防的是"注册表挂了未迁移死壳"，
+// 改为结构判定：剥注释后只允许 invoke() 那一处护栏（≤1），≥2 才判有桩。
 const regCode = regTxt
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^[ \t]*\/\/.*$/gm, '')

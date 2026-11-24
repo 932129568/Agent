@@ -191,9 +191,14 @@ export default function LivingChamber({
                     data-status={tool.status}
                     style={{ animationDelay: `${idx * 50}ms` }}
                   >
-                    <span>{tool.status === 'done' ? '✓' : '◉'}</span>
-                    <span>{tool.name}</span>
+                    <span>{tool.status === 'done' ? '✓' : (tool.status === 'fail' ? '✕' : '◉')}</span>
+                    <span>
+                      {tool.name === 'browser_search'
+                        ? (tool.mode === 'visible' ? '👁 前台检索' : '🌐 后台检索')
+                        : (tool.name === 'browser_open' ? '📄 阅读网页' : (tool.name === 'browser_navigate' ? '🧭 打开网页' : tool.name))}
+                    </span>
                     {tool.detail && <span>· {tool.detail}</span>}
+                    {typeof tool.sourceCount === 'number' && tool.status === 'done' && <span>({tool.sourceCount} 来源)</span>}
                   </div>
                 ))}
               </div>

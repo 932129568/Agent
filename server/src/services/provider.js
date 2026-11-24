@@ -314,8 +314,9 @@ const FULL_TOOLS = [
 ]
 const AGENT_TOOLS = [
   // R57 A1：三段式与 Python tools_schema.py 逐字对齐（原 Electron 链停在同源拆分前的旧单段文案）
-  tool('browser_search', '需要联网搜索资料或查最新信息时|受控次窗搜索+正文提取+缓存,遇验证页返回 CAPTCHA_REQUIRED 等待人工|已知网址直接抓取用 browser_open,GLM 端点走云端原生 web_search',
-    { query: { type: 'string' }, engine: { type: 'string' }, site: { type: 'string' }, filetype: { type: 'string' },
+  tool('browser_search', '需要联网搜索资料或查最新信息时|默认后台静默极速检索+缓存,传 mode=visible 可弹出前台浏览器供用户实时观看,遇验证页返回 CAPTCHA_REQUIRED|已知网址读正文用 browser_open',
+    { query: { type: 'string' }, mode: { type: 'string', enum: ['hidden', 'visible'] }, keep_open: { type: 'boolean' },
+      engine: { type: 'string' }, site: { type: 'string' }, filetype: { type: 'string' },
       time_range: { type: 'string' }, lang: { type: 'string' }, max_results: { type: 'integer' }, extract: { type: 'string' } }, ['query']),
   tool('browser_open', '已知URL要读取网页正文时|readability/selector 提取正文,超长自动截断落盘|要搜索发现页面用 browser_search,要点击/填表等交互用 browser_navigate 系',
     { url: { type: 'string' }, selector: { type: 'string' }, max_chars: { type: 'integer' } }, ['url']),

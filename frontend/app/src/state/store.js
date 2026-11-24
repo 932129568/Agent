@@ -93,6 +93,7 @@ import {
   dismissToast,
   openOnboardingModal,
   closeOnboardingModal,
+  setWebSearchMode,
 } from './uiSlice.js'
 import {
   resolveEndpointConfig,
@@ -117,6 +118,11 @@ import {
   stopCollaborationRun,
   runWebSearch,
   extractSearchUrl,
+  recordWebActivity,
+  clearWebActivities,
+  refreshBrowserSessions,
+  closeBrowserSession,
+  openSourceInForeground,
 } from './domainSlice.js'
 
 const initialVisual = readVisualPrefs()
@@ -202,6 +208,9 @@ const initialState = Object.freeze({
     dockPreview: '',
     activeArtifact: null,      // { id, kind, lang, title, filename, code }
     searchDockOpen: false,
+    webSearchMode: ['auto', 'visible', 'off'].includes(readStorage('harbor.v5.web_search_mode', 'auto'))
+      ? readStorage('harbor.v5.web_search_mode', 'auto')
+      : 'auto',
     composerDraft: '',
     composerTokens: [],
     askBeforeDesign: readStorage(ASK_BEFORE_DESIGN_KEY, '1') !== '0',
@@ -335,6 +344,8 @@ const initialState = Object.freeze({
   },
   plugins: createInitialPluginsSlice(),
   search: {
+    activities: [],
+    activeSessions: [],
     query: '',
     results: [],
     loading: false,
@@ -384,6 +395,7 @@ export {
   dismissToast,
   openOnboardingModal,
   closeOnboardingModal,
+  setWebSearchMode,
 }
 
 /* ---- 启动水合 ---- */
@@ -1215,10 +1227,12 @@ export async function runChatTurn(sid, userText, opts = {}) {
         workflows: state.plugins.workflows,
       }),
       mediaToolDispatcher: (toolName, args, ctx) => dispatchMediaTool(toolName, args, ctx),
+      webSearchMode: state.ui.webSearchMode || 'auto',
       askBeforeDesign: state.ui.askBeforeDesign,
       signal: ctrl.signal,
       onEvent: (ev) => {
         patchRun(sid, ev)
+        if (ev && ev.webActivity) recordWebActivity(ev.webActivity)
         if (ev && ev.toolProfile) {
           patchSlice('runtime', (r) => ({
             ...r,
@@ -1273,6 +1287,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
           content: result.content || '',
           reasoning: result.reasoning || '',
           tools: result.tools || [],
+          ...(Array.isArray(result.webSources) && result.webSources.length ? { webSources: result.webSources } : {}),
           ...(Array.isArray(result.wireTrail) && result.wireTrail.length ? { _wireTrail: result.wireTrail } : {}),
         })
         next.runStatus = result.paused ? 'paused' : 'completed'
@@ -1394,6 +1409,11 @@ export {
   checkAppUpdate,
   runWebSearch,
   extractSearchUrl,
+  recordWebActivity,
+  clearWebActivities,
+  refreshBrowserSessions,
+  closeBrowserSession,
+  openSourceInForeground,
 }
 
 export async function setWorkspacePath(dirPath) {
@@ -1801,6 +1821,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
           workflows: state.plugins.workflows,
         }),
         mediaToolDispatcher: (toolName, args, ctx) => dispatchMediaTool(toolName, args, ctx),
+        webSearchMode: state.ui.webSearchMode || 'auto',
         askBeforeDesign: !autonomous && i <= 1,
         maxRounds: canUseTools ? 8 : 1,
         skipMemoryRecall: true,

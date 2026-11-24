@@ -6,6 +6,7 @@ import { writeStorage } from '../platform/storage.js'
 import { getState, patchSlice, syncRuntimeTelemetryForSid } from './kernel.js'
 
 const ONBOARDING_SEEN_KEY = 'harbor.v5.onboarding.seen'
+const WEB_SEARCH_MODE_KEY = 'harbor.v5.web_search_mode'
 
 let impactSeq = 0
 
@@ -124,4 +125,17 @@ export function closeOnboardingModal(markSeen = true) {
     try { writeStorage(ONBOARDING_SEEN_KEY, '1') } catch {}
   }
   patchSlice('ui', (u) => ({ ...u, onboardingOpen: false }))
+}
+
+
+export function setWebSearchMode(mode = 'auto') {
+  const safe = ['auto', 'visible', 'off'].includes(mode) ? mode : 'auto'
+  try { writeStorage(WEB_SEARCH_MODE_KEY, safe) } catch {}
+  patchSlice('ui', (u) => ({ ...u, webSearchMode: safe }))
+  const labels = {
+    auto: '已切换为「自动后台联网」：模型按需在后台静默搜索并标注来源',
+    visible: '已切换为「前台可视浏览」：模型搜索或打开网页时将弹出浏览器窗口供你观看',
+    off: '已关闭联网搜索：模型仅基于已有知识与本地工作区作答',
+  }
+  pushToast(labels[safe], 'info')
 }

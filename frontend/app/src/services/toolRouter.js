@@ -200,7 +200,7 @@ export function predictToolProfile(query = '', { hasEnabledMcp = false, forceFul
   return next
 }
 
-export function selectToolsForProfile(allTools = [], profile = 'coding', { includeAskUser = true, isolatedGroup = false } = {}) {
+export function selectToolsForProfile(allTools = [], profile = 'coding', { includeAskUser = true, isolatedGroup = false, webSearchMode = '' } = {}) {
   const list = Array.isArray(allTools) ? allTools : []
   const allowed = new Set(isolatedGroup ? ['ask_user_options'] : TOOL_GROUPS.core_chat)
 
@@ -221,12 +221,26 @@ export function selectToolsForProfile(allTools = [], profile = 'coding', { inclu
     for (const t of TOOL_GROUPS.web) allowed.add(t)
   }
 
-  const filtered = profile === 'full'
+  if (webSearchMode === 'auto') {
+    allowed.add('browser_search')
+    allowed.add('browser_open')
+  } else if (webSearchMode === 'visible') {
+    for (const t of TOOL_GROUPS.web) allowed.add(t)
+  }
+
+  let filtered = profile === 'full'
     ? [...list]
     : list.filter((item) => {
       const name = String((item && item.function && item.function.name) || (item && item.name) || '')
       return name && (allowed.has(name) || name.startsWith('mcp__'))
     })
+
+  if (webSearchMode === 'off') {
+    filtered = filtered.filter((item) => {
+      const name = String((item && item.function && item.function.name) || (item && item.name) || '')
+      return !TOOL_GROUPS.web.has(name)
+    })
+  }
 
   // 群聊强隔离：剔除跨会话全局记忆工具，注入仅绑定当前群聊 ID 的专属群文件工具
   const result = isolatedGroup
@@ -261,4 +275,16 @@ export function buildClarifyDirective({ autonomous = false, askBeforeDesign = tr
     return '【执行自主度】用户已授权自主发挥：无需调用 ask_user_options 询问风格或方案，直接按最高审美与工程标准高质量落地。'
   }
   return '【效果可控原则】若当前需求涉及视觉风格、交互动效、版面结构或方案取舍且用户未指定细节，在写文件或正式落地前先调用一次 ask_user_options 弹出 2-4 个具体方案卡片供用户选择或自定义，拿到确认后再严格按所选方向实现；若需求已非常具体或属于排障/查询类任务，直接执行即可，不要多此一举。'
+}
+
+
+/** R22 前沿 Agent 自主联网策略提示（对齐 Claude / ChatGPT / Perplexity / Manus 行为范式） */
+export function buildWebSearchDirective(webSearchMode = 'auto') {
+  if (webSearchMode === 'off') {
+    return '【联网策略】当前为离线模式，严禁调用任何网页检索工具，请仅基于已有知识与本地工作区文件作答。'
+  }
+  if (webSearchMode === 'visible') {
+    return '【前沿 Agent 联网策略 · 前台可视模式】当需要实时信息、外部网页核查或演示浏览时，调用 browser_search / browser_navigate 并显式传 mode="visible" 弹出前台浏览器窗口供用户实时观看；阅读具体网页可用 browser_open，回答末尾以 [来源标题](URL) 标注参考出处。'
+  }
+  return '【前沿 Agent 联网策略 · 自主后台模式】用户无需手动搜索——当问题涉及实时动态、最新价格/版本/新闻、事实核查或你不确定的外部信息时，请自主在后台静默调用 browser_search（默认 mode="hidden"），并对关键条目调用 browser_open 阅读原文，回答中以 [来源标题](URL) 标注信息出处；仅当用户明确要求「前台打开给我看 / 打开浏览器操作」或遇到需要人工登录验证的站点时，才传 mode="visible" 弹出可见浏览器窗口。'
 }

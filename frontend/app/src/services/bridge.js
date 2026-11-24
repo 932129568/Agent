@@ -151,7 +151,7 @@ export const expertSetEnabled = (pkgId, enabled, snapId = '', opt) => callJsApi(
 export const expertImportDirectory = (dirPath, opt) => callJsApi('expert_import_directory', [dirPath], { ...opt, allowErrorPayload: true })
 
 export const browserSearch = (params, token = '', opt) => callJsApi('browser_search', [params, token], { ...opt, allowErrorPayload: true, timeoutMs: 90000 })
-export const browserNavigate = (url, waitSel = '', timeout = 25, mode = 'headless', token = '', opt) =>
+export const browserNavigate = (url, waitSel = '', timeout = 25, mode = 'hidden', token = '', opt) =>
   callJsApi('browser_navigate', [url, waitSel, timeout, mode, token], { ...opt, allowErrorPayload: true })
 export const browserExtract = (selector = '', mode = 'text', token = '', opt) =>
   callJsApi('browser_extract', [selector, mode, token], { ...opt, allowErrorPayload: true })
@@ -176,8 +176,12 @@ export const getPlatformInfo = (opt) => callJsApi('get_platform_info', [], opt)
 /* ---- Pack 2 全量补齐：截屏 / 接管 / 混合路由 / 沙箱状态 / WebDAV / 更新 / 外部软件 ---- */
 export const takeScreenshot = (left = 0, top = 0, width = 0, height = 0, token = '', opt) =>
   callJsApi('take_screenshot', [left, top, width, height, token], { ...opt, allowErrorPayload: true })
-export const browserTakeover = (takeoverId, action = 'resume', opt) =>
-  callJsApi('browser_takeover', [takeoverId, action], { ...opt, allowErrorPayload: true })
+export const browserTakeover = (takeoverId, action = 'continue', opt) => {
+  const norm = action === 'resume' ? 'continue' : (action === 'cancel' ? 'abort' : action)
+  return callJsApi('browser_takeover', [takeoverId, norm], { ...opt, allowErrorPayload: true })
+}
+export const browserClose = (sessionId = '', token = '', opt) =>
+  callJsApi('browser_close', [sessionId, token], { ...opt, allowErrorPayload: true })
 export const browserSessions = (opt) => callJsApi('browser_sessions', [], opt)
 
 export const hybridGetConfig = (opt) => callJsApi('hybrid_get_config', [], opt)

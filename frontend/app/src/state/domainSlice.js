@@ -357,3 +357,60 @@ export async function extractSearchUrl(url) {
     pushToast(`正文提取失败：${e.message}`, 'err')
   }
 }
+
+
+export function recordWebActivity(activity) {
+  if (!activity || !activity.id) return
+  patchSlice('search', (s) => {
+    const list = Array.isArray(s.activities) ? [...s.activities] : []
+    const idx = list.findIndex((a) => a && a.id === activity.id)
+    if (idx >= 0) list[idx] = { ...list[idx], ...activity }
+    else list.unshift(activity)
+    return {
+      ...s,
+      activities: list.slice(0, 40),
+      loading: list.some((a) => a && a.status === 'running'),
+    }
+  })
+}
+
+export function clearWebActivities() {
+  patchSlice('search', (s) => ({ ...s, activities: [], results: [], extracted: null, loading: false }))
+}
+
+export async function refreshBrowserSessions() {
+  try {
+    const r = await api.browserSessions()
+    const list = (r && Array.isArray(r.sessions)) ? r.sessions : []
+    patchSlice('search', (s) => ({ ...s, activeSessions: list }))
+    return list
+  } catch {
+    return []
+  }
+}
+
+export async function closeBrowserSession(sessionId = '') {
+  try {
+    await api.browserClose(sessionId)
+    await refreshBrowserSessions()
+    pushToast(sessionId ? '已关闭前台浏览器窗口' : '已关闭全部浏览器会话', 'info')
+  } catch (e) {
+    pushToast(`关闭浏览器失败：${e.message}`, 'err')
+  }
+}
+
+export async function openSourceInForeground(url) {
+  const u = String(url || '').trim()
+  if (!u) return
+  try {
+    const r = await api.browserNavigate(u, '', 30, 'visible')
+    if (r && r.ok !== false) {
+      await refreshBrowserSessions()
+      pushToast('已在前台浏览器窗口打开该网页', 'ok')
+    } else {
+      pushToast((r && r.error && r.error.message) || '打开前台浏览器失败', 'err')
+    }
+  } catch (e) {
+    pushToast(`前台打开失败：${e.message}`, 'err')
+  }
+}
