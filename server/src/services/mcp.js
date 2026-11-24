@@ -338,20 +338,50 @@ export async function mcpSaveSubscriptions(server, urisJson = '[]') {
   const clean = uris.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim().slice(0, 500)).slice(0, 100)
   cfg.resourceSubs = clean; save(all); return json({ ok: true, subscribed: clean })
 }
+const _mcpSchemaFailUntil = new Map()
+const MCP_SCHEMA_FAST_MS = 2500
+const MCP_SCHEMA_FAIL_TTL_MS = 45000
+
 export async function mcpToolSchemas() {
-  const tools = []
-  for (const [name, cfg] of Object.entries(data().mcpServers)) {
-    if (!cfg.enabled) continue
+  const enabledEntries = Object.entries(data().mcpServers || {}).filter(([, cfg]) => cfg && cfg.enabled)
+  if (!enabledEntries.length) return []
+  const now = Date.now()
+  const settled = await Promise.allSettled(enabledEntries.map(async ([name]) => {
+    const existing = runtime.get(name)
+    if (existing && Array.isArray(existing.tools)) return { name, tools: existing.tools }
+    if ((_mcpSchemaFailUntil.get(name) || 0) > now) return { name, tools: [] }
+    let timer = 0
     try {
-      const entry = await connect(name)
-      for (const tool of entry.tools) {
-        const safeServer = name.replace(/[^a-zA-Z0-9_-]/g, '_')
-        const safeTool = String(tool.name).replace(/[^a-zA-Z0-9_-]/g, '_')
-        tools.push({ type: 'function', function: { name: `mcp__${safeServer}__${safeTool}`,
+      const entry = await Promise.race([
+        connect(name),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('MCP_SCHEMA_TIMEOUT')), MCP_SCHEMA_FAST_MS) }),
+      ])
+      _mcpSchemaFailUntil.delete(name)
+      return { name, tools: (entry && Array.isArray(entry.tools)) ? entry.tools : [] }
+    } catch {
+      _mcpSchemaFailUntil.set(name, Date.now() + MCP_SCHEMA_FAIL_TTL_MS)
+      return { name, tools: [] }
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }))
+
+  const tools = []
+  for (const item of settled) {
+    if (item.status !== 'fulfilled' || !item.value) continue
+    const { name, tools: srvTools } = item.value
+    const safeServer = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    for (const tool of srvTools) {
+      const safeTool = String(tool.name).replace(/[^a-zA-Z0-9_-]/g, '_')
+      tools.push({
+        type: 'function',
+        function: {
+          name: `mcp__${safeServer}__${safeTool}`,
           description: String(tool.description || `MCP ${name}/${tool.name}`).slice(0, 1024),
-          parameters: tool.inputSchema || { type: 'object', properties: {} } } })
-      }
-    } catch { /* 单个服务器不可用不应让内置工具面整体失效 */ }
+          parameters: tool.inputSchema || { type: 'object', properties: {} },
+        },
+      })
+    }
   }
   return tools
 }

@@ -16,6 +16,8 @@ export const WRITE_TOOLS = new Set([
   'write_file', 'append_file', 'search_replace', 'delete_path', 'move_path', 'copy_path', 'make_dir',
 ])
 export const SHELL_TOOLS = new Set(['run_command', 'run_powershell'])
+const _toolsCache = new Map()
+const TOOLS_CACHE_TTL_MS = 30000
 
 export function normCachePath(p) {
   return String(p || '').replace(/\\/g, '/').toLowerCase()
@@ -154,11 +156,20 @@ export async function runAgentConversation({
   } catch {}
   if (expertPrompt) systemPrompt = `${systemPrompt}\n\n【当前激活专家指令】\n${expertPrompt}`
   if (endpointConfig.tool_mode !== 'off') {
-    try {
-      const built = await api.buildTools('full', true, true, /bigmodel\.cn/i.test(endpointConfig.baseUrl || ''), { sid, signal })
-      if (Array.isArray(built)) tools = built
-      else if (built && Array.isArray(built.tools)) tools = built.tools
-    } catch {}
+    const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
+    const includeMcp = !!endpointConfig.hasEnabledMcp
+    const cacheKey = `${sid || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}`
+    const hit = _toolsCache.get(cacheKey)
+    if (hit && hit.exp > Date.now()) {
+      tools = hit.tools
+    } else {
+      try {
+        const built = await api.buildTools('full', includeMcp, true, isGlm, { sid, signal, timeoutMs: 8000 })
+        if (Array.isArray(built)) tools = built
+        else if (built && Array.isArray(built.tools)) tools = built.tools
+        _toolsCache.set(cacheKey, { tools, exp: Date.now() + TOOLS_CACHE_TTL_MS })
+      } catch {}
+    }
   }
 
   const workingMsgs = [

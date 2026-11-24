@@ -133,3 +133,11 @@ test('expertTeam.js 信箱投递消费 + collaboration.js 隐私脱敏与预算�
   assert.ok(redacted.includes('[REDACTED_SECRET]'))
   assert.equal(normalizeCollaborationConfig({ cloud_token_budget: 999999 }).cloud_token_budget, 30000)
 })
+
+
+test('local-proxy 契约对齐：modelTransport 发送 /chat/completions 与干净 base_url', async () => {
+  const { resolveStreamEndpoint } = await import('../src/services/modelTransport.js')
+  const direct = await resolveStreamEndpoint('https://open.bigmodel.cn/api/paas/v4/chat/completions')
+  assert.equal(direct.targetBase, 'https://open.bigmodel.cn/api/paas/v4')
+  assert.equal(direct.url, 'https://open.bigmodel.cn/api/paas/v4/chat/completions')
+})

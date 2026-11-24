@@ -17,34 +17,43 @@ const sleepAbortable = (ms, signal) => new Promise((resolve, reject) => {
   if (signal) signal.addEventListener('abort', onAbort, { once: true })
 })
 
-function buildChatUrl(baseUrl) {
+function normalizeBaseUrl(baseUrl) {
   const clean = String(baseUrl || '').trim().replace(/\/+$/, '')
   if (!clean) throw new HarborError('MISSING_BASE_URL', '请先在「设置 → 模型与推理」配置 Base URL')
-  if (/\/chat\/completions$/i.test(clean)) return clean
-  return `${clean}/chat/completions`
+  return clean.replace(/\/chat\/completions$/i, '')
+}
+
+function buildChatUrl(baseUrl) {
+  return `${normalizeBaseUrl(baseUrl)}/chat/completions`
 }
 
 function isLocalEndpoint(url) {
-  return /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\//i.test(String(url || ''))
+  return /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:\/|$)/i.test(String(url || ''))
 }
 
 export async function resolveStreamEndpoint(baseUrl, harnessMeta = null) {
-  const targetUrl = buildChatUrl(baseUrl)
-  assertLatin1Value('Base URL', targetUrl)
-  const local = isLocalEndpoint(targetUrl)
+  const cleanBase = normalizeBaseUrl(baseUrl)
+  const directUrl = buildChatUrl(cleanBase)
+  assertLatin1Value('Base URL', cleanBase)
+  const local = isLocalEndpoint(cleanBase)
   try {
     const proxy = await getLocalProxy()
-    if (proxy && proxy.base_url) {
+    if (proxy && proxy.ok !== false && proxy.base_url) {
       const extraHeaders = {
-        'X-Harbor-Target': targetUrl,
+        'X-Harbor-Target': cleanBase,
         ...(harnessMeta ? { 'X-Harbor-Harness': JSON.stringify(harnessMeta) } : {}),
       }
-      return { url: `${String(proxy.base_url).replace(/\/+$/, '')}/v1/chat/completions`, extraHeaders, local }
+      return {
+        url: `${String(proxy.base_url).replace(/\/+$/, '')}/chat/completions`,
+        extraHeaders,
+        local,
+        targetBase: cleanBase,
+      }
     }
   } catch {
     // 代理未就绪时回落直连
   }
-  return { url: targetUrl, extraHeaders: {}, local }
+  return { url: directUrl, extraHeaders: {}, local, targetBase: cleanBase }
 }
 
 export async function streamChatCompletion({
@@ -63,7 +72,7 @@ export async function streamChatCompletion({
 }) {
   const key = String(apiKey == null ? '' : apiKey).trim()
   assertLatin1Value('API Key', key, '请到「设置 → 模型与推理」重新粘贴纯英文数字的 API Key')
-  const { url, extraHeaders, local } = await resolveStreamEndpoint(baseUrl, harnessMeta)
+  const { url, extraHeaders, local, targetBase } = await resolveStreamEndpoint(baseUrl, harnessMeta)
   if (!local && !key) {
     throw new HarborError('MISSING_API_KEY', '尚未填写 API Key，请点右上角「设置」填写模型 API Key')
   }
@@ -105,7 +114,7 @@ export async function streamChatCompletion({
       })
     } catch (e) {
       if (isAbort(e)) throw new HarborError('USER_PAUSED', '已中止生成')
-      throw new HarborError('NETWORK_ERROR', `模型请求失败：${e && e.message || e}`, { retryable: true, cause: e })
+      throw new HarborError('NETWORK_ERROR', `模型请求失败（${url} → ${targetBase}）：${e && e.message || e}`, { retryable: true, cause: e })
     }
 
     if (local && resp.status === 503 && loadAttempt < LOADING_BACKOFF.length) {

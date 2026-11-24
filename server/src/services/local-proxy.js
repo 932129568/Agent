@@ -49,7 +49,7 @@ function dynamicAllow() {
     // R61e：前端 save_config 写的是 provider_base_url（主端点）、
     // local_base_url（本地端点）；旧实现只读 base_url/local_base_url，
     // 导致用户在设置里切换到自定义端点后，代理持续 403。
-    for (const key of ['provider_base_url', 'local_base_url', 'base_url']) {
+    for (const key of ['provider_base_url', 'provider_base', 'local_base_url', 'base_url']) {
       try {
         const u = new URL(String(cfg[key] || '').trim())
         const host = (u.hostname || '').toLowerCase().replace(/^\[|\]$/g, '')
@@ -101,7 +101,7 @@ function applyCors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Harbor-Target')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Harbor-Target, X-Harbor-Harness')
   res.setHeader('Access-Control-Max-Age', '600')
   // Chromium 私有网络访问（PNA）：harbor://app 安全源 → 127.0.0.1 回环目标，
   // 预检会带 Access-Control-Request-Private-Network，缺此响应头时 fetch 直接

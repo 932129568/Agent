@@ -47,16 +47,18 @@ export default function SettingsModal() {
 
   const handleSaveModel = async (alsoTest) => {
     try {
-      assertLatin1Value('API Key', draft.api_key || '')
-      assertLatin1Value('Base URL', draft.provider_base || '')
+      const baseVal = draft.provider_base_url || draft.provider_base || ''
+      const keyVal = draft.api_key || draft.provider_key || ''
+      assertLatin1Value('API Key', keyVal)
+      assertLatin1Value('Base URL', baseVal)
       if (draft.local_base_url) assertLatin1Value('本地端点 URL', draft.local_base_url)
       setErrMsg('')
-      await saveBackendConfig(draft)
+      await saveBackendConfig({ ...draft, provider_base_url: baseVal, provider_base: baseVal, api_key: keyVal, provider_key: keyVal })
       if (alsoTest) {
         const res = await api.testProviderEndpoint(
-          draft.local_mode ? draft.local_base_url : draft.provider_base,
-          draft.api_key || '',
-          draft.local_mode ? draft.local_model : draft.model,
+          draft.local_mode ? draft.local_base_url : baseVal,
+          keyVal,
+          draft.local_mode ? draft.local_model : (draft.model || draft.provider_model || 'glm-4.5-flash'),
           15,
           !!draft.local_mode
         )
@@ -148,7 +150,7 @@ export default function SettingsModal() {
               <h3>云端 / OpenAI 兼容端点与会话预算</h3>
               <div className="st-field">
                 <label>Base URL</label>
-                <input className="st-input" value={draft.provider_base || ''} onChange={(e) => setDraft({ ...draft, provider_base: e.target.value })} />
+                <input className="st-input" value={draft.provider_base_url || draft.provider_base || ''} onChange={(e) => setDraft({ ...draft, provider_base_url: e.target.value, provider_base: e.target.value })} />
               </div>
               <div className="st-field">
                 <label>API Key（自动拦截中文/全角非 ASCII 字符）</label>
@@ -337,7 +339,7 @@ export default function SettingsModal() {
               </div>
               <div className="st-field">
                 <label>主舞台通透度：{Math.round(settings.opacity * 100)}%</label>
-                <input type="range" min="32" max="94" value={Math.round(settings.opacity * 100)}
+                <input type="range" min="22" max="90" value={Math.round(settings.opacity * 100)}
                   onChange={(e) => updateVisualSettings({ opacity: Number(e.target.value) / 100 })} />
               </div>
               <div className="st-field">

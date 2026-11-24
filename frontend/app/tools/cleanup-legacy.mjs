@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..')
 const EXEC = process.argv.includes('--execute')
+const INCLUDE_PY = process.argv.includes('--include-python')
+const PY_RETIRED = ['harness', 'agent_memory', 'Harbor.spec', 'Harbor-mac.spec', 'requirements-ci.txt', 'requirements-mac.txt', 'requirements-win.txt']
 
 const TARGETS = [
   // 旧命令式前端 & 过渡 React 岛 & 外挂皮肤 & 单文件巨石
@@ -44,7 +46,7 @@ const TARGETS = [
 
 console.log(`[cleanup-legacy] mode = ${EXEC ? 'EXECUTE (物理删除)' : 'DRY-RUN (仅预览)'}`)
 let count = 0
-for (const rel of TARGETS) {
+for (const rel of (INCLUDE_PY ? [...TARGETS, ...PY_RETIRED] : TARGETS)) {
   const full = path.join(REPO_ROOT, rel)
   if (!fs.existsSync(full)) continue
   count++

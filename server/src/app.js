@@ -44,6 +44,9 @@ export async function buildServer() {
       // 与「绝不输出 *」同一精神）。与 bridge.js callApiHttp 实际发送的头一一对应。
       reply.header('Access-Control-Allow-Headers',
         'content-type, x-harbor-sid, x-harbor-agent-loop, x-harbor-confirmed')
+      if (String(request.headers['access-control-request-private-network'] || '').toLowerCase() === 'true') {
+        reply.header('Access-Control-Allow-Private-Network', 'true')
+      }
       if (request.method === 'OPTIONS') {
         reply.code(204)
         return reply.send()

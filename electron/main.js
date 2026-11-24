@@ -11,7 +11,7 @@
  *      （严禁混用 transparent:true），macOS 用 vibrancy:'under-window'；
  *   3. harbor://app/ 严格白名单映射 frontend/app/dist/* 与 libs/*（补齐 .css/.svg/.woff2 MIME）。
  */
-const { app, BrowserWindow, dialog, safeStorage, protocol, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, safeStorage, protocol, ipcMain, Menu } = require('electron')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -41,6 +41,7 @@ if (USE_CUSTOM_PROTOCOL) {
 
 /** 协议资源白名单：精确映射 dist 产物与只读 libs，拒绝任何目录遍历。 */
 const DIST_FILES = new Set(['index.html', 'app.js', 'app.css', 'app.js.map', 'app.css.map'])
+const ASSET_FILES = new Set(['harbor.ico', 'harbor-icon.png'])
 const LIB_FILES = new Set([
   'libs/marked.min.js',
   'libs/purify.min.js',
@@ -57,6 +58,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.png': 'image/png',
   '.woff2': 'font/woff2',
 }
 
@@ -202,7 +205,7 @@ async function boot() {
         const rel = decodeURIComponent(u.pathname.replace(/^\/+/, '')) || 'index.html'
         let abs = null
         if (DIST_FILES.has(rel)) abs = path.join(APP_DIST, rel)
-        else if (LIB_FILES.has(rel)) abs = path.join(ROOT, rel)
+        else if (LIB_FILES.has(rel) || ASSET_FILES.has(rel)) abs = path.join(ROOT, rel)
         if (!abs) return new Response('not found', { status: 404 })
         const body = await fs.promises.readFile(abs)
         const type = MIME[path.extname(rel)] || 'application/octet-stream'
@@ -216,6 +219,12 @@ async function boot() {
 
   const isWin = process.platform === 'win32'
   const isMac = process.platform === 'darwin'
+  if (isMac) {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]))
+  } else {
+    Menu.setApplicationMenu(null)
+  }
+  const iconFile = path.join(ROOT, 'assets', 'harbor.ico')
   // 铁律 LAW-11：Windows 下只用 backgroundColor:'#00000000' + backgroundMaterial:'acrylic'，绝不混写 transparent:true
   win = new BrowserWindow({
     width: 1320,
@@ -223,6 +232,8 @@ async function boot() {
     minWidth: 920,
     minHeight: 620,
     show: !SMOKE,
+    autoHideMenuBar: true,
+    ...(fs.existsSync(iconFile) ? { icon: iconFile } : {}),
     backgroundColor: '#00000000',
     ...(isWin ? { backgroundMaterial: 'acrylic' } : {}),
     ...(isMac ? { vibrancy: 'under-window', visualEffectState: 'followWindow', titleBarStyle: 'hiddenInset' } : {}),

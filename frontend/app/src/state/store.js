@@ -70,8 +70,10 @@ const initialState = Object.freeze({
     ...initialVisual,
     backendConfig: {
       api_key: '',
+      provider_base_url: 'https://open.bigmodel.cn/api/paas/v4',
       provider_base: 'https://open.bigmodel.cn/api/paas/v4',
       provider_key: '',
+      provider_model: '',
       model: 'glm-4.5-flash',
       temperature: 0.7,
       top_p: 0.9,
@@ -229,7 +231,23 @@ export async function hydrateApp() {
   ])
 
   if (cfgRes.status === 'fulfilled' && cfgRes.value && typeof cfgRes.value === 'object') {
-    patchSlice('settings', (s) => ({ ...s, backendConfig: { ...s.backendConfig, ...cfgRes.value } }))
+    const raw = cfgRes.value
+    const unifiedBase = raw.provider_base_url || raw.provider_base || raw.base_url || 'https://open.bigmodel.cn/api/paas/v4'
+    const unifiedKey = raw.provider_key || raw.api_key || ''
+    const unifiedModel = raw.provider_model || raw.model || 'glm-4.5-flash'
+    patchSlice('settings', (s) => ({
+      ...s,
+      backendConfig: {
+        ...s.backendConfig,
+        ...raw,
+        provider_base_url: unifiedBase,
+        provider_base: unifiedBase,
+        provider_key: unifiedKey,
+        api_key: unifiedKey,
+        provider_model: unifiedModel,
+        model: unifiedModel,
+      },
+    }))
   }
   if (sessRes.status === 'fulfilled' && Array.isArray(sessRes.value) && sessRes.value.length > 0) {
     const hydrated = sessRes.value.map((x) => ensureTree(x))
@@ -393,7 +411,19 @@ export async function updateVisualSettings(partial) {
 }
 
 export async function saveBackendConfig(patch) {
-  const merged = { ...state.settings.backendConfig, ...patch }
+  const rawMerged = { ...state.settings.backendConfig, ...patch }
+  const unifiedBase = rawMerged.provider_base_url || rawMerged.provider_base || 'https://open.bigmodel.cn/api/paas/v4'
+  const unifiedKey = rawMerged.api_key !== undefined ? rawMerged.api_key : (rawMerged.provider_key || '')
+  const unifiedModel = rawMerged.model || rawMerged.provider_model || 'glm-4.5-flash'
+  const merged = {
+    ...rawMerged,
+    provider_base_url: unifiedBase,
+    provider_base: unifiedBase,
+    provider_key: unifiedKey,
+    api_key: unifiedKey,
+    provider_model: unifiedModel,
+    model: unifiedModel,
+  }
   patchSlice('settings', (s) => ({ ...s, backendConfig: merged }))
   await api.saveConfig(merged)
   pushToast('配置已保存到本机 config.json', 'ok')
@@ -401,12 +431,14 @@ export async function saveBackendConfig(patch) {
 
 export function resolveEndpointConfig(preferLocal = false) {
   const c = state.settings.backendConfig || {}
+  const hasEnabledMcp = (state.settings.mcpServers || []).some((s) => s && s.enabled !== false)
   const useLocal = preferLocal || (c.local_mode && c.local_base_url)
   if (useLocal && c.local_base_url) {
     return {
       isLocal: true,
+      hasEnabledMcp,
       baseUrl: c.local_base_url,
-      apiKey: c.provider_key || '',
+      apiKey: c.provider_key || c.api_key || '',
       model: c.local_model || c.model || 'qwen2.5:7b',
       temperature: c.temperature,
       top_p: c.top_p,
@@ -416,11 +448,13 @@ export function resolveEndpointConfig(preferLocal = false) {
       tool_mode: c.tool_mode,
     }
   }
+  const pickedModel = c.provider_model || c.model || 'glm-4.5-flash'
   return {
     isLocal: false,
-    baseUrl: c.provider_base || 'https://open.bigmodel.cn/api/paas/v4',
-    apiKey: c.api_key || c.provider_key || '',
-    model: c.model === 'auto' ? 'glm-4.5-flash' : (c.model || 'glm-4.5-flash'),
+    hasEnabledMcp,
+    baseUrl: c.provider_base_url || c.provider_base || c.base_url || 'https://open.bigmodel.cn/api/paas/v4',
+    apiKey: c.provider_key || c.api_key || '',
+    model: pickedModel === 'auto' ? 'glm-4.5-flash' : pickedModel,
     temperature: c.temperature,
     top_p: c.top_p,
     max_tokens: c.max_tokens,
