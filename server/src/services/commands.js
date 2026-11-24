@@ -144,12 +144,14 @@ function checkDedup(command) {
   }
   const norm = subprocessNorm(key0)
   const key = `${ctxSid()}:${dedupKeyFromNorm(norm)}`
-  if (key === lastKeys.get(ctxSid())) {
+  const prevTs = recent.get(key) || 0
+  const ageMs = Date.now() - prevTs
+  if (key === lastKeys.get(ctxSid()) && ageMs < 4000) {
     return '与上一条命令完全相同，已拒绝；如需刷新结果请加参数或说明目的。'
   }
-  if (recent.has(key)) {
-    if (isWriteCommand(norm)) return '该写命令本会话已执行过，已拦截；确需重跑请修改参数。'
-    return '该命令最近已执行过，已拒绝重复执行；如需刷新结果请加参数或说明目的。'
+  if (prevTs > 0 && ageMs < 8000) {
+    if (isWriteCommand(norm)) return '该写命令刚刚已执行过，已拦截；确需重跑请修改参数或稍候再试。'
+    return '该命令刚刚已执行过，已拒绝高频重复执行；如需刷新结果请稍候再试。'
   }
   return null
 }

@@ -107,8 +107,27 @@ export default function SettingsModal() {
   const handleSaveSandbox = async () => {
     try {
       await api.sandboxSaveConfig(sandboxDraft)
+      if (sandboxDraft.enabled === false) {
+        const baseCfg = (settings.guardConfig && typeof settings.guardConfig === 'object') ? settings.guardConfig : {}
+        const offTiers = {
+          ...(baseCfg.tiers || {}),
+          run_command: 'off',
+          run_powershell: 'off',
+          delete_path: 'off',
+          browser_click: 'off',
+          browser_fill: 'off',
+          software_call: 'off',
+        }
+        await api.guardSaveConfig({ ...baseCfg, tiers: offTiers })
+        setGuardTiersDraft(offTiers)
+      }
       await refreshSettingsAux()
-      pushToast('命令沙箱配置已保存', 'ok')
+      pushToast(
+        sandboxDraft.enabled === false
+          ? '沙箱与目录限制已关闭：现可自由读写桌面/任意用户路径并自动放行命令'
+          : '命令沙箱与路径隔离已启用',
+        'ok'
+      )
     } catch (e) { pushToast(e.message, 'err') }
   }
 
@@ -333,12 +352,12 @@ export default function SettingsModal() {
             </div>
 
             <div className="st-card">
-              <h3>命令沙箱（Windows Job Object 进程资源隔离 · 不控制审批弹窗）</h3>
+              <h3>沙箱与工作区路径隔离总开关（关闭后解除目录监狱与命令弹窗）</h3>
               <div className="st-row" style={{ justifyContent: 'space-between', fontSize: 12.5 }}>
                 <label className="st-row" style={{ cursor: 'pointer' }}>
                   <input type="checkbox" checked={sandboxDraft.enabled !== false}
                     onChange={(e) => setSandboxDraft({ ...sandboxDraft, enabled: e.target.checked })} />
-                  <span>启用命令执行沙箱隔离</span>
+                  <span>启用沙箱与工作区目录隔离（取消勾选并保存 = 允许自由读写桌面/全盘用户文件与命令）</span>
                 </label>
                 <span style={{ color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
                   状态：{settings.sandboxStatus && settings.sandboxStatus.available ? '可用 (Job Object)' : '当前平台降级'}

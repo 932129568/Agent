@@ -19,7 +19,7 @@ import {
   setGroupRoutingMode,
   pushToast,
 } from '../../state/store.js'
-import { CAPABILITY_CATALOG, GROUP_ROSTER_PRESETS } from '../../services/capabilityRouter.js'
+import { CAPABILITY_CATALOG, GROUP_ROSTER_PRESETS, inferMemberCapabilities } from '../../services/capabilityRouter.js'
 import { REASONING_TIERS } from '../../services/reasoningPresets.js'
 import { copyText } from '../../platform/dom.js'
 import { estTokens, historyTokens } from '../../services/compaction.js'
@@ -51,6 +51,7 @@ export default function GroupPanel() {
   const [newPersona, setNewPersona] = useState('')
   const [newModel, setNewModel] = useState('')
   const [newCaps, setNewCaps] = useState(['text'])
+  const [newCapsTouched, setNewCapsTouched] = useState(false)
 
   useEffect(() => { refreshGroupFiles().catch(() => {}) }, [])
 
@@ -70,13 +71,22 @@ export default function GroupPanel() {
       : [...list, capId]
   )
 
+  const handleNewRoleInput = (nextName, nextPersona) => {
+    setNewName(nextName)
+    setNewPersona(nextPersona)
+    if (!newCapsTouched) {
+      setNewCaps(inferMemberCapabilities(nextName, nextPersona))
+    }
+  }
+
   const handleAddMember = () => {
     if (!newName.trim()) return
+    const finalCaps = newCapsTouched ? newCaps : inferMemberCapabilities(newName, newPersona)
     addGroupMember({
       name: newName.trim(),
       persona: newPersona.trim() || '按专长完成当前接力棒次任务',
       model: newModel.trim(),
-      capabilities: newCaps,
+      capabilities: finalCaps,
       reasoningTier: 'auto',
       allowTools: true,
     })
@@ -84,6 +94,7 @@ export default function GroupPanel() {
     setNewPersona('')
     setNewModel('')
     setNewCaps(['text'])
+    setNewCapsTouched(false)
   }
 
   const hasLongAssistant = group.messages.some((m) => m.role === 'assistant' && isLongContent(m.content))
@@ -349,14 +360,21 @@ export default function GroupPanel() {
             <div className="gp-member-card">
               <strong style={{ fontSize: 12 }}>+ 新增自定义角色</strong>
               <div className="gp-member-row">
-                <input className="gp-field-sm" style={{ width: 126 }} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="新角色名（如分镜导演）" />
-                <input className="gp-field-sm" style={{ flex: 1, minWidth: 150 }} value={newPersona} onChange={(e) => setNewPersona(e.target.value)} placeholder="职责与输出要求" />
+                <input className="gp-field-sm" style={{ width: 126 }} value={newName} onChange={(e) => handleNewRoleInput(e.target.value, newPersona)} placeholder="新角色名（如 ui设计）" />
+                <input className="gp-field-sm" style={{ flex: 1, minWidth: 150 }} value={newPersona} onChange={(e) => handleNewRoleInput(newName, e.target.value)} placeholder="职责与输出要求（自动推断能力标签）" />
                 <input className="gp-field-sm" style={{ width: 140 }} value={newModel} onChange={(e) => setNewModel(e.target.value)} placeholder="指定模型名（可选）" />
                 <button type="button" className="gp-chip-btn" data-active="true" onClick={handleAddMember}>添加角色</button>
               </div>
               <div className="gp-member-row">
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>自动推断能力：</span>
                 {CAPABILITY_CATALOG.map((cap) => (
-                  <button key={cap.id} type="button" className="gp-chip-btn" data-active={String(newCaps.includes(cap.id))} onClick={() => setNewCaps((c) => toggleCap(c, cap.id))}>
+                  <button
+                    key={cap.id}
+                    type="button"
+                    className="gp-chip-btn"
+                    data-active={String(newCaps.includes(cap.id))}
+                    onClick={() => { setNewCapsTouched(true); setNewCaps((c) => toggleCap(c, cap.id)) }}
+                  >
                     {cap.label}
                   </button>
                 ))}

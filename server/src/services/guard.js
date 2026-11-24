@@ -31,6 +31,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { CONFIG_DIR, atomicWriteJson } from '../paths.js'
 import { guardAudit } from './audit.js'
+import { isSandboxDisabled } from './jail.js'
 import { ctxSid, registerSidContainer } from '../session-context.js'
 
 const GUARD_FILE = path.join(CONFIG_DIR, 'guard.json')
@@ -397,7 +398,8 @@ export async function guardCheck(op, detail = {}) {
     return JSON.stringify({ action: 'allow', via: 'trusted-persistent' })
   }
 
-  // ⑤⑥ 档位
+  // ⑤⑥ 档位（用户关闭沙箱后，交互审批档位自动放行，仅保留上方①保护名单硬拦截）
+  if (isSandboxDisabled()) return JSON.stringify({ action: 'allow', via: 'sandbox-disabled' })
   if (tier === 'off') return JSON.stringify({ action: 'allow' })
   if (tier === 'list' && !LISTLESS_OPS.has(op)) return JSON.stringify({ action: 'allow' })
   // ⑦ always/session → confirm（回执带 label——Python 契约）

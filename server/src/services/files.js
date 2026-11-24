@@ -16,7 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { runPostWriteHook } from './postWriteHooks.mjs'
 import iconv from 'iconv-lite'
-import { resolveWs, shortPath } from './jail.js'
+import { resolveWs, shortPath, isSandboxDisabled } from './jail.js'
 import { withRootLock, ctxRoot } from '../session-context.js'
 
 const MAX_LIST = 200
@@ -253,8 +253,9 @@ export async function writeFile(input, content) {
   return withRootLock(ctxRoot(), async () => {
     const target = resolveWs(input)
   try {
-    if (fs.existsSync(target) && fs.statSync(target).size > 20000) {
-      return errJson('目标文件已存在且 >20KB。请改用 search_replace 局部修改；确需整体重写，先 delete_path 删掉它再 write_file。')
+    const overwriteCap = isSandboxDisabled() ? 2 * 1024 * 1024 : 20000
+    if (fs.existsSync(target) && fs.statSync(target).size > overwriteCap) {
+      return errJson('目标文件已存在且超过直接覆盖上限。请改用 search_replace 局部修改；确需整体重写，先 delete_path 删掉它再 write_file。')
     }
     // P0-6：覆盖写入前捕获原文件内容（新建文件为空串），供前端 Myers Diff 审查后立即剥离（0 Token 膨胀）
     const prevText = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : ''

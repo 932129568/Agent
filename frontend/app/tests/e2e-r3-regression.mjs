@@ -689,12 +689,21 @@ try {
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForTimeout(200)
 
-  // F2: 群聊真工具调用（write_file 写 index.html）+ 交付卡片默认折叠 + 群文件面板可查看
+  // F2: 群聊自定义「ui设计」角色 + 智能路由调度全部 4 位成员 + 真工具写文件 + 折叠 + 群文件面板
   await page.locator('.hb-rail-btn[title="角色群聊"]').click()
   await page.waitForSelector('.gp-root')
+  await page.locator('.gp-controls button:has-text("自定义角色与模型")').click()
+  await page.waitForSelector('.gp-roster-panel')
+  await page.locator('.gp-roster-panel button:has-text("工程铁三角")').click()
+  const addCardF = page.locator('.gp-member-card').last()
+  await addCardF.locator('input[placeholder*="新角色名"]').fill('ui设计')
+  await addCardF.locator('input[placeholder*="职责与输出要求"]').fill('负责界面视觉设计与CSS美化')
+  await addCardF.locator('button:has-text("添加角色")').click()
+  await page.locator('.gp-roster-panel button:has-text("完成")').click()
+
   stubState.writtenFiles.length = 0
   stubState.triggerGroupToolOnce = true
-  await page.locator('.gp-input').fill('帮我在工作区做一个简单的网页 index.html')
+  await page.locator('.gp-input').fill('帮我在工作区做一个好看的网页 index.html，优化 UI 界面')
   await page.locator('.gp-bar button:has-text("发起接力")').click()
   await page.waitForSelector('.rt-stage[data-status="done"]', { timeout: 15000 })
 

@@ -1145,7 +1145,11 @@ export async function runGroupRelay(topic) {
   if (!clean || state.group.running) return
   while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
 
-  const routed = routeGroupMembers(clean, state.group.members, state.group.routingMode)
+  const recentGroupText = (state.group.messages || [])
+    .slice(-4)
+    .map((m) => String(m && m.content || '').slice(0, 240))
+    .join('\n')
+  const routed = routeGroupMembers(clean, state.group.members, state.group.routingMode, recentGroupText)
   patchSlice('group', (g) => ({
     ...g,
     lastIntent: routed.intent,
@@ -1159,7 +1163,7 @@ export async function runGroupRelay(topic) {
     plannedMembers: routed.selected,
     startIndex: 0,
     relayContext: [{ role: 'user', content: clean }],
-    intentLabel: `${routed.intent.label} (${routed.selected.length} 棒)`,
+    intentLabel: routed.intent.label,
   })
 }
 

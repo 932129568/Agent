@@ -321,3 +321,64 @@ test('promptCache.js extractCacheUsage 修正聚合网关同时返回 prompt_tok
   assert.equal(ant.promptTokens, 10000)
   assert.equal(ant.hitRate, 95)
 })
+
+
+test('capabilityRouter.js 智能多意图路由支持复合需求与自定义角色（如 ui设计 + 审查员）全量协同调度', async () => {
+  const { GROUP_ROSTER_PRESETS, inferMemberCapabilities, routeGroupMembers } = await import('../src/services/capabilityRouter.js')
+  const uiCaps = inferMemberCapabilities('ui设计', '负责界面视觉设计与交互规范')
+  assert.ok(uiCaps.includes('vision'), `ui设计应自动推断 vision 能力: ${uiCaps}`)
+
+  const roster = [
+    ...GROUP_ROSTER_PRESETS.engineering.members,
+    { name: 'ui设计', persona: '负责网页界面视觉与样式设计' },
+  ]
+  const webRouted = routeGroupMembers('做一个好看的个人主页网页，优化 UI 界面', roster, 'smart')
+  const names = webRouted.selected.map((m) => m.name)
+  assert.ok(names.includes('架构师') && names.includes('实现工程师') && names.includes('代码审查员') && names.includes('ui设计'),
+    `复合网页+UI需求应调度全部 4 位相关角色，实得: ${names.join(' -> ')}`)
+  assert.equal(webRouted.missingCapabilityWarning, '')
+
+  // 短续跑指令“继续”也应保持全员协同而非只挑 2 人
+  const contRouted = routeGroupMembers('继续', roster, 'smart')
+  assert.equal(contRouted.selected.length, 4)
+})
+
+test('agentEngine.js 全量覆盖 provider.js 全部 30 个内置工具 + 参数别名容错解析', async () => {
+  const { SUPPORTED_BUILTIN_TOOLS, parseToolArgs, dispatchSingleTool } = await import('../src/services/agentEngine.js')
+  const expectedAll = [
+    'read_more',
+    'read_file', 'write_file', 'append_file', 'search_replace', 'list_dir',
+    'make_dir', 'delete_path', 'move_path', 'copy_path', 'get_file_info',
+    'run_command', 'run_powershell', 'run_admin_command',
+    'open_app', 'open_url', 'take_screenshot', 'clipboard_read', 'clipboard_write',
+    'list_processes', 'kill_process', 'append_memory',
+    'browser_search', 'browser_open', 'software_call',
+    'browser_navigate', 'browser_extract', 'browser_snapshot',
+    'browser_click', 'browser_fill', 'browser_screenshot', 'browser_close',
+    'memory_write', 'memory_search', 'inspect_tool_schema',
+  ]
+  for (const t of expectedAll) {
+    assert.ok(SUPPORTED_BUILTIN_TOOLS.includes(t), `缺少内置工具处理器: ${t}`)
+  }
+
+  // 二次转义 JSON 参数容错
+  const parsed = parseToolArgs('"{\\"file_path\\":\\"demo.html\\",\\"old_string\\":\\"a\\",\\"new_string\\":\\"b\\"}"')
+  assert.equal(parsed.file_path, 'demo.html')
+
+  // 验证 open_url / clipboard_read / search_replace 别名真实分发参数与方法名
+  const calls = []
+  const mockRaw = async (method, args) => { calls.push({ method, args }); return '{"ok":true}' }
+  await dispatchSingleTool({ name: 'open_url', args: { url: 'https://example.com' }, callRaw: mockRaw })
+  await dispatchSingleTool({ name: 'clipboard_read', args: {}, callRaw: mockRaw })
+  await dispatchSingleTool({ name: 'search_replace', args: { file_path: 'index.html', old_string: '<h1>1</h1>', new_string: '<h1>2</h1>' }, callRaw: mockRaw })
+  await dispatchSingleTool({ name: 'run_admin_command', args: { command: 'whoami', timeout: 30 }, callRaw: mockRaw })
+
+  assert.equal(calls[0].method, 'open_url')
+  assert.equal(calls[0].args[0], 'https://example.com')
+  assert.equal(calls[1].method, 'get_clipboard')
+  assert.equal(calls[2].method, 'search_replace')
+  assert.deepEqual(calls[2].args, ['index.html', '<h1>1</h1>', '<h1>2</h1>', false])
+  assert.equal(calls[3].method, 'run_admin_command')
+  assert.equal(calls[3].args[0], 'whoami')
+  assert.equal(calls[3].args[2], 30)
+})
