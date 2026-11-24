@@ -1,0 +1,28 @@
+@layer overlays {
+  .cp-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .cp-input {
+    width: 100%;
+    padding: 14px 18px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    font-size: 15px;
+    outline: none;
+  }
+  .cp-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .cp-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13.5px;
+    color: var(--text);
+  }
+  .cp-row:hover, .cp-row[data-active="true"] { background: var(--primary-soft); color: var(--primary); }
+  .cp-hint { font-size: 11.5px; color: var(--text-3); font-family: var(--font-mono); }
+}

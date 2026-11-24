@@ -1,0 +1,77 @@
+@layer overlays {
+  .st-shell { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .st-nav {
+    width: 210px;
+    flex-shrink: 0;
+    padding: 14px 12px;
+    border-right: 1px solid var(--border);
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .st-search {
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    font-size: 12px;
+    outline: none;
+  }
+  .st-nav-btn {
+    text-align: left;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .st-nav-btn[data-active="true"] {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 600;
+  }
+  .st-body { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .st-card {
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .st-card h3 { margin: 0; font-size: 14px; }
+  .st-field { display: flex; flex-direction: column; gap: 5px; }
+  .st-field label { font-size: 12px; color: var(--text-2); }
+  .st-input {
+    width: 100%;
+    padding: 8px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    font-size: 13px;
+    outline: none;
+  }
+  .st-input:focus { border-color: var(--primary); }
+  .st-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .st-btn {
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text-2);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .st-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .st-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  .st-err { padding: 8px 12px; border-radius: var(--radius-sm); background: var(--err-bg); color: var(--err); font-size: 12.5px; }
+  .st-mem-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+}

@@ -1,201 +1,135 @@
-/**
- * L1 单元测试（规范 §8.1）：纯函数、状态 slice、服务归一化。
- * 零 DOM、零网络、零 React 运行时，确定性可复跑。
- * 运行：node --test frontend/app/tests/unit.test.mjs
- */
-import { test } from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createStore } from '../src/state/createStore.js'
-import { initialSlices, emptySlices } from '../src/state/slices.js'
-import { selectCurrentSession, selectTakeoverCandidates, selectCurrentPick } from '../src/state/selectors.js'
-import { sessionActions } from '../src/state/actions/sessionActions.js'
-import { uiActions } from '../src/state/actions/uiActions.js'
-import { runtimeActions } from '../src/state/actions/runtimeActions.js'
-import { HarborError, normalizeError, isAbort } from '../src/services/errors.js'
-import { createCache, createSingleFlight, withRetry } from '../src/services/cache.js'
-import { guardKindOf, createToolExecutor } from '../src/services/tools.js'
-import { escapeText, renderMarkdown } from '../src/services/sanitize.js'
-import { setLibsForTest, resetLibsCache } from '../src/platform/libs.js'
-import { storageKey } from '../src/platform/storage.js'
-import { appVersion } from '../src/platform/env.js'
+import { findNonLatin1Char, assertLatin1Value, assertLatin1Headers } from '../src/services/headers.js'
 import {
-  TOKEN_NAMES, THEMES, SHARED, toCssVars, validateTokens, tokenOf,
-} from '../src/ui/DossierTokens.js'
-import {
-  EXHIBIT_STATES, EXHIBIT_EVENTS, STAMP_LABELS,
-  transition, isAnimated, isVerified, needsAttention, summarize, validateTransitions,
-} from '../src/state/ExhibitState.js'
+  ensureTree,
+  appendMessageToSession,
+  forkFromMessage,
+  switchSibling,
+  siblingMeta,
+  rewindWithSnapshot,
+  undoRewind,
+  sanitizeMessagesForApi,
+} from '../src/services/dag.js'
+import { invalidateCachesAfterTool, extractAndStripDiff } from '../src/services/agentEngine.js'
+import { estTokens, compactSessionHistory, computeCompactThreshold } from '../src/services/compaction.js'
+import { pickNpmVerifyScript, resolveVerifyCmd, runSelfCheckAfterWrites } from '../src/services/selfCheck.js'
+import { spawnIsolatedSubagent, cancelAllSubagents } from '../src/services/subagent.js'
+import { createCostDefense, isResumableError, detectTakeoverRequired } from '../src/services/budgetAndResume.js'
+import { validateUiSpec, extractUiSpecsFromMarkdown } from '../src/services/generative.js'
+import { ExpertMailbox } from '../src/services/expertTeam.js'
+import { redactForCloud, normalizeCollaborationConfig } from '../src/services/collaboration.js'
 
-test('store：update 产生新快照并通知订阅者', () => {
-  const store = createStore(emptySlices())
-  let calls = 0
-  store.subscribe(() => { calls++ })
-  assert.equal(store.update({ uiSlice: p => ({ ...p, panel: 'sessions' }) }), true)
-  assert.equal(store.getSnapshot().uiSlice.panel, 'sessions')
-  assert.equal(calls, 1)
-  assert.equal(store.update({ uiSlice: store.getSnapshot().uiSlice }), false)
-  assert.equal(calls, 1)
-  assert.equal(typeof store.slice('uiSlice').getSnapshot, 'function')
-  assert.throws(() => store.update({ nope: {} }), /未知 slice/)
-  assert.equal(initialSlices.uiSlice.panel, 'chat', 'initialSlices 不被测试污染')
+test('headers.js 精准拦截非 ASCII API Key 与请求头', () => {
+  assert.equal(findNonLatin1Char('sk-abc123_XYZ'), null)
+  assert.equal(findNonLatin1Char('sk-中123').index, 3)
+  assert.throws(() => assertLatin1Value('API Key', 'sk-中123'), /第 4 个字符/)
+  assert.deepEqual(assertLatin1Headers({ Authorization: 'Bearer sk-ok' }), { Authorization: 'Bearer sk-ok' })
 })
 
-test('actions：会话/UI/运行时写入均经 update，键控 sid', () => {
-  const store = createStore(emptySlices())
-  sessionActions.setSessions(store, [{ id: 'S1', title: 'A' }])
-  sessionActions.setCurrent(store, 'S1')
-  assert.equal(selectCurrentSession(store.getSnapshot()).title, 'A')
-  sessionActions.setRunStatus(store, 'S1', 'paused')
-  assert.equal(store.getSnapshot().sessionSlice.runStatusBySid.S1, 'paused')
-  uiActions.setPick(store, 'S1', { kind: 'experts', id: 'x' })
-  assert.equal(selectCurrentPick(store.getSnapshot()).id, 'x')
-  runtimeActions.setActiveRuns(store, [
-    { sessionId: 'S1', status: 'failed' }, { sessionId: 'S2', status: 'working' },
-  ])
-  assert.equal(selectTakeoverCandidates(store.getSnapshot()).length, 1)
-  runtimeActions.clearTakeover(store, 'S1')
-  assert.ok(store.getSnapshot().runtimeSlice.takeoverBySid !== undefined)
+test('dag.js 非破坏式分叉、分支切换与回退撤销往返', () => {
+  let s = ensureTree({ id: 's1', messages: [] })
+  s = appendMessageToSession(s, { role: 'user', content: 'Q1' })
+  s = appendMessageToSession(s, { role: 'assistant', content: 'A1' })
+  s = forkFromMessage(s, 0, { role: 'user', content: 'Q1-b2' })
+  assert.deepEqual(siblingMeta(s, s.messages[0]._nodeId), { index: 2, total: 2 })
+  s = switchSibling(s, s.messages[0]._nodeId, -1)
+  assert.equal(s.messages.map((m) => m.content).join(','), 'Q1,A1')
+  const rw = rewindWithSnapshot(s, 1)
+  assert.equal(undoRewind(rw).messages.length, 2)
+  assert.equal(sanitizeMessagesForApi([{ role: 'user', content: 'x', _nodeId: 'n1' }, { role: 'system', content: 'tmp', __resumeDirective: true }]).length, 1)
 })
 
-test('错误模型：HarborError / normalizeError / isAbort', () => {
-  const e = new HarborError('E1', 'msg', { hint: 'h', retryable: true })
-  assert.equal(normalizeError(e), e)
-  assert.equal(normalizeError({ ok: false, error: { code: 'C', message: 'M' } }).code, 'C')
-  assert.equal(normalizeError(new Error('x'), 'F').code, 'F')
-  assert.equal(normalizeError('boom').message, 'boom')
-  assert.equal(isAbort({ name: 'AbortError' }), true)
-  assert.equal(isAbort(new HarborError('USER_PAUSED', 'p')), true)
-  assert.equal(isAbort(new Error('x')), false)
+test('agentEngine.js 写后反斜杠归一失效缓存 + 剥离 parsed.diff', () => {
+  const reads = new Set(['src\\a.js@0', 'src/b.js@0'])
+  const dirs = new Set(['.'])
+  invalidateCachesAfterTool(reads, dirs, 'write_file', { path: 'src/a.js' }, true)
+  assert.equal(reads.has('src\\a.js@0'), false)
+  assert.equal(dirs.size, 0)
+  const { cleanJson, diff } = extractAndStripDiff('write_file', { path: 'src/a.js' }, JSON.stringify({ ok: true, diff: { before: 'a', after: 'b' } }))
+  assert.equal(diff.after, 'b')
+  assert.equal(cleanJson.includes('"diff"'), false)
 })
 
-test('cache：TTL / 单飞 / 有界重试（中止不重试）', async () => {
-  const cache = createCache({ ttlMs: 50, maxEntries: 2 })
-  cache.set('a', 1)
-  assert.equal(cache.get('a'), 1)
-  cache.set('b', 2); cache.set('c', 3)
-  assert.equal(cache.size, 2)
-  cache.invalidate()
-  assert.equal(cache.get('a'), undefined)
-
-  let produced = 0
-  const single = createSingleFlight()
-  const producer = () => { produced++; return Promise.resolve('v') }
-  const [x, y] = await Promise.all([single('k', producer), single('k', producer)])
-  assert.equal(x, 'v'); assert.equal(y, 'v'); assert.equal(produced, 1)
-
-  let attempts = 0
-  const value = await withRetry(async () => {
-    attempts++
-    if (attempts < 2) throw new Error('5xx')
-    return 'ok'
-  }, { retries: 2, baseDelayMs: 0 })
-  assert.equal(value, 'ok'); assert.equal(attempts, 2)
-
-  await assert.rejects(
-    () => withRetry(async () => { throw new HarborError('USER_PAUSED', 'stop') },
-      { retries: 3, baseDelayMs: 0 }),
-    /stop/,
-  )
+test('compaction.js stride 估算、缓存优先放宽阈值与幂等锚点摘要', () => {
+  assert.ok(estTokens('中文测试'.repeat(1000)) > estTokens('abcd'.repeat(1000)))
+  assert.equal(computeCompactThreshold({ level: 'std', cacheHitRate: 60 }), 135000)
+  const msgs = Array.from({ length: 10 }, (_, i) => ({
+    role: i % 2 ? 'assistant' : 'user',
+    content: i === 1 ? '决定采用方案A，改动涉及 src/app.js' : `消息内容 ${i} ` + 'x'.repeat(200),
+  }))
+  const r1 = compactSessionHistory({ id: 'c1', messages: msgs }, { force: true, keepTail: 4 })
+  assert.equal(r1.compacted, true)
+  assert.equal(r1.session.messages.filter((m) => m.__anchorDigest).length, 1)
+  assert.ok(r1.session.messages[0].content.includes('方案A'))
+  const r2 = compactSessionHistory(r1.session, { force: true, keepTail: 4 })
+  assert.equal(r2.session.messages.filter((m) => m.__anchorDigest).length, 1)
 })
 
-test('工具类别与执行器：护栏档位 + 进度回调', async () => {
-  assert.equal(guardKindOf('read_file'), 'file')
-  assert.equal(guardKindOf('run_command'), 'command')
-  assert.equal(guardKindOf('browser_click'), 'browser')
-  assert.equal(guardKindOf('mcp__x__y'), 'mcp')
-  const phases = []
-  const executor = createToolExecutor({ onProgress: p => phases.push(p.phase) })
-  await assert.rejects(() => executor.execute('read_file', [], {}), /BRIDGE_UNAVAILABLE|前端桥未就绪/)
-  assert.ok(phases.includes('start') && phases.includes('error'))
+test('selfCheck.js 三级 verifyCmd 解析与失败回灌消息', async () => {
+  assert.equal(pickNpmVerifyScript(JSON.stringify({ scripts: { build: 'x', test: 'y' } })).cmd, 'npm run test')
+  const resolved = await resolveVerifyCmd({ readFile: async (p) => (p === '.harbor/verify' ? '# 注释\nnpm run lint\n' : null) })
+  assert.equal(resolved.cmd, 'npm run lint')
+  const sc = await runSelfCheckAfterWrites({
+    session: { __verifyCmd: 'node -c a.js' },
+    runCommand: async () => JSON.stringify({ ok: false, exit_code: 1, stderr: 'SyntaxError' }),
+  })
+  assert.equal(sc.ran, true)
+  assert.equal(sc.ok, false)
+  assert.ok(sc.feedbackMessage.includes('SyntaxError'))
 })
 
-test('净化：转义 + 缺库时宁可空串也不放行未净化 HTML', () => {
-  assert.equal(escapeText('<b>&"\'</b>'), '&lt;b&gt;&amp;&quot;&#39;&lt;/b&gt;')
-  resetLibsCache()
-  assert.throws(() => renderMarkdown('# hi'), /Markdown 引擎未就绪/)
-  setLibsForTest({ marked: { parse: () => '<b>x</b>' }, purify: { sanitize: s => s } })
-  assert.equal(renderMarkdown('# hi').__html, '<b>x</b>')
-  resetLibsCache()
+test('subagent.js 隔离上下文 + 毫秒级级联中止', async () => {
+  const h1 = spawnIsolatedSubagent({ parentSid: 'p1', task: '探索 A', runner: async () => '结论A' + 'x'.repeat(300) })
+  const r1 = await h1.promise
+  assert.equal(r1.ok, true)
+  assert.ok(r1.summary.length <= 240)
+  spawnIsolatedSubagent({ parentSid: 'p2', task: '挂起1', runner: () => new Promise(() => {}) })
+  spawnIsolatedSubagent({ parentSid: 'p2', task: '挂起2', runner: () => new Promise(() => {}) })
+  const c = cancelAllSubagents('p2')
+  assert.equal(c.count, 2)
+  assert.ok(c.ms <= 100)
 })
 
-test('平台：config.json 零污染 + 版本读取不抛错', () => {
-  assert.equal(storageKey('theme'), 'harbor_app_theme')
-  assert.throws(() => storageKey('config.json'), /禁止写入/)
-  assert.equal(typeof appVersion(), 'string')
+test('budgetAndResume.js 预算硬停、循环熔断、可恢复错误与验证码接管', () => {
+  const d = createCostDefense({ sessionBudgetRmb: 1.0, pricePer1kTokens: 0.002 })
+  assert.equal(d.checkBudget(100000), null)
+  assert.equal(d.checkBudget(600000).stop, true)
+  assert.equal(d.registerToolSignature('a').loop, false)
+  assert.equal(d.registerToolSignature('a').loop, false)
+  assert.equal(d.registerToolSignature('a').loop, true)
+  assert.equal(isResumableError('HTTP 502 Bad Gateway'), true)
+  assert.equal(isResumableError('HTTP 401: Unauthorized'), false)
+  assert.equal(detectTakeoverRequired({ error: { code: 'CAPTCHA_REQUIRED', takeover_id: 'tk1' } }).takeoverId, 'tk1')
 })
 
-/* ======================== R71 · 设计令牌单一事实源 ======================== */
-test('R71 令牌：两套主题齐备、无纯黑白、强调色唯一且有效', () => {
-  const v = validateTokens()
-  assert.equal(v.ok, true, v.problems.join(' | '))
-  assert.deepEqual(Object.keys(THEMES).sort(), ['dark', 'light'])
-  assert.notEqual(THEMES.light['color-accent'], THEMES.dark['color-accent'],
-    '暗色强调色须提亮以满足对比度')
-  assert.notEqual(THEMES.light['color-bg'], '#FFFFFF')
-  assert.notEqual(THEMES.dark['color-bg'], '#000000')
+test('generative.js 提取并安全校验 UiSpec v1（未知组件自动降级 EmptyState）', () => {
+  const specJson = JSON.stringify({
+    schemaVersion: 1,
+    specId: 'sp1',
+    layout: 'card-grid',
+    blocks: [
+      { blockId: 'b1', component: 'StatTile', props: { label: 'OK', value: 1 } },
+      { blockId: 'b2', component: 'EvilScript', props: {} },
+    ],
+  })
+  const v = validateUiSpec(specJson)
+  assert.equal(v.ok, true)
+  assert.equal(v.spec.blocks[1].component, 'EmptyState')
+  const ex = extractUiSpecsFromMarkdown(`正文\n\`\`\`ui-spec\n${specJson}\n\`\`\``)
+  assert.equal(ex.specs.length, 1)
+  assert.equal(ex.cleanMarkdown, '正文')
 })
 
-test('R71 令牌：TOKEN_NAMES 全部可解析，CSS 变量声明完整', () => {
-  assert.ok(TOKEN_NAMES.length >= 40, '令牌清单应覆盖色彩/字阶/间距/动效/可访问性')
-  assert.equal(new Set(TOKEN_NAMES).size, TOKEN_NAMES.length, '令牌名不得重复')
-  for (const theme of ['light', 'dark']) {
-    const css = toCssVars(theme, '[data-theme="' + theme + '"]')
-    assert.ok(css.startsWith('[data-theme="' + theme + '"] {'))
-    for (const name of TOKEN_NAMES) {
-      assert.ok(css.includes('--' + name + ':'), `${theme} 缺令牌 ${name}`)
-    }
-    assert.ok(!css.includes('undefined'), `${theme} 不得出现未定义值`)
-  }
-  assert.throws(() => toCssVars('nope'), /未知主题/)
-})
+test('expertTeam.js 信箱投递消费 + collaboration.js 隐私脱敏与预算归一', () => {
+  const mb = new ExpertMailbox()
+  mb.deliver({ runId: 'r1', from: 'A', to: 'Lead', subject: 's', body: 'b' })
+  assert.equal(mb.unconsumed().length, 1)
+  assert.equal(mb.consumeFor('Lead').length, 1)
+  assert.equal(mb.unconsumed().length, 0)
 
-test('R71 令牌：结构令牌跨主题一致，展示字非默认无衬线', () => {
-  assert.equal(tokenOf('font-display', 'light'), tokenOf('font-display', 'dark'))
-  assert.match(SHARED['font-display'], /Georgia|Cambria|Noto Serif SC/)
-  assert.doesNotMatch(SHARED['font-display'], /Inter|Roboto|Arial|system-ui/)
-  assert.equal(tokenOf('target'), '44px', '可访问性目标下限')
-  assert.equal(tokenOf('focus-ring-w'), '2px')
-  assert.equal(tokenOf('color-accent', 'light'), '#B8412A')
-  assert.equal(tokenOf('color-accent', 'dark'), '#E0674A')
-  assert.equal(tokenOf('__missing__'), undefined, '未知令牌返回 undefined 而非抛错')
-})
-
-/* ======================== R71 · 证据条目状态机 ======================== */
-test('R71 状态机：转移表完整，所有目标状态在枚举内', () => {
-  const v = validateTransitions()
-  assert.equal(v.ok, true, v.problems.join(' | '))
-  assert.equal(Object.keys(EXHIBIT_STATES).length, 6)
-  assert.equal(Object.keys(EXHIBIT_EVENTS).length, 7)
-  assert.equal(Object.keys(STAMP_LABELS).length, 6, '每个状态都有文字钢印（三重编码）')
-})
-
-test('R71 状态机：合法迁移与非法迁移均可判别', () => {
-  assert.deepEqual(transition(EXHIBIT_STATES.QUEUED, EXHIBIT_EVENTS.START),
-    { ok: true, state: 'run' })
-  assert.deepEqual(transition(EXHIBIT_STATES.RUN, EXHIBIT_EVENTS.COMPLETE),
-    { ok: true, state: 'ok' })
-  assert.deepEqual(transition(EXHIBIT_STATES.ERR, EXHIBIT_EVENTS.RETRY),
-    { ok: true, state: 'queued' })
-  assert.deepEqual(transition(EXHIBIT_STATES.OK, EXHIBIT_EVENTS.VERIFY),
-    { ok: true, state: 'ok' }, '复核自环不改变结论')
-  // 非法：跳过态是终态、运行中不能直接跳过、未知状态
-  assert.equal(transition(EXHIBIT_STATES.SKIPPED, EXHIBIT_EVENTS.START).ok, false)
-  assert.equal(transition(EXHIBIT_STATES.RUN, EXHIBIT_EVENTS.VERIFY).ok, false)
-  assert.equal(transition('nope', EXHIBIT_EVENTS.START).ok, false)
-  assert.match(transition(EXHIBIT_STATES.RUN, EXHIBIT_EVENTS.VERIFY).reason, /非法迁移/)
-})
-
-test('R71 状态机：计量与语义判定不得混淆', () => {
-  assert.equal(isAnimated('run'), true)
-  assert.equal(isAnimated('ok'), false)
-  assert.equal(isVerified('ok'), true)
-  assert.equal(isVerified('warn'), false)
-  assert.equal(needsAttention('err'), true)
-  assert.equal(needsAttention('warn'), true)
-  assert.equal(needsAttention('ok'), false)
-  const s = summarize([
-    { state: 'ok' }, { state: 'ok' }, { state: 'run' },
-    { state: 'err' }, { state: 'skipped' },
-  ])
-  assert.deepEqual(s, { total: 5, verified: 2, running: 1, failed: 1, attention: 1, skipped: 1 })
+  const redacted = redactForCloud('我的 key 是 sk-1234567890abcdefg', 'task_summary_only')
+  assert.ok(!redacted.includes('sk-1234567890abcdefg'))
+  assert.ok(redacted.includes('[REDACTED_SECRET]'))
+  assert.equal(normalizeCollaborationConfig({ cloud_token_budget: 999999 }).cloud_token_budget, 30000)
 })

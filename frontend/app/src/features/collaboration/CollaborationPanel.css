@@ -1,0 +1,11 @@
+@layer components {
+  .co-root { padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; height: 100%; overflow-y: auto; }
+  .co-card { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); display: flex; flex-direction: column; gap: 10px; }
+  .co-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .co-input { flex: 1; min-width: 180px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-subtle); font-size: 13px; }
+  .co-btn { padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--surface-subtle); cursor: pointer; font-size: 12.5px; }
+  .co-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  .co-ev { padding: 12px 14px; border-radius: var(--radius-sm); border-left: 3px solid var(--primary); background: var(--surface-subtle); display: flex; flex-direction: column; gap: 6px; }
+  .co-ev[data-phase="review_done"] { border-left-color: var(--warn); }
+  .co-ev[data-phase="done"] { border-left-color: var(--ok); }
+}

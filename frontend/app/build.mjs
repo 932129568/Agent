@@ -1,40 +1,44 @@
 #!/usr/bin/env node
 /**
- * 规范化 React 工程的骨架构建（规范 §10）。
- *
- * 当前阶段**不接入生产链**：只产出 frontend/app/dist/harbor-app.iife.js 供评审与
- * 骨架自检，绝不写 harbor.html、绝不覆盖 frontend/react/dist/ 的现有产物。
- * 评审确认后，把 outfile 接入 frontend/build.js 的 prebuilt 链即为正式构建。
+ * Harbor React 19 全量构建器（复用 frontend/react/node_modules，零额外依赖）
+ * 产出：frontend/app/dist/{index.html, app.js, app.css}
  */
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import fs from 'node:fs'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { statSync } from 'node:fs'
 
 const require = createRequire(import.meta.url)
-const HERE = dirname(fileURLToPath(import.meta.url))
-const REACT_MODULES = resolve(HERE, '../react/node_modules')
-const { build } = require('../react/node_modules/esbuild')
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const DIST = path.join(HERE, 'dist')
+const REACT_MODULES = path.resolve(HERE, '../react/node_modules')
+const { build } = require(path.join(REACT_MODULES, 'esbuild'))
+
+fs.mkdirSync(DIST, { recursive: true })
 
 const result = await build({
-  entryPoints: [resolve(HERE, 'src/main.jsx')],
+  entryPoints: [path.join(HERE, 'src/main.jsx')],
   bundle: true,
   format: 'iife',
-  globalName: 'HarborApp',
-  outfile: resolve(HERE, 'dist/harbor-app.iife.js'),
+  outfile: path.join(DIST, 'app.js'),
   platform: 'browser',
-  target: ['chrome110'],
+  target: ['chrome120'],
   jsx: 'automatic',
-  minify: false,
+  minify: process.argv.includes('--minify'),
+  sourcemap: process.argv.includes('--sourcemap'),
   legalComments: 'none',
   nodePaths: [REACT_MODULES],
   define: { 'process.env.NODE_ENV': '"production"' },
-  banner: { js: '/* Harbor normalized React app (R68 skeleton) - generated, do not edit. */' },
   logLevel: 'warning',
 })
+
 if (result.errors.length) {
-  console.error('[app-build] 失败')
+  console.error('[harbor-app] build failed')
   process.exit(1)
 }
-console.log('[app-build] OK dist/harbor-app.iife.js %d B',
-  statSync(resolve(HERE, 'dist/harbor-app.iife.js')).size)
+
+fs.copyFileSync(path.join(HERE, 'index.html'), path.join(DIST, 'index.html'))
+const jsSize = fs.statSync(path.join(DIST, 'app.js')).size
+const cssPath = path.join(DIST, 'app.css')
+const cssSize = fs.existsSync(cssPath) ? fs.statSync(cssPath).size : 0
+console.log('[harbor-app] OK dist/app.js=%dB dist/app.css=%dB dist/index.html', jsSize, cssSize)

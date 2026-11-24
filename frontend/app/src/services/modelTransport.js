@@ -1,37 +1,226 @@
 /**
- * 模型传输契约（规范 §6）。
- *
- * 这是**接口骨架**，B1/B3 迁移时把 legacy 的 ModelTransport 实现搬进来。
- * 迁移必须保住的行为钉（来自 R63/R64 真机修复）：
- *  - local=true 时包装流必须 new Response(wrapped) 重建，禁止 resp.body = wrapped（只读 getter 会静默丢弃）；
- *  - 本地端点同端点 FIFO 槽位，流消费完才释放；
- *  - AbortController 一路传播到 fetch 与 SSE 解析器，暂停要带原因、保留部分正文；
- *  - 免费档节流 / 429 退避 / 5xx 重试集中在此层。
+ * 统一模型 SSE 流式传输层（LAW-03）：
+ * - 统一走 assertLatin1Headers() 拦截 API Key / Base URL 非 ASCII 字符；
+ * - 自动经本地代理转发本地/非 CORS 端点，或直连云端 OpenAI 兼容端点；
+ * - 429 full-jitter 退避（尊重 Retry-After）+ 本地 503 冷加载重试 + AbortSignal 传播；
+ * - 实时输出 reasoning / content / toolCalls 增量与真实出字速度 cps。
  */
 import { HarborError, isAbort } from './errors.js'
+import { assertLatin1Headers, assertLatin1Value } from './headers.js'
+import { getLocalProxy } from './bridge.js'
 
-export function createModelTransport({ request, parseSse, acquireLocalSlot, onDelta }) {
-  if (typeof request !== 'function' || typeof parseSse !== 'function') {
-    throw new HarborError('TRANSPORT_CONTRACT', 'modelTransport 缺少 request / parseSse 实现')
-  }
-  return {
-    async *stream({ payload, local = false, signal, endpoint }) {
-      const release = local && typeof acquireLocalSlot === 'function'
-        ? await acquireLocalSlot(endpoint, signal) : () => {}
-      try {
-        const response = await request({ payload, local, signal, endpoint })
-        for await (const chunk of parseSse(response, signal)) {
-          if (signal && signal.aborted) throw new HarborError('USER_PAUSED', '用户暂停')
-          if (typeof onDelta === 'function') onDelta(chunk)
-          yield chunk
-        }
-      } catch (error) {
-        if (isAbort(error)) throw error
-        throw new HarborError('STREAM_FAILED', String(error && error.message || error),
-          { cause: error, retryable: true })
-      } finally {
-        release()
+const sleepAbortable = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal && signal.aborted) return reject(new HarborError('USER_PAUSED', '已中止'))
+  const t = setTimeout(() => { cleanup(); resolve() }, ms)
+  const onAbort = () => { clearTimeout(t); cleanup(); reject(new HarborError('USER_PAUSED', '已中止')) }
+  const cleanup = () => { if (signal) signal.removeEventListener('abort', onAbort) }
+  if (signal) signal.addEventListener('abort', onAbort, { once: true })
+})
+
+function buildChatUrl(baseUrl) {
+  const clean = String(baseUrl || '').trim().replace(/\/+$/, '')
+  if (!clean) throw new HarborError('MISSING_BASE_URL', '请先在「设置 → 模型与推理」配置 Base URL')
+  if (/\/chat\/completions$/i.test(clean)) return clean
+  return `${clean}/chat/completions`
+}
+
+function isLocalEndpoint(url) {
+  return /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\//i.test(String(url || ''))
+}
+
+export async function resolveStreamEndpoint(baseUrl, harnessMeta = null) {
+  const targetUrl = buildChatUrl(baseUrl)
+  assertLatin1Value('Base URL', targetUrl)
+  const local = isLocalEndpoint(targetUrl)
+  try {
+    const proxy = await getLocalProxy()
+    if (proxy && proxy.base_url) {
+      const extraHeaders = {
+        'X-Harbor-Target': targetUrl,
+        ...(harnessMeta ? { 'X-Harbor-Harness': JSON.stringify(harnessMeta) } : {}),
       }
-    },
+      return { url: `${String(proxy.base_url).replace(/\/+$/, '')}/v1/chat/completions`, extraHeaders, local }
+    }
+  } catch {
+    // 代理未就绪时回落直连
+  }
+  return { url: targetUrl, extraHeaders: {}, local }
+}
+
+export async function streamChatCompletion({
+  baseUrl,
+  apiKey,
+  model,
+  messages,
+  tools = [],
+  temperature = 0.7,
+  topP = 0.9,
+  maxTokens = 4096,
+  reasoningEffort = 'auto',
+  harnessMeta = null,
+  signal = null,
+  onDelta = null,
+}) {
+  const key = String(apiKey == null ? '' : apiKey).trim()
+  assertLatin1Value('API Key', key, '请到「设置 → 模型与推理」重新粘贴纯英文数字的 API Key')
+  const { url, extraHeaders, local } = await resolveStreamEndpoint(baseUrl, harnessMeta)
+  if (!local && !key) {
+    throw new HarborError('MISSING_API_KEY', '尚未填写 API Key，请点右上角「设置」填写模型 API Key')
+  }
+
+  const body = {
+    model: String(model || 'glm-4.5-flash'),
+    messages,
+    stream: true,
+    temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : 0.7,
+    top_p: Number.isFinite(Number(topP)) ? Number(topP) : 0.9,
+    max_tokens: Number(maxTokens) > 0 ? Number(maxTokens) : 4096,
+  }
+  if (Array.isArray(tools) && tools.length) {
+    body.tools = tools
+    body.tool_choice = 'auto'
+  }
+  if (reasoningEffort && reasoningEffort !== 'auto' && reasoningEffort !== 'off') {
+    body.reasoning_effort = reasoningEffort
+  }
+
+  const headers = assertLatin1Headers({
+    'Content-Type': 'application/json',
+    ...(key ? { Authorization: `Bearer ${key}` } : {}),
+    ...extraHeaders,
+  })
+
+  const LOADING_BACKOFF = local ? [2000, 4000, 8000, 15000] : [2000, 4000]
+  let loadAttempt = 0
+  let rateAttempt = 0
+  let resp = null
+
+  while (true) {
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers,
+        signal,
+        body: JSON.stringify(body),
+      })
+    } catch (e) {
+      if (isAbort(e)) throw new HarborError('USER_PAUSED', '已中止生成')
+      throw new HarborError('NETWORK_ERROR', `模型请求失败：${e && e.message || e}`, { retryable: true, cause: e })
+    }
+
+    if (local && resp.status === 503 && loadAttempt < LOADING_BACKOFF.length) {
+      await sleepAbortable(LOADING_BACKOFF[loadAttempt++], signal)
+      continue
+    }
+    if (resp.status === 429 && rateAttempt < 3) {
+      const text429 = await resp.clone().text().catch(() => '')
+      if (/余额|欠费|arrears|insufficient|quota|billing|充值/i.test(text429)) break
+      const ra = Number(resp.headers.get('retry-after'))
+      const waitMs = Number.isFinite(ra) && ra > 0
+        ? Math.min(60000, ra * 1000) + Math.floor(Math.random() * 800)
+        : 1200 + Math.floor(Math.random() * Math.min(20000, 1500 * (2 ** rateAttempt)))
+      rateAttempt++
+      await sleepAbortable(waitMs, signal)
+      continue
+    }
+    break
+  }
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '')
+    throw new HarborError(`HTTP_${resp.status}`, `模型返回 HTTP ${resp.status}：${errText.slice(0, 320)}`)
+  }
+  if (!resp.body || typeof resp.body.getReader !== 'function') {
+    const data = await resp.json()
+    const choice = data && data.choices && data.choices[0]
+    const msg = (choice && choice.message) || {}
+    return {
+      content: String(msg.content || ''),
+      reasoning: String(msg.reasoning_content || ''),
+      toolCalls: Array.isArray(msg.tool_calls) ? msg.tool_calls : [],
+      usage: data && data.usage || null,
+      finishReason: (choice && choice.finish_reason) || 'stop',
+    }
+  }
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let content = ''
+  let reasoning = ''
+  let finishReason = 'stop'
+  let usage = null
+  const tcMap = new Map()
+  let lastTick = Date.now()
+  let windowChars = 0
+  let cps = 0
+
+  const sampleCps = (addedLen) => {
+    windowChars += addedLen
+    const now = Date.now()
+    const dt = now - lastTick
+    if (dt >= 180) {
+      cps = Math.round((windowChars * 1000) / dt)
+      windowChars = 0
+      lastTick = now
+    }
+  }
+
+  try {
+    while (true) {
+      if (signal && signal.aborted) throw new HarborError('USER_PAUSED', '已中止生成')
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() || ''
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (!payload || payload === '[DONE]') continue
+        let chunk = null
+        try { chunk = JSON.parse(payload) } catch { continue }
+        if (chunk.usage) usage = chunk.usage
+        const choice = chunk.choices && chunk.choices[0]
+        if (!choice) continue
+        if (choice.finish_reason) finishReason = choice.finish_reason
+        const delta = choice.delta || {}
+        const rPart = delta.reasoning_content || delta.reasoning || ''
+        const cPart = delta.content || ''
+        if (rPart) {
+          reasoning += rPart
+          sampleCps(rPart.length)
+        }
+        if (cPart) {
+          content += cPart
+          sampleCps(cPart.length)
+        }
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const idx = Number.isInteger(tc.index) ? tc.index : tcMap.size
+            const cur = tcMap.get(idx) || { id: tc.id || `tc_${idx}`, type: 'function', function: { name: '', arguments: '' } }
+            if (tc.id) cur.id = tc.id
+            if (tc.function && tc.function.name) cur.function.name += tc.function.name
+            if (tc.function && tc.function.arguments) cur.function.arguments += tc.function.arguments
+            tcMap.set(idx, cur)
+          }
+        }
+        if ((rPart || cPart) && typeof onDelta === 'function') {
+          onDelta({ reasoning, content, cps, hasReasoning: reasoning.length > 0, hasContent: content.length > 0 })
+        }
+      }
+    }
+  } finally {
+    try { reader.releaseLock() } catch {}
+  }
+
+  return {
+    content,
+    reasoning,
+    toolCalls: [...tcMap.values()],
+    usage,
+    finishReason,
   }
 }

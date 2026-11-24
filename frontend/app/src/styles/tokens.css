@@ -1,0 +1,114 @@
+/* Harbor Design Tokens v2 · 唯一真理源（真窗外透色三阶透明度 + 5 级图层 + 动效令牌） */
+@layer reset, base, components, overlays;
+
+:root {
+  color-scheme: dark;
+  --font-sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+
+  /* 5 级唯一图层阶梯（全仓严禁裸数字 z-index） */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-dock: 40;
+  --z-modal: 100;
+  --z-toast: 200;
+
+  /* 动效时长与 16 控点物理弹簧曲线 */
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+  --dur-panel: 380ms;
+  --dur-stage: 480ms;
+  --dur-settle: 560ms;
+  --dur-stream: 2400ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-exit: cubic-bezier(.32, 0, .67, 0);
+  --ease-spring: linear(
+    0, 0.088 4%, 0.312 10%, 0.584 17%, 0.818 25%, 0.976 34%,
+    1.045 43%, 1.051 52%, 1.031 62%, 1.012 72%, 1.002 82%, 0.999 91%, 1
+  );
+
+  /* 三阶窗外透色标量（支持设置页实时调节） */
+  --glass-rail: 0.52;
+  --glass-stage: 0.66;
+  --glass-card: 0.82;
+  --glass-modal: 0.92;
+
+  /* 暗档语义色（配合 OS 硬件 Acrylic 实时透窗外） */
+  --bg-solid: #141312;
+  --rail-bg: rgba(20, 19, 18, var(--glass-rail));
+  --stage-bg: rgba(26, 25, 23, var(--glass-stage));
+  --card-bg: rgba(36, 34, 31, var(--glass-card));
+  --card-elevated: rgba(44, 42, 38, var(--glass-modal));
+  --surface-subtle: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+
+  --text: #F5F4EE;
+  --text-2: #B9B6AC;
+  --text-3: #8D897F;
+  --border: rgba(255, 252, 245, 0.11);
+  --border-strong: rgba(255, 252, 245, 0.22);
+  --rim-top: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+
+  --primary: #E07D5A;
+  --primary-2: #52B4F5;
+  --primary-hover: #EB8E6C;
+  --primary-soft: rgba(224, 125, 90, 0.18);
+  --on-primary: #141312;
+  --ok: #59B886;
+  --ok-bg: rgba(89, 184, 134, 0.16);
+  --warn: #E3A758;
+  --warn-bg: rgba(227, 167, 88, 0.16);
+  --err: #EA6D5F;
+  --err-bg: rgba(234, 109, 95, 0.16);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  --elev-1: 0 2px 8px rgba(0, 0, 0, 0.22), var(--rim-top);
+  --elev-2: 0 8px 24px -4px rgba(0, 0, 0, 0.36), var(--rim-top);
+  --elev-3: 0 18px 48px -8px rgba(0, 0, 0, 0.54), 0 0 0 1px rgba(224, 125, 90, 0.22), var(--rim-top);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg-solid: #EFECE4;
+  --rail-bg: rgba(242, 239, 231, var(--glass-rail));
+  --stage-bg: rgba(250, 248, 243, var(--glass-stage));
+  --card-bg: rgba(255, 254, 251, var(--glass-card));
+  --card-elevated: rgba(255, 255, 255, var(--glass-modal));
+  --surface-subtle: rgba(20, 19, 18, 0.045);
+  --surface-hover: rgba(20, 19, 18, 0.08);
+
+  --text: #171614;
+  --text-2: #57544E;
+  --text-3: #7A766E;
+  --border: rgba(23, 22, 20, 0.10);
+  --border-strong: rgba(23, 22, 20, 0.20);
+  --rim-top: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+
+  --primary: #C9603B;
+  --primary-2: #0E7DC4;
+  --primary-hover: #B54F2C;
+  --primary-soft: rgba(201, 96, 59, 0.14);
+  --on-primary: #FFFFFF;
+  --ok: #266E49;
+  --ok-bg: rgba(38, 110, 73, 0.12);
+  --warn: #9A5B13;
+  --warn-bg: rgba(154, 91, 19, 0.12);
+  --err: #B83526;
+  --err-bg: rgba(184, 53, 38, 0.12);
+
+  --elev-1: 0 2px 8px rgba(20, 19, 18, 0.06), var(--rim-top);
+  --elev-2: 0 10px 28px -6px rgba(20, 19, 18, 0.11), var(--rim-top);
+  --elev-3: 0 20px 50px -10px rgba(20, 19, 18, 0.18), 0 0 0 1px rgba(201, 96, 59, 0.22), var(--rim-top);
+}
+
+/* 降级兜底：非 Acrylic/Vibrancy 环境或用户选实色时自动切高质感实体底色 */
+html[data-backdrop="none"] {
+  --glass-rail: 0.98;
+  --glass-stage: 1;
+  --glass-card: 1;
+  --glass-modal: 1;
+}

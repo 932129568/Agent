@@ -1,0 +1,39 @@
+@layer components {
+  .hb-diff {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--card-bg);
+  }
+  .hb-diff-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-subtle);
+  }
+  .hb-diff-stat { display: flex; gap: 8px; font-size: 11px; }
+  .hb-diff-stat-add { color: var(--ok); }
+  .hb-diff-stat-del { color: var(--err); }
+  .hb-diff-body {
+    max-height: 280px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    padding: 6px 0;
+  }
+  .hb-diff-ln {
+    padding: 1px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-left: 3px solid transparent;
+  }
+  .hb-diff-ln.add { background: var(--ok-bg); color: var(--ok); border-left-color: var(--ok); }
+  .hb-diff-ln.del { background: var(--err-bg); color: var(--err); border-left-color: var(--err); }
+  .hb-diff-ln.eq { color: var(--text-3); }
+  .hb-diff-ln.fold { color: var(--text-3); font-style: italic; text-align: center; }
+}

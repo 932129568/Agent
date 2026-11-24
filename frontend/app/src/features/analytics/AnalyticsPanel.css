@@ -1,0 +1,8 @@
+@layer components {
+  .an-root { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; }
+  .an-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .an-kpi { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); }
+  .an-kpi-val { font-size: 24px; font-weight: 700; font-family: var(--font-mono); margin-top: 6px; }
+  .an-card { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); display: flex; flex-direction: column; gap: 10px; }
+  .an-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+}

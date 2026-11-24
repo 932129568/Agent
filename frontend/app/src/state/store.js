@@ -1,0 +1,962 @@
+import { useSyncExternalStore } from 'react'
+import { readVisualPrefs, applyVisualPrefs } from '../platform/theme.js'
+import * as api from '../services/bridge.js'
+import {
+  ensureTree,
+  appendMessageToSession,
+  forkFromMessage,
+  switchSibling,
+  rewindWithSnapshot,
+  undoRewind,
+} from '../services/dag.js'
+import { runAgentConversation } from '../services/agentEngine.js'
+import { streamChatCompletion } from '../services/modelTransport.js'
+import { compactSessionHistory } from '../services/compaction.js'
+import { spawnIsolatedSubagent, cancelAllSubagents } from '../services/subagent.js'
+import { isResumableError } from '../services/budgetAndResume.js'
+import { runExpertTeam } from '../services/expertTeam.js'
+import { COLLABORATION_DEFAULTS, normalizeCollaborationConfig, runDualModelCollaboration } from '../services/collaboration.js'
+import { isAbort } from '../services/errors.js'
+
+const initialVisual = readVisualPrefs()
+
+function makeSession(title = '新对话', kind = 'chat') {
+  const now = Date.now()
+  return ensureTree({
+    id: 's_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+    title,
+    kind,
+    runStatus: 'completed',
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  })
+}
+
+const firstSession = makeSession('新对话')
+
+const initialState = Object.freeze({
+  ui: {
+    activePanel: 'chat',       // 'chat' | 'sessions' | 'workspace' | 'planning' | 'group' | 'collaboration' | 'analytics'
+    sidebarOpen: true,
+    activeModal: null,         // 'settings' | 'market' | 'command' | null（强互斥）
+    dockOpen: false,
+    dockTab: 'overview',
+    dockPreview: '',
+    searchDockOpen: false,
+    composerDraft: '',
+    composerTokens: [],
+    toasts: [],
+  },
+  sessions: {
+    items: [firstSession],
+    currentId: firstSession.id,
+    hydrated: false,
+  },
+  runtime: {
+    serverHealth: null,
+    runsBySid: {},
+    queuesBySid: {},
+    subagentsBySid: {},        // sid -> [{ id, task, status, summary }]
+    pendingApproval: null,
+    pendingTakeover: null,     // { sid, takeoverId, url, message }
+    pendingBudgetPause: null,  // { sid, kind, detail }
+    hybridSplit: { localTokens: 0, cloudTokens: 0 },
+    updateInfo: null,          // { latest, url, sha256, notes }
+    updateProgress: null,
+  },
+  settings: {
+    ...initialVisual,
+    backendConfig: {
+      api_key: '',
+      provider_base: 'https://open.bigmodel.cn/api/paas/v4',
+      provider_key: '',
+      model: 'glm-4.5-flash',
+      temperature: 0.7,
+      top_p: 0.9,
+      max_tokens: 4096,
+      reasoning_effort: 'auto',
+      system_prompt: '',
+      enable_search: true,
+      tool_mode: 'auto',
+      saver_level: 'std',
+      session_budget: 0,
+      update_manifest_url: '',
+      local_mode: false,
+      local_base_url: 'http://127.0.0.1:11434/v1',
+      local_model: '',
+    },
+    mcpServers: [],
+    memories: [],
+    guardConfig: null,
+    hybridConfig: { strategy: 'auto', local_first: true, cloud_budget_rmb: 0 },
+    readerConfig: { base_url: '', model: '' },
+    sandboxConfig: { enabled: true, command_profiles: { run_command: 'standard', run_powershell: 'standard', run_admin_command: 'off' } },
+    sandboxStatus: null,
+    webdavConfig: { url: '', username: '', password: '', remote_path: '/harbor-backup', conflict_policy: 'ask' },
+    softwareList: [],
+  },
+  workspace: {
+    enabled: true,
+    rootPath: '',
+    recent: [],
+    entries: [],
+    previewFile: null,
+    guardRules: [],
+  },
+  planning: {
+    plans: [],
+    checkpoints: [],
+  },
+  market: {
+    experts: [],
+    loading: false,
+  },
+  expertTeam: {
+    running: false,
+    runId: '',
+    timeline: [],
+    mailbox: [],
+    checkpoint: null,
+    finalReport: '',
+  },
+  collaboration: {
+    config: { ...COLLABORATION_DEFAULTS },
+    running: false,
+    events: [],
+    cloudTokens: 0,
+    localTokens: 0,
+    finalAnswer: '',
+  },
+  group: {
+    activeGroupId: 'grp_default',
+    members: [
+      { id: 'm1', name: '架构师', role: '拆解系统边界、识别风险并给出核心方案' },
+      { id: 'm2', name: '实现工程师', role: '将方案落地为精确可运行代码与边界校验' },
+      { id: 'm3', name: '代码审查员', role: '挑出缺陷、竞态与未覆盖场景并给出收口结论' },
+    ],
+    messages: [],
+    files: [],
+    running: false,
+  },
+  search: {
+    query: '',
+    results: [],
+    loading: false,
+    extracted: null,
+  },
+})
+
+let state = initialState
+const listeners = new Set()
+const abortBySid = new Map()
+let approvalResolver = null
+let takeoverResolver = null
+let budgetResolver = null
+let teamAbortCtrl = null
+let collabAbortCtrl = null
+let saveSessionsTimer = 0
+
+function emit() { for (const fn of listeners) fn() }
+export function getState() { return state }
+export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn) }
+
+function patchSlice(name, updater) {
+  const prev = state[name]
+  const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }
+  if (next === prev) return
+  state = Object.freeze({ ...state, [name]: Object.freeze(next) })
+  emit()
+}
+
+export function useSlice(name) {
+  return useSyncExternalStore(subscribe, () => state[name], () => state[name])
+}
+
+/* ---- 通用 UI & 图层调度（LAW-05：Modal 与 Dock 强互斥） ---- */
+export function setActivePanel(panel) { patchSlice('ui', (u) => ({ ...u, activePanel: panel })) }
+export function toggleSidebar() { patchSlice('ui', (u) => ({ ...u, sidebarOpen: !u.sidebarOpen })) }
+export function openModal(modalId) { patchSlice('ui', (u) => ({ ...u, activeModal: modalId, dockOpen: false })) }
+export function closeModal() { patchSlice('ui', (u) => ({ ...u, activeModal: null })) }
+export function toggleDock(tab) {
+  patchSlice('ui', (u) => {
+    const willOpen = tab ? true : !u.dockOpen
+    return { ...u, dockOpen: willOpen, dockTab: tab || u.dockTab, activeModal: willOpen ? null : u.activeModal }
+  })
+}
+export function setDockTab(tab) { patchSlice('ui', (u) => ({ ...u, dockTab: tab })) }
+export function setDockPreview(text) {
+  patchSlice('ui', (u) => ({ ...u, dockPreview: String(text || ''), dockOpen: true, dockTab: 'preview', activeModal: null }))
+}
+export function toggleSearchDock(force) {
+  patchSlice('ui', (u) => ({ ...u, searchDockOpen: typeof force === 'boolean' ? force : !u.searchDockOpen }))
+}
+export function setComposerDraft(text) { patchSlice('ui', (u) => ({ ...u, composerDraft: String(text == null ? '' : text) })) }
+export function appendComposerDraft(snippet) {
+  patchSlice('ui', (u) => ({ ...u, composerDraft: u.composerDraft ? `${u.composerDraft}\n${snippet}` : String(snippet || '') }))
+}
+export function addComposerToken(token) {
+  patchSlice('ui', (u) => {
+    if (!token || !token.id || u.composerTokens.some((t) => t.id === token.id)) return u
+    return { ...u, composerTokens: [...u.composerTokens, token] }
+  })
+}
+export function removeComposerToken(id) {
+  patchSlice('ui', (u) => ({ ...u, composerTokens: u.composerTokens.filter((t) => t.id !== id) }))
+}
+
+export function pushToast(message, kind = 'info') {
+  const id = 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5)
+  patchSlice('ui', (u) => ({ ...u, toasts: [...u.toasts.slice(-3), { id, message: String(message || ''), kind }] }))
+  setTimeout(() => dismissToast(id), 3800)
+}
+export function dismissToast(id) {
+  patchSlice('ui', (u) => ({ ...u, toasts: u.toasts.filter((t) => t.id !== id) }))
+}
+
+/* ---- 启动水合 ---- */
+export async function hydrateApp() {
+  const health = await api.checkServerHealth()
+  patchSlice('runtime', { serverHealth: health })
+  if (!health || !health.ok) return
+
+  const [cfgRes, sessRes, wsRes, expRes] = await Promise.allSettled([
+    api.getConfig(),
+    api.getSessions(),
+    api.getWsState(''),
+    api.expertList(''),
+  ])
+
+  if (cfgRes.status === 'fulfilled' && cfgRes.value && typeof cfgRes.value === 'object') {
+    patchSlice('settings', (s) => ({ ...s, backendConfig: { ...s.backendConfig, ...cfgRes.value } }))
+  }
+  if (sessRes.status === 'fulfilled' && Array.isArray(sessRes.value) && sessRes.value.length > 0) {
+    const hydrated = sessRes.value.map((x) => ensureTree(x))
+    hydrated.sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))
+    patchSlice('sessions', { items: hydrated, currentId: hydrated[0].id, hydrated: true })
+    api.setCurrentSid(hydrated[0].id).catch(() => {})
+  } else {
+    patchSlice('sessions', (s) => ({ ...s, hydrated: true }))
+  }
+  if (wsRes.status === 'fulfilled' && wsRes.value && typeof wsRes.value === 'object') {
+    patchSlice('workspace', (w) => ({
+      ...w,
+      enabled: wsRes.value.enabled !== false,
+      rootPath: wsRes.value.effective || wsRes.value.dir || wsRes.value.path || '',
+    }))
+  }
+  if (expRes.status === 'fulfilled' && expRes.value) {
+    const list = Array.isArray(expRes.value) ? expRes.value : ((expRes.value.packages || expRes.value.items || expRes.value.experts) || [])
+    patchSlice('market', { experts: list })
+  }
+  // 后台静默检查更新（不阻塞启动）
+  checkAppUpdate(false).catch(() => {})
+}
+
+/* ---- 会话管理与持久化 ---- */
+export function queuePersistSessions() {
+  clearTimeout(saveSessionsTimer)
+  saveSessionsTimer = setTimeout(() => {
+    api.saveSessions(state.sessions.items).catch(() => {})
+  }, 350)
+}
+
+export function createNewSession(title = '新对话') {
+  const s = makeSession(title)
+  patchSlice('sessions', (st) => ({ ...st, items: [s, ...st.items], currentId: s.id }))
+  patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
+  api.setCurrentSid(s.id).catch(() => {})
+  queuePersistSessions()
+  return s
+}
+
+export function selectSession(sid) {
+  if (!state.sessions.items.some((x) => x.id === sid)) return
+  patchSlice('sessions', (st) => ({ ...st, currentId: sid }))
+  patchSlice('ui', (u) => ({ ...u, activePanel: 'chat' }))
+  api.setCurrentSid(sid).catch(() => {})
+}
+
+export function deleteSession(sid) {
+  stopSessionRun(sid)
+  patchSlice('sessions', (st) => {
+    const rest = st.items.filter((x) => x.id !== sid)
+    const items = rest.length ? rest : [makeSession('新对话')]
+    const currentId = st.currentId === sid ? items[0].id : st.currentId
+    return { ...st, items, currentId }
+  })
+  api.sessionPurge(sid, []).catch(() => {})
+  queuePersistSessions()
+}
+
+function updateSessionById(sid, updater) {
+  patchSlice('sessions', (st) => ({
+    ...st,
+    items: st.items.map((x) => (x.id === sid ? updater(x) : x)),
+  }))
+  queuePersistSessions()
+}
+
+export function switchSessionBranch(sid, nodeId, delta) {
+  updateSessionById(sid, (s) => switchSibling(s, nodeId, delta))
+}
+
+export function rewindSessionAt(sid, keepCount) {
+  updateSessionById(sid, (s) => rewindWithSnapshot(s, keepCount))
+  pushToast('已非破坏式回退，可随时撤销', 'ok')
+}
+
+export function undoSessionRewind(sid) {
+  updateSessionById(sid, (s) => undoRewind(s))
+  pushToast('已恢复回退前的全部消息', 'ok')
+}
+
+/* ---- /compact 历史压缩 & /sub 并发隔离子代理 ---- */
+export function compactSessionNow(sid, force = true) {
+  const target = state.sessions.items.find((x) => x.id === sid)
+  if (!target) return false
+  const c = state.settings.backendConfig || {}
+  const res = compactSessionHistory(target, {
+    force,
+    level: c.saver_level || 'std',
+    localMode: !!c.local_mode,
+  })
+  if (!res.compacted) {
+    if (force) pushToast('当前消息条数较少，无需压缩', 'info')
+    return false
+  }
+  updateSessionById(sid, () => ensureTree(res.session))
+  pushToast(`已压缩 ${res.removedCount} 条历史为锚点摘要（${res.beforeTokens} → ${res.afterTokens} tok）`, 'ok')
+  return true
+}
+
+export function spawnSubagentForSession(sid, task) {
+  const cleanTask = String(task || '').trim()
+  if (!cleanTask) return
+  try {
+    const handle = spawnIsolatedSubagent({
+      parentSid: sid,
+      task: cleanTask,
+      onChange: (list) => patchSlice('runtime', (r) => ({ ...r, subagentsBySid: { ...r.subagentsBySid, [sid]: list } })),
+      runner: async (isoSess, signal) => {
+        const ep = resolveEndpointConfig()
+        const out = await runAgentConversation({
+          sid: isoSess.id,
+          session: isoSess,
+          userQuery: cleanTask,
+          historyMessages: isoSess.messages,
+          endpointConfig: { ...ep, max_tokens: 1600 },
+          workspacePath: state.workspace.rootPath,
+          signal,
+        })
+        return out.content || ''
+      },
+    })
+    pushToast(`已派生隔离子代理探索「${cleanTask.slice(0, 20)}」`, 'ok')
+    handle.promise.then((res) => {
+      if (res && res.summary) {
+        updateSessionById(sid, (s) => appendMessageToSession(s, {
+          role: 'assistant',
+          content: `**【子代理精炼结论】**（任务：${cleanTask}）\n\n${res.summary}`,
+        }))
+      }
+    })
+  } catch (e) {
+    pushToast(e.message, 'err')
+  }
+}
+
+export function abortAllSubagentsForSession(sid) {
+  const res = cancelAllSubagents(sid, (list) => patchSlice('runtime', (r) => ({ ...r, subagentsBySid: { ...r.subagentsBySid, [sid]: list } })))
+  pushToast(`已级联中止 ${res.count} 个子代理（${res.ms}ms）`, 'info')
+}
+
+export async function captureScreenshotToComposer() {
+  try {
+    const r = await api.takeScreenshot(0, 0, 0, 0, '')
+    if (r && (r.path || r.ok)) {
+      appendComposerDraft(`[已附带屏幕截图：${r.path || 'clipboard'}]`)
+      pushToast('截屏已捕获并附入输入框', 'ok')
+    } else {
+      pushToast((r && (r.error || r.message)) || '截屏未能获取', 'err')
+    }
+  } catch (e) {
+    pushToast(`截屏失败：${e.message}`, 'err')
+  }
+}
+
+/* ---- 端点与视觉设置 ---- */
+export async function updateVisualSettings(partial) {
+  patchSlice('settings', (s) => ({ ...s, ...partial }))
+  await applyVisualPrefs(partial)
+}
+
+export async function saveBackendConfig(patch) {
+  const merged = { ...state.settings.backendConfig, ...patch }
+  patchSlice('settings', (s) => ({ ...s, backendConfig: merged }))
+  await api.saveConfig(merged)
+  pushToast('配置已保存到本机 config.json', 'ok')
+}
+
+export function resolveEndpointConfig(preferLocal = false) {
+  const c = state.settings.backendConfig || {}
+  const useLocal = preferLocal || (c.local_mode && c.local_base_url)
+  if (useLocal && c.local_base_url) {
+    return {
+      isLocal: true,
+      baseUrl: c.local_base_url,
+      apiKey: c.provider_key || '',
+      model: c.local_model || c.model || 'qwen2.5:7b',
+      temperature: c.temperature,
+      top_p: c.top_p,
+      max_tokens: c.max_tokens,
+      reasoning_effort: c.reasoning_effort,
+      system_prompt: c.system_prompt,
+      tool_mode: c.tool_mode,
+    }
+  }
+  return {
+    isLocal: false,
+    baseUrl: c.provider_base || 'https://open.bigmodel.cn/api/paas/v4',
+    apiKey: c.api_key || c.provider_key || '',
+    model: c.model === 'auto' ? 'glm-4.5-flash' : (c.model || 'glm-4.5-flash'),
+    temperature: c.temperature,
+    top_p: c.top_p,
+    max_tokens: c.max_tokens,
+    reasoning_effort: c.reasoning_effort,
+    system_prompt: c.system_prompt,
+    tool_mode: c.tool_mode,
+  }
+}
+
+/* ---- 并行 Run、审批、验证码接管与熔断协调 ---- */
+function patchRun(sid, updater) {
+  patchSlice('runtime', (r) => {
+    const prev = r.runsBySid[sid] || { phase: 'idle', stageLabel: '', reasoning: '', answer: '', cps: 0, elapsedMs: 0, tools: [], diffs: [] }
+    const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }
+    return { ...r, runsBySid: { ...r.runsBySid, [sid]: next } }
+  })
+}
+
+export function clearSessionRunStage(sid) {
+  patchRun(sid, { phase: 'idle', stageLabel: '', reasoning: '', answer: '', cps: 0, elapsedMs: 0, error: '' })
+}
+
+export function stopSessionRun(sid) {
+  const ctrl = abortBySid.get(sid)
+  if (ctrl) { ctrl.abort(); abortBySid.delete(sid) }
+  cancelAllSubagents(sid, (list) => patchSlice('runtime', (r) => ({ ...r, subagentsBySid: { ...r.subagentsBySid, [sid]: list } })))
+  if (state.runtime.pendingApproval && state.runtime.pendingApproval.sid === sid && approvalResolver) {
+    const r = approvalResolver; approvalResolver = null; patchSlice('runtime', { pendingApproval: null }); r({ ok: false, denyReason: '用户中止了当前任务' })
+  }
+  if (state.runtime.pendingTakeover && state.runtime.pendingTakeover.sid === sid && takeoverResolver) {
+    const r = takeoverResolver; takeoverResolver = null; patchSlice('runtime', { pendingTakeover: null }); r('cancel')
+  }
+  if (state.runtime.pendingBudgetPause && state.runtime.pendingBudgetPause.sid === sid && budgetResolver) {
+    const r = budgetResolver; budgetResolver = null; patchSlice('runtime', { pendingBudgetPause: null }); r({ action: 'stop' })
+  }
+  const cur = state.runtime.runsBySid[sid]
+  if (cur && cur.answer) {
+    updateSessionById(sid, (s) => ({ ...appendMessageToSession(s, { role: 'assistant', content: cur.answer, reasoning: cur.reasoning || '' }), runStatus: 'paused' }))
+  } else {
+    updateSessionById(sid, (s) => ({ ...s, runStatus: 'paused' }))
+  }
+  patchRun(sid, (x) => ({ ...x, phase: x.answer ? 'done' : 'idle', cps: 0 }))
+}
+
+export function resolvePendingApproval(decision) {
+  if (!approvalResolver) return
+  const r = approvalResolver; approvalResolver = null
+  patchSlice('runtime', { pendingApproval: null })
+  r(decision)
+}
+
+export function resolvePendingTakeover(action) {
+  if (!takeoverResolver) return
+  const r = takeoverResolver; takeoverResolver = null
+  patchSlice('runtime', { pendingTakeover: null })
+  r(action)
+}
+
+export function resolveBudgetPause(decision) {
+  if (!budgetResolver) return
+  const r = budgetResolver; budgetResolver = null
+  patchSlice('runtime', { pendingBudgetPause: null })
+  r(decision)
+}
+
+export function dismissResumeBanner(sid) {
+  updateSessionById(sid, (s) => ({ ...s, runStatus: 'completed' }))
+}
+
+export function resumePausedSession(sid, directive = '') {
+  const s = state.sessions.items.find((x) => x.id === sid)
+  if (!s) return
+  const lastUser = [...(s.messages || [])].reverse().find((m) => m.role === 'user')
+  return runChatTurn(sid, (lastUser && lastUser.content) || '请继续未完成的任务', { resumeMode: true, correctiveDirective: directive })
+}
+
+export function enqueueOrSendChat(text, opts = {}) {
+  const clean = String(text || '').trim()
+  if (!clean) return
+  const sid = opts.sid || state.sessions.currentId
+
+  // 内置斜杠命令路由（/compact /sub /demo /clear /plan）
+  if (clean === '/compact') { compactSessionNow(sid, true); return }
+  if (clean === '/clear') { createNewSession('新对话'); return }
+  if (clean === '/demo') { triggerFourActShowcase(sid); return }
+  if (clean.startsWith('/sub ')) { spawnSubagentForSession(sid, clean.slice(5).trim()); return }
+  if (clean.startsWith('/plan ')) {
+    const goal = clean.slice(6).trim()
+    api.planCreate(goal, ['分析需求与边界', '落地代码实现', '验证与收口']).then(() => refreshPlanning()).catch(() => {})
+    return runChatTurn(sid, `请为以下目标先制定清晰的分步实施计划再执行：\n${goal}`, opts)
+  }
+
+  const curRun = state.runtime.runsBySid[sid]
+  const busy = curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase)
+  if (busy && !opts.forkIdx) {
+    const item = { id: 'q_' + Date.now(), text: clean }
+    patchSlice('runtime', (r) => ({ ...r, queuesBySid: { ...r.queuesBySid, [sid]: [...(r.queuesBySid[sid] || []), item] } }))
+    pushToast('当前正在生成，已加入本会话发送队列', 'info')
+    return
+  }
+  return runChatTurn(sid, clean, opts)
+}
+
+export function cancelQueuedMessage(sid, qid) {
+  patchSlice('runtime', (r) => ({
+    ...r,
+    queuesBySid: { ...r.queuesBySid, [sid]: (r.queuesBySid[sid] || []).filter((x) => x.id !== qid) },
+  }))
+}
+
+export async function runChatTurn(sid, userText, opts = {}) {
+  const tokens = state.ui.composerTokens || []
+  const tokenMeta = tokens.map((t) => ({ id: t.id, name: t.name, kind: t.kind }))
+  const expertPrompt = tokens.map((t) => t.prompt || `请以「${t.name}」专家身份协同解决本任务。`).join('\n')
+
+  if (!opts.resumeMode) {
+    const userMsg = { role: 'user', content: userText, meta: tokenMeta.length ? { tokens: tokenMeta } : undefined }
+    if (Number.isInteger(opts.forkIdx)) {
+      updateSessionById(sid, (s) => ({ ...forkFromMessage(s, opts.forkIdx, userMsg), runStatus: 'running' }))
+    } else {
+      updateSessionById(sid, (s) => {
+        const nextTitle = (!s.messages.length && s.title === '新对话') ? userText.slice(0, 26) : s.title
+        return { ...appendMessageToSession({ ...s, title: nextTitle }, userMsg), runStatus: 'running' }
+      })
+    }
+  } else {
+    updateSessionById(sid, (s) => ({ ...s, runStatus: 'running' }))
+  }
+
+  // 发送前静默检查缓存感知自动压缩
+  compactSessionNow(sid, false)
+  const targetSession = state.sessions.items.find((x) => x.id === sid)
+  if (!targetSession) return
+
+  const ep = resolveEndpointConfig()
+  const ctrl = new AbortController()
+  abortBySid.set(sid, ctrl)
+  patchRun(sid, {
+    phase: 'waiting',
+    stageLabel: opts.resumeMode ? '正在从中断点恢复并续跑任务' : '建立安全连接',
+    reasoning: '',
+    answer: '',
+    cps: 0,
+    elapsedMs: 0,
+    tools: [],
+    diffs: (state.runtime.runsBySid[sid] && state.runtime.runsBySid[sid].diffs) || [],
+    error: '',
+    isDemo: false,
+  })
+
+  try {
+    const result = await runAgentConversation({
+      sid,
+      session: targetSession,
+      userQuery: userText,
+      historyMessages: targetSession.messages,
+      endpointConfig: ep,
+      expertPrompt,
+      workspacePath: state.workspace.rootPath,
+      sessionBudgetRmb: Number(state.settings.backendConfig.session_budget) || 0,
+      correctiveDirective: opts.correctiveDirective || '',
+      signal: ctrl.signal,
+      onEvent: (ev) => patchRun(sid, ev),
+      requestApproval: (req) => new Promise((resolve) => {
+        approvalResolver = resolve
+        patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid, ...req } })
+      }),
+      requestTakeover: (tk) => new Promise((resolve) => {
+        takeoverResolver = resolve
+        patchSlice('runtime', { pendingTakeover: { sid, ...tk } })
+      }),
+      requestBudgetDecision: (bp) => new Promise((resolve) => {
+        budgetResolver = resolve
+        patchSlice('runtime', { pendingBudgetPause: { sid, ...bp } })
+      }),
+    })
+
+    if (result && (result.content || result.reasoning)) {
+      const addTok = (result.usage && result.usage.total_tokens) || 0
+      if (addTok > 0) {
+        patchSlice('runtime', (r) => ({
+          ...r,
+          hybridSplit: {
+            localTokens: r.hybridSplit.localTokens + (ep.isLocal ? addTok : 0),
+            cloudTokens: r.hybridSplit.cloudTokens + (ep.isLocal ? 0 : addTok),
+          },
+        }))
+      }
+      updateSessionById(sid, (s) => {
+        const next = appendMessageToSession(s, {
+          role: 'assistant',
+          content: result.content || '',
+          reasoning: result.reasoning || '',
+          tools: result.tools || [],
+        })
+        next.runStatus = result.paused ? 'paused' : 'completed'
+        const u = s.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+        const add = result.usage || {}
+        next.usage = {
+          prompt_tokens: u.prompt_tokens + (add.prompt_tokens || 0),
+          completion_tokens: u.completion_tokens + (add.completion_tokens || 0),
+          total_tokens: u.total_tokens + (add.total_tokens || 0),
+        }
+        return next
+      })
+    } else {
+      updateSessionById(sid, (s) => ({ ...s, runStatus: result && result.paused ? 'paused' : 'completed' }))
+    }
+  } catch (err) {
+    if (!isAbort(err)) {
+      const msg = String(err && err.message || err)
+      const resumable = isResumableError(msg)
+      updateSessionById(sid, (s) => ({ ...s, runStatus: resumable ? 'paused' : 'failed' }))
+      patchRun(sid, { phase: 'idle', cps: 0, error: msg })
+      pushToast(msg, 'err')
+    }
+  } finally {
+    abortBySid.delete(sid)
+    const q = state.runtime.queuesBySid[sid] || []
+    if (q.length > 0) {
+      const [first, ...rest] = q
+      patchSlice('runtime', (r) => ({ ...r, queuesBySid: { ...r.queuesBySid, [sid]: rest } }))
+      setTimeout(() => runChatTurn(sid, first.text), 120)
+    }
+  }
+}
+
+/* ---- 四幕大尺度动效演示（含真实生成式 UI Spec 卡片预览） ---- */
+const demoTimers = []
+export function triggerFourActShowcase(sid) {
+  while (demoTimers.length) clearTimeout(demoTimers.pop())
+  const t0 = Date.now()
+  const at = (ms, fn) => demoTimers.push(setTimeout(fn, ms))
+  patchRun(sid, { phase: 'waiting', stageLabel: '建立安全连接与原生窗外透色合成', reasoning: '', answer: '', cps: 0, elapsedMs: 120, tools: [], error: '', isDemo: true })
+  at(650, () => patchRun(sid, { stageLabel: '装配 AGENTS.md、5× 静态前缀缓存与生成式 UI 协议', elapsedMs: Date.now() - t0 }))
+  at(1350, () => patchRun(sid, {
+    phase: 'thinking',
+    stageLabel: '深度推演沉浸中',
+    cps: 36,
+    elapsedMs: Date.now() - t0,
+    reasoning: '1. 验证真窗外硬件透色（Win11 Acrylic / macOS Vibrancy）与零假壁纸链路。\n',
+  }))
+  at(2100, () => patchRun(sid, (r) => ({
+    ...r,
+    cps: 52,
+    elapsedMs: Date.now() - t0,
+    reasoning: r.reasoning + '2. 校验全量迁入模块：/compact 锚点压缩、/sub 并发子代理、专家团队编排器、生成式 UI 与双模型协同。\n',
+    tools: [{ id: 'demo_1', name: 'read_file', detail: 'frontend/app/src/services/agentEngine.js', status: 'running' }],
+  })))
+  at(2850, () => patchRun(sid, (r) => ({
+    ...r,
+    cps: 60,
+    elapsedMs: Date.now() - t0,
+    reasoning: r.reasoning + '3. 组装结构化 UiSpec v1 生成式视图，准备向回答卡片交棒动量。\n',
+    tools: [
+      { id: 'demo_1', name: 'read_file', detail: 'frontend/app/src/services/agentEngine.js', status: 'done' },
+      { id: 'demo_2', name: 'search_replace', detail: 'frontend/app/src/ui/GenerativeView.jsx', status: 'running' },
+    ],
+  })))
+  const demoAnswer = [
+    '### Harbor React 19 全量迁移完成（含生成式 UI 实景演示）',
+    '',
+    '以下卡片由 React 19 `GenerativeView` 实时校验并渲染（遵循 UiSpec v1 规范）：',
+    '',
+    '```ui-spec',
+    JSON.stringify({
+      schemaVersion: 1,
+      specId: 'harbor_v2_summary',
+      title: 'Harbor React 19 全域迁入健康仪表盘',
+      layout: 'card-grid',
+      blocks: [
+        { blockId: 's1', component: 'StatTile', props: { label: '铁律门禁违例', value: '0', delta: '12 / 12 PASS' } },
+        { blockId: 's2', component: 'StatTile', props: { label: 'CSS !important', value: '0', delta: '原 91 处已清零' } },
+        { blockId: 's3', component: 'Progress', props: { label: '17 个旧业务域全量迁入率', value: 100 } },
+        { blockId: 's4', component: 'Chips', props: { items: ['Acrylic 真窗外透色', '四幕空间编排', '/compact + /sub', '专家团队编排器', '双模型协同', '生成式 UI'] } },
+      ],
+    }),
+    '```',
+  ].join('\n')
+
+  at(3650, () => patchRun(sid, (r) => ({
+    ...r,
+    phase: 'streaming',
+    cps: 66,
+    elapsedMs: Date.now() - t0,
+    tools: r.tools.map((t) => ({ ...t, status: 'done' })),
+    answer: demoAnswer,
+  })))
+  at(4600, () => patchRun(sid, (r) => ({ ...r, phase: 'done', cps: 0, elapsedMs: Date.now() - t0 })))
+}
+
+/* ---- 专家团队编排 & 双模型协同 ---- */
+export async function startExpertTeamRun({ goal, lead, members, useRecovery = false }) {
+  if (teamAbortCtrl) teamAbortCtrl.abort()
+  teamAbortCtrl = new AbortController()
+  patchSlice('expertTeam', (t) => ({
+    ...t,
+    running: true,
+    timeline: useRecovery ? t.timeline : [],
+    finalReport: '',
+  }))
+  try {
+    const res = await runExpertTeam({
+      goal,
+      lead,
+      members,
+      endpointConfig: resolveEndpointConfig(),
+      recovery: useRecovery ? state.expertTeam.checkpoint : null,
+      signal: teamAbortCtrl.signal,
+      onUpdate: (upd) => patchSlice('expertTeam', (t) => ({ ...t, ...upd })),
+    })
+    patchSlice('expertTeam', (t) => ({
+      ...t,
+      running: false,
+      timeline: res.timeline,
+      mailbox: res.mailbox,
+      checkpoint: res.checkpoint,
+      finalReport: res.finalReport,
+    }))
+    if (res.status === 'completed') pushToast('专家团队编排已完成交付', 'ok')
+  } catch (e) {
+    patchSlice('expertTeam', { running: false })
+    if (!isAbort(e)) pushToast(`团队编排失败：${e.message}`, 'err')
+  } finally {
+    teamAbortCtrl = null
+  }
+}
+
+export function stopExpertTeamRun() {
+  if (teamAbortCtrl) teamAbortCtrl.abort()
+}
+
+export function updateCollaborationConfig(partial) {
+  patchSlice('collaboration', (c) => ({ ...c, config: normalizeCollaborationConfig({ ...c.config, ...partial }) }))
+}
+
+export async function startCollaborationRun(goal) {
+  if (collabAbortCtrl) collabAbortCtrl.abort()
+  collabAbortCtrl = new AbortController()
+  patchSlice('collaboration', (c) => ({ ...c, running: true, events: [], finalAnswer: '' }))
+  try {
+    const cloudEp = resolveEndpointConfig(false)
+    const localEp = resolveEndpointConfig(true)
+    const res = await runDualModelCollaboration({
+      goal,
+      config: state.collaboration.config,
+      cloudEndpoint: cloudEp,
+      localEndpoint: localEp,
+      signal: collabAbortCtrl.signal,
+      onEvent: (ev) => patchSlice('collaboration', (c) => ({ ...c, ...ev })),
+    })
+    patchSlice('collaboration', (c) => ({
+      ...c,
+      running: false,
+      events: res.events,
+      cloudTokens: res.cloudTokens,
+      localTokens: res.localTokens,
+      finalAnswer: res.finalAnswer,
+    }))
+    pushToast('双模型协同完成', 'ok')
+  } catch (e) {
+    patchSlice('collaboration', { running: false })
+    if (!isAbort(e)) pushToast(`双模型协同失败：${e.message}`, 'err')
+  } finally {
+    collabAbortCtrl = null
+  }
+}
+
+export function stopCollaborationRun() {
+  if (collabAbortCtrl) collabAbortCtrl.abort()
+}
+
+/* ---- 域刷新：工作区 / 计划 / 市场 / 设置全量扩展（Hybrid/Sandbox/WebDAV/Software/Update） ---- */
+export async function refreshWorkspace() {
+  try {
+    const sid = state.sessions.currentId
+    const [ws, recent, dir, rules] = await Promise.allSettled([
+      api.getWsState(sid), api.listRecentWs(), api.listDir('.'), api.guardRuleList(),
+    ])
+    patchSlice('workspace', (w) => ({
+      ...w,
+      enabled: ws.status === 'fulfilled' && ws.value ? ws.value.enabled !== false : w.enabled,
+      rootPath: ws.status === 'fulfilled' && ws.value ? (ws.value.effective || ws.value.dir || w.rootPath) : w.rootPath,
+      recent: recent.status === 'fulfilled' && Array.isArray(recent.value && recent.value.recent) ? recent.value.recent : w.recent,
+      entries: dir.status === 'fulfilled' && dir.value && Array.isArray(dir.value.entries) ? dir.value.entries : [],
+      guardRules: rules.status === 'fulfilled' && rules.value && Array.isArray(rules.value.rules) ? rules.value.rules : [],
+    }))
+  } catch (e) {
+    pushToast(`读取工作区失败：${e.message}`, 'err')
+  }
+}
+
+export async function setWorkspacePath(dirPath) {
+  await api.setSessionWs(state.sessions.currentId, dirPath, true)
+  await refreshWorkspace()
+  pushToast(`工作区已切换至 ${dirPath}`, 'ok')
+}
+
+export async function toggleWorkspaceEnabled(enabled) {
+  await api.setWsEnabled(state.sessions.currentId, enabled)
+  await refreshWorkspace()
+}
+
+export async function previewWorkspaceFile(filePath) {
+  const res = await api.readFile(filePath, 0, 200, true)
+  patchSlice('workspace', { previewFile: { path: filePath, content: String((res && res.content) || '') } })
+}
+
+export async function refreshPlanning() {
+  const [pl, ck] = await Promise.allSettled([api.planList(25), api.checkpointList('')])
+  patchSlice('planning', {
+    plans: pl.status === 'fulfilled' && pl.value && Array.isArray(pl.value.plans) ? pl.value.plans : [],
+    checkpoints: ck.status === 'fulfilled' && ck.value && Array.isArray(ck.value.checkpoints) ? ck.value.checkpoints : [],
+  })
+}
+
+export async function refreshMarket(query = '') {
+  patchSlice('market', { loading: true })
+  try {
+    const res = await api.expertList(query)
+    const list = Array.isArray(res) ? res : ((res && (res.packages || res.items || res.experts)) || [])
+    patchSlice('market', { experts: list, loading: false })
+  } catch {
+    patchSlice('market', { loading: false })
+  }
+}
+
+export async function refreshSettingsAux() {
+  const [mcp, mem, gd, hy, rd, sb, sbSt, wd, sw] = await Promise.allSettled([
+    api.mcpListServers(),
+    api.getMemory(),
+    api.guardGetConfig(),
+    api.hybridGetConfig(),
+    api.readerConfigGet(),
+    api.sandboxGetConfig(),
+    api.sandboxStatus(),
+    api.webdavGetConfig(),
+    api.softwareList(''),
+  ])
+  patchSlice('settings', (s) => ({
+    ...s,
+    mcpServers: mcp.status === 'fulfilled' && mcp.value ? (Array.isArray(mcp.value) ? mcp.value : (mcp.value.servers || [])) : s.mcpServers,
+    memories: mem.status === 'fulfilled' && Array.isArray(mem.value) ? mem.value : s.memories,
+    guardConfig: gd.status === 'fulfilled' ? gd.value : s.guardConfig,
+    hybridConfig: hy.status === 'fulfilled' && hy.value && typeof hy.value === 'object' ? { ...s.hybridConfig, ...hy.value } : s.hybridConfig,
+    readerConfig: rd.status === 'fulfilled' && rd.value && typeof rd.value === 'object' ? { ...s.readerConfig, ...rd.value } : s.readerConfig,
+    sandboxConfig: sb.status === 'fulfilled' && sb.value && typeof sb.value === 'object' ? { ...s.sandboxConfig, ...sb.value } : s.sandboxConfig,
+    sandboxStatus: sbSt.status === 'fulfilled' ? sbSt.value : s.sandboxStatus,
+    webdavConfig: wd.status === 'fulfilled' && wd.value && typeof wd.value === 'object' ? { ...s.webdavConfig, ...wd.value, password: '' } : s.webdavConfig,
+    softwareList: sw.status === 'fulfilled' && sw.value ? (Array.isArray(sw.value) ? sw.value : (sw.value.items || sw.value.software || [])) : s.softwareList,
+  }))
+}
+
+export async function checkAppUpdate(manual = true) {
+  try {
+    const url = state.settings.backendConfig.update_manifest_url || null
+    const r = await api.checkUpdate(url)
+    if (r && r.update_available) {
+      patchSlice('runtime', { updateInfo: r })
+      if (manual) pushToast(`发现新版本 v${r.latest}`, 'ok')
+    } else {
+      patchSlice('runtime', { updateInfo: null })
+      if (manual) pushToast('当前已是最新版本', 'info')
+    }
+  } catch (e) {
+    if (manual) pushToast(`检查更新失败：${e.message}`, 'err')
+  }
+}
+
+export async function runGroupRelay(topic) {
+  const clean = String(topic || '').trim()
+  if (!clean) return
+  const ep = resolveEndpointConfig()
+  const members = state.group.members
+  patchSlice('group', (g) => ({
+    ...g,
+    running: true,
+    messages: [...g.messages, { id: 'gm_' + Date.now(), author: '我（主持人）', role: 'user', content: clean }],
+  }))
+  const relayContext = [{ role: 'user', content: clean }]
+  try {
+    for (const m of members) {
+      const res = await streamChatCompletion({
+        ...ep,
+        messages: [
+          { role: 'system', content: `你是群聊接力成员「${m.name}」，职责：${m.role}。请承接前序发言输出简洁高密度结论。` },
+          ...relayContext,
+        ],
+      })
+      const reply = String(res.content || '').trim()
+      relayContext.push({ role: 'assistant', content: `【${m.name}】\n${reply}` })
+      patchSlice('group', (g) => ({
+        ...g,
+        messages: [...g.messages, { id: 'gm_' + Date.now() + '_' + m.id, author: m.name, role: 'assistant', content: reply }],
+      }))
+    }
+    const handoff = `【交接文档】\n议题：${clean}\n\n` + relayContext.slice(1).map((x) => x.content).join('\n\n---\n\n')
+    await api.groupFilesWrite(state.group.activeGroupId, '默认群聊', '主持人', clean.slice(0, 32), handoff).catch(() => {})
+    await refreshGroupFiles()
+  } catch (e) {
+    pushToast(`群聊接力中断：${e.message}`, 'err')
+  } finally {
+    patchSlice('group', { running: false })
+  }
+}
+
+export async function refreshGroupFiles() {
+  try {
+    const res = await api.groupFilesList(state.group.activeGroupId, '默认群聊')
+    const files = (res && (res.files || res.items)) || (Array.isArray(res) ? res : [])
+    patchSlice('group', { files })
+  } catch {}
+}
+
+export async function runWebSearch(query) {
+  const q = String(query || '').trim()
+  if (!q) return
+  patchSlice('search', { query: q, loading: true, extracted: null })
+  try {
+    const res = await api.browserSearch({ query: q, max_results: 8 })
+    const items = (res && (res.results || res.items)) || []
+    patchSlice('search', { results: Array.isArray(items) ? items : [], loading: false })
+  } catch (e) {
+    patchSlice('search', { loading: false })
+    pushToast(`搜索失败：${e.message}`, 'err')
+  }
+}
+
+export async function extractSearchUrl(url) {
+  patchSlice('search', { loading: true })
+  try {
+    await api.browserNavigate(url)
+    const ex = await api.browserExtract('', 'text')
+    patchSlice('search', { extracted: { url, text: String((ex && (ex.content || ex.text)) || '') }, loading: false })
+  } catch (e) {
+    patchSlice('search', { loading: false })
+    pushToast(`正文提取失败：${e.message}`, 'err')
+  }
+}
