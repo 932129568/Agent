@@ -172,7 +172,14 @@ function needsGuardCheck(name) {
   return WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name) || GUARDED_EXTRA_TOOLS.has(name) || name.startsWith('mcp__')
 }
 
-export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, isolatedGroupId = '', pluginToolDispatcher = null, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+  // R16 插件化工具分发：优先匹配由已启用插件声明的工具
+  if (typeof pluginToolDispatcher === 'function') {
+    const plugRes = await pluginToolDispatcher(name, args)
+    if (plugRes !== null && plugRes !== undefined) {
+      return typeof plugRes === 'string' ? plugRes : JSON.stringify(plugRes)
+    }
+  }
   // 群聊专属群文件工具（严格锁死在当前 isolatedGroupId 独立目录内，跨群路径一律拒绝）
   if (name === 'group_file_list' || name === 'group_file_read' || name === 'group_file_search') {
     if (!isolatedGroupId) {
@@ -341,6 +348,9 @@ export async function runAgentConversation({
   correctiveDirective = '',
   allowTools = true,
   isolatedGroupId = '',
+  pluginTools = [],
+  pluginDirectives = '',
+  pluginToolDispatcher = null,
   askBeforeDesign = true,
   forceToolProfile = '',
   maxRounds = 14,
@@ -371,7 +381,8 @@ export async function runAgentConversation({
     forceFull: endpointConfig.tool_mode === 'full',
     prevProfile: existingFrozen ? existingFrozen.toolProfile : '',
   })
-  const prefixScopeKey = `${workspacePath || ''}|${isolatedGroupId || 'chat'}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
+  const plugToolSig = Array.isArray(pluginTools) ? pluginTools.map((t) => (t && t.function && t.function.name) || '').join(',') : ''
+  const prefixScopeKey = `${workspacePath || ''}|${isolatedGroupId || 'chat'}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${isGlm}|${plugToolSig}|${endpointConfig.system_prompt || ''}`
 
   let systemPrompt = endpointConfig.system_prompt || '你是 Harbor 桌面智能工程助手，请始终用简体中文清晰回答。'
   let tools = []
@@ -419,6 +430,16 @@ export async function runAgentConversation({
         })
       } else {
         tools = rawFullTools
+      }
+    }
+    if (toolsOn && Array.isArray(pluginTools) && pluginTools.length > 0) {
+      const seenNames = new Set(tools.map((t) => (t && t.function && t.function.name) || ''))
+      for (const pt of pluginTools) {
+        const cleanPt = pt && pt.function ? { type: 'function', function: pt.function } : null
+        if (cleanPt && cleanPt.function.name && !seenNames.has(cleanPt.function.name)) {
+          tools.push(cleanPt)
+          seenNames.add(cleanPt.function.name)
+        }
       }
     }
     tools = canonicalizeTools(tools)
@@ -471,6 +492,7 @@ export async function runAgentConversation({
     : ''
   const combinedDirective = [
     correctiveDirective,
+    pluginDirectives,
     clarifyHint,
     blockToolDispatch ? '【本步指令约束】本步骤仅做任务分析、角色分工与交接规划，严禁调用任何工具，请直接输出最终结果。' : '',
   ].filter(Boolean).join('\n')
@@ -645,7 +667,7 @@ export async function runAgentConversation({
         try {
           if (readKey) readFileSet.add(readKey)
           if (dirKey) listDirsSet.add(dirKey)
-          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, requestApproval, requestClarify })
+          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, isolatedGroupId, pluginToolDispatcher, requestApproval, requestClarify })
           const takeover = detectTakeoverRequired(rawOut)
           if (takeover && typeof requestTakeover === 'function') {
             const action = await requestTakeover(takeover)

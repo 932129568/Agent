@@ -22,6 +22,8 @@ import {
   setAskBeforeDesign,
   openProjectSessionModal,
   convertSessionToNormal,
+  openArtifactCanvas,
+  exportCurrentSessionMarkdown,
   openModal,
   triggerFourActShowcase,
   pushToast,
@@ -29,6 +31,7 @@ import {
 import { siblingMeta } from '../../services/dag.js'
 import { shouldOfferResume } from '../../services/budgetAndResume.js'
 import { extractUiSpecsFromMarkdown } from '../../services/generative.js'
+import { extractArtifactsFromMarkdown } from '../../services/artifacts.js'
 import { appendMemory } from '../../services/bridge.js'
 import { copyText, readFileAsText } from '../../platform/dom.js'
 import { captureTriggerRect } from '../../platform/kinetic.js'
@@ -55,6 +58,10 @@ const ChatMessageItem = memo(function ChatMessageItem({
   const tokens = (msg.meta && Array.isArray(msg.meta.tokens)) ? msg.meta.tokens : []
   const parsed = useMemo(
     () => (msg.role === 'assistant' ? extractUiSpecsFromMarkdown(msg.content) : { cleanMarkdown: msg.content, specs: [] }),
+    [msg.role, msg.content]
+  )
+  const artifacts = useMemo(
+    () => (msg.role === 'assistant' ? extractArtifactsFromMarkdown(msg.content) : []),
     [msg.role, msg.content]
   )
 
@@ -99,7 +106,14 @@ const ChatMessageItem = memo(function ChatMessageItem({
             <button type="button" className="chat-mini-btn" onClick={() => onRewind(idx)}>回退到此之前</button>
           </>
         ) : (
-          <button type="button" className="chat-mini-btn" onClick={() => onSaveMemory(msg.content)}>提炼入记忆</button>
+          <>
+            {artifacts.map((art) => (
+              <button key={art.id} type="button" className="chat-mini-btn" onClick={() => openArtifactCanvas(art)}>
+                ✦ 实时画布 · {art.title}
+              </button>
+            ))}
+            <button type="button" className="chat-mini-btn" onClick={() => onSaveMemory(msg.content)}>提炼入记忆</button>
+          </>
         )}
       </div>
     </div>
@@ -248,6 +262,10 @@ export default function ChatPanel() {
               <button type="button" className="chat-quick-card" onClick={(e) => openModal('settings', captureTriggerRect(e))}>
                 <strong>⚙ 模型 / 混合路由 / 沙箱 / WebDAV</strong>
                 <span>全套 4 域设置中心 + 真窗外透色与非 ASCII 拦截</span>
+              </button>
+              <button type="button" className="chat-quick-card" onClick={() => openProjectSessionModal('create')}>
+                <strong>📁 新建项目会话（绑定文件夹）</strong>
+                <span>为代码仓库或创作项目锁定独立工作目录与隔离上下文</span>
               </button>
               <button type="button" className="chat-quick-card" onClick={(e) => openModal('market', captureTriggerRect(e))}>
                 <strong>✦ 专家市场与多专家团队编排</strong>
@@ -424,6 +442,7 @@ export default function ChatPanel() {
               <button type="button" className="chat-mini-btn" onClick={captureScreenshotToComposer}>📸 截屏</button>
               <button type="button" className="chat-mini-btn" onClick={(e) => openModal('market', captureTriggerRect(e))}>✦ 选专家</button>
               <button type="button" className="chat-mini-btn" onClick={() => compactSessionNow(sid, true)}>🗜 压缩 /compact</button>
+              <button type="button" className="chat-mini-btn" onClick={() => exportCurrentSessionMarkdown(sid)} title="将当前对话一键导出为 Markdown 文档">⬇ 导出</button>
               <button
                 type="button"
                 className="chat-mini-btn"

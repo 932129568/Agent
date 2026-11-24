@@ -10,6 +10,11 @@ export function buildComposerMenuItems(draft, { workspaceEntries = [], experts =
       { id: '/sub', kind: 'cmd', label: '/sub <探索任务>', desc: '派生隔离子代理并行检索（省主对话 Token）', insert: '/sub ' },
       { id: '/plan', kind: 'cmd', label: '/plan <目标>', desc: '先拆解可执行步骤并创建检查点', insert: '/plan ' },
       { id: '/demo', kind: 'cmd', label: '/demo', desc: '播放四幕大尺度动效演示（含生成式 UI）', insert: '/demo' },
+      { id: '/wf', kind: 'cmd', label: '/wf', desc: '打开插件化可视化 DAG 工作流工坊', insert: '/wf' },
+      { id: '/plugins', kind: 'cmd', label: '/plugins', desc: '打开插件热插拔管理中心', insert: '/plugins' },
+      { id: '/project', kind: 'cmd', label: '/project', desc: '为当前对话绑定专属项目工作文件夹', insert: '/project' },
+      { id: '/export', kind: 'cmd', label: '/export', desc: '一键导出当前会话为 Markdown 纪要', insert: '/export' },
+      { id: '/zen', kind: 'cmd', label: '/zen', desc: '开关无干扰专注模式（Ctrl+Shift+F）', insert: '/zen' },
       { id: '/clear', kind: 'cmd', label: '/clear', desc: '新建空白对话', insert: '/clear' },
     ]
     return { trigger: mSlash[1], items: cmds.filter((c) => c.label.toLowerCase().startsWith(q)) }

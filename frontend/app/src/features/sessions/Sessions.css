@@ -42,6 +42,28 @@
   .ss-pin-title { font-size: 11px; font-weight: 600; color: var(--primary); }
   .ss-pin-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
 
+  .ss-filter {
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    color: var(--text);
+    font-size: 12px;
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  }
+  .ss-filter:focus { border-color: var(--primary); background: var(--card-bg); }
+  .ss-rename-input {
+    width: 100%;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--primary);
+    background: var(--card-elevated);
+    color: var(--text);
+    font-size: 12px;
+    outline: none;
+  }
   .ss-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
   .ss-item {
     display: flex;

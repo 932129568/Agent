@@ -87,6 +87,7 @@ const stubState = {
   chatRequests: [],
   triggerGroupToolOnce: false,
   triggerClarifyOnce: false,
+  triggerArtifactOnce: false,
 }
 
 function readReqBody(req) {
@@ -255,6 +256,15 @@ const server = http.createServer(async (req, res) => {
       return
     }
     const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
+    if (stubState.triggerArtifactOnce) {
+      stubState.triggerArtifactOnce = false
+      const artContent = '已为你生成交互式卡片：\n\n```html\n<!doctype html><html><head><title>R15 交互画布测试</title></head><body><h1>Hello Artifact Canvas</h1></body></html>\n```'
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: artContent } }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 900, completion_tokens: 60, total_tokens: 960, prompt_tokens_details: { cached_tokens: 800 } } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     if (stubState.triggerClarifyOnce && !hasToolRole) {
       stubState.triggerClarifyOnce = false
       const askArgs = JSON.stringify({
@@ -711,7 +721,15 @@ try {
   const chatReqs = stubState.chatRequests.slice(-2)
   const sys1 = JSON.stringify(chatReqs[0] && chatReqs[0].systemContent)
   const sys2 = JSON.stringify(chatReqs[1] && chatReqs[1].systemContent)
-  const toolsSorted = JSON.stringify(chatReqs[1] && chatReqs[1].toolNames) === JSON.stringify(['read_file', 'write_file'])
+  // 判据本意是「工具按字典序稳定（前缀可冻结）」，不是「恰好两个工具」。
+  // 原写法硬编码 ['read_file','write_file']，r16 新增 list_workflow_plugins 后立刻假红。
+  // 改为验意图：① 两次请求工具集完全一致 ② 该数组严格非降序 ③ 仍包含核心读写工具。
+  const _t1 = (chatReqs[0] && chatReqs[0].toolNames) || []
+  const _t2 = (chatReqs[1] && chatReqs[1].toolNames) || []
+  const toolsSorted = _t1.length > 0
+    && JSON.stringify(_t1) === JSON.stringify(_t2)
+    && _t2.every((n, i) => i === 0 || String(_t2[i - 1]) <= String(n))
+    && _t2.includes('read_file') && _t2.includes('write_file')
   const dynInTail = Boolean(chatReqs[1] && chatReqs[1].lastUser.includes('<system-reminder>'))
   const hasAnthropicBp = sys2.includes('"cache_control":{"type":"ephemeral"}')
   const ribbonTxt = await page.locator('.hb-ribbon').textContent()
@@ -725,7 +743,7 @@ try {
       && dynInTail
       && hasAnthropicBp
       && /本轮缓存\s*88%/.test(ribbonTxt || ''),
-    `sysEqual=${sys1 === sys2}, toolsSorted=${toolsSorted}, dynInTail=${dynInTail}, antBp=${hasAnthropicBp}, ribbon=${(ribbonTxt || '').slice(0, 64)}`
+    `sysEqual=${sys1 === sys2}, toolsSorted=${toolsSorted}, tools=${JSON.stringify((chatReqs[1] || {}).toolNames || null)}, dynInTail=${dynInTail}, antBp=${hasAnthropicBp}, ribbon=${(ribbonTxt || '').slice(0, 48)}`
   )
 
   /* ======================================================================== *
@@ -902,6 +920,84 @@ try {
     '项目会话支持一键转为普通会话并解除专属工作目录绑定',
     /普通会话/.test(modeStripNormal || ''),
     `strip=${(modeStripNormal || '').trim()}`
+  )
+
+  /* ======================================================================== *
+   * Suite K · R15 实时交互 Artifact 画布 + 代码块复制栏 + Zen 专注模式 + 侧栏实时搜索
+   * ======================================================================== */
+  stubState.triggerArtifactOnce = true
+  await page.locator('.chat-textarea').fill('生成一个 HTML 交互示例')
+  await page.locator('.chat-send-btn').click()
+  await page.waitForSelector('.chat-msg-bar button:has-text("实时画布")', { timeout: 6000 })
+  const hasCodeCopyBar = (await page.locator('.md-code-block .md-code-copy').count()) >= 1
+  await page.locator('.chat-msg-bar button:has-text("实时画布")').first().click()
+  await page.waitForSelector('.ac-frame', { timeout: 4000 })
+  const frameSrcDoc = await page.locator('.ac-frame').getAttribute('srcdoc')
+  record(
+    'Suite-K',
+    '实时交互 Artifact 画布：自动识别 HTML 代码块并在沙箱 iframe 实时渲染 + 代码块复制栏',
+    hasCodeCopyBar && Boolean(frameSrcDoc && frameSrcDoc.includes('Hello Artifact Canvas')),
+    `hasCodeCopyBar=${hasCodeCopyBar}, hasSrcDoc=${Boolean(frameSrcDoc)}`
+  )
+  await page.locator('.dk-close').click()
+  await page.waitForTimeout(220)
+
+  // K2: Zen 专注模式切换与恢复 + 侧栏搜索过滤框可用
+  await page.locator('.hb-topbar button:has-text("专注")').click()
+  await page.waitForTimeout(160)
+  const zenOn = (await page.locator('.hb-shell').getAttribute('data-zen')) === 'true'
+  await page.locator('.hb-topbar button:has-text("退出专注")').click()
+  await page.waitForTimeout(160)
+  const zenOff = (await page.locator('.hb-shell').getAttribute('data-zen')) === 'false'
+  const filterVisible = await page.locator('.ss-filter').isVisible()
+  record(
+    'Suite-K',
+    'Zen 专注模式一键隐藏/恢复导航与侧栏 + 侧栏实时搜索框就绪',
+    zenOn && zenOff && filterVisible,
+    `zenOn=${zenOn}, zenOff=${zenOff}, filterVisible=${filterVisible}`
+  )
+
+  /* ======================================================================== *
+   * Suite L · R16 插件化可视化 DAG 工作流引擎 + 插件热插拔中心端到端验收
+   * ======================================================================== */
+  await page.locator('.hb-rail-btn[title="工作流插件"]').click()
+  await page.waitForSelector('.wf-root', { timeout: 5000 })
+  const wfSideHead = await page.locator('.hb-side-head').textContent()
+  const dagNodeCount = await page.locator('.wg-node').count()
+  const dagEdgeCount = await page.locator('.wg-edge-base').count()
+
+  // L1: 侧边栏切换为「工作流目录」，可视化 DAG 节点图与 SVG 连线完整渲染，演练动效驱动并发拓扑
+  await page.locator('.wf-actions button:has-text("演练并发 DAG 动效")').click()
+  await page.waitForTimeout(450)
+  const hasRunningOrDone = (await page.locator('.wg-node[data-status="running"], .wg-node[data-status="done"]').count()) >= 1
+  record(
+    'Suite-L',
+    '插件化 DAG 工作流工坊：侧栏切换工作流目录 + SVG 节点图渲染 + 并发拓扑动效执行',
+    /工作流目录/.test(wfSideHead || '') && dagNodeCount >= 4 && dagEdgeCount >= 3 && hasRunningOrDone,
+    `head=${(wfSideHead || '').trim()}, nodes=${dagNodeCount}, edges=${dagEdgeCount}, active=${hasRunningOrDone}`
+  )
+
+  // 干净收口演练定时器后再切至插件中心，杜绝关闭阶段悬空定时回调
+  if (await page.locator('.wf-runbar button:has-text("中止执行")').isVisible().catch(() => false)) {
+    await page.locator('.wf-runbar button:has-text("中止执行")').click()
+  }
+
+  // L2: 切换到插件中心 → 热插拔安装自定义 JSON 插件 → 校验新插件上线且可即时启停
+  await page.locator('.wf-seg-btn:has-text("插件中心")').click()
+  await page.waitForSelector('.wf-plugins-grid', { timeout: 4000 })
+  await page.locator('.wf-actions button:has-text("热插拔安装 JSON 插件")').click()
+  await page.waitForSelector('.wf-install-box', { timeout: 3000 })
+  await page.locator('.wf-install-box button:has-text("校验并热安装插件")').click()
+  await page.waitForSelector('.wf-plugin-card[data-plugin-id="custom.prd-sprint"]', { timeout: 4000 })
+  const installedVisible = await page.locator('.wf-plugin-card[data-plugin-id="custom.prd-sprint"]').isVisible()
+  await page.locator('.wf-plugin-card[data-plugin-id="custom.prd-sprint"] button:has-text("已启用")').click()
+  await page.waitForTimeout(160)
+  const toggledOff = (await page.locator('.wf-plugin-card[data-plugin-id="custom.prd-sprint"]').getAttribute('data-enabled')) === 'false'
+  record(
+    'Suite-L',
+    '插件热插拔中心：自定义 JSON 插件实时校验安装 + 即时启停热重载生效',
+    installedVisible && toggledOff,
+    `installed=${installedVisible}, toggledOff=${toggledOff}`
   )
 
   // D4: 全程零未捕获页面异常

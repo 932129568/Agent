@@ -1,5 +1,5 @@
 /**
- * 平台层富文本净化适配（Markdown → DOMPurify 唯一出口，带 64 条有界 LRU 缓存）。
+ * 平台层富文本净化适配（Markdown → DOMPurify 唯一出口，带 64 条有界 LRU 缓存 + 交互式代码块顶栏增强）。
  * 归属 platform/ 使 ui/MarkdownView.jsx 遵守 LAW-07 单向依赖（ui → platform），零反向依赖。
  */
 import { libs } from './libs.js'
@@ -28,6 +28,25 @@ export function clearMarkdownCache() {
   _htmlCache.clear()
 }
 
+/** 将已净化的 `<pre><code class="language-xxx">...</code></pre>` 包装为带语言标签与一键复制按钮的玻璃代码卡。 */
+function enhanceCodeBlocks(sanitizedHtml) {
+  return String(sanitizedHtml || '').replace(
+    /<pre><code(?:\s+class="language-([a-zA-Z0-9_+#.-]+)")?>([\s\S]*?)<\/code><\/pre>/gi,
+    (_full, rawLang, inner) => {
+      const lang = String(rawLang || 'code').replace(/[^a-zA-Z0-9_+#.-]/g, '').slice(0, 20) || 'code'
+      return (
+        `<div class="md-code-block" data-lang="${lang}">` +
+          `<div class="md-code-bar">` +
+            `<span class="md-code-lang">${lang}</span>` +
+            `<button type="button" class="md-code-copy">复制代码</button>` +
+          `</div>` +
+          `<pre><code class="language-${lang}">${inner}</code></pre>` +
+        `</div>`
+      )
+    }
+  )
+}
+
 export function renderSafeMarkdown(source) {
   const text = String(source == null ? '' : source)
   if (!text) return { __html: '' }
@@ -40,7 +59,8 @@ export function renderSafeMarkdown(source) {
   const { marked, purify } = libs()
   let result
   if (marked && typeof marked.parse === 'function' && purify && typeof purify.sanitize === 'function') {
-    result = { __html: purify.sanitize(marked.parse(text)) }
+    const clean = purify.sanitize(marked.parse(text))
+    result = { __html: enhanceCodeBlocks(clean) }
   } else {
     const escaped = text
       .replace(/&/g, '&amp;')

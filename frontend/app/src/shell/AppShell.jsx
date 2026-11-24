@@ -7,11 +7,13 @@ import {
   flushPersistSessions,
   setActivePanel,
   toggleSidebar,
+  toggleZenMode,
   openModal,
   toggleDock,
   toggleSearchDock,
   createNewSession,
   createNewGroup,
+  createNewWorkflow,
   updateVisualSettings,
 } from '../state/store.js'
 import HarborLogo from '../ui/HarborLogo.jsx'
@@ -21,6 +23,7 @@ import SidebarSessions from '../features/sessions/SidebarSessions.jsx'
 import SessionsPanel from '../features/sessions/SessionsPanel.jsx'
 import WorkspacePanel from '../features/workspace/WorkspacePanel.jsx'
 import PlanningPanel from '../features/planning/PlanningPanel.jsx'
+import WorkflowPanel from '../features/workflow/WorkflowPanel.jsx'
 import GroupPanel from '../features/group/GroupPanel.jsx'
 import CollaborationPanel from '../features/collaboration/CollaborationPanel.jsx'
 import AnalyticsPanel from '../features/analytics/AnalyticsPanel.jsx'
@@ -32,6 +35,7 @@ const PRIMARY_NAV = [
   { id: 'chat', icon: 'chat', label: '智能对话' },
   { id: 'sessions', icon: 'sessions', label: '会话总览' },
   { id: 'workspace', icon: 'workspace', label: '工作空间' },
+  { id: 'workflow', icon: 'workflow', label: '工作流插件' },
   { id: 'planning', icon: 'planning', label: '计划回滚' },
   { id: 'group', icon: 'group', label: '角色群聊' },
   { id: 'collaboration', icon: 'collaboration', label: '双模协同' },
@@ -42,6 +46,7 @@ export default function AppShell() {
   const ui = useSlice('ui')
   const sessionsState = useSlice('sessions')
   const group = useSlice('group')
+  const pluginsState = useSlice('plugins')
   const runtime = useSlice('runtime')
   const settings = useSlice('settings')
   const [compactRail, setCompactRail] = useState(false)
@@ -131,9 +136,12 @@ export default function AppShell() {
         e.preventDefault(); openModal('command')
       } else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'd') {
         e.preventDefault(); toggleDock()
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault(); toggleZenMode()
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault()
         if (ui.activePanel === 'group') createNewGroup()
+        else if (ui.activePanel === 'workflow') createNewWorkflow()
         else createNewSession('新对话')
       }
     }
@@ -142,27 +150,31 @@ export default function AppShell() {
   }, [ui.activePanel])
 
   const isGroupPanel = ui.activePanel === 'group'
+  const isWorkflowPanel = ui.activePanel === 'workflow'
+  const activeWorkflow = (pluginsState.workflows || []).find((w) => w.id === pluginsState.activeWorkflowId)
   const currentSession = sessionsState.items.find((s) => s.id === sessionsState.currentId)
   const curRun = currentSession && runtime.runsBySid[currentSession.id]
-  const busy = isGroupPanel
-    ? !!group.running
-    : !!(curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase))
-  // r13 的 TDZ 崩溃点：activeModel 原先声明在 topSubStatus 之后，
-  // 但 topSubStatus 第 148/149 行就引用它 ⇒ 渲染即
-  // "ReferenceError: Cannot access 'activeModel' before initialization"，
-  // 整个应用外壳挂不上（e2e 连 .hb-shell 都等不到）。必须在使用前声明。
+  const busy = isWorkflowPanel
+    ? (pluginsState.run && pluginsState.run.status === 'running')
+    : (isGroupPanel
+      ? !!group.running
+      : !!(curRun && ['waiting', 'thinking', 'streaming'].includes(curRun.phase)))
   const activeModel = settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'
-  const topTitle = isGroupPanel
-    ? (group.title || '多角色群聊')
-    : (currentSession ? currentSession.title : 'Harbor')
-  const topSubStatus = isGroupPanel
-    ? (group.running ? (group.status === 'planning' ? '主持人调度中…' : '群聊接力中…') : activeModel)
-    : (busy ? (curRun.stageLabel || curRun.phase) : activeModel)
+  const topTitle = isWorkflowPanel
+    ? (activeWorkflow ? activeWorkflow.name : '插件化工作流')
+    : (isGroupPanel
+      ? (group.title || '多角色群聊')
+      : (currentSession ? currentSession.title : 'Harbor'))
+  const topSubStatus = isWorkflowPanel
+    ? (busy ? 'DAG 并发执行中…' : `${(pluginsState.plugins || []).filter((p) => p.enabled).length} 个插件在线`)
+    : (isGroupPanel
+      ? (group.running ? (group.status === 'planning' ? '主持人调度中…' : '群聊接力中…') : activeModel)
+      : (busy ? (curRun.stageLabel || curRun.phase) : activeModel))
   const split = runtime.hybridSplit || { localTokens: 0, cloudTokens: 0 }
   const savedYuan = ((split.localTokens / 1000) * 0.002).toFixed(2)
 
   return (
-    <div ref={shellRef} className="hb-shell">
+    <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)}>
       <nav className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
         <div className="hb-rail-brand" onClick={() => setCompactRail((v) => !v)} style={{ cursor: 'pointer' }} title="点击切换导航栏宽/窄形态">
           <HarborLogo size={26} />
@@ -234,12 +246,14 @@ export default function AppShell() {
         </button>
       </nav>
 
-      {ui.sidebarOpen && (
+      {ui.sidebarOpen && !ui.zenMode && (
         <aside className="hb-sidebar">
           <div className="hb-side-head">
-            <span>{isGroupPanel ? '群聊列表' : '历史会话'}</span>
+            <span>{isWorkflowPanel ? '工作流目录' : (isGroupPanel ? '群聊列表' : '历史会话')}</span>
             <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-              {isGroupPanel ? `${(group.items || []).length} 个` : `${sessionsState.items.length} 条`}
+              {isWorkflowPanel
+                ? `${(pluginsState.workflows || []).length} 条`
+                : (isGroupPanel ? `${(group.items || []).length} 个` : `${sessionsState.items.length} 条`)}
             </span>
           </div>
           <SidebarSessions />
@@ -253,11 +267,17 @@ export default function AppShell() {
               <NavIcon name="sidebar" />
               <span>{ui.sidebarOpen ? '收起会话' : '展开会话'}</span>
             </button>
-            <div className="hb-island" data-busy={String(busy)}>
+            <button
+              type="button"
+              className="hb-island"
+              data-busy={String(busy)}
+              onClick={(e) => openModal('settings', captureTriggerRect(e))}
+              title="点击直达模型与推理设置"
+            >
               <span>{busy ? '◉' : '●'}</span>
               <strong>{topTitle}</strong>
               <span>· {topSubStatus}</span>
-            </div>
+            </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {runtime.updateInfo && (
@@ -265,6 +285,15 @@ export default function AppShell() {
                 ⬆ v{runtime.updateInfo.latest}
               </button>
             )}
+            <button
+              type="button"
+              className="hb-top-btn"
+              data-active={String(!!ui.zenMode)}
+              onClick={() => toggleZenMode()}
+              title="专注模式（Ctrl+Shift+F）：隐藏导航栏与侧边栏，聚焦主对话与实时画布"
+            >
+              <span>{ui.zenMode ? '⊞ 退出专注' : '⊡ 专注'}</span>
+            </button>
             <button
               type="button"
               className="hb-top-btn"
@@ -298,6 +327,7 @@ export default function AppShell() {
               {ui.activePanel === 'chat' && <ChatPanel />}
               {ui.activePanel === 'sessions' && <SessionsPanel />}
               {ui.activePanel === 'workspace' && <WorkspacePanel />}
+              {ui.activePanel === 'workflow' && <WorkflowPanel />}
               {ui.activePanel === 'planning' && <PlanningPanel />}
               {ui.activePanel === 'group' && <GroupPanel />}
               {ui.activePanel === 'collaboration' && <CollaborationPanel />}
@@ -308,12 +338,17 @@ export default function AppShell() {
         </div>
 
         <footer className="hb-ribbon">
-          <span>
+          <button
+            type="button"
+            className="hb-ribbon-btn"
+            onClick={() => toggleDock('overview')}
+            title="点击打开右侧上下文工作台查看详细遥测"
+          >
             后端：{runtime.serverHealth && runtime.serverHealth.ok ? 'Fastify 5 在线' : '离线模式'}
             {' · '}窗外透色：{settings.backdrop} ({Math.round(settings.opacity * 100)}%)
             {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 && ` · 本轮缓存 ${runtime.cacheTotals.latestHitRate}% / 累计 ${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`}
             {(split.localTokens > 0 || split.cloudTokens > 0) && ` · 本地 ${split.localTokens.toLocaleString()} / 云端 ${split.cloudTokens.toLocaleString()} tok · 省 ≈¥${savedYuan}`}
-          </span>
+          </button>
           <span>Harbor · React 19 + Fastify 5</span>
         </footer>
       </main>

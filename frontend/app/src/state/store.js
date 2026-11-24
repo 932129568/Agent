@@ -1,4 +1,16 @@
-import { useSyncExternalStore } from 'react'
+import {
+  EMPTY_CACHE_TOTALS,
+  initKernel,
+  getState,
+  subscribe,
+  patchSlice as kernelPatchSlice,
+  useSlice,
+  useStoreSelector,
+  activeViewSid,
+  syncRuntimeTelemetryForSid as kernelSyncTelemetry,
+} from './kernel.js'
+import { downloadTextFile } from '../platform/dom.js'
+import { formatSessionAsMarkdown, formatGroupAsMarkdown, safeExportFilename } from '../services/sessionExport.js'
 import { readVisualPrefs, applyVisualPrefs } from '../platform/theme.js'
 import { readStorage, writeStorage } from '../platform/storage.js'
 import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers, buildModeratorPrompt, parseModeratorPlan } from '../services/capabilityRouter.js'
@@ -23,7 +35,29 @@ import {
   rewindWithSnapshot,
   undoRewind,
 } from '../services/dag.js'
-import { runAgentConversation, invalidateSessionPrefixCache } from '../services/agentEngine.js'
+import { runAgentConversation, dispatchSingleTool, invalidateSessionPrefixCache } from '../services/agentEngine.js'
+import {
+  collectPluginTools,
+  runPluginBeforePromptHooks,
+  dispatchPluginTool,
+  collectPluginSlashCommands,
+} from '../services/pluginRegistry.js'
+import {
+  createInitialPluginsSlice,
+  setWorkflowViewTab,
+  selectWorkflow,
+  togglePluginEnabled,
+  installCustomPlugin,
+  uninstallCustomPlugin,
+  createBlankCustomWorkflow,
+  saveCustomWorkflowDef,
+  deleteCustomWorkflowDef,
+  compileActiveGroupToWorkflow,
+  stopWorkflowExecution,
+  resetWorkflowRunState,
+  runWorkflowWithHandlers,
+  triggerWorkflowShowcaseRun,
+} from './workflowSlice.js'
 import { streamChatCompletion } from '../services/modelTransport.js'
 import { compactSessionHistory } from '../services/compaction.js'
 import { spawnIsolatedSubagent, cancelAllSubagents, purgeSubagents } from '../services/subagent.js'
@@ -108,9 +142,11 @@ const initialState = Object.freeze({
     sidebarOpen: true,
     activeModal: null,         // 'settings' | 'market' | 'command' | null（强互斥）
     modalOriginRect: null,     // 触发按钮坐标（用于 FLIP 平滑展开）
+    zenMode: false,
     dockOpen: false,
     dockTab: 'overview',
     dockPreview: '',
+    activeArtifact: null,      // { id, kind, lang, title, filename, code }
     searchDockOpen: false,
     composerDraft: '',
     composerTokens: [],
@@ -241,6 +277,7 @@ const initialState = Object.freeze({
     routingWarning: '',
     checkpoint: null,          // { topic, plannedMembers, nextIndex, relayContext, intentLabel }
   },
+  plugins: createInitialPluginsSlice(),
   search: {
     query: '',
     results: [],
@@ -249,8 +286,7 @@ const initialState = Object.freeze({
   },
 })
 
-let state = initialState
-const listeners = new Set()
+let state = initKernel(initialState)
 const abortBySid = new Map()
 let approvalResolver = null
 let clarifyResolver = null
@@ -264,37 +300,14 @@ let impactSeq = 0
 const relayDemoTimers = []
 let saveSessionsTimer = 0
 
-function emit() { for (const fn of listeners) fn() }
-export function getState() { return state }
-export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn) }
-
-function shallowEqualObj(a, b) {
-  if (Object.is(a, b)) return true
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
-  const ka = Object.keys(a)
-  const kb = Object.keys(b)
-  if (ka.length !== kb.length) return false
-  for (let i = 0; i < ka.length; i++) {
-    const k = ka[i]
-    if (!Object.prototype.hasOwnProperty.call(b, k) || !Object.is(a[k], b[k])) return false
-  }
-  return true
-}
+export { getState, subscribe, useSlice, useStoreSelector }
 
 function patchSlice(name, updater) {
-  const prev = state[name]
-  const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }
-  if (shallowEqualObj(prev, next)) return
-  state = Object.freeze({ ...state, [name]: Object.freeze(next) })
-  emit()
+  state = kernelPatchSlice(name, updater)
 }
 
-export function useSlice(name) {
-  return useSyncExternalStore(subscribe, () => state[name], () => state[name])
-}
-
-export function useStoreSelector(selector) {
-  return useSyncExternalStore(subscribe, () => selector(state), () => selector(state))
+function syncRuntimeTelemetryForSid(targetSid) {
+  state = kernelSyncTelemetry(targetSid)
 }
 
 /* ---- 通用 UI & 图层调度（LAW-05：Modal 与 Dock 强互斥） ---- */
@@ -310,9 +323,6 @@ export function fireShellImpact(edge = 'left', strength = 'medium', vec = null) 
     },
   }))
 }
-function activeViewSid() {
-  return state.ui.activePanel === 'group' ? state.group.activeGroupId : state.sessions.currentId
-}
 
 export function setActivePanel(panel) {
   const prev = state.ui.activePanel
@@ -323,6 +333,12 @@ export function setActivePanel(panel) {
   }
 }
 export function toggleSidebar() { patchSlice('ui', (u) => ({ ...u, sidebarOpen: !u.sidebarOpen })) }
+export function toggleZenMode(force) {
+  patchSlice('ui', (u) => {
+    const next = typeof force === 'boolean' ? force : !u.zenMode
+    return { ...u, zenMode: next }
+  })
+}
 export function openModal(modalId, originRect = null) {
   patchSlice('ui', (u) => ({ ...u, activeModal: modalId, modalOriginRect: originRect || null, dockOpen: false }))
 }
@@ -342,6 +358,16 @@ export function toggleDock(tab) {
 export function setDockTab(tab) { patchSlice('ui', (u) => ({ ...u, dockTab: tab })) }
 export function setDockPreview(text) {
   patchSlice('ui', (u) => ({ ...u, dockPreview: String(text || ''), dockOpen: true, dockTab: 'preview', activeModal: null }))
+}
+export function openArtifactCanvas(artifact) {
+  if (!artifact || !artifact.code) return
+  patchSlice('ui', (u) => ({
+    ...u,
+    activeArtifact: artifact,
+    dockOpen: true,
+    dockTab: 'artifact',
+    activeModal: null,
+  }))
 }
 export function toggleSearchDock(force) {
   patchSlice('ui', (u) => ({ ...u, searchDockOpen: typeof force === 'boolean' ? force : !u.searchDockOpen }))
@@ -451,20 +477,7 @@ if (typeof globalThis !== 'undefined' && typeof globalThis.addEventListener === 
   globalThis.addEventListener('beforeunload', () => { flushPersistSessions() })
 }
 
-const EMPTY_CACHE_TOTALS = Object.freeze({
-  promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
-  turnPromptTokens: 0, turnCachedTokens: 0,
-  latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
-  prefixHash: '', prefixLocked: false,
-})
 
-function syncRuntimeTelemetryForSid(targetSid) {
-  patchSlice('runtime', (r) => ({
-    ...r,
-    cacheTotals: (targetSid && r.cacheTotalsBySid && r.cacheTotalsBySid[targetSid]) || { ...EMPTY_CACHE_TOTALS },
-    activeToolProfile: (targetSid && r.toolProfileBySid && r.toolProfileBySid[targetSid]) || null,
-  }))
-}
 
 export function createNewSession(title = '新对话') {
   const s = makeSession(title, 'chat', '')
@@ -617,6 +630,58 @@ function updateSessionById(sid, updater) {
     items: st.items.map((x) => (x.id === sid ? updater(x) : x)),
   }))
   queuePersistSessions()
+}
+
+export function renameSession(sid, nextTitle) {
+  const clean = String(nextTitle || '').trim()
+  if (!sid || !clean) return
+  updateSessionById(sid, (s) => ({ ...s, title: clean.slice(0, 48), updatedAt: Date.now() }))
+  pushToast(`已重命名会话为「${clean.slice(0, 24)}」`, 'ok')
+}
+
+export function renameGroup(groupId, nextTitle) {
+  const clean = String(nextTitle || '').trim()
+  if (!groupId || !clean) return
+  const trimmed = clean.slice(0, 48)
+  let savedItems = state.group.items
+  patchSlice('group', (g) => {
+    const items = (g.items || []).map((item) => (
+      item.id === groupId ? { ...item, title: trimmed, updatedAt: Date.now() } : item
+    ))
+    savedItems = items
+    return {
+      ...g,
+      items,
+      ...(g.activeGroupId === groupId ? { title: trimmed } : {}),
+    }
+  })
+  persistGroups(savedItems, state.group.activeGroupId)
+  pushToast(`已重命名群聊为「${trimmed.slice(0, 24)}」`, 'ok')
+}
+
+export function exportCurrentSessionMarkdown(sid) {
+  const target = state.sessions.items.find((x) => x.id === (sid || state.sessions.currentId))
+  if (!target || !(target.messages || []).length) {
+    pushToast('当前会话尚无消息可导出', 'info')
+    return false
+  }
+  const md = formatSessionAsMarkdown(target)
+  const fname = safeExportFilename(target.title, '.md')
+  const ok = downloadTextFile(fname, md, 'text/markdown;charset=utf-8')
+  if (ok) pushToast(`已导出会话纪要：${fname}`, 'ok')
+  return ok
+}
+
+export function exportCurrentGroupMarkdown() {
+  if (!(state.group.messages || []).length) {
+    pushToast('当前群聊尚无记录可导出', 'info')
+    return false
+  }
+  const md = formatGroupAsMarkdown(state.group)
+  const fname = safeExportFilename(`群聊-${state.group.title}`, '.md')
+  const ok = downloadTextFile(fname, md, 'text/markdown;charset=utf-8')
+  if (ok) pushToast(`已导出群聊纪要：${fname}`, 'ok')
+  return ok
 }
 
 export function switchSessionBranch(sid, nodeId, delta) {
@@ -1063,10 +1128,28 @@ export function enqueueOrSendChat(text, opts = {}) {
   if (!clean) return
   const sid = opts.sid || state.sessions.currentId
 
-  // 内置斜杠命令路由（/compact /sub /demo /clear /plan）
+  // 内置斜杠命令路由（/compact /sub /demo /clear /plan /zen /export /project）
   if (clean === '/compact') { compactSessionNow(sid, true); return }
   if (clean === '/clear') { createNewSession('新对话'); return }
   if (clean === '/demo') { triggerFourActShowcase(sid); return }
+  if (clean === '/zen') { toggleZenMode(); return }
+  if (clean === '/export') { exportCurrentSessionMarkdown(sid); return }
+  if (clean === '/project') { openProjectSessionModal('bind', sid); return }
+  if (clean === '/wf') { setWorkflowViewTab('studio'); setActivePanel('workflow'); return }
+  if (clean === '/plugins') { setWorkflowViewTab('plugins'); setActivePanel('workflow'); return }
+  const plugCmd = collectPluginSlashCommands(state.plugins.plugins).find((c) => clean === c.label || clean.startsWith(c.label + ' '))
+  if (plugCmd) {
+    if (plugCmd.action === 'open_plugins') { setWorkflowViewTab('plugins'); setActivePanel('workflow'); return }
+    if (plugCmd.action === 'open_workflow') { setWorkflowViewTab('studio'); setActivePanel('workflow'); return }
+    if (plugCmd.workflowId) {
+      const restInput = clean.slice(plugCmd.label.length).trim()
+      setWorkflowViewTab('studio')
+      setActivePanel('workflow')
+      selectWorkflow(plugCmd.workflowId)
+      if (restInput) runActiveWorkflow({ workflowId: plugCmd.workflowId, input: restInput })
+      return
+    }
+  }
   if (clean.startsWith('/sub ')) { spawnSubagentForSession(sid, clean.slice(5).trim()); return }
   if (clean.startsWith('/plan ')) {
     const goal = clean.slice(6).trim()
@@ -1144,6 +1227,12 @@ export async function runChatTurn(sid, userText, opts = {}) {
       workspacePath: (targetSession && targetSession.workspaceDir) || state.workspace.rootPath,
       sessionBudgetRmb: Number(state.settings.backendConfig.session_budget) || 0,
       correctiveDirective: opts.correctiveDirective || '',
+      pluginTools: collectPluginTools(state.plugins.plugins),
+      pluginDirectives: runPluginBeforePromptHooks(state.plugins.plugins),
+      pluginToolDispatcher: (toolName, args) => dispatchPluginTool(toolName, args, {
+        plugins: state.plugins.plugins,
+        workflows: state.plugins.workflows,
+      }),
       askBeforeDesign: state.ui.askBeforeDesign,
       signal: ctrl.signal,
       onEvent: (ev) => {
@@ -2137,4 +2226,138 @@ export async function extractSearchUrl(url) {
     patchSlice('search', { loading: false })
     pushToast(`正文提取失败：${e.message}`, 'err')
   }
+}
+
+
+/* ---- R16 插件化工作流统一动作出口（委托 workflowSlice.js） ---- */
+export { setWorkflowViewTab, selectWorkflow }
+
+export function togglePlugin(pluginId, enabled) {
+  const res = togglePluginEnabled(pluginId, enabled)
+  if (res.ok) {
+    invalidateSessionPrefixCache()
+    pushToast(`${res.enabled ? '已启用' : '已停用'}插件「${res.name}」（热重载生效）`, 'ok')
+  } else if (res.message) {
+    pushToast(res.message, 'warn')
+  }
+  return res
+}
+
+export function installPluginJson(rawJson) {
+  const res = installCustomPlugin(rawJson)
+  if (res.ok) {
+    invalidateSessionPrefixCache()
+    pushToast(`已热插拔安装插件「${res.plugin.name}」`, 'ok')
+  } else {
+    pushToast(res.error || '插件安装失败', 'err')
+  }
+  return res
+}
+
+export function uninstallPlugin(pluginId) {
+  uninstallCustomPlugin(pluginId)
+  invalidateSessionPrefixCache()
+  pushToast('已卸载自定义插件', 'info')
+}
+
+export function createNewWorkflow(name = '') {
+  const wf = createBlankCustomWorkflow(name)
+  setActivePanel('workflow')
+  setWorkflowViewTab('studio')
+  pushToast(`已创建新工作流「${wf.name}」`, 'ok')
+  return wf
+}
+
+export function saveWorkflowDef(rawWorkflow) {
+  const res = saveCustomWorkflowDef(rawWorkflow)
+  if (res.ok) pushToast(`已保存工作流「${res.workflow.name}」`, 'ok')
+  else pushToast(res.error || '保存工作流失败', 'err')
+  return res
+}
+
+export function deleteWorkflowDef(workflowId) {
+  deleteCustomWorkflowDef(workflowId)
+  pushToast('已删除自定义工作流', 'info')
+}
+
+export function convertGroupToWorkflow() {
+  const wf = compileActiveGroupToWorkflow()
+  setWorkflowViewTab('studio')
+  setActivePanel('workflow')
+  pushToast(`已将群聊班底编译为可视化 DAG 工作流「${wf.name}」`, 'ok')
+  return wf
+}
+
+export function stopWorkflowRun() {
+  stopWorkflowExecution()
+  pushToast('已中止当前 DAG 工作流运行', 'info')
+}
+
+export function resetWorkflowRun() {
+  resetWorkflowRunState()
+}
+
+export function triggerWorkflowShowcase() {
+  triggerWorkflowShowcaseRun((art) => openArtifactCanvas(art))
+}
+
+export async function runActiveWorkflow({ workflowId = '', input = '', resume = false } = {}) {
+  const baseEp = resolveEndpointConfig()
+  const wfSid = `wf_${workflowId || state.plugins.activeWorkflowId || 'default'}`
+  const res = await runWorkflowWithHandlers({
+    workflowId,
+    input,
+    resume,
+    runLlmNode: async ({ node, prompt, signal }) => {
+      const nodeEp = {
+        ...baseEp,
+        model: node.model || baseEp.model,
+        reasoning_effort: (node.reasoningTier && node.reasoningTier !== 'auto') ? node.reasoningTier : baseEp.reasoning_effort,
+      }
+      return runAgentConversation({
+        sid: `${wfSid}_${node.id}`,
+        userQuery: prompt,
+        historyMessages: [{ role: 'user', content: prompt }],
+        endpointConfig: nodeEp,
+        workspacePath: state.workspace.rootPath,
+        allowTools: node.allowTools === true,
+        askBeforeDesign: false,
+        maxRounds: node.allowTools ? 6 : 1,
+        skipMemoryRecall: true,
+        skipSelfCheck: true,
+        signal,
+        onEvent: (ev) => {
+          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats, wfSid)
+        },
+        requestApproval: (req) => new Promise((resolve) => {
+          approvalResolver = resolve
+          patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid: wfSid, ...req } })
+        }),
+        requestClarify: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
+      })
+    },
+    runToolNode: async ({ toolName, args, signal }) => dispatchSingleTool({
+      name: toolName,
+      args,
+      sid: wfSid,
+      signal,
+      pluginToolDispatcher: (tn, a) => dispatchPluginTool(tn, a, {
+        plugins: state.plugins.plugins,
+        workflows: state.plugins.workflows,
+      }),
+      requestApproval: (req) => new Promise((resolve) => {
+        approvalResolver = resolve
+        patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid: wfSid, ...req } })
+      }),
+      requestClarify: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
+    }),
+    requestHumanGate: (req) => openClarifyPrompt({ sid: wfSid, ...req }),
+    onArtifact: (art) => openArtifactCanvas(art),
+  })
+  if (res && res.status === 'done') {
+    pushToast('DAG 工作流执行完成', 'ok')
+  } else if (res && res.status === 'error' && res.error) {
+    pushToast(`工作流执行异常：${res.error}`, 'err')
+  }
+  return res
 }

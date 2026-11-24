@@ -600,3 +600,181 @@ test('expertTeam.js 流式途中中止自动保存断点检查点（不丢已完
   assert.ok(res.checkpoint && res.checkpoint.completedMembers.length === 1)
   assert.equal(res.checkpoint.completedMembers[0].name, '架构师')
 })
+
+
+test('artifacts.js 从 Markdown 准确提取 HTML/SVG 并生成沙箱预览文档', async () => {
+  const { extractArtifactsFromMarkdown, buildArtifactSandboxDoc } = await import('../src/services/artifacts.js')
+  const md = [
+    '已为你生成交互钟摆组件：',
+    '```html',
+    '<!doctype html><html><head><title>精密钟摆</title></head><body><h1>钟摆</h1><script>console.log(1)</script></body></html>',
+    '```',
+    '以及矢量徽标：',
+    '```svg',
+    '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" fill="#D4653E"/></svg>',
+    '```',
+  ].join('\n')
+  const arts = extractArtifactsFromMarkdown(md)
+  assert.equal(arts.length, 2)
+  assert.equal(arts[0].kind, 'html')
+  assert.equal(arts[0].title, '精密钟摆')
+  assert.equal(arts[1].kind, 'svg')
+  const svgDoc = buildArtifactSandboxDoc(arts[1], 'dark')
+  assert.ok(svgDoc.includes('<!doctype html>') && svgDoc.includes('#181a20') && svgDoc.includes('<svg'))
+})
+
+test('sessionExport.js 导出普通/项目会话与群聊 Markdown 纪要格式完整', async () => {
+  const { formatSessionAsMarkdown, formatGroupAsMarkdown, safeExportFilename } = await import('../src/services/sessionExport.js')
+  assert.equal(safeExportFilename('我的/项目:A?'), '我的-项目-A-.md')
+  const sMd = formatSessionAsMarkdown({
+    title: '架构重构',
+    kind: 'project',
+    workspaceDir: 'C:\\repo\\harbor',
+    messages: [
+      { role: 'user', content: '优化状态内核' },
+      { role: 'assistant', reasoning: '先解耦 kernel.js', content: '已完成 kernel.js 拆分。' },
+    ],
+  })
+  assert.ok(sMd.includes('项目会话') && sMd.includes('C:\\repo\\harbor') && sMd.includes('先解耦 kernel.js'))
+  const gMd = formatGroupAsMarkdown({
+    activeGroupId: 'grp_x1',
+    title: '前端攻关组',
+    members: [{ name: '架构师' }, { name: 'UI设计' }],
+    messages: [{ role: 'assistant', author: '架构师', model: 'glm-4.5', content: '已输出目录规范' }],
+  })
+  assert.ok(gMd.includes('前端攻关组') && gMd.includes('架构师') && gMd.includes('已输出目录规范'))
+})
+
+test('kernel.js 独立响应式状态内核支持浅相等去重与订阅通知', async () => {
+  const { initKernel, getState, subscribe, patchSlice } = await import('../src/state/kernel.js')
+  initKernel(Object.freeze({ ui: Object.freeze({ zenMode: false, count: 1 }), sessions: Object.freeze({ currentId: 's1' }), group: Object.freeze({ activeGroupId: 'g1' }), runtime: Object.freeze({}) }))
+  let calls = 0
+  const unsub = subscribe(() => { calls++ })
+  patchSlice('ui', { zenMode: false, count: 1 })
+  assert.equal(calls, 0)
+  patchSlice('ui', { zenMode: true })
+  assert.equal(calls, 1)
+  assert.equal(getState().ui.zenMode, true)
+  unsub()
+})
+
+
+test('workflowEngine.js 拓扑分层、环路拦截、并行扇出与条件分支跳过完全准确', async () => {
+  const { analyzeWorkflowDag, executeWorkflowDag } = await import('../src/services/workflowEngine.js')
+
+  const cyclic = analyzeWorkflowDag({
+    id: 'cyc',
+    nodes: [{ id: 'a', kind: 'llm', label: 'A' }, { id: 'b', kind: 'llm', label: 'B' }],
+    edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'a' }],
+  })
+  assert.equal(cyclic.ok, false)
+  assert.ok(cyclic.error.includes('循环依赖'))
+
+  const wf = {
+    id: 'wf_test',
+    name: '并行条件流',
+    nodes: [
+      { id: 'in', kind: 'input', label: '输入' },
+      { id: 'p1', kind: 'llm', label: '并行1', prompt: 'P1:{{input}}' },
+      { id: 'p2', kind: 'llm', label: '并行2', prompt: 'P2:{{input}}' },
+      { id: 'join', kind: 'merge', label: '汇合' },
+      { id: 'cond', kind: 'condition', label: '检查关键词', condition: { op: 'contains', value: 'PASS_FLAG' } },
+      { id: 'yes_branch', kind: 'llm', label: '命中分支' },
+      { id: 'no_branch', kind: 'llm', label: '未命中分支' },
+    ],
+    edges: [
+      { from: 'in', to: 'p1' },
+      { from: 'in', to: 'p2' },
+      { from: 'p1', to: 'join' },
+      { from: 'p2', to: 'join' },
+      { from: 'join', to: 'cond' },
+      { from: 'cond', to: 'yes_branch', when: 'true' },
+      { from: 'cond', to: 'no_branch', when: 'false' },
+    ],
+  }
+  const dag = analyzeWorkflowDag(wf)
+  assert.equal(dag.ok, true)
+  assert.deepEqual(dag.layers[1].sort(), ['p1', 'p2'])
+
+  const res = await executeWorkflowDag({
+    workflow: wf,
+    input: '任务X',
+    runLlmNode: async ({ node }) => ({ content: node.id === 'p1' ? 'OK PASS_FLAG' : `DONE:${node.id}` }),
+  })
+  assert.equal(res.status, 'done')
+  assert.equal(res.nodeStates.yes_branch.status, 'done')
+  assert.equal(res.nodeStates.no_branch.status, 'skipped')
+})
+
+test('workflowEngine.js human_gate 人工拍板门 + artifact 实时画布发射 + 群聊编译闭环', async () => {
+  const { executeWorkflowDag, compileGroupToWorkflow } = await import('../src/services/workflowEngine.js')
+  const emitted = []
+  const wf = {
+    id: 'wf_gate_art',
+    name: '拍板画布流',
+    nodes: [
+      { id: 'in', kind: 'input', label: '输入' },
+      { id: 'gate', kind: 'human_gate', label: '风格确认' },
+      { id: 'build', kind: 'llm', label: '生成页面', prompt: '按{{nodes.gate.output}}生成' },
+      { id: 'art', kind: 'artifact', label: '实时画布', prompt: '{{nodes.build.output}}' },
+    ],
+    edges: [
+      { from: 'in', to: 'gate' },
+      { from: 'gate', to: 'build' },
+      { from: 'build', to: 'art' },
+    ],
+  }
+  const res = await executeWorkflowDag({
+    workflow: wf,
+    input: '时钟页',
+    requestHumanGate: async () => ({ mode: 'selected', summary: '极简玻璃风' }),
+    runLlmNode: async ({ prompt }) => ({ content: `\`\`\`html\n<!doctype html><html><head><title>${prompt}</title></head><body><h1>OK</h1></body></html>\n\`\`\`` }),
+    onArtifact: (a) => emitted.push(a),
+  })
+  assert.equal(res.status, 'done')
+  assert.equal(emitted.length, 1)
+  assert.ok(emitted[0].code.includes('极简玻璃风'))
+
+  const compiled = compileGroupToWorkflow({
+    title: '攻关群',
+    members: [{ id: 'a', name: '架构师', persona: '设计' }, { id: 'b', name: '前端', persona: '写页面' }],
+  })
+  assert.equal(compiled.nodes.length, 4)
+  assert.equal(compiled.edges.length, 3)
+})
+
+test('pluginRegistry.js 支持热插拔校验自定义 JSON 插件、收集工具/指令/钩子并安全分发', async () => {
+  const {
+    SAMPLE_CUSTOM_PLUGIN_JSON,
+    validateCustomPluginManifest,
+    resolveAllPlugins,
+    collectEnabledWorkflows,
+    collectPluginTools,
+    runPluginBeforePromptHooks,
+    dispatchPluginTool,
+  } = await import('../src/services/pluginRegistry.js')
+
+  const valid = validateCustomPluginManifest(SAMPLE_CUSTOM_PLUGIN_JSON)
+  assert.equal(valid.ok, true)
+  assert.equal(valid.plugin.id, 'custom.prd-sprint')
+
+  const invalid = validateCustomPluginManifest('{"id":"bad id!","name":"x"}')
+  assert.equal(invalid.ok, false)
+
+  const all = resolveAllPlugins({ 'plugin.content-studio': false }, [valid.plugin])
+  assert.equal(all.find((p) => p.id === 'plugin.content-studio').enabled, false)
+  assert.equal(all.find((p) => p.id === 'custom.prd-sprint').enabled, true)
+
+  const wfs = collectEnabledWorkflows(all)
+  assert.ok(wfs.some((w) => w.id === 'wf-custom-prd'))
+  assert.ok(!wfs.some((w) => w.id === 'wf-content-studio'))
+
+  const tools = collectPluginTools(all)
+  assert.ok(tools.some((t) => t.function.name === 'list_workflow_plugins'))
+  const out = JSON.parse(dispatchPluginTool('list_workflow_plugins', {}, { plugins: all, workflows: wfs }))
+  assert.equal(out.ok, true)
+  assert.ok(out.count >= 4)
+
+  const hooks = runPluginBeforePromptHooks(all)
+  assert.ok(hooks.includes('验收标准'))
+})

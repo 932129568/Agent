@@ -5,6 +5,7 @@
     right: 12px;
     bottom: 44px;
     width: min(400px, calc(100vw - 24px));
+    transition: width var(--dur-base) var(--ease-spring);
     z-index: var(--z-dock);
     display: flex;
     flex-direction: column;
@@ -15,6 +16,7 @@
     overflow: hidden;
     will-change: transform, opacity;
   }
+  .dk-root[data-wide="true"] { width: min(640px, calc(100vw - 32px)); }
   .dk-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
   .dk-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
   .dk-tab {

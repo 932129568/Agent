@@ -18,12 +18,16 @@ import {
   applyGroupPreset,
   setGroupRoutingMode,
   setAskBeforeDesign,
+  openArtifactCanvas,
+  exportCurrentGroupMarkdown,
+  convertGroupToWorkflow,
   pushToast,
 } from '../../state/store.js'
 import { CAPABILITY_CATALOG, GROUP_ROSTER_PRESETS, inferMemberCapabilities } from '../../services/capabilityRouter.js'
 import { REASONING_TIERS } from '../../services/reasoningPresets.js'
 import { copyText } from '../../platform/dom.js'
 import { estTokens, historyTokens } from '../../services/compaction.js'
+import { extractArtifactsFromMarkdown } from '../../services/artifacts.js'
 import MarkdownView from '../../ui/MarkdownView.jsx'
 import RelayTrackStage from '../../ui/RelayTrackStage.jsx'
 import ContextUsageRing from '../../ui/ContextUsageRing.jsx'
@@ -169,6 +173,14 @@ export default function GroupPanel() {
             {ui.askBeforeDesign ? '🎯 效果先问我' : '⚡ 自主发挥'}
           </button>
 
+          {group.messages.length > 0 && (
+            <button type="button" className="gp-chip-btn" onClick={() => exportCurrentGroupMarkdown()} title="导出本群完整交接纪要为 Markdown">
+              ⬇ 导出纪要
+            </button>
+          )}
+          <button type="button" className="gp-chip-btn" onClick={() => convertGroupToWorkflow()} title="将当前群聊名册一键编译为可视化可编辑 DAG 工作流">
+            ⚡ 转 DAG 流
+          </button>
           <button type="button" className="gp-chip-btn" onClick={() => { setActiveDrawer(null); triggerRelayShowcase() }}>
             ▶ 预览光梭接力动画
           </button>
@@ -240,6 +252,11 @@ export default function GroupPanel() {
                       <button type="button" className="gp-chip-btn" onClick={async () => { await copyText(m.content); pushToast('已复制该棒交付内容', 'ok') }}>
                         复制
                       </button>
+                      {extractArtifactsFromMarkdown(m.content).slice(0, 1).map((art) => (
+                        <button key={art.id} type="button" className="gp-chip-btn" data-active="true" onClick={() => openArtifactCanvas(art)}>
+                          ✦ 实时画布
+                        </button>
+                      ))}
                       <button type="button" className="gp-chip-btn" onClick={() => setDockPreview(`### ${m.author}\n\n${m.content}`)}>
                         副屏 →
                       </button>

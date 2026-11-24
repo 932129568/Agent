@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useSlice, toggleDock, setDockTab, fireShellImpact } from '../../state/store.js'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useSlice, toggleDock, setDockTab, fireShellImpact, pushToast } from '../../state/store.js'
 import { playDrawerSlideIn, playDrawerSlideOut } from '../../platform/kinetic.js'
+import { buildArtifactSandboxDoc } from '../../services/artifacts.js'
 import DiffView from '../../ui/DiffView.jsx'
 import MarkdownView from '../../ui/MarkdownView.jsx'
+import ArtifactCanvas from '../../ui/ArtifactCanvas.jsx'
 import './ContextDock.css'
 
 export default function ContextDock() {
@@ -40,6 +42,11 @@ export default function ContextDock() {
     }
   }, [mounted, shouldShow])
 
+  const sandboxHtml = useMemo(
+    () => (ui.activeArtifact ? buildArtifactSandboxDoc(ui.activeArtifact, settings.theme) : ''),
+    [ui.activeArtifact, settings.theme]
+  )
+
   if (!mounted) return null
 
   const session = sessionsState.items.find((s) => s.id === sessionsState.currentId)
@@ -47,9 +54,10 @@ export default function ContextDock() {
   const run = (sid && runtime.runsBySid[sid]) || { phase: 'idle', tools: [], diffs: [] }
   const msgs = (session && session.messages) || []
   const approxTokens = Math.ceil(msgs.reduce((n, m) => n + String(m.content || '').length, 0) / 1.8)
+  const isWide = ui.dockTab === 'artifact' && Boolean(ui.activeArtifact)
 
   return (
-    <aside ref={asideRef} className="dk-root" aria-label="右侧上下文工作台">
+    <aside ref={asideRef} className="dk-root" data-wide={String(isWide)} aria-label="右侧上下文工作台">
       <div className="dk-head">
         <strong>上下文工作台（事件驱动 · 0 轮询）</strong>
         <button type="button" className="dk-close" onClick={() => toggleDock()} aria-label="关闭">×</button>
@@ -57,6 +65,7 @@ export default function ContextDock() {
       <div className="dk-tabs" role="tablist">
         {[
           ['overview', '概览'],
+          ['artifact', ui.activeArtifact ? '✦ 画布' : '画布'],
           ['diff', `Diff(${(run.diffs || []).length})`],
           ['trace', `轨迹(${(run.tools || []).length})`],
           ['preview', '预览'],
@@ -90,6 +99,13 @@ export default function ContextDock() {
             <div className="dk-kv"><span className="dk-k">窗外透色材质</span><span className="dk-v">{settings.backdrop} ({Math.round(settings.opacity * 100)}%)</span></div>
             <div className="dk-kv"><span className="dk-k">本地 Fastify</span><span className="dk-v">{runtime.serverHealth && runtime.serverHealth.ok ? '在线' : '离线'}</span></div>
           </>
+        )}
+        {ui.dockTab === 'artifact' && (
+          <ArtifactCanvas
+            artifact={ui.activeArtifact}
+            sandboxHtml={sandboxHtml}
+            onCopied={(msg) => pushToast(msg, 'ok')}
+          />
         )}
         {ui.dockTab === 'diff' && (
           (run.diffs || []).length > 0

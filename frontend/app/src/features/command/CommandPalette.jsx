@@ -3,15 +3,20 @@ import {
   useSlice,
   closeModal,
   createNewSession,
+  openProjectSessionModal,
+  createNewGroup,
   selectSession,
   setActivePanel,
   openModal,
   toggleDock,
+  toggleZenMode,
+  exportCurrentSessionMarkdown,
   toggleSearchDock,
   updateVisualSettings,
   compactSessionNow,
   checkAppUpdate,
   triggerFourActShowcase,
+  setWorkflowViewTab,
 } from '../../state/store.js'
 import './CommandPalette.css'
 
@@ -22,7 +27,14 @@ export default function CommandPalette() {
   const [idx, setIdx] = useState(0)
 
   const commands = [
-    { id: 'new', label: '新建对话', hint: 'Ctrl+N', run: () => createNewSession('新对话') },
+    { id: 'new', label: '新建普通会话', hint: 'Ctrl+N', run: () => createNewSession('新对话') },
+    { id: 'new-proj', label: '新建项目会话（绑定工作文件夹）', hint: '/project', run: () => openProjectSessionModal('create') },
+    { id: 'new-grp', label: '新建隔离群聊（专属群文件空间）', hint: 'Group', run: () => { setActivePanel('group'); createNewGroup() } },
+    { id: 'zen', label: '开关无干扰专注模式（隐藏导航与侧栏）', hint: 'Ctrl+Shift+F', run: () => toggleZenMode() },
+    { id: 'export', label: '导出当前会话为 Markdown 纪要', hint: '/export', run: () => exportCurrentSessionMarkdown(sessionsState.currentId) },
+    { id: 'wf-studio', label: '打开「插件化可视化 DAG 工作流工坊」', hint: '/wf', run: () => { setWorkflowViewTab('studio'); setActivePanel('workflow') } },
+    { id: 'plug-hub', label: '打开「插件热插拔管理中心」', hint: '/plugins', run: () => { setWorkflowViewTab('plugins'); setActivePanel('workflow') } },
+    { id: 'artifact', label: '打开实时交互 Artifact 画布', hint: 'Canvas', run: () => toggleDock('artifact') },
     { id: 'demo', label: '预览四幕大尺度动效 + 生成式 UI 仪表盘', hint: '/demo', run: () => { setActivePanel('chat'); triggerFourActShowcase(sessionsState.currentId) } },
     { id: 'compact', label: '立即压缩当前会话历史并生成锚点摘要', hint: '/compact', run: () => compactSessionNow(sessionsState.currentId, true) },
     { id: 'acrylic', label: '窗外透色：Acrylic（实时透窗外窗口）', hint: 'Optics', run: () => updateVisualSettings({ backdrop: 'acrylic' }) },

@@ -40,6 +40,10 @@ export function NavIcon({ name }) {
       return <svg {...baseProps}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
     case 'moon':
       return <svg {...baseProps}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+    case 'workflow':
+      return <svg {...baseProps}><rect x="2" y="9" width="6" height="6" rx="1.5" /><rect x="16" y="3" width="6" height="6" rx="1.5" /><rect x="16" y="15" width="6" height="6" rx="1.5" /><path d="M8 12h4l2-6h2M12 12l2 6h2" /></svg>
+    case 'plugin':
+      return <svg {...baseProps}><path d="M12 2v4M7 7h10v5a5 5 0 0 1-10 0V7zM12 17v5M9 2v5M15 2v5" /></svg>
     case 'sidebar':
       return <svg {...baseProps}><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /></svg>
     default:

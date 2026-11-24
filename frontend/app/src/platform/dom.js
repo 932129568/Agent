@@ -1,4 +1,4 @@
-/** 平台白名单：唯一允许访问挂载点、剪贴板与文件下载的位置（LAW-01 白名单）。 */
+/** 平台白名单：唯一允许访问挂载点、剪贴板与文件读写的出口（LAW-01 白名单）。 */
 export function mountPoint(id = 'harbor-app-root') {
   return typeof document !== 'undefined' ? document.getElementById(id) : null
 }
@@ -18,4 +18,22 @@ export function readFileAsText(file) {
     reader.onerror = () => reject(reader.error || new Error('读取文件失败'))
     reader.readAsText(file)
   })
+}
+
+/** 浏览器原生 Blob 下载（用于一键导出 Markdown 会话纪要与 HTML/SVG Artifact）。 */
+export function downloadTextFile(filename, text, mimeType = 'text/plain;charset=utf-8') {
+  if (typeof document === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') return false
+  const blob = new Blob([String(text || '')], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = String(filename || 'harbor-export.txt')
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    return true
+  } finally {
+    setTimeout(() => { try { URL.revokeObjectURL(url) } catch {} }, 800)
+  }
 }

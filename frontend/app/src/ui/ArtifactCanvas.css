@@ -1,0 +1,110 @@
+@layer components {
+  .ac-root {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    min-height: 0;
+  }
+  .ac-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+  }
+  .ac-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+  .ac-badge {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: var(--radius-full);
+    background: var(--primary-soft);
+    color: var(--primary);
+    flex-shrink: 0;
+  }
+  .ac-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ac-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .ac-btn {
+    padding: 3px 9px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text-2);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .ac-btn:hover { border-color: var(--primary); color: var(--text); }
+  .ac-btn[data-active="true"] {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .ac-stage {
+    flex: 1;
+    min-height: 360px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+  }
+  .ac-frame {
+    width: 100%;
+    height: 100%;
+    min-height: 360px;
+    border: 0;
+    background: #fff;
+    transition: width var(--dur-base) var(--ease-spring);
+  }
+  .ac-frame[data-viewport="mobile"] {
+    width: 375px;
+    max-width: 100%;
+    border-left: 1px solid var(--border-strong);
+    border-right: 1px solid var(--border-strong);
+    box-shadow: var(--elev-2);
+  }
+  .ac-code {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 12px 14px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--surface-subtle);
+    white-space: pre;
+  }
+}
