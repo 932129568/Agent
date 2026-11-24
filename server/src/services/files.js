@@ -248,6 +248,19 @@ export async function readMore(cacheId, offset = 0, limit = 400) {
 
 /* ---------------- 写族 ---------------- */
 
+/** 原子写盘（异常路径自动清理遗留 .tmp，避免 Windows 文件被占用时留下孤儿临时文件）。 */
+function atomicWriteSync(target, data, encoding) {
+  const tmp = `${target}.${process.pid}.${Date.now().toString(36)}.tmp`
+  try {
+    if (encoding) fs.writeFileSync(tmp, data, encoding)
+    else fs.writeFileSync(tmp, data)
+    fs.renameSync(tmp, target)
+  } catch (error) {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp) } catch {}
+    throw error
+  }
+}
+
 export async function writeFile(input, content) {
   // P0-3 T02：per-root 写互斥（同 root 写操作串行不撕裂）
   return withRootLock(ctxRoot(), async () => {
@@ -260,10 +273,8 @@ export async function writeFile(input, content) {
     // P0-6：覆盖写入前捕获原文件内容（新建文件为空串），供前端 Myers Diff 审查后立即剥离（0 Token 膨胀）
     const prevText = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : ''
     fs.mkdirSync(path.dirname(target), { recursive: true })
-    // atomic_write_text：newline=''（无换行翻译）逐字节
-    const tmp = `${target}.${process.pid}.tmp`
-    fs.writeFileSync(tmp, String(content ?? ''), 'utf8')
-    fs.renameSync(tmp, target)
+    // atomic_write_text：newline=''（无换行翻译）逐字节，失败自动清理 .tmp
+    atomicWriteSync(target, String(content ?? ''), 'utf8')
     invalidate(target)
     const base = {
       ok: true,
@@ -365,10 +376,7 @@ export async function searchReplace(input, oldText, newText, replaceAll = false)
     catch (error) {
       return errJson(`新内容含原编码（${encoding}）无法表示的字符（${error.message || error}），已拒绝写入；请改用 UTF-8 字符集或先转换文件编码。`)
     }
-    let written = payload
-    const tmp = `${target}.${process.pid}.tmp`
-    fs.writeFileSync(tmp, written)
-    fs.renameSync(tmp, target)
+    atomicWriteSync(target, payload)
     invalidate(target)
     return okJson({
       ok: true,

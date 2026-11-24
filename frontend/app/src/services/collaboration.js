@@ -49,6 +49,16 @@ export async function runDualModelCollaboration({
   const events = []
   let cloudTokens = 0
   let localTokens = 0
+  const CLOUD_PRICE_PER_1K = 0.002
+  const addUsageTokens = (resp, fallbackText) => {
+    const real = Number(resp && resp.usage && resp.usage.total_tokens) || 0
+    return real > 0 ? real : estTokens(fallbackText)
+  }
+  const budgetExhausted = () => (
+    cloudTokens >= cfg.cloud_token_budget
+    || (cloudTokens + localTokens) >= cfg.total_token_budget
+    || ((cloudTokens / 1000) * CLOUD_PRICE_PER_1K) >= Number(cfg.cloud_cost_budget || 2.0)
+  )
 
   const emit = (phase, actor, content) => {
     const ev = { id: `ce_${events.length}`, phase, actor, content, cloudTokens, localTokens, at: Date.now() }
@@ -82,7 +92,7 @@ export async function runDualModelCollaboration({
       { role: 'user', content: safeGoal },
     ],
   })
-  cloudTokens += estTokens(safeGoal) + estTokens(planRes.content)
+  cloudTokens += addUsageTokens(planRes, safeGoal + '\n' + (planRes.content || ''))
   emit('plan_ready', '云端规划模型 (Planner)', planRes.content)
 
   // 阶段 2：Local Worker 按方案落地
@@ -104,10 +114,10 @@ export async function runDualModelCollaboration({
       ],
     })
     currentDraft = workRes.content
-    localTokens += estTokens(workerPrompt) + estTokens(currentDraft)
+    localTokens += addUsageTokens(workRes, workerPrompt + '\n' + currentDraft)
     emit('draft_ready', `本地执行模型 (Worker · 第 ${round + 1} 轮)`, currentDraft)
 
-    if (round >= cfg.max_review_rounds || cloudTokens >= cfg.cloud_token_budget) break
+    if (round >= cfg.max_review_rounds || budgetExhausted()) break
 
     // 阶段 3：Cloud Reviewer 评审（仅上传脱敏摘要）
     const reviewInput = redactForCloud(`目标：${safeGoal}\n\n待审草稿：\n${currentDraft}`, cfg.upload_scope)
@@ -120,7 +130,7 @@ export async function runDualModelCollaboration({
         { role: 'user', content: reviewInput },
       ],
     })
-    cloudTokens += estTokens(reviewInput) + estTokens(revRes.content)
+    cloudTokens += addUsageTokens(revRes, reviewInput + '\n' + (revRes.content || ''))
     emit('review_done', `云端评审模型 (Reviewer · 第 ${round + 1} 轮)`, revRes.content)
     if (/^\s*APPROVED\b/i.test(revRes.content)) break
   }

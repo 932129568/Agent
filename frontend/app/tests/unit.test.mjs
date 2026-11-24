@@ -531,3 +531,72 @@ test('sessionMode.js 普通会话与项目会话互转及路径短名提取（Wi
   assert.equal(normalizeSessionKind(backToNormal), 'chat')
   assert.equal(backToNormal.workspaceDir, '')
 })
+
+
+test('dag.js sanitizeMessagesForApi 协议自愈：自动补齐中断工具循环遗留的悬空 tool_calls 回执并剔除孤儿 tool 消息', async () => {
+  const { sanitizeMessagesForApi } = await import('../src/services/dag.js')
+  const broken = [
+    { role: 'user', content: '查一下文件' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'tc_orphan_1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.js"}' } }] },
+    { role: 'user', content: '换个问题吧' },
+    { role: 'tool', tool_call_id: 'tc_stray_999', content: 'should be dropped' },
+  ]
+  const healed = sanitizeMessagesForApi(broken)
+  assert.equal(healed.length, 4)
+  assert.equal(healed[2].role, 'tool')
+  assert.equal(healed[2].tool_call_id, 'tc_orphan_1')
+  assert.ok(healed[2].content.includes('interrupted'))
+  assert.equal(healed[3].role, 'user')
+  assert.equal(healed[3].content, '换个问题吧')
+})
+
+test('compaction.js 压缩切分点自动对齐到 user 边界，绝不产生连续两条 assistant 消息', async () => {
+  const { compactSessionHistory } = await import('../src/services/compaction.js')
+  const msgs = []
+  for (let i = 0; i < 6; i++) {
+    msgs.push({ role: 'user', content: `问题 ${i}` })
+    msgs.push({ role: 'assistant', content: `回答 ${i}` })
+  }
+  // keepTail=5 时原始 cut=7 会落在 assistant 上，R14 应自动对齐到 user 边界
+  const res = compactSessionHistory({ id: 's_c', messages: msgs }, { force: true, keepTail: 5 })
+  assert.equal(res.compacted, true)
+  assert.equal(res.session.messages[0].role, 'assistant')
+  assert.equal(res.session.messages[1].role, 'user')
+})
+
+test('subagent.js purgeSubagents 彻底释放已删除会话的子代理记录并中止在途任务', async () => {
+  const { spawnIsolatedSubagent, listSubagents, purgeSubagents } = await import('../src/services/subagent.js')
+  let aborted = false
+  spawnIsolatedSubagent({
+    parentSid: 'sid_purge_test',
+    task: '长耗时任务',
+    runner: (_sess, sig) => new Promise((resolve) => {
+      sig.addEventListener('abort', () => { aborted = true; resolve('stopped') }, { once: true })
+    }),
+  })
+  assert.equal(listSubagents('sid_purge_test').length, 1)
+  // runner 是在 Promise.resolve().then() 里启动的，spawn 返回时它还没跑；
+  // 必须先让它进入在途（挂上 abort 监听），否则测的是"启动前取消"，
+  // 那条路径由实现里的 signal.aborted 守卫负责（不再启动 runner）。
+  await Promise.resolve()
+  purgeSubagents('sid_purge_test')
+  assert.equal(aborted, true)
+  assert.equal(listSubagents('sid_purge_test').length, 0)
+})
+
+test('expertTeam.js 流式途中中止自动保存断点检查点（不丢已完成成员与未消费信箱）', async () => {
+  const { runExpertTeam } = await import('../src/services/expertTeam.js')
+  const ctrl = new AbortController()
+  ctrl.abort()
+  const res = await runExpertTeam({
+    goal: '测试断点保护',
+    lead: { name: '总监' },
+    members: [{ name: '架构师' }, { name: '工程师' }],
+    endpointConfig: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: 'k', model: 'm' },
+    recovery: { completedMembers: [{ name: '架构师', result: '已完成设计' }], unconsumedMailbox: [] },
+    signal: ctrl.signal,
+  })
+  assert.equal(res.status, 'paused')
+  assert.ok(res.checkpoint && res.checkpoint.completedMembers.length === 1)
+  assert.equal(res.checkpoint.completedMembers[0].name, '架构师')
+})

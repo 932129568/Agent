@@ -4,6 +4,7 @@ import { desktopBridge } from '../platform/libs.js'
 import {
   useSlice,
   hydrateApp,
+  flushPersistSessions,
   setActivePanel,
   toggleSidebar,
   openModal,
@@ -78,7 +79,12 @@ export default function AppShell() {
     const desktop = desktopBridge()
     if (desktop && typeof desktop.onWindowLifecycle === 'function') {
       return desktop.onWindowLifecycle((ev) => {
-        if (ev && (ev.phase === 'open' || ev.phase === 'close')) playShellTransition(ev.phase)
+        if (!ev) return
+        if (ev.phase === 'close') {
+          // Electron win.destroy() 不触发 beforeunload：窗口关闭动画启动瞬间立即同步落盘未保存会话
+          flushPersistSessions()
+        }
+        if (ev.phase === 'open' || ev.phase === 'close') playShellTransition(ev.phase)
       })
     }
     return undefined

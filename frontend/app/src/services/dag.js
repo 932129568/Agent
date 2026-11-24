@@ -37,7 +37,35 @@ export function sanitizeMessagesForApi(messages) {
     if (m.name) clean.name = m.name
     out.push(clean)
   }
-  return out
+  // R14 协议自愈：若上轮工具循环在中途被中断，可能导致 assistant(tool_calls) 缺少对应 role:'tool' 回执，
+  // 从而让 OpenAI / DeepSeek / Anthropic 报 HTTP 400 锁死整条会话；此处自动补齐缺失的回执或剔除悬空 tool 消息。
+  const healed = []
+  let pendingIds = []
+  for (const msg of out) {
+    if (pendingIds.length > 0 && msg.role !== 'tool') {
+      for (const id of pendingIds) {
+        healed.push({ role: 'tool', tool_call_id: id, content: '{"interrupted":true,"info":"前序工具调用被中断"}' })
+      }
+      pendingIds = []
+    }
+    if (msg.role === 'tool') {
+      const cid = String(msg.tool_call_id || '')
+      if (!cid || !pendingIds.includes(cid)) continue
+      pendingIds = pendingIds.filter((x) => x !== cid)
+      healed.push(msg)
+      continue
+    }
+    healed.push(msg)
+    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+      pendingIds = msg.tool_calls.map((tc) => String((tc && tc.id) || '')).filter(Boolean)
+    }
+  }
+  if (pendingIds.length > 0) {
+    for (const id of pendingIds) {
+      healed.push({ role: 'tool', tool_call_id: id, content: '{"interrupted":true,"info":"前序工具调用被中断"}' })
+    }
+  }
+  return healed
 }
 
 export function ensureTree(session) {

@@ -217,17 +217,39 @@ async function relay(req, res) {
     } catch (e) { /* 装配失败：原 body 原样透传，绝不中断请求 */ }
   }
 
+  // R14：客户端提前断开（停止生成/暂停接力）时立刻联动中止上游推理并销毁流，杜绝后台空烧 Token
+  const clientAbort = new AbortController()
+  let stream = null
+  const onClientClose = () => {
+    if (!res.writableEnded) {
+      try { clientAbort.abort() } catch {}
+      if (stream) { try { stream.destroy() } catch {} }
+    }
+  }
+  res.on('close', onClientClose)
+
   let upstream
   try {
+    const timeoutSig = AbortSignal.timeout(FORWARD_TIMEOUT_MS)
+    const combinedSignal = typeof AbortSignal.any === 'function'
+      ? AbortSignal.any([clientAbort.signal, timeoutSig])
+      : clientAbort.signal
     upstream = await fetch(resolved.url, {
       method: req.method,
       headers: fwd,
       body: req.method === 'GET' ? undefined : body,
-      signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
+      signal: combinedSignal,
       redirect: 'manual',
     })
   } catch (e) {
+    res.off('close', onClientClose)
+    if (clientAbort.signal.aborted || res.destroyed) return
     return jsonError(req, res, 502, '模型端点转发失败: ' + ((e && e.message) || e))
+  }
+  if (clientAbort.signal.aborted || res.destroyed) {
+    res.off('close', onClientClose)
+    try { await upstream.body?.cancel() } catch {}
+    return
   }
   applyCors(req, res)
   const headers = {}
@@ -236,9 +258,19 @@ async function relay(req, res) {
     if (v) headers[h] = v
   }
   res.writeHead(upstream.status, headers)
-  if (!upstream.body) { res.end(); return }
-  const stream = Readable.fromWeb(upstream.body)
-  stream.on('error', () => { try { res.end() } catch (e) { /* 已断 */ } })
+  if (!upstream.body) {
+    res.off('close', onClientClose)
+    res.end()
+    return
+  }
+  stream = Readable.fromWeb(upstream.body)
+  const cleanup = () => { res.off('close', onClientClose) }
+  stream.on('end', cleanup)
+  stream.on('close', cleanup)
+  stream.on('error', () => {
+    cleanup()
+    try { res.end() } catch (e) { /* 已断 */ }
+  })
   stream.pipe(res)
 }
 

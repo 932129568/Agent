@@ -26,7 +26,7 @@ import {
 import { runAgentConversation, invalidateSessionPrefixCache } from '../services/agentEngine.js'
 import { streamChatCompletion } from '../services/modelTransport.js'
 import { compactSessionHistory } from '../services/compaction.js'
-import { spawnIsolatedSubagent, cancelAllSubagents } from '../services/subagent.js'
+import { spawnIsolatedSubagent, cancelAllSubagents, purgeSubagents } from '../services/subagent.js'
 import { isResumableError } from '../services/budgetAndResume.js'
 import { runExpertTeam } from '../services/expertTeam.js'
 import { COLLABORATION_DEFAULTS, normalizeCollaborationConfig, runDualModelCollaboration } from '../services/collaboration.js'
@@ -310,10 +310,17 @@ export function fireShellImpact(edge = 'left', strength = 'medium', vec = null) 
     },
   }))
 }
+function activeViewSid() {
+  return state.ui.activePanel === 'group' ? state.group.activeGroupId : state.sessions.currentId
+}
+
 export function setActivePanel(panel) {
   const prev = state.ui.activePanel
   patchSlice('ui', (u) => ({ ...u, activePanel: panel }))
-  if (prev !== panel) fireShellImpact('left', 'panel')
+  if (prev !== panel) {
+    syncRuntimeTelemetryForSid(panel === 'group' ? state.group.activeGroupId : state.sessions.currentId)
+    fireShellImpact('left', 'panel')
+  }
 }
 export function toggleSidebar() { patchSlice('ui', (u) => ({ ...u, sidebarOpen: !u.sidebarOpen })) }
 export function openModal(modalId, originRect = null) {
@@ -574,6 +581,7 @@ export function selectSession(sid) {
 
 export function deleteSession(sid) {
   stopSessionRun(sid)
+  purgeSubagents(sid)
   invalidateSessionPrefixCache(sid)
   let nextCurrentId = ''
   patchSlice('sessions', (st) => {
@@ -722,6 +730,10 @@ export async function saveBackendConfig(patch) {
     provider_model: unifiedModel,
     model: unifiedModel,
   }
+  const prevCfg = state.settings.backendConfig || {}
+  if (prevCfg.system_prompt !== merged.system_prompt || prevCfg.tool_mode !== merged.tool_mode) {
+    invalidateSessionPrefixCache()
+  }
   patchSlice('settings', (s) => ({ ...s, backendConfig: merged }))
   await api.saveConfig(merged)
   pushToast('配置已保存到本机 config.json', 'ok')
@@ -787,6 +799,9 @@ export function stopSessionRun(sid) {
   cancelAllSubagents(sid, (list) => patchSlice('runtime', (r) => ({ ...r, subagentsBySid: { ...r.subagentsBySid, [sid]: list } })))
   if (state.runtime.pendingApproval && state.runtime.pendingApproval.sid === sid && approvalResolver) {
     const r = approvalResolver; approvalResolver = null; patchSlice('runtime', { pendingApproval: null }); r({ ok: false, denyReason: '用户中止了当前任务' })
+  }
+  if (state.runtime.pendingClarify && state.runtime.pendingClarify.sid === sid && clarifyResolver) {
+    const r = clarifyResolver; clarifyResolver = null; patchSlice('runtime', { pendingClarify: null }); r({ mode: 'cancelled', answers: {}, customNote: '', summary: '用户已中止当前任务' })
   }
   if (state.runtime.pendingTakeover && state.runtime.pendingTakeover.sid === sid && takeoverResolver) {
     const r = takeoverResolver; takeoverResolver = null; patchSlice('runtime', { pendingTakeover: null }); r('cancel')
@@ -1137,7 +1152,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
           patchSlice('runtime', (r) => ({
             ...r,
             toolProfileBySid: { ...(r.toolProfileBySid || {}), [sid]: ev.toolProfile },
-            activeToolProfile: ev.toolProfile,
+            ...(activeViewSid() === sid ? { activeToolProfile: ev.toolProfile } : {}),
           }))
         }
         if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats, sid)
@@ -1157,7 +1172,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
       }),
     })
 
-    if (result && (result.content || result.reasoning)) {
+    if (!ctrl.signal.aborted && result && (result.content || result.reasoning)) {
       const addTok = (result.usage && result.usage.total_tokens) || 0
       if (addTok > 0) {
         patchSlice('runtime', (r) => ({
@@ -1527,6 +1542,12 @@ export function abortGroupRelay() {
   while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
   groupAbortReason = 'abort'
   if (groupAbortCtrl) groupAbortCtrl.abort()
+  if (state.runtime.pendingApproval && state.runtime.pendingApproval.sid === 'group' && approvalResolver) {
+    const r = approvalResolver; approvalResolver = null; patchSlice('runtime', { pendingApproval: null }); r({ ok: false, denyReason: '群聊接力已中止' })
+  }
+  if (state.runtime.pendingClarify && state.runtime.pendingClarify.sid === 'group' && clarifyResolver) {
+    const r = clarifyResolver; clarifyResolver = null; patchSlice('runtime', { pendingClarify: null }); r({ mode: 'cancelled', answers: {}, customNote: '', summary: '群聊接力已中止' })
+  }
   patchSlice('group', {
     running: false,
     status: 'idle',
@@ -1552,6 +1573,7 @@ export async function resumeGroupRelay(extraNote = '') {
       ? [...ck.relayContext, { role: 'user', content: `【主持人中途补充指令】${extraNote.trim()}` }]
       : [...ck.relayContext],
     intentLabel: ck.intentLabel,
+    autonomous: !!ck.autonomous,
   })
 }
 
@@ -1570,7 +1592,7 @@ function _beginCacheTurn(scopeSid = '') {
     return {
       ...r,
       cacheTotalsBySid: { ...(r.cacheTotalsBySid || {}), [key]: next },
-      cacheTotals: next,
+      ...(activeViewSid() === key ? { cacheTotals: next } : {}),
     }
   })
 }
@@ -1605,7 +1627,7 @@ function _recordCacheStats(cs, scopeSid = '') {
     return {
       ...r,
       cacheTotalsBySid: { ...(r.cacheTotalsBySid || {}), [key]: next },
-      cacheTotals: next,
+      ...(activeViewSid() === key ? { cacheTotals: next } : {}),
     }
   })
 }
@@ -1962,7 +1984,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
           handoffTo: '',
           liveTools: [],
           cps: 0,
-          checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel },
+          checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel, autonomous },
         })
         pushToast(`接力已暂停在第 ${currentIdx + 1} 棒，可随时继续`, 'info')
       }
@@ -1973,7 +1995,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         activeIndex: currentIdx,
         liveTools: [],
         cps: 0,
-        checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel },
+        checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel, autonomous },
       })
       pushToast(`接力异常（可点继续重试当前棒）：${e.message}`, 'err')
     }

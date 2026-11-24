@@ -33,27 +33,41 @@ function isLocalEndpoint(url) {
   return /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:\/|$)/i.test(String(url || ''))
 }
 
+let _proxyCache = { baseUrl: '', exp: 0 }
+const PROXY_CACHE_TTL_MS = 30000
+
+export function resetLocalProxyCache() {
+  _proxyCache = { baseUrl: '', exp: 0 }
+}
+
 export async function resolveStreamEndpoint(baseUrl, harnessMeta = null) {
   const cleanBase = normalizeBaseUrl(baseUrl)
   const directUrl = buildChatUrl(cleanBase)
   assertLatin1Value('Base URL', cleanBase)
   const local = isLocalEndpoint(cleanBase)
-  try {
-    const proxy = await getLocalProxy()
-    if (proxy && proxy.ok !== false && proxy.base_url) {
-      const extraHeaders = {
-        'X-Harbor-Target': cleanBase,
-        ...(harnessMeta ? { 'X-Harbor-Harness': toAsciiJson(harnessMeta) } : {}),
+  let proxyBase = (_proxyCache.baseUrl && _proxyCache.exp > Date.now()) ? _proxyCache.baseUrl : ''
+  if (!proxyBase) {
+    try {
+      const proxy = await getLocalProxy()
+      if (proxy && proxy.ok !== false && proxy.base_url) {
+        proxyBase = String(proxy.base_url).replace(/\/+$/, '')
+        _proxyCache = { baseUrl: proxyBase, exp: Date.now() + PROXY_CACHE_TTL_MS }
       }
-      return {
-        url: `${String(proxy.base_url).replace(/\/+$/, '')}/chat/completions`,
-        extraHeaders,
-        local,
-        targetBase: cleanBase,
-      }
+    } catch {
+      // 代理未就绪时回落直连
     }
-  } catch {
-    // 代理未就绪时回落直连
+  }
+  if (proxyBase) {
+    const extraHeaders = {
+      'X-Harbor-Target': cleanBase,
+      ...(harnessMeta ? { 'X-Harbor-Harness': toAsciiJson(harnessMeta) } : {}),
+    }
+    return {
+      url: `${proxyBase}/chat/completions`,
+      extraHeaders,
+      local,
+      targetBase: cleanBase,
+    }
   }
   return { url: directUrl, extraHeaders: {}, local, targetBase: cleanBase }
 }
@@ -119,7 +133,7 @@ export async function streamChatCompletion({
     ...extraHeaders,
   })
 
-  const LOADING_BACKOFF = local ? [2000, 4000, 8000, 15000] : [2000, 4000]
+  const LOADING_BACKOFF = local ? [2000, 4000, 8000, 15000] : [1200]
   let loadAttempt = 0
   let rateAttempt = 0
   let resp = null
@@ -134,11 +148,16 @@ export async function streamChatCompletion({
       })
     } catch (e) {
       if (isAbort(e)) throw new HarborError('USER_PAUSED', '已中止生成')
+      resetLocalProxyCache()
       throw new HarborError('NETWORK_ERROR', `模型请求失败（${url} → ${targetBase}）：${e && e.message || e}`, { retryable: true, cause: e })
     }
 
     if (local && resp.status === 503 && loadAttempt < LOADING_BACKOFF.length) {
       await sleepAbortable(LOADING_BACKOFF[loadAttempt++], signal)
+      continue
+    }
+    if (!local && (resp.status === 502 || resp.status === 503 || resp.status === 504) && loadAttempt < LOADING_BACKOFF.length) {
+      await sleepAbortable(LOADING_BACKOFF[loadAttempt++] + Math.floor(Math.random() * 400), signal)
       continue
     }
     if (resp.status === 429 && rateAttempt < 3) {
@@ -165,7 +184,7 @@ export async function streamChatCompletion({
     const msg = (choice && choice.message) || {}
     return {
       content: String(msg.content || ''),
-      reasoning: String(msg.reasoning_content || ''),
+      reasoning: String(msg.reasoning_content || msg.reasoning || ''),
       toolCalls: Array.isArray(msg.tool_calls) ? msg.tool_calls : [],
       usage: data && data.usage || null,
       cacheUsage: extractCacheUsage(data && data.usage),
@@ -213,64 +232,81 @@ export async function streamChatCompletion({
     onDelta({ reasoning, content, cps, hasReasoning: reasoning.length > 0, hasContent: content.length > 0 })
   }
 
+  const consumeSseLine = (rawLine) => {
+    const line = String(rawLine || '').trim()
+    if (!line.startsWith('data:')) return
+    const payload = line.slice(5).trim()
+    if (!payload || payload === '[DONE]') return
+    let chunk = null
+    try { chunk = JSON.parse(payload) } catch { return }
+    if (chunk.usage) usage = chunk.usage
+    const choice = chunk.choices && chunk.choices[0]
+    if (!choice) return
+    if (choice.finish_reason) finishReason = choice.finish_reason
+    const delta = choice.delta || {}
+    const rPart = delta.reasoning_content || delta.reasoning || ''
+    const cPart = delta.content || ''
+    if (rPart) {
+      reasoning += rPart
+      sampleCps(rPart.length)
+    }
+    if (cPart) {
+      content += cPart
+      sampleCps(cPart.length)
+    }
+    if (Array.isArray(delta.tool_calls)) {
+      for (const tc of delta.tool_calls) {
+        const idx = Number.isInteger(tc.index) ? tc.index : tcMap.size
+        const cur = tcMap.get(idx) || { id: tc.id || `tc_${idx}`, type: 'function', function: { name: '', arguments: '' } }
+        if (tc.id) cur.id = tc.id
+        if (tc.function && tc.function.name) cur.function.name += tc.function.name
+        if (tc.function && tc.function.arguments) cur.function.arguments += tc.function.arguments
+        tcMap.set(idx, cur)
+      }
+    }
+    if (rPart || cPart) {
+      const isFirst = (cPart && !firstContentEmitted) || (rPart && !firstReasoningEmitted)
+      if (cPart) firstContentEmitted = true
+      if (rPart) firstReasoningEmitted = true
+      flushDelta(isFirst)
+    }
+  }
+
+  let abortedMidStream = false
   try {
     while (true) {
-      if (signal && signal.aborted) throw new HarborError('USER_PAUSED', '已中止生成')
+      if (signal && signal.aborted) {
+        abortedMidStream = true
+        throw new HarborError('USER_PAUSED', '已中止生成')
+      }
       const { value, done } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split(/\r?\n/)
       buffer = lines.pop() || ''
-
-      for (const rawLine of lines) {
-        const line = rawLine.trim()
-        if (!line.startsWith('data:')) continue
-        const payload = line.slice(5).trim()
-        if (!payload || payload === '[DONE]') continue
-        let chunk = null
-        try { chunk = JSON.parse(payload) } catch { continue }
-        if (chunk.usage) usage = chunk.usage
-        const choice = chunk.choices && chunk.choices[0]
-        if (!choice) continue
-        if (choice.finish_reason) finishReason = choice.finish_reason
-        const delta = choice.delta || {}
-        const rPart = delta.reasoning_content || delta.reasoning || ''
-        const cPart = delta.content || ''
-        if (rPart) {
-          reasoning += rPart
-          sampleCps(rPart.length)
-        }
-        if (cPart) {
-          content += cPart
-          sampleCps(cPart.length)
-        }
-        if (Array.isArray(delta.tool_calls)) {
-          for (const tc of delta.tool_calls) {
-            const idx = Number.isInteger(tc.index) ? tc.index : tcMap.size
-            const cur = tcMap.get(idx) || { id: tc.id || `tc_${idx}`, type: 'function', function: { name: '', arguments: '' } }
-            if (tc.id) cur.id = tc.id
-            if (tc.function && tc.function.name) cur.function.name += tc.function.name
-            if (tc.function && tc.function.arguments) cur.function.arguments += tc.function.arguments
-            tcMap.set(idx, cur)
-          }
-        }
-        if (rPart || cPart) {
-          const isFirst = (cPart && !firstContentEmitted) || (rPart && !firstReasoningEmitted)
-          if (cPart) firstContentEmitted = true
-          if (rPart) firstReasoningEmitted = true
-          flushDelta(isFirst)
-        }
-      }
+      for (const rawLine of lines) consumeSseLine(rawLine)
+    }
+    // 刷新尾部 UTF-8 多字节残留与无尾换行的最后一条 data: 帧（防止丢失末帧 usage 或末段正文）
+    buffer += decoder.decode()
+    if (buffer.trim()) {
+      for (const tailLine of buffer.split(/\r?\n/)) consumeSseLine(tailLine)
     }
     if (pendingEmit) flushDelta(true)
   } finally {
+    if (abortedMidStream) {
+      try { await reader.cancel() } catch {}
+    }
     try { reader.releaseLock() } catch {}
   }
+
+  const sortedToolCalls = [...tcMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, tc]) => tc)
 
   return {
     content,
     reasoning,
-    toolCalls: [...tcMap.values()],
+    toolCalls: sortedToolCalls,
     usage,
     cacheUsage: extractCacheUsage(usage),
     finishReason,

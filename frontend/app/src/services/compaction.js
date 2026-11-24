@@ -95,7 +95,12 @@ export function compactSessionHistory(session, { force = false, keepTail = 6, le
   if (nonDigest.length <= keepTail) {
     return { compacted: false, session, beforeTokens, afterTokens: beforeTokens }
   }
-  const cut = Math.max(1, nonDigest.length - keepTail)
+  let cut = Math.max(1, nonDigest.length - keepTail)
+  // 对齐到 user 消息边界，避免 [assistant(锚点摘要), assistant(...)] 连续两条同角色消息
+  if (nonDigest[cut] && nonDigest[cut].role === 'assistant') {
+    if (cut + 1 < nonDigest.length && nonDigest[cut + 1].role === 'user') cut += 1
+    else if (cut - 1 >= 1 && nonDigest[cut - 1].role === 'user') cut -= 1
+  }
   const existingDigest = session.messages.filter((m) => m && m.__anchorDigest)
   const head = [...existingDigest, ...nonDigest.slice(0, cut)]
   const tail = nonDigest.slice(cut)

@@ -59,6 +59,15 @@ const _toolsCache = new Map()
 const _frozenPrefixBySid = new Map()
 const _injectedMemoriesBySid = new Map()
 const TOOLS_CACHE_TTL_MS = 30000
+const SID_CACHE_MAX = 64
+
+function lruSet(map, key, value, max = SID_CACHE_MAX) {
+  if (map.has(key)) map.delete(key)
+  map.set(key, value)
+  while (map.size > max) {
+    map.delete(map.keys().next().value)
+  }
+}
 
 export function invalidateSessionPrefixCache(sid) {
   if (sid) {
@@ -399,7 +408,7 @@ export async function runAgentConversation({
           if (Array.isArray(built)) rawFullTools = built
           else if (built && Array.isArray(built.tools)) rawFullTools = built.tools
           rawFullTools = canonicalizeTools(rawFullTools)
-          _toolsCache.set(cacheKey, { tools: rawFullTools, exp: Date.now() + TOOLS_CACHE_TTL_MS })
+          lruSet(_toolsCache, cacheKey, { tools: rawFullTools, exp: Date.now() + TOOLS_CACHE_TTL_MS }, 32)
         } catch {}
       }
       totalAvailableTools = rawFullTools.length
@@ -415,7 +424,7 @@ export async function runAgentConversation({
     tools = canonicalizeTools(tools)
     prefixHash = computePrefixFingerprint(systemPrompt, tools)
     if (sid) {
-      _frozenPrefixBySid.set(String(sid), {
+      lruSet(_frozenPrefixBySid, String(sid), {
         key: prefixScopeKey,
         toolProfile: predictedProfile,
         systemPrompt,
@@ -450,7 +459,7 @@ export async function runAgentConversation({
             seen.add(txt)
           }
         }
-        if (sid) _injectedMemoriesBySid.set(String(sid), seen)
+        if (sid) lruSet(_injectedMemoriesBySid, String(sid), seen)
       }
     } catch {}
   }
@@ -665,9 +674,29 @@ export async function runAgentConversation({
       wireTrail.push(toolMsg)
     }
 
-    defense.registerProgress(factsCount)
+    const prog = defense.registerProgress(factsCount)
+    if (prog && prog.stalled && typeof requestBudgetDecision === 'function') {
+      const dec = await requestBudgetDecision({
+        kind: 'stalled',
+        detail: `已连续 ${prog.noProgressRounds} 轮工具调用未产生有效写入或实质进展，已触发停滞熔断暂停。`,
+      })
+      if (!dec || dec.action === 'stop') {
+        const stopText = finalContent || `已触发无进展停滞熔断并暂停（累计执行 ${allTools.length} 次工具调用）。`
+        emit({ phase: 'done', reasoning: finalReasoning, answer: stopText, cps: 0, tools: [...allTools], diffs: [...allDiffs] })
+        return { content: stopText, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true, wiredUserContent, wireTrail }
+      }
+      if (dec.action === 'readonly') {
+        readonlyMode = true
+        const roMsg = { role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) }
+        workingMsgs.push(roMsg)
+        wireTrail.push(roMsg)
+      }
+    }
   }
 
+  if (!finalContent && allTools.length > 0 && !(signal && signal.aborted)) {
+    finalContent = `已达到单轮最大工具执行轮次上限（${maxRounds} 轮，共执行 ${allTools.length} 次工具调用）。如需继续推进，请回复「继续」。`
+  }
   emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs] })
   return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
 }

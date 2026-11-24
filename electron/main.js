@@ -409,6 +409,10 @@ function adminMessageBoxProvider(req) {
 async function gracefulShutdown() {
   if (shuttingDown) return
   shuttingDown = true
+  try {
+    const lp = await import(pathToFileURL(path.join(SERVER_SRC, 'services', 'local-proxy.js')).href)
+    if (lp && typeof lp.shutdownLocalProxy === 'function') lp.shutdownLocalProxy()
+  } catch {}
   try { if (serverApp) await serverApp.close() } catch (error) { console.error('[harbor] server close error:', error && error.message) }
   try { const db = await importDb(); await db.disconnectDb() } catch (error) { console.error('[harbor] db disconnect error:', error && error.message) }
   app.quit()

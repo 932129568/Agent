@@ -180,6 +180,80 @@ if (fs.existsSync(elecMain)) {
   }
 }
 
+// LAW-13（R14 静态 TDZ 防线）：扫描函数体顶层顺序求值的 const/let 声明，
+// 若同一块作用域的同步初始化表达式中在声明行之前就引用了该变量，立即报错（把 R13 级白屏拦截在构建前）。
+function stripStringsAndTemplates(src) {
+  return src
+    .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    .replace(/`(?:\\.|[^`\\])*`/g, (m) => m.replace(/[^\n]/g, ' '))
+}
+
+function checkBlockTdz(filePath, cleanSrc) {
+  const noStr = stripStringsAndTemplates(cleanSrc)
+  const lines = noStr.split('\n')
+  // 匹配顶层函数/组件体起始：`export default function Foo(...) {` 或 `function Foo(...) {`
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*\(/.test(lines[i])) continue
+    // 找到函数体的开大括号
+    let braceLine = i
+    let openCol = lines[i].indexOf('{')
+    while (openCol < 0 && braceLine + 1 < Math.min(lines.length, i + 15)) {
+      braceLine++
+      openCol = lines[braceLine].indexOf('{')
+    }
+    if (openCol < 0) continue
+
+    // 提取函数体 depth===1（即函数体直接顶层，不含内部回调/子函数）的语句行
+    let depth = 0
+    const topLines = []
+    for (let ln = braceLine; ln < lines.length; ln++) {
+      const s = lines[ln]
+      let topChars = ''
+      for (let c = (ln === braceLine ? openCol : 0); c < s.length; c++) {
+        const ch = s[c]
+        if (ch === '{') {
+          depth++
+          if (depth === 1) continue
+        } else if (ch === '}') {
+          depth--
+          if (depth === 0) break
+        }
+        if (depth === 1) topChars += ch
+      }
+      if (topChars.trim()) topLines.push({ lineNo: ln + 1, text: topChars })
+      if (depth === 0) break
+    }
+
+    // 收集函数体直接顶层 const/let 简单变量声明及其声明行号（跳过箭头函数回调行）
+    const decls = []
+    for (const item of topLines) {
+      const m = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=/.exec(item.text)
+      if (m) decls.push({ name: m[1], lineNo: item.lineNo })
+    }
+    if (decls.length < 2) continue
+
+    for (const d of decls) {
+      const idRe = new RegExp(`(?<![.\\w$])${d.name}(?![\\w$])`)
+      const keyRe = new RegExp(`(?<![.\\w$])${d.name}\\s*:`, 'g')
+      for (const item of topLines) {
+        if (item.lineNo >= d.lineNo) break
+        // 跳过函数/回调定义行（如 `const handler = (...) => ...` 或 `useEffect(() => ...)`），因为回调不在此刻同步求值
+        if (/=>|\bfunction\b|\buseEffect\s*\(|\buseLayoutEffect\s*\(|\buseCallback\s*\(|\breturn\s*\(/.test(item.text)) continue
+        // 忽略对象字面量键 `foo:`
+        const scrubbed = item.text.replace(keyRe, '')
+        if (idRe.test(scrubbed)) {
+          fail('LAW-13', filePath, item.lineNo, `疑似 TDZ（先引用后声明）：变量 "${d.name}" 在第 ${item.lineNo} 行同步求值，但直到第 ${d.lineNo} 行才用 const/let 声明`)
+        }
+      }
+    }
+  }
+}
+
+for (const f of jsFiles) {
+  checkBlockTdz(f, stripCommentsPreserveLines(fs.readFileSync(f, 'utf8')))
+}
+
 // LAW-12（收口严格模式）：全量切换完成后，禁止仓库残存旧遗产与未被 main.jsx 引用的死文件
 if (STRICT) {
   for (const legacyPath of [

@@ -41,10 +41,22 @@ export function spawnIsolatedSubagent({ parentSid, task, runner, onChange }) {
   }
   const rec = { id, task: String(task || ''), controller, status: 'running', startedAt: Date.now(), summary: '' }
   bag.set(id, rec)
+  // 控制单会话历史子代理记录上限（16 条），防长驻运行堆积
+  if (bag.size > 16) {
+    for (const [oldId, item] of bag.entries()) {
+      if (item.status !== 'running') { bag.delete(oldId); if (bag.size <= 16) break }
+    }
+  }
   if (typeof onChange === 'function') onChange(listSubagents(parentSid))
 
   const promise = Promise.resolve()
-    .then(() => runner(isolatedSession, controller.signal))
+    .then(() => {
+      // 已被取消（purge/cancel 在 runner 启动前就发生）时不要再启动任务：
+      // 否则 runner 会拿到一个**已经 aborted** 的 signal，若它只监听 'abort' 事件，
+      // 该事件再也不会触发 ⇒ 任务永久挂起（僵尸），且记录已被删掉、无人能停它。
+      if (controller.signal.aborted) return 'stopped'
+      return runner(isolatedSession, controller.signal)
+    })
     .then((raw) => {
       const text = typeof raw === 'string' ? raw : String((raw && raw.content) || '')
       rec.status = controller.signal.aborted ? 'aborted' : 'done'
@@ -75,4 +87,10 @@ export function cancelAllSubagents(parentSid, onChange) {
   }
   if (typeof onChange === 'function') onChange(listSubagents(parentSid))
   return { count, ms: Date.now() - t0 }
+}
+
+export function purgeSubagents(parentSid) {
+  const key = String(parentSid || 'default')
+  cancelAllSubagents(key)
+  activeByParent.delete(key)
 }
