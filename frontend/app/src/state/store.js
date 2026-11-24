@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { readVisualPrefs, applyVisualPrefs } from '../platform/theme.js'
 import { readStorage, writeStorage } from '../platform/storage.js'
 import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers, buildModeratorPrompt, parseModeratorPlan } from '../services/capabilityRouter.js'
+import { isAutonomousAuthorized } from '../services/toolRouter.js'
 import * as api from '../services/bridge.js'
 import {
   ensureTree,
@@ -23,6 +24,7 @@ import { isAbort } from '../services/errors.js'
 const initialVisual = readVisualPrefs()
 const GROUP_MEMBERS_KEY = 'harbor.v3.group.members'
 const DISABLED_CURATED_KEY = 'harbor.v3.disabled_curated'
+const ASK_BEFORE_DESIGN_KEY = 'harbor.v3.ask_before_design'
 
 function loadDisabledCurated() {
   try {
@@ -77,6 +79,7 @@ const initialState = Object.freeze({
     searchDockOpen: false,
     composerDraft: '',
     composerTokens: [],
+    askBeforeDesign: readStorage(ASK_BEFORE_DESIGN_KEY, '1') !== '0',
     impactSignal: null,        // { seq, edge, strength } 驱动 AppShell <main> 校准后的物理撞击
     toasts: [],
   },
@@ -91,10 +94,17 @@ const initialState = Object.freeze({
     queuesBySid: {},
     subagentsBySid: {},        // sid -> [{ id, task, status, summary }]
     pendingApproval: null,
+    pendingClarify: null,
     pendingTakeover: null,     // { sid, takeoverId, url, message }
     pendingBudgetPause: null,  // { sid, kind, detail }
+    activeToolProfile: null,   // { id, label, activeCount, totalCount }
     hybridSplit: { localTokens: 0, cloudTokens: 0 },
-    cacheTotals: { promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0, latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0, prefixHash: '', prefixLocked: false },
+    cacheTotals: {
+      promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
+      turnPromptTokens: 0, turnCachedTokens: 0,
+      latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
+      prefixHash: '', prefixLocked: false,
+    },
     updateInfo: null,          // { latest, url, sha256, notes }
     updateProgress: null,
   },
@@ -172,6 +182,7 @@ const initialState = Object.freeze({
     routingMode: 'smart',      // 'smart'（按能力路由） | 'all'（全员按序接力）
     members: loadSavedGroupMembers(),
     messages: [],
+    relayWireHistory: [],
     files: [],
     filesDir: '',
     lastArchivedName: '',
@@ -201,6 +212,7 @@ let state = initialState
 const listeners = new Set()
 const abortBySid = new Map()
 let approvalResolver = null
+let clarifyResolver = null
 let takeoverResolver = null
 let budgetResolver = null
 let teamAbortCtrl = null
@@ -612,11 +624,51 @@ export function stopSessionRun(sid) {
   patchRun(sid, (x) => ({ ...x, phase: x.answer ? 'done' : 'idle', cps: 0 }))
 }
 
+export function setAskBeforeDesign(enabled) {
+  const next = !!enabled
+  try { writeStorage(ASK_BEFORE_DESIGN_KEY, next ? '1' : '0') } catch {}
+  patchSlice('ui', { askBeforeDesign: next })
+}
+
 export function resolvePendingApproval(decision) {
   if (!approvalResolver) return
   const r = approvalResolver; approvalResolver = null
   patchSlice('runtime', { pendingApproval: null })
   r(decision)
+}
+
+export function resolvePendingClarify(answer) {
+  if (!clarifyResolver) return
+  const r = clarifyResolver; clarifyResolver = null
+  patchSlice('runtime', { pendingClarify: null })
+  r(answer)
+}
+
+function openClarifyPrompt(req) {
+  return new Promise((resolve) => {
+    clarifyResolver = resolve
+    patchSlice('runtime', { pendingClarify: { id: 'cl_' + Date.now(), ...req } })
+  })
+}
+
+export function clearGroupSession() {
+  abortGroupRelay()
+  patchSlice('group', {
+    messages: [],
+    relayWireHistory: [],
+    status: 'idle',
+    running: false,
+    activeIndex: -1,
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    liveReasoning: '',
+    liveTools: [],
+    cps: 0,
+    checkpoint: null,
+    routingWarning: '',
+  })
+  pushToast('已开启全新群聊上下文', 'info')
 }
 
 export function resolvePendingTakeover(action) {
@@ -719,6 +771,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
   })
 
   try {
+    _beginCacheTurn()
     const result = await runAgentConversation({
       sid,
       session: targetSession,
@@ -729,15 +782,18 @@ export async function runChatTurn(sid, userText, opts = {}) {
       workspacePath: state.workspace.rootPath,
       sessionBudgetRmb: Number(state.settings.backendConfig.session_budget) || 0,
       correctiveDirective: opts.correctiveDirective || '',
+      askBeforeDesign: state.ui.askBeforeDesign,
       signal: ctrl.signal,
       onEvent: (ev) => {
         patchRun(sid, ev)
+        if (ev && ev.toolProfile) patchSlice('runtime', { activeToolProfile: ev.toolProfile })
         if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
       },
       requestApproval: (req) => new Promise((resolve) => {
         approvalResolver = resolve
         patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid, ...req } })
       }),
+      requestClarify: (req) => openClarifyPrompt({ sid, ...req }),
       requestTakeover: (tk) => new Promise((resolve) => {
         takeoverResolver = resolve
         patchSlice('runtime', { pendingTakeover: { sid, ...tk } })
@@ -1140,10 +1196,71 @@ export async function resumeGroupRelay(extraNote = '') {
   })
 }
 
+function _formatPct1(hit, total) {
+  if (!total || total <= 0) return 0
+  const raw = (hit / total) * 100
+  if (hit < total) return Math.min(99.9, Math.floor(raw * 10) / 10)
+  return 100
+}
+
+function _beginCacheTurn() {
+  patchSlice('runtime', (r) => ({
+    ...r,
+    cacheTotals: {
+      ...(r.cacheTotals || {
+        promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
+        latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
+        prefixHash: '', prefixLocked: false,
+      }),
+      turnPromptTokens: 0,
+      turnCachedTokens: 0,
+    },
+  }))
+}
+
+function _recordCacheStats(cs) {
+  if (!cs) return
+  patchSlice('runtime', (r) => {
+    const prev = r.cacheTotals || {
+      promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0,
+      turnPromptTokens: 0, turnCachedTokens: 0,
+      latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
+      prefixHash: '', prefixLocked: false,
+    }
+    const addPt = Number(cs.promptTokens) || 0
+    const addCt = Number(cs.cachedTokens) || 0
+    const addWt = Number(cs.cacheWriteTokens) || 0
+    const pt = prev.promptTokens + addPt
+    const ct = prev.cachedTokens + addCt
+    const wt = prev.cacheWriteTokens + addWt
+    const tPt = (prev.turnPromptTokens || 0) + addPt
+    const tCt = (prev.turnCachedTokens || 0) + addCt
+    const turnHit = tPt > 0 ? _formatPct1(tCt, tPt) : prev.latestHitRate
+    return {
+      ...r,
+      cacheTotals: {
+        promptTokens: pt,
+        cachedTokens: ct,
+        cacheWriteTokens: wt,
+        hitRate: pt > 0 ? _formatPct1(ct, pt) : prev.hitRate,
+        turnPromptTokens: tPt,
+        turnCachedTokens: tCt,
+        latestHitRate: turnHit,
+        latestPromptTokens: addPt || prev.latestPromptTokens,
+        latestCachedTokens: addCt,
+        prefixHash: cs.prefixHash || prev.prefixHash,
+        prefixLocked: !!cs.prefixLocked,
+      },
+    }
+  })
+}
+
 export async function runGroupRelay(topic) {
   const clean = String(topic || '').trim()
   if (!clean || state.group.running) return
   while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
+
+  _beginCacheTurn()
 
   const recentGroupText = (state.group.messages || [])
     .slice(-4)
@@ -1151,6 +1268,7 @@ export async function runGroupRelay(topic) {
     .join('\n')
 
   const isSmart = state.group.routingMode !== 'all'
+  const autonomous = isAutonomousAuthorized(clean) || !state.ui.askBeforeDesign
   const fallbackRouted = routeGroupMembers(clean, state.group.members, state.group.routingMode, recentGroupText)
 
   patchSlice('group', (g) => ({
@@ -1162,9 +1280,10 @@ export async function runGroupRelay(topic) {
 
   let plannedMembers = fallbackRouted.selected.map((m) => ({ ...m, taskBrief: m.persona }))
   let intentLabel = fallbackRouted.intent.label
-  const relayContext = [{ role: 'user', content: clean }]
+  const relayContext = Array.isArray(state.group.relayWireHistory)
+    ? state.group.relayWireHistory.map((x) => ({ ...x }))
+    : []
 
-  // 主持人智能调度模式：先由「🎙 主持人」分析需求、动态挑选最匹配成员、重排最优工作流顺序并发布调度单！
   if (isSmart && state.group.members.length > 0) {
     const baseEp = resolveEndpointConfig()
     const groupSid = state.sessions.currentId || state.group.activeGroupId
@@ -1186,19 +1305,22 @@ export async function runGroupRelay(topic) {
     })
 
     try {
-      const modPrompt = buildModeratorPrompt(clean, state.group.members, recentGroupText)
+      const modPrompt = buildModeratorPrompt(clean, state.group.members, recentGroupText, { allowClarify: !autonomous })
+      const modHistory = [...relayContext, { role: 'user', content: modPrompt }]
       const modRes = await runAgentConversation({
         sid: groupSid,
         userQuery: clean,
-        historyMessages: [{ role: 'user', content: modPrompt }],
+        historyMessages: modHistory,
         endpointConfig: { ...baseEp, max_tokens: Math.min(1200, Number(baseEp.max_tokens) || 1200) },
         workspacePath: state.workspace.rootPath,
         allowTools: false,
+        askBeforeDesign: false,
         maxRounds: 1,
         skipMemoryRecall: true,
         skipSelfCheck: true,
         signal: groupAbortCtrl.signal,
         onEvent: (ev) => {
+          if (ev && ev.toolProfile) patchSlice('runtime', { activeToolProfile: ev.toolProfile })
           if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
           if (ev && typeof ev.cps === 'number') patchSlice('group', { cps: ev.cps })
         },
@@ -1209,25 +1331,48 @@ export async function runGroupRelay(topic) {
         return
       }
 
-      const planObj = parseModeratorPlan((modRes && modRes.content) || '', state.group.members, fallbackRouted)
+      const modRawReply = String((modRes && modRes.content) || '').trim()
+      const planObj = parseModeratorPlan(modRawReply, state.group.members, fallbackRouted)
       plannedMembers = planObj.selected
       intentLabel = planObj.intentLabel
+
+      // 保持与主持人请求 100% 前缀连续性，第 1 棒直接命中主持人刚预热的 KV-Cache！
+      relayContext.push({ role: 'user', content: (modRes && modRes.wiredUserContent) || modPrompt })
+      if (modRawReply) relayContext.push({ role: 'assistant', content: modRawReply })
+
+      let userClarifySummary = ''
+      if (!autonomous && planObj.clarify && Array.isArray(planObj.clarify.questions) && planObj.clarify.questions.length) {
+        const chosen = await openClarifyPrompt({
+          sid: 'group',
+          title: planObj.clarify.title || '请先确认效果方向，再由专家团精准落地',
+          subtitle: planObj.clarify.subtitle || planObj.analysis,
+          allow_custom: true,
+          questions: planObj.clarify.questions,
+        })
+        userClarifySummary = (chosen && chosen.summary) || ''
+        if (userClarifySummary) {
+          relayContext.push({
+            role: 'user',
+            content: `【用户已拍板效果方向（全员必须严格遵守）】\n${userClarifySummary}`,
+          })
+        }
+      }
 
       const dispatchCardMd = [
         `**调度策略**：${planObj.analysis}`,
         '',
         `**动态接力路线**：\`${planObj.routeChain}\``,
+        ...(userClarifySummary ? ['', '**已确认效果偏好**：', userClarifySummary] : []),
         '',
         ...plannedMembers.map((m, idx) =>
           `${idx + 1}. **${m.name}**${m.model ? ` \`${m.model}\`` : ''}：${m.taskBrief || m.persona}`
         ),
       ].join('\n')
 
-      // 将主持人调度单写入消息流，并同步追加进 relayContext（保持 100% append-only 前缀缓存！）
-      relayContext.push({ role: 'assistant', content: dispatchCardMd })
       patchSlice('group', (g) => ({
         ...g,
         lastIntent: { ...fallbackRouted.intent, label: intentLabel },
+        relayWireHistory: [...relayContext],
         messages: [
           ...g.messages,
           {
@@ -1246,11 +1391,13 @@ export async function runGroupRelay(topic) {
         patchSlice('group', { running: false, status: 'idle', cps: 0 })
         return
       }
-      // 主持人调用失败时静默降级为拓扑智能排程，绝不阻断接力
+      relayContext.push({ role: 'user', content: clean })
       const fbPlan = parseModeratorPlan('', state.group.members, fallbackRouted)
       plannedMembers = fbPlan.selected
       intentLabel = fbPlan.intentLabel
     }
+  } else {
+    relayContext.push({ role: 'user', content: clean })
   }
 
   return _executeGroupRelayLoop({
@@ -1259,44 +1406,12 @@ export async function runGroupRelay(topic) {
     startIndex: 0,
     relayContext,
     intentLabel,
+    autonomous,
   })
 }
 
-function _recordCacheStats(cs) {
-  if (!cs) return
-  patchSlice('runtime', (r) => {
-    const prev = r.cacheTotals || {
-      promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
-      hitRate: 0, latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
-      prefixHash: '', prefixLocked: false,
-    }
-    const addPt = Number(cs.promptTokens) || 0
-    const addCt = Number(cs.cachedTokens) || 0
-    const addWt = Number(cs.cacheWriteTokens) || 0
-    const pt = prev.promptTokens + addPt
-    const ct = prev.cachedTokens + addCt
-    const wt = prev.cacheWriteTokens + addWt
-    const latestHit = addPt > 0 ? Math.min(100, Math.round((addCt / addPt) * 100)) : prev.latestHitRate
-    return {
-      ...r,
-      cacheTotals: {
-        promptTokens: pt,
-        cachedTokens: ct,
-        cacheWriteTokens: wt,
-        hitRate: pt > 0 ? Math.min(100, Math.round((ct / pt) * 100)) : prev.hitRate,
-        latestHitRate: latestHit,
-        latestPromptTokens: addPt || prev.latestPromptTokens,
-        latestCachedTokens: addCt,
-        prefixHash: cs.prefixHash || prev.prefixHash,
-        prefixLocked: !!cs.prefixLocked,
-      },
-    }
-  })
-}
-
-async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relayContext, intentLabel }) {
+async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relayContext, intentLabel, autonomous = false }) {
   const baseEp = resolveEndpointConfig()
-  // 保留主持人定制的 taskBrief，同时允许用户在暂停期间修改模型/人设
   const latestMembers = plannedMembers.map((pm) => {
     const fresh = state.group.members.find((m) => m.id === pm.id)
     return fresh ? { ...fresh, taskBrief: pm.taskBrief || fresh.persona } : pm
@@ -1374,11 +1489,13 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         endpointConfig: memberEp,
         workspacePath: state.workspace.rootPath,
         allowTools: canUseTools,
+        askBeforeDesign: !autonomous && i <= 1,
         maxRounds: canUseTools ? 8 : 1,
         skipMemoryRecall: true,
         skipSelfCheck: true,
         signal: groupAbortCtrl.signal,
         onEvent: (ev) => {
+          if (ev && ev.toolProfile) patchSlice('runtime', { activeToolProfile: ev.toolProfile })
           if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
           if (ev && typeof ev.answer === 'string') livePartial = ev.answer
           patchSlice('group', (g) => ({
@@ -1393,6 +1510,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
           approvalResolver = resolve
           patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid: 'group', ...req } })
         }),
+        requestClarify: (req) => openClarifyPrompt({ sid: 'group', ...req }),
       })
 
       const reply = String((res && res.content) || '').trim()
@@ -1412,6 +1530,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         liveReasoning: '',
         liveTools: [],
         cps: 0,
+        relayWireHistory: [...relayContext],
         messages: [
           ...g.messages,
           {
@@ -1449,6 +1568,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         cps: 0,
         checkpoint: null,
         lastArchivedName: archivedName,
+        relayWireHistory: [...relayContext],
       })
       pushToast(archivedName ? `全员接力完成 · 交接文档已存入「群文件」：${archivedName}` : '全员接力完成并已归档至「群文件」', 'ok')
     }

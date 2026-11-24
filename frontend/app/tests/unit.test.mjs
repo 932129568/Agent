@@ -420,3 +420,62 @@ test('capabilityRouter.js 主持人调度构建与动态重排解析（按工作
   assert.ok(names.indexOf('ui设计') < names.indexOf('实现工程师'))
   assert.ok(names.indexOf('实现工程师') < names.indexOf('代码审查员'))
 })
+
+
+test('toolRouter.js 按任务语义智能裁剪工具面（省 55%-85% 无用工具 Token）并保持会话单调锁死', async () => {
+  const { predictToolProfile, selectToolsForProfile, isAutonomousAuthorized } = await import('../src/services/toolRouter.js')
+  assert.equal(predictToolProfile('给我讲个笑话并翻译成英文'), 'chat')
+  assert.equal(predictToolProfile('在桌面帮我写一个钟摆网页 index.html'), 'coding')
+  assert.equal(predictToolProfile('上网搜索一下最新的 React 19 发布说明'), 'web')
+  assert.equal(predictToolProfile('查一下最新官网文档', { prevProfile: 'coding' }), 'coding_web')
+  assert.equal(predictToolProfile('你好', { prevProfile: 'coding' }), 'coding')
+
+  assert.equal(isAutonomousAuthorized('帮我做一个钟摆网页，你自主发挥不用问我'), true)
+  assert.equal(isAutonomousAuthorized('帮我做一个钟摆网页'), false)
+
+  const mockAll = [
+    'read_file', 'write_file', 'search_replace', 'list_dir', 'run_command', 'run_powershell',
+    'browser_search', 'browser_navigate', 'browser_click', 'browser_fill', 'take_screenshot',
+    'clipboard_read', 'clipboard_write', 'kill_process', 'software_call',
+  ].map((name) => ({ type: 'function', function: { name } }))
+
+  const chatTools = selectToolsForProfile(mockAll, 'chat')
+  assert.equal(chatTools.length, 1)
+  assert.equal(chatTools[0].function.name, 'ask_user_options')
+
+  const codingTools = selectToolsForProfile(mockAll, 'coding')
+  const codingNames = codingTools.map((t) => t.function.name)
+  assert.ok(codingNames.includes('write_file') && codingNames.includes('ask_user_options'))
+  assert.ok(!codingNames.includes('browser_click') && !codingNames.includes('kill_process'))
+})
+
+test('promptCache.js extractCacheUsage 严禁把 <100% 四舍五入虚报 100%，并修正拆分上报网关分母', async () => {
+  const { extractCacheUsage } = await import('../src/services/promptCache.js')
+  const nearFull = extractCacheUsage({ prompt_tokens: 10000, prompt_tokens_details: { cached_tokens: 9960 } })
+  assert.equal(nearFull.hitRate, 99.6)
+  assert.ok(nearFull.hitRate < 100)
+
+  const splitGw = extractCacheUsage({ prompt_tokens: 2000, prompt_tokens_details: { cached_tokens: 8000 } })
+  assert.equal(splitGw.promptTokens, 10000)
+  assert.equal(splitGw.hitRate, 80)
+})
+
+test('agentEngine.js ask_user_options 工具触发前端效果拍板回调并原样回传用户自定义选择', async () => {
+  const { dispatchSingleTool } = await import('../src/services/agentEngine.js')
+  let captured = null
+  const out = await dispatchSingleTool({
+    name: 'ask_user_options',
+    args: {
+      title: '选择钟摆网页视觉风格',
+      questions: [{ id: 'style', label: '主视觉方向', options: [{ id: 'glass', label: '极简玻璃拟态' }, { id: 'retro', label: '黄铜机械复古' }] }],
+    },
+    requestClarify: async (req) => {
+      captured = req
+      return { mode: 'selected', answers: { style: { ids: ['retro'], labels: ['黄铜机械复古'] } }, customNote: '加真实滴答音效', summary: '- 主视觉方向：黄铜机械复古\n- 自定义：加真实滴答音效' }
+    },
+  })
+  assert.equal(captured.title, '选择钟摆网页视觉风格')
+  const parsed = JSON.parse(out)
+  assert.equal(parsed.ok, true)
+  assert.ok(parsed.summary.includes('黄铜机械复古') && parsed.summary.includes('加真实滴答音效'))
+})

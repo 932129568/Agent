@@ -84,6 +84,7 @@ const stubState = {
   writtenFiles: [],
   chatRequests: [],
   triggerGroupToolOnce: false,
+  triggerClarifyOnce: false,
 }
 
 function readReqBody(req) {
@@ -233,6 +234,26 @@ const server = http.createServer(async (req, res) => {
       return
     }
     const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
+    if (stubState.triggerClarifyOnce && !hasToolRole) {
+      stubState.triggerClarifyOnce = false
+      const askArgs = JSON.stringify({
+        title: '选择页面视觉效果方向',
+        subtitle: '请在正式生成代码前拍板核心视觉风格',
+        questions: [{
+          id: 'style',
+          label: '主视觉风格',
+          options: [
+            { id: 'glass', label: '极简玻璃拟态', desc: '通透磨砂与柔光层次', tag: '推荐' },
+            { id: 'brass', label: '黄铜精密机械', desc: '金属光泽与物理齿轮', tag: '复古' },
+          ],
+        }],
+      })
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_ask_1', type: 'function', function: { name: 'ask_user_options', arguments: askArgs } }] }, finish_reason: 'tool_calls' }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 1000, completion_tokens: 45, total_tokens: 1045, prompt_tokens_details: { cached_tokens: 880 } } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     if (stubState.triggerGroupToolOnce && Array.isArray(body.tools) && body.tools.length > 0 && !hasToolRole) {
       stubState.triggerGroupToolOnce = false
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_grp_1', type: 'function', function: { name: 'write_file', arguments: '{"path":"index.html","content":"<h1>Hello Harbor</h1>"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`)
@@ -768,6 +789,27 @@ try {
     '行业专家市场（12大热门包/分类筛选/零裁切/直入胶囊）+ 普通对话上下文环形指示器',
     totalCuratedCards === 12 && noHorizOverflow && officeCards >= 2 && chipAttached && chatRingOk,
     `cards=${totalCuratedCards}, office=${officeCards}, noOverflow=${noHorizOverflow}, chip=${chipAttached}, chatRing=${chatRingLabel}`
+  )
+
+  /* ======================================================================== *
+   * Suite H · R11 效果拍板交互弹窗（ask_user_options）+ 灵动岛单行工具栏 + 自主发挥开关
+   * ======================================================================== */
+  stubState.triggerClarifyOnce = true
+  stubState.chatRequests.length = 0
+  await page.locator('.chat-textarea').fill('帮我设计一个精密钟摆网页')
+  await page.locator('.chat-send-btn').click()
+  await page.waitForSelector('.cl-modal', { timeout: 6000 })
+  await page.locator('.cl-opt:has-text("黄铜精密机械")').click()
+  await page.locator('#cl-custom-input').fill('增加夜间护眼暖光模式')
+  await page.locator('.cl-foot button:has-text("确认方案并继续执行")').click()
+  await page.waitForSelector('.cl-modal', { state: 'detached', timeout: 5000 })
+  await page.waitForTimeout(500)
+  const sawUserChoice = stubState.chatRequests.some((r) => JSON.stringify(r.messages || []).includes('黄铜精密机械') && JSON.stringify(r.messages || []).includes('增加夜间护眼暖光模式'))
+  record(
+    'Suite-H',
+    '效果拍板交互弹窗：用户选定风格 + 自定义补充实时回灌模型无缝续跑',
+    sawUserChoice,
+    `sawUserChoice=${sawUserChoice}`
   )
 
   // D4: 全程零未捕获页面异常

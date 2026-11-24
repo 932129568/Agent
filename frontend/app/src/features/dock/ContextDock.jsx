@@ -81,6 +81,12 @@ export default function ContextDock() {
                   : (runtime.cacheTotals && runtime.cacheTotals.prefixLocked ? `已锁定 #${runtime.cacheTotals.prefixHash}` : '首轮预热中')}
               </span>
             </div>
+            {runtime.activeToolProfile && (
+              <div className="dk-kv">
+                <span className="dk-k">智能工具域</span>
+                <span className="dk-v">{runtime.activeToolProfile.label} ({runtime.activeToolProfile.activeCount}/{runtime.activeToolProfile.totalCount} 工具)</span>
+              </div>
+            )}
             <div className="dk-kv"><span className="dk-k">窗外透色材质</span><span className="dk-v">{settings.backdrop} ({Math.round(settings.opacity * 100)}%)</span></div>
             <div className="dk-kv"><span className="dk-k">本地 Fastify</span><span className="dk-v">{runtime.serverHealth && runtime.serverHealth.ok ? '在线' : '离线'}</span></div>
           </>

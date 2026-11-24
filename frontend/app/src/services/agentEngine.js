@@ -13,6 +13,13 @@ import { createCostDefense, detectTakeoverRequired } from './budgetAndResume.js'
 import { runSelfCheckAfterWrites } from './selfCheck.js'
 import { detectProviderKind } from './reasoningPresets.js'
 import {
+  predictToolProfile,
+  selectToolsForProfile,
+  isAutonomousAuthorized,
+  buildClarifyDirective,
+  TOOL_PROFILE_META,
+} from './toolRouter.js'
+import {
   canonicalizeTools,
   computePrefixFingerprint,
   buildDynamicTurnReminder,
@@ -35,7 +42,7 @@ export const SUPPORTED_BUILTIN_TOOLS = Object.freeze([
   'browser_search', 'browser_open', 'software_call',
   'browser_navigate', 'browser_extract', 'browser_snapshot',
   'browser_click', 'browser_fill', 'browser_screenshot', 'browser_close',
-  'memory_write', 'memory_search', 'inspect_tool_schema',
+  'memory_write', 'memory_search', 'inspect_tool_schema', 'ask_user_options',
 ])
 const SUPPORTED_BUILTIN_SET = new Set(SUPPORTED_BUILTIN_TOOLS)
 
@@ -154,7 +161,31 @@ function needsGuardCheck(name) {
   return WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name) || GUARDED_EXTRA_TOOLS.has(name) || name.startsWith('mcp__')
 }
 
-export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, requestApproval, callRaw = api.callJsApiRaw }) {
+export async function dispatchSingleTool({ name, args = {}, sid, signal, readonlyMode = false, requestApproval, requestClarify, callRaw = api.callJsApiRaw }) {
+  if (name === 'ask_user_options') {
+    const questions = Array.isArray(args.questions) ? args.questions : []
+    if (typeof requestClarify !== 'function' || !questions.length) {
+      return JSON.stringify({
+        ok: true,
+        mode: 'autonomous',
+        summary: '当前环境已自动授权 AI 自主发挥，请按最优方案直接落地。',
+      })
+    }
+    const answer = await requestClarify({
+      title: String(args.title || '请确认方案与视觉效果方向'),
+      subtitle: String(args.subtitle || '选择后我将严格按你的偏好执行，也可在下方输入自定义要求'),
+      allow_custom: args.allow_custom !== false,
+      questions,
+    })
+    return JSON.stringify({
+      ok: true,
+      mode: (answer && answer.mode) || 'selected',
+      answers: (answer && answer.answers) || {},
+      customNote: (answer && answer.customNote) || '',
+      summary: (answer && answer.summary) || '用户已确认方案，请继续执行。',
+    })
+  }
+
   if (readonlyMode && (WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name))) {
     return JSON.stringify({ skipped: true, info: '当前处于只读模式，写文件与命令工具已禁用。' })
   }
@@ -272,12 +303,15 @@ export async function runAgentConversation({
   sessionBudgetRmb = 0,
   correctiveDirective = '',
   allowTools = true,
+  askBeforeDesign = true,
+  forceToolProfile = '',
   maxRounds = 14,
   skipMemoryRecall = false,
   skipSelfCheck = false,
   signal,
   onEvent,
   requestApproval,
+  requestClarify,
   requestTakeover,
   requestBudgetDecision,
 }) {
@@ -286,23 +320,31 @@ export async function runAgentConversation({
 
   emit({ phase: 'waiting', stageLabel: '装配工作区规范、长期记忆与工具面' })
 
-  // 关键 KV-Cache 纪律：即使本轮 allowTools=false（如主持人统筹或仅文本成员），
-  // 只要全局 tool_mode !== 'off'，依然发送同一份冻结 canonical tools 数组，保证 [tools + system] 100% 字节锁死！
+  // 智能工具域预判 + 会话级单调粘性锁：
+  // 1) 按任务语义仅装配真正需要的工具子集（chat / coding / web / coding_web / full），省掉 55%–85% 无用工具 Schema Token；
+  // 2) 同一 sid 内单调锁死工具集，即使主持人步骤 allowTools=false 也不删改 tools[]，100% 保护多轮 KV-Cache 前缀！
   const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
   const includeMcp = !!endpointConfig.hasEnabledMcp
   const toolsOn = endpointConfig.tool_mode !== 'off'
   const blockToolDispatch = allowTools === false
-  const prefixScopeKey = `${workspacePath || ''}|${toolsOn ? 'on' : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
   const existingFrozen = sid ? _frozenPrefixBySid.get(String(sid)) : null
+  const predictedProfile = forceToolProfile || predictToolProfile(userQuery, {
+    hasEnabledMcp: includeMcp,
+    forceFull: endpointConfig.tool_mode === 'full',
+    prevProfile: existingFrozen ? existingFrozen.toolProfile : '',
+  })
+  const prefixScopeKey = `${workspacePath || ''}|${toolsOn ? predictedProfile : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
 
   let systemPrompt = endpointConfig.system_prompt || '你是 Harbor 桌面智能工程助手，请始终用简体中文清晰回答。'
   let tools = []
+  let totalAvailableTools = 0
   let prefixHash = ''
   let prefixLocked = false
 
   if (existingFrozen && existingFrozen.key === prefixScopeKey) {
     systemPrompt = existingFrozen.systemPrompt
     tools = existingFrozen.tools
+    totalAvailableTools = existingFrozen.totalAvailableTools || tools.length
     prefixHash = existingFrozen.hash
     prefixLocked = true
   } else {
@@ -311,26 +353,50 @@ export async function runAgentConversation({
       if (typeof sysRes === 'string' && sysRes.trim()) systemPrompt = sysRes
     } catch {}
     if (toolsOn) {
-      const cacheKey = `${sid || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}`
+      const cacheKey = `${sid || ''}|full|${includeMcp}|${isGlm}`
+      let rawFullTools = []
       const hit = _toolsCache.get(cacheKey)
       if (hit && hit.exp > Date.now()) {
-        tools = hit.tools
+        rawFullTools = hit.tools
       } else {
         try {
           const built = await api.buildTools('full', includeMcp, true, isGlm, { sid, signal, timeoutMs: 8000 })
-          if (Array.isArray(built)) tools = built
-          else if (built && Array.isArray(built.tools)) tools = built.tools
-          tools = canonicalizeTools(tools)
-          _toolsCache.set(cacheKey, { tools, exp: Date.now() + TOOLS_CACHE_TTL_MS })
+          if (Array.isArray(built)) rawFullTools = built
+          else if (built && Array.isArray(built.tools)) rawFullTools = built.tools
+          rawFullTools = canonicalizeTools(rawFullTools)
+          _toolsCache.set(cacheKey, { tools: rawFullTools, exp: Date.now() + TOOLS_CACHE_TTL_MS })
         } catch {}
+      }
+      totalAvailableTools = rawFullTools.length
+      if (rawFullTools.length > 4) {
+        tools = selectToolsForProfile(rawFullTools, predictedProfile, { includeAskUser: true })
+      } else {
+        tools = rawFullTools
       }
     }
     tools = canonicalizeTools(tools)
     prefixHash = computePrefixFingerprint(systemPrompt, tools)
     if (sid) {
-      _frozenPrefixBySid.set(String(sid), { key: prefixScopeKey, systemPrompt, tools, hash: prefixHash })
+      _frozenPrefixBySid.set(String(sid), {
+        key: prefixScopeKey,
+        toolProfile: predictedProfile,
+        systemPrompt,
+        tools,
+        totalAvailableTools,
+        hash: prefixHash,
+      })
     }
   }
+
+  const profileMeta = TOOL_PROFILE_META[predictedProfile] || TOOL_PROFILE_META.coding
+  emit({
+    toolProfile: {
+      id: predictedProfile,
+      label: profileMeta.label,
+      activeCount: tools.length,
+      totalCount: Math.max(totalAvailableTools, tools.length),
+    },
+  })
 
   let dynamicMemories = []
   if (!skipMemoryRecall && String(userQuery || '').trim()) {
@@ -351,8 +417,14 @@ export async function runAgentConversation({
     } catch {}
   }
 
+  const autonomousNow = isAutonomousAuthorized(userQuery)
+  const hasAskUserTool = tools.some((t) => ((t && t.function && t.function.name) || '') === 'ask_user_options')
+  const clarifyHint = (!blockToolDispatch && hasAskUserTool && String(userQuery || '').trim())
+    ? buildClarifyDirective({ autonomous: autonomousNow, askBeforeDesign })
+    : ''
   const combinedDirective = [
     correctiveDirective,
+    clarifyHint,
     blockToolDispatch ? '【本步指令约束】本步骤仅做任务分析、角色分工与交接规划，严禁调用任何工具，请直接输出最终结果。' : '',
   ].filter(Boolean).join('\n')
   const tailReminder = buildDynamicTurnReminder({
@@ -526,7 +598,7 @@ export async function runAgentConversation({
         try {
           if (readKey) readFileSet.add(readKey)
           if (dirKey) listDirsSet.add(dirKey)
-          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, requestApproval })
+          rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, requestApproval, requestClarify })
           const takeover = detectTakeoverRequired(rawOut)
           if (takeover && typeof requestTakeover === 'function') {
             const action = await requestTakeover(takeover)

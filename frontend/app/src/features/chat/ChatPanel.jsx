@@ -19,6 +19,7 @@ import {
   rewindSessionAt,
   undoSessionRewind,
   toggleDock,
+  setAskBeforeDesign,
   openModal,
   triggerFourActShowcase,
   pushToast,
@@ -395,6 +396,14 @@ export default function ChatPanel() {
               <button type="button" className="chat-mini-btn" onClick={captureScreenshotToComposer}>📸 截屏</button>
               <button type="button" className="chat-mini-btn" onClick={(e) => openModal('market', captureTriggerRect(e))}>✦ 选专家</button>
               <button type="button" className="chat-mini-btn" onClick={() => compactSessionNow(sid, true)}>🗜 压缩 /compact</button>
+              <button
+                type="button"
+                className="chat-mini-btn"
+                title="开启时：涉及视觉风格/交互效果/架构分叉前会先弹出可视化卡片让你拍板；关闭时 AI 直接自主发挥"
+                onClick={() => setAskBeforeDesign(!ui.askBeforeDesign)}
+              >
+                {ui.askBeforeDesign ? '🎯 效果先问我' : '⚡ 自主发挥'}
+              </button>
               <button type="button" className="chat-mini-btn" onClick={() => triggerFourActShowcase(sid)}>▶ 预览四幕</button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

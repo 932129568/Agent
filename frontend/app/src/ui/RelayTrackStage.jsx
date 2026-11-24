@@ -1,6 +1,32 @@
 import { useEffect, useState } from 'react'
 import './RelayTrackStage.css'
 
+const TOOL_LABELS = Object.freeze({
+  read_file: '读取文件',
+  write_file: '写入文件',
+  append_file: '追加文件',
+  search_replace: '局部编辑',
+  list_dir: '查看目录',
+  make_dir: '创建目录',
+  delete_path: '删除路径',
+  run_command: '运行命令',
+  run_powershell: '执行脚本',
+  browser_search: '联网检索',
+  browser_open: '抓取网页',
+  memory_search: '检索记忆',
+  ask_user_options: '等待方案确认',
+})
+
+function compactDetail(raw = '') {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  if (/^[a-zA-Z]:[\\/]|^\//.test(s) && !s.includes(' ')) {
+    const parts = s.replace(/\\/g, '/').split('/').filter(Boolean)
+    return parts.slice(-2).join('/')
+  }
+  return s.length > 36 ? `${s.slice(0, 36)}…` : s
+}
+
 function RoleGlyph({ name = '', done = false }) {
   if (done) {
     return (
@@ -54,12 +80,6 @@ function RoleGlyph({ name = '', done = false }) {
   )
 }
 
-/**
- * 群聊接力现代玻璃拟态光轨舞台：
- * - 支持「主持人统筹规划 (planning) → 动态接力执行 (running) → 完成收束 (done)」全流程可视化；
- * - 每个节点佩戴专属几何 SVG 图标与呼吸光环，连接轨带流体光流与彗星交棒脉冲；
- * - 实时输出窗过滤原始英文内部思考链，仅展示干净中文进展与工具调用胶囊。
- */
 export default function RelayTrackStage({
   status = 'idle',
   members = [],
@@ -73,10 +93,14 @@ export default function RelayTrackStage({
   motionTier = 'dynamic',
 }) {
   const [expandDone, setExpandDone] = useState(false)
+  const [expandTools, setExpandTools] = useState(false)
 
   useEffect(() => {
-    if (status === 'running' || status === 'planning') setExpandDone(false)
-  }, [status])
+    if (status === 'running' || status === 'planning') {
+      setExpandDone(false)
+      setExpandTools(false)
+    }
+  }, [status, activeIndex])
 
   if (status === 'idle' || !members.length) return null
 
@@ -84,30 +108,33 @@ export default function RelayTrackStage({
   const activeMember = !isPlanning ? (members[activeIndex] || null) : null
   const isHandoff = Boolean(handoffFrom && handoffTo)
   const isCompactDone = status === 'done' && !expandDone
+  const toolsList = Array.isArray(liveTools) ? liveTools : []
+  const latestTool = toolsList.length ? toolsList[toolsList.length - 1] : null
 
-  // 绝不把原始英文思考链泄漏到实时窗：有正文显示干净正文，推演阶段显示中文状态提示
-  const cleanLive = String(liveContent || '').trim()
+  const cleanLive = String(liveContent || '').replace(/\s+/g, ' ').trim()
   const previewText = isPlanning
-    ? '🎙 主持人正在分析本轮任务意图、动态筛选最匹配专家并规划最优交接顺序…'
+    ? '主持人正在拆解需求、评估是否需弹出效果确认，并规划最佳协作顺序…'
     : (cleanLive || (activeMember
-      ? `💭 「${activeMember.name}」正在深度推演本棒方案${activeMember.taskBrief ? `（重点：${activeMember.taskBrief.slice(0, 48)}）` : ''}…`
+      ? `正在推进「${activeMember.name}」本棒核心交付${activeMember.taskBrief ? ` · ${activeMember.taskBrief.slice(0, 44)}` : ''}…`
       : '接力推进中…'))
 
   const statusText = {
-    planning: '主持人正在统筹调度与规划交接顺序…',
+    planning: '主持人正在统筹调度…',
     running: isHandoff
-      ? `交棒中：${handoffFrom} ⟶ ${handoffTo}`
+      ? `交棒：${handoffFrom} ⟶ ${handoffTo}`
       : (activeMember ? `第 ${activeIndex + 1}/${members.length} 棒 · ${activeMember.name}` : '接力推进中'),
     paused: `已暂停于第 ${Math.min(members.length, Math.max(1, activeIndex + 1))}/${members.length} 棒`,
-    done: `全员接力完成（${members.length} 棒）`,
+    done: `接力完成（${members.length} 棒）`,
   }[status] || ''
 
   return (
     <section className="rt-stage" data-status={status} data-compact={String(isCompactDone)} aria-live="polite">
+      {(status === 'running' || isPlanning) && motionTier !== 'reduced' && <div className="rt-aurora" aria-hidden="true" />}
+
       <div className="rt-top">
         <div className="rt-top-left">
           <span className="rt-badge">
-            <span>{status === 'done' ? '✓' : status === 'paused' ? '⏸' : isPlanning ? '🎙' : '⚡'}</span>
+            <span>{status === 'done' ? '✓' : status === 'paused' ? '⏸' : isPlanning ? '🎙' : '✦'}</span>
             <span>{statusText}</span>
           </span>
           {isCompactDone && (
@@ -117,7 +144,7 @@ export default function RelayTrackStage({
           )}
         </div>
         <div className="rt-top-right">
-          <span className="rt-meta">
+          <span className="rt-meta" title={intentLabel || ''}>
             {intentLabel || ''}
             {(status === 'running' || isPlanning) && cps > 0 ? ` · ${Math.round(cps)} 字/秒` : ''}
           </span>
@@ -162,43 +189,62 @@ export default function RelayTrackStage({
 
       {isHandoff && (
         <div key={`${handoffFrom}->${handoffTo}`} className="rt-handoff-banner">
-          ⚡ 主持人交接：{handoffFrom} 已完成交付 ⟶ {handoffTo} 接管下一棒
+          ✦ 主持人交接：{handoffFrom} 已完成交付 ⟶ {handoffTo} 接管下一棒
         </div>
       )}
 
       {status !== 'done' && (
         <div className="rt-telemetry">
-          <div className="rt-wave-dots" aria-hidden="true">
-            {[0, 1, 2, 3].map((d) => (
-              <span
-                key={d}
-                className="rt-wave-dot"
-                style={{ animationDelay: `${d * 180}ms` }}
-              />
-            ))}
-          </div>
-          <div className="rt-stream-box">
-            <div className="rt-stream-head">
-              <strong>
-                {isPlanning ? '🎙 主持人 · 智能统筹调度' : (activeMember ? `${activeMember.name} · 实时进度` : '等待接力')}
-              </strong>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>
-                {activeMember && activeMember.reasoningTier && activeMember.reasoningTier !== 'auto'
-                  ? `思考档：${activeMember.reasoningTier}`
-                  : (isPlanning ? '动态选人与定序' : '思考档：继承')}
-              </span>
+          <div className="rt-live-row">
+            <div className="rt-wave-dots" aria-hidden="true">
+              {[0, 1, 2, 3].map((d) => (
+                <span key={d} className="rt-wave-dot" style={{ animationDelay: `${d * 160}ms` }} />
+              ))}
             </div>
-            {Array.isArray(liveTools) && liveTools.length > 0 && (
-              <div className="rt-tools-row">
-                {liveTools.slice(-6).map((t) => (
-                  <span key={t.id} className="rt-tool-pill" data-status={t.status}>
-                    {t.status === 'done' ? '✓' : t.status === 'fail' ? '✗' : '◉'} {t.name}{t.detail ? `(${t.detail})` : ''}
-                  </span>
-                ))}
+            <div className="rt-stream-box">
+              <div className="rt-stream-head">
+                <span className="rt-stream-title">
+                  {isPlanning ? '🎙 主持人 · 智能统筹调度' : (activeMember ? `${activeMember.name} · 实时进度` : '等待接力')}
+                </span>
+                <span className="rt-stream-tier">
+                  {activeMember && activeMember.reasoningTier && activeMember.reasoningTier !== 'auto'
+                    ? `思考：${activeMember.reasoningTier}`
+                    : (isPlanning ? '动态选人与定序' : '思考：继承')}
+                </span>
               </div>
-            )}
-            <div className="rt-stream-preview">{previewText.slice(-280)}</div>
+              <div className="rt-stream-preview">{previewText.slice(-140)}</div>
+            </div>
           </div>
+
+          {latestTool && (
+            <div className="rt-island-bar">
+              <div className="rt-island-main">
+                <span className="rt-island-dot" data-status={latestTool.status} />
+                <span className="rt-island-text">
+                  {latestTool.status === 'running' ? '正在执行 ' : `已完成 ${toolsList.length} 步 · 最新 `}
+                  {TOOL_LABELS[latestTool.name] || latestTool.name}
+                  {latestTool.detail ? `（${compactDetail(latestTool.detail)}）` : ''}
+                </span>
+              </div>
+              {toolsList.length > 1 && (
+                <button type="button" className="rt-island-toggle" onClick={() => setExpandTools((v) => !v)}>
+                  {expandTools ? '收起 ▴' : `明细 (${toolsList.length}) ▾`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {expandTools && toolsList.length > 0 && (
+            <div className="rt-tool-drawer">
+              {toolsList.map((t) => (
+                <div key={t.id} className="rt-tool-line" data-status={t.status}>
+                  <span className="rt-tool-st">{t.status === 'done' ? '✓' : t.status === 'fail' ? '✗' : '◉'}</span>
+                  <span className="rt-tool-name">{TOOL_LABELS[t.name] || t.name}</span>
+                  <span className="rt-tool-arg">{compactDetail(t.detail) || '—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>

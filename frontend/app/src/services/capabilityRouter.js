@@ -155,24 +155,28 @@ function extractKeywords(text) {
 }
 
 /** 构造发给 AI 主持人的调度提示词，要求输出严格的 JSON 选人与动态交接顺序 */
-export function buildModeratorPrompt(topic, members = [], recentContextText = '') {
+export function buildModeratorPrompt(topic, members = [], recentContextText = '', { allowClarify = true } = {}) {
   const list = (Array.isArray(members) ? members : []).map((m, i) => normalizeGroupMember(m, i))
   const rosterLines = list.map((m) =>
     `- id="${m.id}" | 角色名="${m.name}" | 能力=[${m.capabilities.join(',')}] | 职责="${m.persona}"`
   ).join('\n')
 
   return [
-    '你是本群聊的「智能接力主持人（Moderator）」。你的唯一任务是根据用户当前需求与近期上下文，从下方名册中**动态挑选最合适的成员、决定最合理的先后交接顺序（不要死板照抄名册顺序！）**，并为每位入选成员分配具体的本棒任务与交接重点。',
+    '你是本群聊的「智能接力主持人（Moderator）」。你的职责是根据用户当前需求与上下文，从名册中**动态挑选最合适的成员、重排最优工作流先后顺序（绝不死板照抄名册顺序）**，并为每位入选成员分配具体的本棒任务。',
     '',
     '【调度铁律】',
-    '1. 按真实工作流逻辑排顺序：例如做网页/产品时，应先「架构/策划」→ 再「UI/视觉设计」→ 再「实现工程师写代码落地」→ 最后「代码审查/测试验收」；如果是纯文案/调研任务，只选文案/调研相关角色，不要硬塞无关角色；如果用户明确点名某角色，必须入选。',
-    '2. 只输出一个合法的 JSON 对象，不要输出多余寒暄或解释文字：',
+    '1. 按真实工作流逻辑排顺序：例如做网页/应用时，先「架构/策划」→ 再「UI/视觉设计」→ 再「实现工程师写代码落地」→ 最后「代码审查/验收」；纯文案/调研任务只挑相关角色，不硬塞无关人员。',
+    allowClarify
+      ? '2. 【效果可控弹窗】若需求涉及视觉风格、交互效果或功能方案且用户未明确指定（也未说「自主发挥/直接做」），可在 JSON 中附加可选字段 "clarify"（1-2 个核心选择题，每题 2-4 个具体风格选项），系统会在第 1 棒开跑前弹出选择卡片让用户拍板；若需求已经足够明确，省略 clarify 字段即可。'
+      : '2. 用户已授权自主发挥，禁止输出 clarify 字段，直接进入高效执行排程。',
+    '3. 只输出一个合法 JSON 对象，不要输出额外寒暄：',
     '```json',
     '{',
-    '  "analysis": "一句话说明你的调度策略与为什么按此顺序交接",',
+    '  "analysis": "一句话说明调度策略与交接顺序原因",',
     '  "plan": [',
-    '    { "id": "成员id", "taskBrief": "给该成员的具体本棒指令与交付要求" }',
-    '  ]',
+    '    { "id": "成员id", "taskBrief": "该成员本棒具体任务与交付物" }',
+    '  ],',
+    '  "clarify": null',
     '}',
     '```',
     '',
@@ -230,12 +234,16 @@ export function parseModeratorPlan(rawText, members = [], fallbackRouted = null)
     }
     if (picked.length > 0) {
       const routeChain = picked.map((m) => m.name).join(' ⟶ ')
+      const rawClarify = parsed.clarify && typeof parsed.clarify === 'object' && Array.isArray(parsed.clarify.questions) && parsed.clarify.questions.length
+        ? parsed.clarify
+        : null
       return {
         source: 'moderator-ai',
         analysis: String(parsed.analysis || `主持人已根据任务特征动态编排 ${picked.length} 棒协作流`).trim(),
         selected: picked,
         intentLabel: `主持人调度 (${picked.length}/${list.length} 棒: ${picked.map((m) => m.name).join('→')})`,
         routeChain,
+        clarify: rawClarify,
       }
     }
   }
@@ -316,7 +324,7 @@ export function routeGroupMembers(topic, members = [], mode = 'smart', recentCon
   }
 
   const orderedAll = sortByWorkflow(scored)
-  const warn = `当前议题暂无单一专长匹配，已智能编排全员（${orderedAll.length} 位）协同接力。`
+  const warn = `当前议题识别为「${intent.label}」，名册中暂无对应专长角色，已智能编排全员（${orderedAll.length} 位）协同接力。`
   return {
     intent: { ...intent, label: `全员协同 (${orderedAll.length} 棒)` },
     selected: orderedAll,

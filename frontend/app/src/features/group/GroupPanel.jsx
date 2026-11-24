@@ -17,6 +17,8 @@ import {
   removeGroupMember,
   applyGroupPreset,
   setGroupRoutingMode,
+  setAskBeforeDesign,
+  clearGroupSession,
   pushToast,
 } from '../../state/store.js'
 import { CAPABILITY_CATALOG, GROUP_ROSTER_PRESETS, inferMemberCapabilities } from '../../services/capabilityRouter.js'
@@ -41,6 +43,7 @@ function formatBytes(n) {
 
 export default function GroupPanel() {
   const group = useSlice('group')
+  const ui = useSlice('ui')
   const runtime = useSlice('runtime')
   const settings = useSlice('settings')
   const [topic, setTopic] = useState('')
@@ -155,6 +158,20 @@ export default function GroupPanel() {
               }}
             >
               {anyCollapsed ? '展开全部' : '收起全部'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="gp-chip-btn"
+            data-active={String(ui.askBeforeDesign)}
+            title="开启时：涉及风格与交互方案前会先弹窗询问；关闭时直接自主发挥"
+            onClick={() => setAskBeforeDesign(!ui.askBeforeDesign)}
+          >
+            {ui.askBeforeDesign ? '🎯 效果先问我' : '⚡ 自主发挥'}
+          </button>
+          {group.messages.length > 0 && !group.running && (
+            <button type="button" className="gp-chip-btn" onClick={() => clearGroupSession()}>
+              清空重开
             </button>
           )}
           <button type="button" className="gp-chip-btn" onClick={() => { setActiveDrawer(null); triggerRelayShowcase() }}>

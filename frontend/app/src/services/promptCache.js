@@ -211,21 +211,29 @@ export function extractCacheUsage(usage) {
   const isNativeAnthropic = !hasOpenAiPrompt && usage.input_tokens !== undefined && usage.cache_read_input_tokens !== undefined
   const rawPrompt = Math.max(0, Number(usage.prompt_tokens) || Number(usage.input_tokens) || 0)
 
-  // 关键修正：
+  // 精确分母判定（彻底消灭 100% 虚高与 49% 误半）：
   // 1) DeepSeek 同时返回 hit + miss 时，hit + miss 为精确总输入分母；
-  // 2) OpenAI 兼容网关（含同时透传 prompt_tokens 与 cache_read_input_tokens 的聚合网关）中，
-  //    prompt_tokens 已包含 cachedTokens，绝不能重复相加（否则 95% 会被算成 48.7% ≈ 49%！）；
-  // 3) 仅原生 Anthropic（无 prompt_tokens、只有 input_tokens）才需要 input_tokens + read + write。
+  // 2) 原生 Anthropic（无 prompt_tokens、仅 input_tokens）或拆分上报网关（rawPrompt > 0 且 cachedTokens > rawPrompt，
+  //    说明 rawPrompt 仅计未命中部分）必须以 rawPrompt + cachedTokens + cacheWriteTokens 为分母；
+  // 3) 标准 OpenAI/GLM（prompt_tokens 已包含 cachedTokens）直接取 rawPrompt。
+  const splitAccounting = isNativeAnthropic || (rawPrompt > 0 && cachedTokens > rawPrompt)
   let denominator = 0
   if (usage.prompt_cache_hit_tokens !== undefined && usage.prompt_cache_miss_tokens !== undefined) {
     denominator = Math.max(rawPrompt, cachedTokens + missTokens)
-  } else if (isNativeAnthropic) {
+  } else if (splitAccounting) {
     denominator = rawPrompt + cachedTokens + cacheWriteTokens
   } else {
     denominator = Math.max(rawPrompt, cachedTokens)
   }
 
-  const hitRate = denominator > 0 ? Math.min(100, Math.round((cachedTokens / denominator) * 100)) : 0
+  // 严禁将 99.6% 四舍五入为虚假的 100%：保留 1 位小数，仅当 cachedTokens >= denominator 时才为 100
+  let hitRate = 0
+  if (denominator > 0) {
+    const rawPct = (cachedTokens / denominator) * 100
+    hitRate = cachedTokens < denominator
+      ? Math.min(99.9, Math.floor(rawPct * 10) / 10)
+      : 100
+  }
   const hasCacheData = cachedTokens > 0
     || cacheWriteTokens > 0
     || missTokens > 0
