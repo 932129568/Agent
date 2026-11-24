@@ -235,3 +235,21 @@ test('promptCache.js 确定性工具排序、前缀指纹稳定、动态提醒�
   assert.equal(extractCacheUsage({ prompt_tokens: 10000, prompt_cache_hit_tokens: 9000 }).hitRate, 90)
   assert.equal(extractCacheUsage({ input_tokens: 1000, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0 }).hitRate, 90)
 })
+
+
+test('headers.js toAsciiJson 将含中文工作区路径编码为纯 ASCII JSON，杜绝 Windows 中文目录报 NON_LATIN1_HEADER', async () => {
+  const { toAsciiJson, assertLatin1Headers } = await import('../src/services/headers.js')
+  const meta = { v: 2, phase: 'execute', workspace: 'C:\\Users\\测试用户\\桌面\\Harbor项目', prefixHash: 'a1b2c3d4' }
+  const encoded = toAsciiJson(meta)
+  const hdrs = assertLatin1Headers({ 'X-Harbor-Harness': encoded })
+  assert.equal(JSON.parse(hdrs['X-Harbor-Harness']).workspace, meta.workspace)
+})
+
+test('platform/markdown.js LRU 缓存命中返回同一对象引用且正确转义 HTML 降级', async () => {
+  const { renderSafeMarkdown, clearMarkdownCache } = await import('../src/platform/markdown.js')
+  clearMarkdownCache()
+  const a = renderSafeMarkdown('# Harbor <script>alert(1)</script>')
+  const b = renderSafeMarkdown('# Harbor <script>alert(1)</script>')
+  assert.equal(a, b, '相同输入应命中 LRU 缓存返回同一对象')
+  assert.ok(!a.__html.includes('<script>'), '脚本标签必须被转义/净化')
+})

@@ -1,23 +1,26 @@
 {
   "name": "harbor-desktop",
-  "version": "0.0.0-private",
+  "version": "2.0.0",
   "private": true,
-  "description": "Harbor native UiSpec schema tooling",
+  "description": "Harbor Desktop AI Agent (React 19 + Electron 45 + Fastify 5 + Prisma 7)",
   "engines": {
-    "node": ">=27.0.0-alpha.0.0.0",
-    "npm": ">=12.0.0"
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
   },
   "main": "electron/main.js",
   "scripts": {
-    "build:ui-schema": "node tools/build_ui_schema_bundle.js",
-    "build:island": "npm --prefix frontend/react run build",
-    "build": "node frontend/build.js",
-    "build:all": "npm run build:island && npm run build",
-    "diff:all": "npm --prefix server run diff:all",
-    "smoke:island": "node tools/smoke_harbor_island.js",
-    "perf:confirm": "node tools/perf_confirm_path.js",
+    "build": "node frontend/app/build.mjs",
+    "build:dev": "node frontend/app/build.mjs --dev",
+    "iron-laws": "node frontend/app/tools/enforce-iron-laws.mjs --strict",
+    "arch:backend": "node server/tools/check-backend-arch.mjs",
+    "test:unit": "node --test frontend/app/tests/unit.test.mjs",
+    "test:e2e": "node frontend/app/tests/e2e-r3-regression.mjs",
+    "test:server": "node server/test/smoke.mjs && node server/test/local-proxy.mjs && node server/test/cors-preflight.mjs && node server/test/guard.mjs",
+    "cleanup:dry": "node frontend/app/tools/cleanup-legacy.mjs --dry-run",
+    "cleanup:exec": "node frontend/app/tools/cleanup-legacy.mjs --execute",
+    "verify": "npm run iron-laws && npm run arch:backend && npm run build && npm run test:unit && npm run test:server",
     "desktop": "electron .",
-    "dist:win": "electron-builder --win nsis --config electron-builder.yml"
+    "dist:win": "npm run build && electron-builder --win nsis --config electron-builder.yml"
   },
   "dependencies": {},
   "devDependencies": {

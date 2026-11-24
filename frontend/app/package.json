@@ -3,16 +3,17 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "Harbor 全量 React 19 桌面前端工程（真窗外透色 + 四幕编排动效 + 十二条铁律）",
+  "description": "Harbor 全量 React 19 桌面前端工程（真窗外透色 + 四幕动效 + 光梭接力 + KV-Cache 前缀锁 + 十二条铁律）",
   "scripts": {
     "build": "node build.mjs",
-    "build:prod": "node build.mjs --minify",
+    "build:dev": "node build.mjs --dev",
     "iron-laws": "node tools/enforce-iron-laws.mjs",
     "iron-laws:strict": "node tools/enforce-iron-laws.mjs --strict",
     "test:unit": "node --test tests/unit.test.mjs",
+    "test:e2e": "node tests/e2e-r3-regression.mjs",
     "cleanup:dry": "node tools/cleanup-legacy.mjs --dry-run",
     "cleanup:exec": "node tools/cleanup-legacy.mjs --execute",
-    "verify": "node tools/enforce-iron-laws.mjs && node build.mjs && node --test tests/unit.test.mjs"
+    "verify": "node tools/enforce-iron-laws.mjs --strict && node build.mjs && node --test tests/unit.test.mjs"
   },
   "dependencies": {
     "react": "19.3.1",

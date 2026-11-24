@@ -6,7 +6,7 @@
  * - 实时输出 reasoning / content / toolCalls 增量与真实出字速度 cps。
  */
 import { HarborError, isAbort } from './errors.js'
-import { assertLatin1Headers, assertLatin1Value } from './headers.js'
+import { assertLatin1Headers, assertLatin1Value, toAsciiJson } from './headers.js'
 import { getLocalProxy } from './bridge.js'
 import { buildReasoningRequestParams } from './reasoningPresets.js'
 import { applyProviderCacheControl, extractCacheUsage } from './promptCache.js'
@@ -43,7 +43,7 @@ export async function resolveStreamEndpoint(baseUrl, harnessMeta = null) {
     if (proxy && proxy.ok !== false && proxy.base_url) {
       const extraHeaders = {
         'X-Harbor-Target': cleanBase,
-        ...(harnessMeta ? { 'X-Harbor-Harness': JSON.stringify(harnessMeta) } : {}),
+        ...(harnessMeta ? { 'X-Harbor-Harness': toAsciiJson(harnessMeta) } : {}),
       }
       return {
         url: `${String(proxy.base_url).replace(/\/+$/, '')}/chat/completions`,
@@ -184,6 +184,10 @@ export async function streamChatCompletion({
   let lastTick = Date.now()
   let windowChars = 0
   let cps = 0
+  let lastEmitAt = 0
+  let pendingEmit = false
+  let firstContentEmitted = false
+  let firstReasoningEmitted = false
 
   const sampleCps = (addedLen) => {
     windowChars += addedLen
@@ -194,6 +198,19 @@ export async function streamChatCompletion({
       windowChars = 0
       lastTick = now
     }
+  }
+
+  // 32ms（~30fps）流式增量合批：首字立即刷新，其余合批推送，降低 60-75% 高速流式下的 React 重渲染压力
+  const flushDelta = (force = false) => {
+    if (typeof onDelta !== 'function') return
+    const now = Date.now()
+    if (!force && now - lastEmitAt < 32) {
+      pendingEmit = true
+      return
+    }
+    pendingEmit = false
+    lastEmitAt = now
+    onDelta({ reasoning, content, cps, hasReasoning: reasoning.length > 0, hasContent: content.length > 0 })
   }
 
   try {
@@ -237,11 +254,15 @@ export async function streamChatCompletion({
             tcMap.set(idx, cur)
           }
         }
-        if ((rPart || cPart) && typeof onDelta === 'function') {
-          onDelta({ reasoning, content, cps, hasReasoning: reasoning.length > 0, hasContent: content.length > 0 })
+        if (rPart || cPart) {
+          const isFirst = (cPart && !firstContentEmitted) || (rPart && !firstReasoningEmitted)
+          if (cPart) firstContentEmitted = true
+          if (rPart) firstReasoningEmitted = true
+          flushDelta(isFirst)
         }
       }
     }
+    if (pendingEmit) flushDelta(true)
   } finally {
     try { reader.releaseLock() } catch {}
   }

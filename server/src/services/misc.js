@@ -1,177 +1,18 @@
 /**
- * 审计日志（P0-1b G11：与 Python audit_chain.py + guard_service.audit 同构）与
- * 搜索缓存统计、历史目录配置。
- *
- * 审计条目形状（Python guard_service.audit 五维 + 哈希链）：
- *   {ts, op, action, detail, decision?, trace?, identity:{sid,principal},
- *    intent:{trace,summary}, evidence?:{args_sha256}, prev_hash, hash}
- * 链算法：canonical = 键排序紧凑 JSON；hash = sha256(prev ‖ canonical)；
- * genesis prev_hash = 64 个 '0'。链头持久化 audit_chain.json（独立文件）。
- * ts 口径：本地 '%Y-%m-%d %H:%M:%S'（Python B8.5 禁改口径）。
+ * 搜索缓存统计、历史目录配置与审计门面（审计哈希链已下沉至独立叶子模块 audit.js，
+ * 彻底消除 browser ↔ guard ↔ misc 循环依赖，同时保留同名导出 100% 兼容既有调用方与测试）。
  */
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { CONFIG_DIR, atomicWriteJson, readTextIfExists } from '../paths.js'
+import { CONFIG_DIR } from '../paths.js'
 import { readConfigJson, mergeConfig, readConfigNormalized } from './jsonstore.js'
 import { CONFIG_SPECS } from './config-specs.js'
 import { runtime } from '../runtime.js'
 import { currentDbPath, switchDatabaseCore, withDbSwitchLock } from '../db.js'
 import { materializeSessions } from './session-migrate.js'
-import { ctxSid } from '../session-context.js'
+export { guardAudit, getAuditLog } from './audit.js'
 
-const AUDIT_FILE = path.join(CONFIG_DIR, 'audit_log.jsonl')
-const AUDIT_CHAIN_FILE = path.join(CONFIG_DIR, 'audit_chain.json')
-const GENESIS_HASH = '0'.repeat(64)
-
-const okJson = value => JSON.stringify(value)
-
-function nowLocal() {
-  const d = new Date()
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
-    + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-/** 键排序紧凑序列化（与 Python canonical_json 同构：sort_keys+separators）。 */
-function canonicalJson(value) {
-  const sort = input => {
-    if (Array.isArray(input)) return input.map(sort)
-    if (input && typeof input === 'object') {
-      return Object.fromEntries(Object.keys(input).sort()
-        .map(key => [key, sort(input[key])]))
-    }
-    return input
-  }
-  return JSON.stringify(sort(value))
-}
-
-function entryHash(prevHash, entry) {
-  return crypto.createHash('sha256')
-    .update(String(prevHash || '') + canonicalJson(entry))
-    .digest('hex')
-}
-
-/* ---------------- 链头状态（进程内 + 原子落盘） ---------------- */
-function loadChainHead() {
-  try {
-    const d = JSON.parse(readTextIfExists(AUDIT_CHAIN_FILE, 'null'))
-    if (d && typeof d === 'object') {
-      return { head: String(d.head || GENESIS_HASH), len: Math.max(0, Number(d.len) || 0) }
-    }
-  } catch { /* 损坏 → genesis 重启（Python 同口径） */ }
-  return { head: GENESIS_HASH, len: 0 }
-}
-
-const chain = loadChainHead()
-
-/** 进程级 trace id（Python SessionCoordinator 装配即有当前 trace；js_api 侧
- * 每条审计带 trace 键。差分归一按 id 键掩蔽，值形态无关紧要——键存在性对齐）。 */
-const TRACE_ID = `t_${Date.now().toString(36)}_${crypto.randomBytes(2).toString('hex')}`
-
-function persistChainHead() {
-  atomicWriteJson(AUDIT_CHAIN_FILE, {
-    version: 1, head: chain.head, len: chain.len, updated_at: nowLocal(),
-  })
-}
-
-/* ---------------- 审计写入（Python audit() 同构） ---------------- */
-export async function guardAudit(op, detailJson, action = 'check', decision = null) {
-  try {
-    let detail = detailJson
-    if (typeof detail === 'string') {
-      try { detail = JSON.parse(detail) } catch { detail = { raw: String(detailJson).slice(0, 200) } }
-    }
-    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) detail = {}
-    const normalizedDetail = Object.fromEntries(Object.entries(detail)
-      .map(([k, v]) => [k, String(v).slice(0, 200)]))
-
-    const entry = {
-      ts: nowLocal(),
-      op: String(op || ''),
-      action: String(action || 'check'),
-      detail: normalizedDetail,
-    }
-    if (decision) entry.decision = decision
-    entry.trace = TRACE_ID
-    entry.identity = { sid: String(ctxSid() || ''), principal: 'user' }
-    entry.intent = { trace: TRACE_ID, summary: `${entry.op} ${decision || entry.action}` }
-    if (Object.keys(normalizedDetail).length) {
-      entry.evidence = {
-        args_sha256: crypto.createHash('sha256')
-          .update(canonicalJson(normalizedDetail)).digest('hex').slice(0, 32),
-      }
-    }
-    // 挂链（Python 顺序：先对无链键条目计算 hash，再补 prev_hash/hash）
-    const prev = chain.head
-    const hash = entryHash(prev, entry)
-    entry.prev_hash = prev
-    entry.hash = hash
-    chain.head = hash
-    chain.len += 1
-    // R49-N13 修复：先 append 条目再持久链头——原顺序在 append 失败时链头
-    // 已前进（永久断链，verifyChain 必报 broken，与注释「链头不前进」相悖）。
-    // append 先行：append 失败 → 链头未动 → 重算同 hash 重写同条目（幂等）。
-    fs.mkdirSync(CONFIG_DIR, { recursive: true })
-    fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + '\n', 'utf8')
-    try { persistChainHead() } catch { /* 链头落盘失败：重启由文件尾重建 */ }
-
-    return '{"ok":true}'
-  } catch (error) {
-    return JSON.stringify({ error: String(error && error.message ? error.message : error) })
-  }
-}
-
-/* ---------------- 链校验（Python verify 同构：hash 重算 + 相邻衔接） ---------------- */
-function verifyChain(entries) {
-  const hashed = (entries || []).filter(e => e && typeof e === 'object' && 'hash' in e)
-  if (!hashed.length) return { ok: true, checked: 0, head: chain.head, len: chain.len }
-  let checked = 0
-  for (let i = 1; i < hashed.length; i += 1) {
-    const newer = hashed[i - 1]   // read_audit 倒序窗口：前者新、后者旧
-    const older = hashed[i]
-    const linked = newer.prev_hash === older.hash || older.prev_hash === newer.hash
-    if (!linked) {
-      return { ok: false, checked, broken_at: { index: i, ts: older.ts, op: older.op } }
-    }
-    checked += 1
-  }
-  for (const entry of hashed) {
-    // 重算须剥离链键本身（Python：hash 在挂链前对无链键条目计算）
-    const { hash, prev_hash, ...rest } = entry
-    if (entryHash(entry.prev_hash, rest) !== entry.hash) {
-      return { ok: false, checked, broken_at: { index: hashed.indexOf(entry), ts: entry.ts, op: entry.op } }
-    }
-  }
-  return { ok: true, checked: hashed.length, head: chain.head, len: chain.len }
-}
-
-/** 审计读取（Python read_audit + api.get_audit_log 链块同构）：
- * 倒序窗口 {ok, total, entries} + chain{head, head_full, len, valid}。 */
-export async function getAuditLog(limit = 200, offset = 0, verifyAll = false) {
-  const text = readTextIfExists(AUDIT_FILE, '')
-  const entries = []
-  for (const line of text.split('\n')) {
-    if (!line.trim()) continue
-    try { entries.push(JSON.parse(line)) } catch { /* 单行损坏不拖垮整页 */ }
-  }
-  const size = Math.max(1, Math.min(Number(limit) || 200, 1000))
-  const start = Math.max(0, Number(offset) || 0)
-  const window = entries.slice().reverse().slice(start, start + size)
-
-  const headInfo = loadChainHead()
-  const chainBlock = {
-    head: String(headInfo.head || '').slice(0, 8),
-    head_full: headInfo.head || '',
-    len: headInfo.len,
-    valid: true,
-  }
-  const verdict = verifyChain(window)
-  chainBlock.valid = !!verdict.ok
-  if (!verdict.ok) chainBlock.broken_at = verdict.broken_at
-
-  return okJson({ ok: true, total: entries.length, entries: window, chain: chainBlock })
-}
+const okJson = (value) => JSON.stringify(value)
 
 /* ---------------- 搜索缓存统计 / 历史目录（不变） ---------------- */
 /** 读取器统计的进程起点（search_reader._started_at = time.time() 同口径）。 */

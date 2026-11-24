@@ -15,7 +15,7 @@ import { prisma } from '../db.js'
 import { cacheToolOutput as cacheOutput, clearFileCaches } from './files.js'
 import { consumeExportPath } from './system.js'
 import { ensureLocalProxyRunning } from './local-proxy.js'
-import { guardAudit } from './misc.js'
+import { guardAudit } from './audit.js'
 import { rememberDeletedId } from './session-migrate.js'
 // R88（D-09）：MCP 折叠阈值唯一事实源改由 harness 注册表导出，禁止本地重复声明。
 import { MCP_FOLD_THRESHOLD } from './harness/progressiveToolRegistry.mjs'

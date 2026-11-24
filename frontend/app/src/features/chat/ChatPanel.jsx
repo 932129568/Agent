@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   useSlice,
   setComposerDraft,
@@ -34,6 +34,69 @@ import LivingChamber from '../../ui/LivingChamber.jsx'
 import InlineApproval from '../../ui/InlineApproval.jsx'
 import ComposerMenu, { buildComposerMenuItems } from './ComposerMenu.jsx'
 import './ChatPanel.css'
+
+const ChatMessageItem = memo(function ChatMessageItem({
+  msg,
+  idx,
+  sib,
+  sid,
+  onFork,
+  onRewind,
+  onSaveMemory,
+}) {
+  const tokens = (msg.meta && Array.isArray(msg.meta.tokens)) ? msg.meta.tokens : []
+  const parsed = useMemo(
+    () => (msg.role === 'assistant' ? extractUiSpecsFromMarkdown(msg.content) : { cleanMarkdown: msg.content, specs: [] }),
+    [msg.role, msg.content]
+  )
+
+  return (
+    <div className="chat-msg" data-role={msg.role}>
+      <div className="chat-bubble">
+        {tokens.length > 0 && (
+          <div className="chat-tokens-row" style={{ marginBottom: 8 }}>
+            {tokens.map((t) => <span key={t.id} className="chat-token-chip">@{t.name}</span>)}
+          </div>
+        )}
+        {msg.reasoning && (
+          <details className="chat-think-details">
+            <summary>已深度思考（点击展开完整推演过程）</summary>
+            <pre className="chat-think-pre">{msg.reasoning}</pre>
+          </details>
+        )}
+        {msg.role === 'assistant' ? (
+          <>
+            {parsed.cleanMarkdown && <MarkdownView content={parsed.cleanMarkdown} />}
+            {parsed.specs.map((sp) => (
+              <GenerativeView key={sp.specId} spec={sp} onAction={() => pushToast('已复制 UiSpec JSON', 'ok')} />
+            ))}
+          </>
+        ) : (
+          <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+        )}
+      </div>
+
+      <div className="chat-msg-bar">
+        {sib && (
+          <>
+            <button type="button" className="chat-mini-btn" disabled={sib.index <= 1} onClick={() => switchSessionBranch(sid, msg._nodeId, -1)}>‹</button>
+            <span>{sib.index} / {sib.total}</span>
+            <button type="button" className="chat-mini-btn" disabled={sib.index >= sib.total} onClick={() => switchSessionBranch(sid, msg._nodeId, 1)}>›</button>
+          </>
+        )}
+        <button type="button" className="chat-mini-btn" onClick={async () => { await copyText(msg.content); pushToast('已复制', 'ok') }}>复制</button>
+        {msg.role === 'user' ? (
+          <>
+            <button type="button" className="chat-mini-btn" onClick={() => onFork(idx, msg.content)}>分叉编辑</button>
+            <button type="button" className="chat-mini-btn" onClick={() => onRewind(idx)}>回退到此之前</button>
+          </>
+        ) : (
+          <button type="button" className="chat-mini-btn" onClick={() => onSaveMemory(msg.content)}>提炼入记忆</button>
+        )}
+      </div>
+    </div>
+  )
+})
 
 export default function ChatPanel() {
   const ui = useSlice('ui')
@@ -109,7 +172,16 @@ export default function ChatPanel() {
     }
   }
 
-  const saveOneSentenceMemory = async (rawText) => {
+  const handleForkMessage = useCallback((idx, content) => {
+    setEditingIdx(idx)
+    setComposerDraft(content)
+  }, [])
+
+  const handleRewindMessage = useCallback((idx) => {
+    rewindSessionAt(sid, idx)
+  }, [sid])
+
+  const saveOneSentenceMemory = useCallback(async (rawText) => {
     const concise = String(rawText || '').replace(/```[\s\S]*?```/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
     if (!concise) return
     try {
@@ -118,7 +190,7 @@ export default function ChatPanel() {
     } catch (err) {
       pushToast(`存入记忆失败：${err.message}`, 'err')
     }
-  }
+  }, [])
 
   const messages = (session && Array.isArray(session.messages)) ? session.messages : []
   const liveParsed = useMemo(() => extractUiSpecsFromMarkdown((isBusy || run.isDemo) ? run.answer : ''), [isBusy, run.isDemo, run.answer])
@@ -156,57 +228,18 @@ export default function ChatPanel() {
             </div>
           </div>
         ) : (
-          messages.map((m, idx) => {
-            const sib = m._nodeId ? siblingMeta(session, m._nodeId) : null
-            const tokens = m.meta && Array.isArray(m.meta.tokens) ? m.meta.tokens : []
-            const parsed = m.role === 'assistant' ? extractUiSpecsFromMarkdown(m.content) : { cleanMarkdown: m.content, specs: [] }
-            return (
-              <div key={m._nodeId || idx} className="chat-msg" data-role={m.role}>
-                <div className="chat-bubble">
-                  {tokens.length > 0 && (
-                    <div className="chat-tokens-row" style={{ marginBottom: 8 }}>
-                      {tokens.map((t) => <span key={t.id} className="chat-token-chip">@{t.name}</span>)}
-                    </div>
-                  )}
-                  {m.reasoning && (
-                    <details className="chat-think-details">
-                      <summary>已深度思考（点击展开完整推演过程）</summary>
-                      <pre className="chat-think-pre">{m.reasoning}</pre>
-                    </details>
-                  )}
-                  {m.role === 'assistant' ? (
-                    <>
-                      {parsed.cleanMarkdown && <MarkdownView content={parsed.cleanMarkdown} />}
-                      {parsed.specs.map((sp) => (
-                        <GenerativeView key={sp.specId} spec={sp} onAction={() => pushToast('已复制 UiSpec JSON', 'ok')} />
-                      ))}
-                    </>
-                  ) : (
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                  )}
-                </div>
-
-                <div className="chat-msg-bar">
-                  {sib && (
-                    <>
-                      <button type="button" className="chat-mini-btn" disabled={sib.index <= 1} onClick={() => switchSessionBranch(sid, m._nodeId, -1)}>‹</button>
-                      <span>{sib.index} / {sib.total}</span>
-                      <button type="button" className="chat-mini-btn" disabled={sib.index >= sib.total} onClick={() => switchSessionBranch(sid, m._nodeId, 1)}>›</button>
-                    </>
-                  )}
-                  <button type="button" className="chat-mini-btn" onClick={async () => { await copyText(m.content); pushToast('已复制', 'ok') }}>复制</button>
-                  {m.role === 'user' ? (
-                    <>
-                      <button type="button" className="chat-mini-btn" onClick={() => { setEditingIdx(idx); setComposerDraft(m.content) }}>分叉编辑</button>
-                      <button type="button" className="chat-mini-btn" onClick={() => rewindSessionAt(sid, idx)}>回退到此之前</button>
-                    </>
-                  ) : (
-                    <button type="button" className="chat-mini-btn" onClick={() => saveOneSentenceMemory(m.content)}>提炼入记忆</button>
-                  )}
-                </div>
-              </div>
-            )
-          })
+          messages.map((m, idx) => (
+            <ChatMessageItem
+              key={m._nodeId || idx}
+              msg={m}
+              idx={idx}
+              sib={m._nodeId ? siblingMeta(session, m._nodeId) : null}
+              sid={sid}
+              onFork={handleForkMessage}
+              onRewind={handleRewindMessage}
+              onSaveMemory={saveOneSentenceMemory}
+            />
+          ))
         )}
 
         {run.error && <div className="chat-error">请求/执行错误：{run.error}</div>}

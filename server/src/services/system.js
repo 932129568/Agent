@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import iconv from 'iconv-lite'
 import { enforceExec, ARMED } from './guard.js'
-import { guardAudit } from './misc.js'
+import { guardAudit } from './audit.js'
 
 const run = promisify(execFile)
 const okJson = value => JSON.stringify(value)

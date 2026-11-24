@@ -180,14 +180,39 @@ if (fs.existsSync(elecMain)) {
   }
 }
 
-// LAW-12（收口严格模式）：全量切换完成后，禁止仓库残存旧遗产
+// LAW-12（收口严格模式）：全量切换完成后，禁止仓库残存旧遗产与未被 main.jsx 引用的死文件
 if (STRICT) {
   for (const legacyPath of [
     'frontend/src', 'frontend/react/src', 'frontend/react/dist', 'frontend/styles/legacy.css',
-    'frontend/skin/lightwellShell.js', 'electron/wallpaper.js',
+    'frontend/skin/lightwellShell.js', 'electron/wallpaper.js', 'harbor.html',
+    'frontend/app/src/features/_template', 'frontend/app/src/state/actions',
+    'frontend/app/src/state/createStore.js', 'frontend/app/src/ui/DossierTokens.js',
   ]) {
     if (fs.existsSync(path.join(REPO_ROOT, legacyPath))) {
-      fail('LAW-12', path.join(REPO_ROOT, legacyPath), 0, `严格模式下禁止保留旧架构遗产: ${legacyPath}`)
+      fail('LAW-12', path.join(REPO_ROOT, legacyPath), 0, `严格模式下禁止保留旧架构遗产或 R67 孤儿文件: ${legacyPath}（请运行 cleanup-legacy.mjs --execute）`)
+    }
+  }
+  const entryFile = path.join(SRC_ROOT, 'main.jsx')
+  if (fs.existsSync(entryFile)) {
+    const visited = new Set()
+    const q = [entryFile]
+    while (q.length) {
+      const cur = q.shift()
+      if (visited.has(cur) || !fs.existsSync(cur)) continue
+      visited.add(cur)
+      if (!/\.(?:js|jsx|mjs)$/.test(cur)) continue
+      const txt = stripCommentsPreserveLines(fs.readFileSync(cur, 'utf8'))
+      const re = /(?:from|import)\s+['"](\.[^'"]+)['"]/g
+      let m
+      while ((m = re.exec(txt)) !== null) {
+        const tgt = path.resolve(path.dirname(cur), m[1])
+        if (!visited.has(tgt) && fs.existsSync(tgt)) q.push(tgt)
+      }
+    }
+    for (const f of [...jsFiles, ...cssFiles]) {
+      if (!visited.has(f)) {
+        fail('LAW-12', f, 0, '死文件/孤儿模块未被 main.jsx 引用（请运行 cleanup-legacy.mjs --execute 清理）')
+      }
     }
   }
 }

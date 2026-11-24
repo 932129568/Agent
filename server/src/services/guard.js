@@ -30,7 +30,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { CONFIG_DIR, atomicWriteJson } from '../paths.js'
-import { guardAudit } from './misc.js'
+import { guardAudit } from './audit.js'
 import { ctxSid, registerSidContainer } from '../session-context.js'
 
 const GUARD_FILE = path.join(CONFIG_DIR, 'guard.json')

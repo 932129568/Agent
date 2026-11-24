@@ -201,16 +201,33 @@ function emit() { for (const fn of listeners) fn() }
 export function getState() { return state }
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn) }
 
+function shallowEqualObj(a, b) {
+  if (Object.is(a, b)) return true
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
+  const ka = Object.keys(a)
+  const kb = Object.keys(b)
+  if (ka.length !== kb.length) return false
+  for (let i = 0; i < ka.length; i++) {
+    const k = ka[i]
+    if (!Object.prototype.hasOwnProperty.call(b, k) || !Object.is(a[k], b[k])) return false
+  }
+  return true
+}
+
 function patchSlice(name, updater) {
   const prev = state[name]
   const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }
-  if (next === prev) return
+  if (shallowEqualObj(prev, next)) return
   state = Object.freeze({ ...state, [name]: Object.freeze(next) })
   emit()
 }
 
 export function useSlice(name) {
   return useSyncExternalStore(subscribe, () => state[name], () => state[name])
+}
+
+export function useStoreSelector(selector) {
+  return useSyncExternalStore(subscribe, () => selector(state), () => selector(state))
 }
 
 /* ---- 通用 UI & 图层调度（LAW-05：Modal 与 Dock 强互斥） ---- */
@@ -323,11 +340,23 @@ export async function hydrateApp() {
 }
 
 /* ---- 会话管理与持久化 ---- */
-export function queuePersistSessions() {
+let sessionsDirty = false
+
+export function flushPersistSessions() {
+  if (!sessionsDirty) return
+  sessionsDirty = false
   clearTimeout(saveSessionsTimer)
-  saveSessionsTimer = setTimeout(() => {
-    api.saveSessions(state.sessions.items).catch(() => {})
-  }, 350)
+  api.saveSessions(state.sessions.items).catch(() => {})
+}
+
+export function queuePersistSessions() {
+  sessionsDirty = true
+  clearTimeout(saveSessionsTimer)
+  saveSessionsTimer = setTimeout(flushPersistSessions, 350)
+}
+
+if (typeof globalThis !== 'undefined' && typeof globalThis.addEventListener === 'function') {
+  globalThis.addEventListener('beforeunload', () => { flushPersistSessions() })
 }
 
 export function createNewSession(title = '新对话') {

@@ -580,7 +580,7 @@ try {
   )
 
   /* ======================================================================== *
-   * Suite E · 前沿 KV-Cache 前缀冻结、工具字典序锁定与实时缓存命中率遥测
+   * Suite E · 前沿 KV-Cache 前缀冻结、工具字典序锁定、中文路径 ASCII 头保护与实时命中率遥测
    * ======================================================================== */
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForTimeout(220)
@@ -588,26 +588,48 @@ try {
   await page.waitForSelector('.chat-textarea')
   stubState.chatRequests.length = 0
 
-  await page.locator('.chat-textarea').fill('第一轮测试前缀锁定')
-  await page.locator('.chat-send-btn').click()
-  await page.waitForSelector('.lc-chamber[data-phase="done"]', { timeout: 8000 })
+  async function runAndWaitChatTurn(promptText, expectedReqCount) {
+    await page.locator('.chat-textarea').fill(promptText)
+    await page.locator('.chat-send-btn').click()
+    const t0 = Date.now()
+    while (Date.now() - t0 < 10000) {
+      const errCount = await page.locator('.chat-error').count()
+      if (errCount > 0) {
+        const errTxt = await page.locator('.chat-error').first().textContent()
+        throw new Error(`Chat turn failed with UI error: ${errTxt}`)
+      }
+      if (stubState.chatRequests.length >= expectedReqCount) {
+        const doneCount = await page.locator('.lc-chamber[data-phase="done"]').count()
+        const isBusyNow = await page.locator('.chat-send-btn[data-stop="true"]').count()
+        if (doneCount > 0 && isBusyNow === 0) return
+      }
+      await page.waitForTimeout(60)
+    }
+    const phaseNow = await page.locator('.lc-chamber').getAttribute('data-phase').catch(() => 'none')
+    throw new Error(`Chat turn ${expectedReqCount} timed out (reqs=${stubState.chatRequests.length}, phase=${phaseNow})`)
+  }
 
-  await page.locator('.chat-textarea').fill('第二轮切换全新问题检验缓存前缀零漂移')
-  await page.locator('.chat-send-btn').click()
-  await page.waitForTimeout(900)
-  await page.waitForSelector('.lc-chamber[data-phase="done"]', { timeout: 8000 })
+  await runAndWaitChatTurn('第一轮测试前缀锁定', 1)
+  await runAndWaitChatTurn('第二轮切换全新问题检验缓存前缀零漂移', 2)
 
   const chatReqs = stubState.chatRequests.slice(-2)
   const sys1 = JSON.stringify(chatReqs[0] && chatReqs[0].systemContent)
   const sys2 = JSON.stringify(chatReqs[1] && chatReqs[1].systemContent)
   const toolsSorted = JSON.stringify(chatReqs[1] && chatReqs[1].toolNames) === JSON.stringify(['read_file', 'write_file'])
   const dynInTail = Boolean(chatReqs[1] && chatReqs[1].lastUser.includes('<system-reminder>'))
+  const hasAnthropicBp = sys2.includes('"cache_control":{"type":"ephemeral"}')
   const ribbonTxt = await page.locator('.hb-ribbon').textContent()
   record(
     'Suite-E',
-    '多轮前缀绝对冻结（System 逐字节一致 + 工具字典序 + 动态记忆后置 + 88% 命中率上屏）',
-    chatReqs.length === 2 && sys1 === sys2 && !sys2.includes('DYN_QUERY') && toolsSorted && dynInTail && /缓存命中\s*88%/.test(ribbonTxt || ''),
-    `sysEqual=${sys1 === sys2}, toolsSorted=${toolsSorted}, dynInTail=${dynInTail}, ribbon=${(ribbonTxt || '').slice(0, 60)}`
+    '多轮前缀绝对冻结（System 逐字节一致 + 工具字典序 + 动态记忆后置 + Anthropic 缓存断点 + 88% 命中率）',
+    chatReqs.length === 2
+      && sys1 === sys2
+      && !sys2.includes('DYN_QUERY')
+      && toolsSorted
+      && dynInTail
+      && hasAnthropicBp
+      && /缓存命中\s*88%/.test(ribbonTxt || ''),
+    `sysEqual=${sys1 === sys2}, toolsSorted=${toolsSorted}, dynInTail=${dynInTail}, antBp=${hasAnthropicBp}, ribbon=${(ribbonTxt || '').slice(0, 64)}`
   )
 
   // D4: 全程零未捕获页面异常

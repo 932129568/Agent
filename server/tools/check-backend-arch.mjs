@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 /**
- * Harbor 后端框架架构门禁（对齐 ARCHITECTURE-BACKEND.md）：
- * 校验 Fastify 5 + Zod 4 + Prisma 7 后端红线与 CORS / PNA / MCP 防阻塞契约。
+ * Harbor 后端框架架构门禁（R5 升级版 · 对齐 ARCHITECTURE-BACKEND.md）：
+ * 校验项（7 项硬红线）：
+ *   1. server/src 零 Python 子进程调用；
+ *   2. electron-builder.yml 不含 backend/*.py、不含已删 harbor.html，且包含 frontend/app/dist/**/*；
+ *   3. server/src/registry.js 零残留 NOT_MIGRATED 死壳；
+ *   4. local-proxy.js CORS 放行 X-Harbor-Target / X-Harbor-Harness + PNA；
+ *   5. app.js CORS 放行 4 业务自定义头 + PNA；
+ *   6. mcp.js mcpToolSchemas 并发 + 快速超时防阻塞；
+ *   7. server/src 全图静态/动态 import 零循环依赖（browser ↔ guard ↔ misc 已由 audit.js 彻底解环）。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -28,15 +35,51 @@ function walkJs(dir) {
 }
 
 const srvFiles = walkJs(path.join(SERVER_ROOT, 'src'))
+const graph = new Map()
+
 for (const f of srvFiles) {
   const txt = fs.readFileSync(f, 'utf8')
   check(!/\b(?:spawn|execFile)\s*\(\s*['"]python/i.test(txt), `server/src 不得 spawn Python: ${path.relative(REPO_ROOT, f)}`)
+  const deps = []
+  const re = /(?:from\s+['"](\.[^'"]+)['"]|import\(\s*['"](\.[^'"]+)['"]\s*\))/g
+  let m
+  while ((m = re.exec(txt)) !== null) {
+    const spec = m[1] || m[2]
+    const target = path.resolve(path.dirname(f), spec)
+    if (fs.existsSync(target)) deps.push(target)
+  }
+  graph.set(f, deps)
 }
+
+const state = new Map()
+const stack = []
+const cycles = []
+function dfs(node) {
+  state.set(node, 1)
+  stack.push(node)
+  for (const nxt of (graph.get(node) || [])) {
+    const st = state.get(nxt) || 0
+    if (st === 1) {
+      const idx = stack.indexOf(nxt)
+      cycles.push(stack.slice(idx).concat(nxt).map((p) => path.relative(path.join(SERVER_ROOT, 'src'), p)).join(' -> '))
+    } else if (st === 0) {
+      dfs(nxt)
+    }
+  }
+  stack.pop()
+  state.set(node, 2)
+}
+for (const f of srvFiles) {
+  if (!state.get(f)) dfs(f)
+}
+check(cycles.length === 0, `server/src 存在循环依赖: ${cycles.join(' ; ')}`)
 
 const builderPath = path.join(REPO_ROOT, 'electron-builder.yml')
 if (fs.existsSync(builderPath)) {
   const yml = fs.readFileSync(builderPath, 'utf8')
   check(!/backend\/\*\.py/.test(yml), 'electron-builder.yml 不得打包 backend/*.py')
+  check(!/^\s*-\s*harbor\.html\s*$/m.test(yml), 'electron-builder.yml 不得引用已删除的旧 harbor.html')
+  check(/frontend\/app\/dist\/\*\*\/\*/.test(yml), 'electron-builder.yml 必须打包 frontend/app/dist/**/*')
 }
 
 const regTxt = fs.readFileSync(path.join(SERVER_ROOT, 'src', 'registry.js'), 'utf8')
@@ -57,4 +100,4 @@ if (errors.length) {
   errors.forEach((e) => console.error('  -', e))
   process.exit(1)
 }
-console.log(`[BACKEND-ARCH] PASS — Fastify 5 + Zod 4 + Prisma 7 后端扫描 ${srvFiles.length} 文件，全部 6 项红线通过`)
+console.log(`[BACKEND-ARCH] PASS — Fastify 5 + Zod 4 + Prisma 7 扫描 ${srvFiles.length} 文件，0 循环依赖，7 项架构红线全通过`)

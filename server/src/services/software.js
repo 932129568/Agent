@@ -21,7 +21,7 @@ import { CONFIG_DIR, atomicWriteJson } from '../paths.js'
 import { resolveWs } from './jail.js'
 import { ctxRoot } from '../session-context.js'
 import { enforceExec } from './guard.js'
-import { guardAudit } from './misc.js'
+import { guardAudit } from './audit.js'
 import { cacheToolOutput } from './files.js'
 
 const run = promisify(execFile)
