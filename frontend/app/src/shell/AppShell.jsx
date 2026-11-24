@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { applyKineticImpulse } from '../platform/kinetic.js'
 import {
   useSlice,
   hydrateApp,
@@ -40,8 +41,43 @@ export default function AppShell() {
   const runtime = useSlice('runtime')
   const settings = useSlice('settings')
   const [compactRail, setCompactRail] = useState(false)
+  const [impactEdge, setImpactEdge] = useState('')
+  const mainRef = useRef(null)
 
   useEffect(() => { hydrateApp().catch(() => {}) }, [])
+
+  // 校准后的物理撞击响应（峰值 4.6–5.8px + scale(0.988) + 140ms 弧形高光，收敛 275ms，残余 0px）
+  useEffect(() => {
+    const sig = ui.impactSignal
+    const el = mainRef.current
+    if (!sig || !el) return undefined
+    const isStrong = sig.strength === 'strong'
+    const speed = isStrong ? 275 : 210
+    const edge = sig.edge || 'left'
+    const vx = edge === 'left' ? speed : (edge === 'right' ? -speed : 0)
+    const vy = edge === 'top' ? speed * 0.75 : (edge === 'bottom' ? -speed * 0.75 : (isStrong ? 36 : 22))
+    const vrot = edge === 'left' ? 7.5 : (edge === 'right' ? -7.5 : 0)
+    const applied = applyKineticImpulse(el, {
+      vx,
+      vy,
+      vrot,
+      vsc: isStrong ? -0.42 : -0.26,
+      omega: 24,
+      zeta: 0.44,
+      maxPx: isStrong ? 6.0 : 4.8,
+      maxRot: isStrong ? 0.38 : 0.24,
+      maxSc: isStrong ? 0.014 : 0.009,
+      motionTier: settings.motion,
+    })
+    if (!applied) return undefined
+    setImpactEdge('')
+    const t1 = requestAnimationFrame(() => setImpactEdge(edge))
+    const t2 = setTimeout(() => setImpactEdge(''), 180)
+    return () => {
+      cancelAnimationFrame(t1)
+      clearTimeout(t2)
+    }
+  }, [ui.impactSignal, settings.motion])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -119,7 +155,7 @@ export default function AppShell() {
         </aside>
       )}
 
-      <main className="hb-main">
+      <main ref={mainRef} className="hb-main" data-impact-edge={impactEdge}>
         <header className="hb-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <button type="button" className="hb-top-btn" onClick={toggleSidebar} title="展开/收起会话栏">

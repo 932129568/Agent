@@ -8,6 +8,7 @@
 import { HarborError, isAbort } from './errors.js'
 import { assertLatin1Headers, assertLatin1Value } from './headers.js'
 import { getLocalProxy } from './bridge.js'
+import { buildReasoningRequestParams } from './reasoningPresets.js'
 
 const sleepAbortable = (ms, signal) => new Promise((resolve, reject) => {
   if (signal && signal.aborted) return reject(new HarborError('USER_PAUSED', '已中止'))
@@ -66,6 +67,8 @@ export async function streamChatCompletion({
   topP = 0.9,
   maxTokens = 4096,
   reasoningEffort = 'auto',
+  thinkingBudget = 0,
+  customEffort = '',
   harnessMeta = null,
   signal = null,
   onDelta = null,
@@ -89,9 +92,14 @@ export async function streamChatCompletion({
     body.tools = tools
     body.tool_choice = 'auto'
   }
-  if (reasoningEffort && reasoningEffort !== 'auto' && reasoningEffort !== 'off') {
-    body.reasoning_effort = reasoningEffort
-  }
+  const { bodyPatch } = buildReasoningRequestParams({
+    baseUrl,
+    model: body.model,
+    tier: reasoningEffort || 'auto',
+    customBudget: thinkingBudget,
+    customEffort,
+  })
+  Object.assign(body, bodyPatch)
 
   const headers = assertLatin1Headers({
     'Content-Type': 'application/json',

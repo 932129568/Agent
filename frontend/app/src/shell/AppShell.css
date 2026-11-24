@@ -164,3 +164,32 @@
     color: var(--text-3);
   }
 }
+
+@layer components {
+  .hb-main { position: relative; will-change: transform; }
+  .hb-main::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    border-radius: inherit;
+    z-index: var(--z-sticky);
+  }
+  .hb-main[data-impact-edge="left"]::after {
+    background: radial-gradient(ellipse 14% 52% at 0% 50%, rgba(255, 244, 232, 0.72), rgba(224, 125, 90, 0.28) 46%, transparent 74%);
+    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+  }
+  .hb-main[data-impact-edge="right"]::after {
+    background: radial-gradient(ellipse 14% 52% at 100% 50%, rgba(255, 244, 232, 0.72), rgba(82, 180, 245, 0.28) 46%, transparent 74%);
+    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+  }
+  .hb-main[data-impact-edge="top"]::after {
+    background: radial-gradient(ellipse 48% 14% at 50% 0%, rgba(255, 244, 232, 0.72), rgba(82, 180, 245, 0.26) 46%, transparent 74%);
+    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+  }
+  .hb-main[data-impact-edge="bottom"]::after {
+    background: radial-gradient(ellipse 48% 14% at 50% 100%, rgba(255, 244, 232, 0.72), rgba(224, 125, 90, 0.26) 46%, transparent 74%);
+    animation: harborImpactArcFlash var(--dur-fast) var(--ease-out) forwards;
+  }
+}

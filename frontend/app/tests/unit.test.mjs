@@ -141,3 +141,38 @@ test('local-proxy 契约对齐：modelTransport 发送 /chat/completions 与干�
   assert.equal(direct.targetBase, 'https://open.bigmodel.cn/api/paas/v4')
   assert.equal(direct.url, 'https://open.bigmodel.cn/api/paas/v4/chat/completions')
 })
+
+
+test('reasoningPresets.js 支持多级中文档位、自定义思考预算与跨厂商协议映射', async () => {
+  const { REASONING_TIERS, buildReasoningRequestParams } = await import('../src/services/reasoningPresets.js')
+  assert.ok(REASONING_TIERS.some((t) => t.id === 'xhigh' && t.label === '超高'))
+  assert.ok(REASONING_TIERS.some((t) => t.id === 'max' && t.label === '极致'))
+  const glm = buildReasoningRequestParams({ baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.5', tier: 'high' })
+  assert.equal(glm.bodyPatch.thinking.type, 'enabled')
+  assert.equal(glm.bodyPatch.reasoning_effort, 'high')
+  const ant = buildReasoningRequestParams({ baseUrl: 'https://api.anthropic.com/v1', model: 'claude-3-7', tier: 'custom', customBudget: 16384 })
+  assert.equal(ant.bodyPatch.thinking.budget_tokens, 16384)
+  const off = buildReasoningRequestParams({ baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen3:8b', tier: 'off' })
+  assert.equal(off.bodyPatch.think, false)
+})
+
+test('capabilityRouter.js 识别视频/代码意图、按能力匹配角色并在缺失时诚实预警', async () => {
+  const { GROUP_ROSTER_PRESETS, classifyTaskIntent, routeGroupMembers } = await import('../src/services/capabilityRouter.js')
+  assert.equal(classifyTaskIntent('帮我做一个 60 秒产品宣传视频分镜脚本').capability, 'video')
+  assert.equal(classifyTaskIntent('重构 React 组件和 SQL 接口').capability, 'code')
+  const miss = routeGroupMembers('做一个宣传视频分镜', GROUP_ROSTER_PRESETS.engineering.members, 'smart')
+  assert.equal(miss.matchedCount, 0)
+  assert.ok(miss.missingCapabilityWarning.includes('视频制作'))
+  const hit = routeGroupMembers('做一个宣传视频分镜', GROUP_ROSTER_PRESETS.video.members, 'smart')
+  assert.equal(hit.matchedCount, 3)
+  assert.equal(hit.missingCapabilityWarning, '')
+})
+
+test('kinetic.js 校准后的物理撞击曲线：峰值 4.5–6.2px、收敛 <=340ms、过冲 <=2、残余 0px', async () => {
+  const { simulateImpactCurve } = await import('../src/platform/kinetic.js')
+  const strong = simulateImpactCurve({ v0: 275, omega: 24, zeta: 0.44, maxPx: 6.0 })
+  assert.ok(strong.peakAbs >= 4.5 && strong.peakAbs <= 6.0, `peakAbs=${strong.peakAbs}`)
+  assert.ok(strong.settleMs >= 160 && strong.settleMs <= 340, `settleMs=${strong.settleMs}`)
+  assert.ok(strong.overshoots >= 1 && strong.overshoots <= 2, `overshoots=${strong.overshoots}`)
+  assert.equal(strong.residual, 0)
+})

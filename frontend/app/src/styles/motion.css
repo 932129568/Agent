@@ -73,6 +73,26 @@
     to { opacity: 1; transform: translate3d(0, 0, 0); }
   }
 
+
+  @keyframes rtRadarRing {
+    0% { transform: scale(0.88); opacity: 0.78; }
+    100% { transform: scale(1.48); opacity: 0; }
+  }
+  @keyframes rtIgniteBurst {
+    0% { transform: scale(0.95); opacity: 0.95; }
+    100% { transform: scale(1.08); opacity: 0; }
+  }
+  @keyframes rtBatonRocket {
+    0% { transform: translateX(-24px); opacity: 0.2; }
+    25% { opacity: 1; }
+    100% { transform: translateX(120px); opacity: 0.95; }
+  }
+  @keyframes harborImpactArcFlash {
+    0% { opacity: 0; transform: scale(0.92); }
+    24% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.06); }
+  }
+
   html[data-motion="reduced"] *,
   html[data-motion="reduced"] *::before,
   html[data-motion="reduced"] *::after {

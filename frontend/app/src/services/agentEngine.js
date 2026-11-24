@@ -219,6 +219,8 @@ export async function runAgentConversation({
       topP: endpointConfig.top_p,
       maxTokens: endpointConfig.max_tokens,
       reasoningEffort: endpointConfig.reasoning_effort,
+      thinkingBudget: endpointConfig.thinking_budget,
+      customEffort: endpointConfig.custom_effort,
       harnessMeta: { v: 2, phase: 'execute', workspace: workspacePath },
       signal,
       onDelta: ({ reasoning, content, cps, hasReasoning, hasContent }) => {

@@ -1,11 +1,99 @@
 @layer components {
-  .gp-root { padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
-  .gp-roster { display: flex; gap: 8px; flex-wrap: wrap; }
-  .gp-member { padding: 6px 12px; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--card-bg); font-size: 12px; }
+  .gp-root { padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
+  .gp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .gp-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .gp-chip-btn {
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text-2);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .gp-chip-btn:hover { border-color: var(--primary); color: var(--text); }
+  .gp-chip-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  .gp-roster-panel {
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    box-shadow: var(--elev-1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .gp-member-card {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .gp-member-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gp-field-sm {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    font-size: 12px;
+    outline: none;
+  }
+  .gp-field-sm:focus { border-color: var(--primary); }
+
+  .gp-warn {
+    padding: 9px 13px;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--warn);
+    background: var(--warn-bg);
+    color: var(--text);
+    font-size: 12px;
+  }
+
   .gp-feed { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
   .gp-msg { padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); }
-  .gp-author { font-size: 12px; font-weight: 600; color: var(--primary); margin-bottom: 6px; display: flex; justify-content: space-between; }
-  .gp-bar { display: flex; gap: 8px; }
-  .gp-input { flex: 1; padding: 10px 14px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--card-elevated); }
-  .gp-btn { padding: 8px 18px; border-radius: var(--radius-full); border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); font-weight: 600; cursor: pointer; }
+  .gp-author { font-size: 12.5px; font-weight: 600; color: var(--primary); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .gp-model-tag { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); font-weight: 400; margin-left: 6px; }
+
+  .gp-pause-bar {
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--warn);
+    background: var(--warn-bg);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+
+  .gp-bar { display: flex; gap: 8px; align-items: center; }
+  .gp-input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-elevated);
+    outline: none;
+  }
+  .gp-input:focus { border-color: var(--primary); }
+  .gp-btn {
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .gp-btn-warn { background: var(--warn); border-color: var(--warn); color: #171614; }
+  .gp-btn-err { background: var(--err); border-color: var(--err); color: #fff; }
 }

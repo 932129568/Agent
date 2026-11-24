@@ -9,10 +9,12 @@ import {
 } from '../../state/store.js'
 import * as api from '../../services/bridge.js'
 import { assertLatin1Value } from '../../services/headers.js'
+import { fireShellImpact } from '../../state/store.js'
+import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReasoningRequestParams } from '../../services/reasoningPresets.js'
 import './SettingsModal.css'
 
 const DOMAINS = [
-  { id: 'model', label: '模型、混合路由与推理', keywords: '模型 api key base url 本地 ollama 混合 hybrid reader 预算' },
+  { id: 'model', label: '模型、混合路由与推理', keywords: '模型 api key base url 本地 ollama 混合 hybrid 上下文 context 输出 max_tokens 思考 reasoning thinking 档位 预算' },
   { id: 'tools', label: '工具、MCP、沙箱与软件', keywords: 'mcp 护栏 沙箱 sandbox 外部软件 software 工具' },
   { id: 'memory', label: '记忆与 WebDAV 同步', keywords: '记忆 memory webdav 同步 备份 恢复' },
   { id: 'optics', label: '透色、动效与自动更新', keywords: '外观 主题 透明 acrylic mica 四幕 动效 更新 update' },
@@ -176,6 +178,78 @@ export default function SettingsModal() {
               <div className="st-row">
                 <button type="button" className="st-btn st-btn-primary" onClick={() => handleSaveModel(false)}>保存配置</button>
                 <button type="button" className="st-btn" onClick={() => handleSaveModel(true)}>保存并测试连接</button>
+              </div>
+            </div>
+
+            <div className="st-card">
+              <h3>上下文长度、最大输出与多级思考档位</h3>
+              <div className="st-field">
+                <label>上下文长度（Context Window：{Number(draft.context_window || 128000).toLocaleString()} tokens，驱动自动压缩时机）</label>
+                <div className="st-row">
+                  {CONTEXT_WINDOW_PRESETS.map((p) => (
+                    <button key={p.value} type="button" className="st-btn"
+                      data-active={String(Number(draft.context_window || 128000) === p.value)}
+                      onClick={() => setDraft({ ...draft, context_window: p.value })}>{p.label}</button>
+                  ))}
+                  <input className="st-input" style={{ width: 116 }} type="number" min="4096" max="1000000" step="4096"
+                    value={draft.context_window ?? 128000}
+                    onChange={(e) => setDraft({ ...draft, context_window: Number(e.target.value) || 32768 })} />
+                </div>
+              </div>
+
+              <div className="st-field">
+                <label>最大输出长度（Max Tokens：{Number(draft.max_tokens || 4096).toLocaleString()}）</label>
+                <div className="st-row">
+                  {MAX_OUTPUT_PRESETS.map((p) => (
+                    <button key={p.value} type="button" className="st-btn"
+                      data-active={String(Number(draft.max_tokens || 4096) === p.value)}
+                      onClick={() => setDraft({ ...draft, max_tokens: p.value })}>{p.label}</button>
+                  ))}
+                  <input className="st-input" style={{ width: 116 }} type="number" min="256" max="128000" step="512"
+                    value={draft.max_tokens ?? 4096}
+                    onChange={(e) => setDraft({ ...draft, max_tokens: Number(e.target.value) || 4096 })} />
+                </div>
+              </div>
+
+              <div className="st-field">
+                <label>思考档位（内置 低 / 中 / 高 / 超高 / 极致 + 自定义，自动适配各厂商协议）</label>
+                <div className="st-row">
+                  {REASONING_TIERS.map((t) => (
+                    <button key={t.id} type="button" className="st-btn" title={t.desc}
+                      data-active={String((draft.reasoning_effort || 'auto') === t.id)}
+                      onClick={() => setDraft({ ...draft, reasoning_effort: t.id })}>{t.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {(draft.reasoning_effort || 'auto') === 'custom' && (
+                <div className="st-row">
+                  <div className="st-field" style={{ flex: 1 }}>
+                    <label>自定义思考 Token 预算（如 8192 / 24576 / 65536）</label>
+                    <input className="st-input" type="number" min="0" max="128000" step="1024"
+                      value={draft.thinking_budget ?? 8192}
+                      onChange={(e) => setDraft({ ...draft, thinking_budget: Number(e.target.value) || 0 })} />
+                  </div>
+                  <div className="st-field" style={{ flex: 1 }}>
+                    <label>可选：自定义原始 effort 参数名（如 minimal / xhigh）</label>
+                    <input className="st-input" value={draft.custom_effort || ''}
+                      onChange={(e) => setDraft({ ...draft, custom_effort: e.target.value })}
+                      placeholder="留空按预算自动映射" />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                协议映射预览：{buildReasoningRequestParams({
+                  baseUrl: draft.local_mode ? draft.local_base_url : (draft.provider_base_url || draft.provider_base),
+                  model: draft.local_mode ? draft.local_model : (draft.model || draft.provider_model),
+                  tier: draft.reasoning_effort || 'auto',
+                  customBudget: draft.thinking_budget,
+                  customEffort: draft.custom_effort,
+                }).summary}
+              </div>
+              <div className="st-row">
+                <button type="button" className="st-btn st-btn-primary" onClick={() => handleSaveModel(false)}>保存推理参数</button>
               </div>
             </div>
 
@@ -349,10 +423,13 @@ export default function SettingsModal() {
                     <button key={t} type="button" className="st-btn" data-active={String(settings.theme === t)}
                       onClick={() => updateVisualSettings({ theme: t })}>{label}</button>
                   ))}
-                  {[['dynamic', '灵动四幕 (1.0×)'], ['balanced', '轻盈平衡 (0.55×)'], ['reduced', '静息无障碍 (0×)']].map(([mo, label]) => (
+                  {[['dynamic', '灵动四幕 (1.0×)'], ['balanced', '轻盈平衡 (0.58×)'], ['reduced', '静息无障碍 (0×)']].map(([mo, label]) => (
                     <button key={mo} type="button" className="st-btn" data-active={String(settings.motion === mo)}
                       onClick={() => updateVisualSettings({ motion: mo })}>{label}</button>
                   ))}
+                  <button type="button" className="st-btn st-btn-primary" onClick={() => fireShellImpact('left', 'strong')}>
+                    ⚡ 试一下物理撞击手感（5.5px + 弧形高光）
+                  </button>
                 </div>
               </div>
             </div>

@@ -54,7 +54,11 @@
     pointer-events: none;
   }
   .ov-toast {
-    pointer-events: auto;
+    /* 纯展示态：绝不能吃指针事件。
+       实测（e2e-r3 回归）：一条「议题识别为视频制作…」的 info toast 悬在右下，
+       正好盖住群聊的「■ 中止」按钮，Playwright 判定 pointer events 被拦截，
+       点击超时 —— 也就是**用户此刻也点不到中止**。容器已 none，但每条 auto 让它失效。 */
+    pointer-events: none;
     padding: 10px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-strong);

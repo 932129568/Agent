@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { readVisualPrefs, applyVisualPrefs } from '../platform/theme.js'
+import { readStorage, writeStorage } from '../platform/storage.js'
+import { GROUP_ROSTER_PRESETS, normalizeGroupMember, routeGroupMembers } from '../services/capabilityRouter.js'
 import * as api from '../services/bridge.js'
 import {
   ensureTree,
@@ -19,6 +21,24 @@ import { COLLABORATION_DEFAULTS, normalizeCollaborationConfig, runDualModelColla
 import { isAbort } from '../services/errors.js'
 
 const initialVisual = readVisualPrefs()
+const GROUP_MEMBERS_KEY = 'harbor.v3.group.members'
+
+function loadSavedGroupMembers() {
+  try {
+    const raw = readStorage(GROUP_MEMBERS_KEY, '')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((m, i) => normalizeGroupMember(m, i))
+      }
+    }
+  } catch {}
+  return GROUP_ROSTER_PRESETS.engineering.members.map((m, i) => normalizeGroupMember(m, i))
+}
+
+function saveGroupMembers(list) {
+  try { writeStorage(GROUP_MEMBERS_KEY, JSON.stringify(list)) } catch {}
+}
 
 function makeSession(title = '新对话', kind = 'chat') {
   const now = Date.now()
@@ -47,6 +67,7 @@ const initialState = Object.freeze({
     searchDockOpen: false,
     composerDraft: '',
     composerTokens: [],
+    impactSignal: null,        // { seq, edge, strength } 驱动 AppShell <main> 校准后的物理撞击
     toasts: [],
   },
   sessions: {
@@ -77,8 +98,11 @@ const initialState = Object.freeze({
       model: 'glm-4.5-flash',
       temperature: 0.7,
       top_p: 0.9,
+      context_window: 128000,
       max_tokens: 4096,
       reasoning_effort: 'auto',
+      thinking_budget: 8192,
+      custom_effort: '',
       system_prompt: '',
       enable_search: true,
       tool_mode: 'auto',
@@ -133,14 +157,22 @@ const initialState = Object.freeze({
   },
   group: {
     activeGroupId: 'grp_default',
-    members: [
-      { id: 'm1', name: '架构师', role: '拆解系统边界、识别风险并给出核心方案' },
-      { id: 'm2', name: '实现工程师', role: '将方案落地为精确可运行代码与边界校验' },
-      { id: 'm3', name: '代码审查员', role: '挑出缺陷、竞态与未覆盖场景并给出收口结论' },
-    ],
+    routingMode: 'smart',      // 'smart'（按能力路由） | 'all'（全员按序接力）
+    members: loadSavedGroupMembers(),
     messages: [],
     files: [],
+    status: 'idle',            // 'idle' | 'running' | 'paused' | 'done'
     running: false,
+    activeIndex: -1,
+    activeMembers: [],
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    liveReasoning: '',
+    cps: 0,
+    lastIntent: null,
+    routingWarning: '',
+    checkpoint: null,          // { topic, plannedMembers, nextIndex, relayContext, intentLabel }
   },
   search: {
     query: '',
@@ -158,6 +190,10 @@ let takeoverResolver = null
 let budgetResolver = null
 let teamAbortCtrl = null
 let collabAbortCtrl = null
+let groupAbortCtrl = null
+let groupAbortReason = ''
+let impactSeq = 0
+const relayDemoTimers = []
 let saveSessionsTimer = 0
 
 function emit() { for (const fn of listeners) fn() }
@@ -177,15 +213,28 @@ export function useSlice(name) {
 }
 
 /* ---- 通用 UI & 图层调度（LAW-05：Modal 与 Dock 强互斥） ---- */
-export function setActivePanel(panel) { patchSlice('ui', (u) => ({ ...u, activePanel: panel })) }
+export function fireShellImpact(edge = 'left', strength = 'medium') {
+  patchSlice('ui', (u) => ({ ...u, impactSignal: { seq: ++impactSeq, edge, strength } }))
+}
+export function setActivePanel(panel) {
+  const prev = state.ui.activePanel
+  patchSlice('ui', (u) => ({ ...u, activePanel: panel }))
+  if (prev !== panel) fireShellImpact('left', 'panel')
+}
 export function toggleSidebar() { patchSlice('ui', (u) => ({ ...u, sidebarOpen: !u.sidebarOpen })) }
 export function openModal(modalId) { patchSlice('ui', (u) => ({ ...u, activeModal: modalId, dockOpen: false })) }
-export function closeModal() { patchSlice('ui', (u) => ({ ...u, activeModal: null })) }
+export function closeModal(impactEdge = 'left') {
+  const hadModal = !!state.ui.activeModal
+  patchSlice('ui', (u) => ({ ...u, activeModal: null }))
+  if (hadModal) fireShellImpact(impactEdge, 'strong')
+}
 export function toggleDock(tab) {
+  const wasOpen = state.ui.dockOpen
   patchSlice('ui', (u) => {
     const willOpen = tab ? true : !u.dockOpen
     return { ...u, dockOpen: willOpen, dockTab: tab || u.dockTab, activeModal: willOpen ? null : u.activeModal }
   })
+  if (wasOpen && !tab) fireShellImpact('right', 'strong')
 }
 export function setDockTab(tab) { patchSlice('ui', (u) => ({ ...u, dockTab: tab })) }
 export function setDockPreview(text) {
@@ -338,7 +387,8 @@ export function compactSessionNow(sid, force = true) {
   const res = compactSessionHistory(target, {
     force,
     level: c.saver_level || 'std',
-    localMode: !!c.local_mode,
+    localMode: !!c.local_mode || Number(c.context_window) > 0,
+    localCtxWindow: Number(c.context_window) || 128000,
   })
   if (!res.compacted) {
     if (force) pushToast('当前消息条数较少，无需压缩', 'info')
@@ -442,8 +492,11 @@ export function resolveEndpointConfig(preferLocal = false) {
       model: c.local_model || c.model || 'qwen2.5:7b',
       temperature: c.temperature,
       top_p: c.top_p,
-      max_tokens: c.max_tokens,
-      reasoning_effort: c.reasoning_effort,
+      context_window: Number(c.context_window) || 32768,
+      max_tokens: Number(c.max_tokens) || 4096,
+      reasoning_effort: c.reasoning_effort || 'auto',
+      thinking_budget: Number(c.thinking_budget) || 8192,
+      custom_effort: String(c.custom_effort || ''),
       system_prompt: c.system_prompt,
       tool_mode: c.tool_mode,
     }
@@ -457,8 +510,11 @@ export function resolveEndpointConfig(preferLocal = false) {
     model: pickedModel === 'auto' ? 'glm-4.5-flash' : pickedModel,
     temperature: c.temperature,
     top_p: c.top_p,
-    max_tokens: c.max_tokens,
-    reasoning_effort: c.reasoning_effort,
+    context_window: Number(c.context_window) || 128000,
+    max_tokens: Number(c.max_tokens) || 4096,
+    reasoning_effort: c.reasoning_effort || 'auto',
+    thinking_budget: Number(c.thinking_budget) || 8192,
+    custom_effort: String(c.custom_effort || ''),
     system_prompt: c.system_prompt,
     tool_mode: c.tool_mode,
   }
@@ -924,41 +980,302 @@ export async function checkAppUpdate(manual = true) {
   }
 }
 
+export function setGroupRoutingMode(mode) {
+  patchSlice('group', { routingMode: mode === 'all' ? 'all' : 'smart' })
+}
+
+export function addGroupMember(memberInput) {
+  const next = normalizeGroupMember(memberInput, state.group.members.length)
+  const list = [...state.group.members, next]
+  saveGroupMembers(list)
+  patchSlice('group', { members: list })
+  pushToast(`已添加角色「${next.name}」`, 'ok')
+}
+
+export function updateGroupMember(id, patch) {
+  const list = state.group.members.map((m, idx) => (m.id === id ? normalizeGroupMember({ ...m, ...patch, id }, idx) : m))
+  saveGroupMembers(list)
+  patchSlice('group', { members: list })
+}
+
+export function removeGroupMember(id) {
+  if (state.group.members.length <= 1) {
+    pushToast('至少需要保留 1 名群聊角色', 'warn')
+    return
+  }
+  const list = state.group.members.filter((m) => m.id !== id)
+  saveGroupMembers(list)
+  patchSlice('group', { members: list })
+}
+
+export function applyGroupPreset(presetKey) {
+  const preset = GROUP_ROSTER_PRESETS[presetKey]
+  if (!preset) return
+  const list = preset.members.map((m, i) => normalizeGroupMember(m, i))
+  saveGroupMembers(list)
+  patchSlice('group', { members: list, routingWarning: '' })
+  pushToast(`已切换名册模板：${preset.name}`, 'ok')
+}
+
+export function pauseGroupRelay() {
+  if (!state.group.running) return
+  groupAbortReason = 'pause'
+  if (groupAbortCtrl) groupAbortCtrl.abort()
+}
+
+export function abortGroupRelay() {
+  while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
+  groupAbortReason = 'abort'
+  if (groupAbortCtrl) groupAbortCtrl.abort()
+  patchSlice('group', {
+    running: false,
+    status: 'idle',
+    activeIndex: -1,
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    liveReasoning: '',
+    cps: 0,
+    checkpoint: null,
+  })
+  pushToast('已彻底中止本轮群聊接力', 'info')
+}
+
+export async function resumeGroupRelay(extraNote = '') {
+  const ck = state.group.checkpoint
+  if (!ck || state.group.running) return
+  return _executeGroupRelayLoop({
+    topic: ck.topic,
+    plannedMembers: ck.plannedMembers,
+    startIndex: ck.nextIndex,
+    relayContext: extraNote.trim()
+      ? [...ck.relayContext, { role: 'user', content: `【主持人中途补充指令】${extraNote.trim()}` }]
+      : [...ck.relayContext],
+    intentLabel: ck.intentLabel,
+  })
+}
+
 export async function runGroupRelay(topic) {
   const clean = String(topic || '').trim()
-  if (!clean) return
-  const ep = resolveEndpointConfig()
-  const members = state.group.members
+  if (!clean || state.group.running) return
+  while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
+
+  const routed = routeGroupMembers(clean, state.group.members, state.group.routingMode)
   patchSlice('group', (g) => ({
     ...g,
-    running: true,
+    lastIntent: routed.intent,
+    routingWarning: routed.missingCapabilityWarning,
     messages: [...g.messages, { id: 'gm_' + Date.now(), author: '我（主持人）', role: 'user', content: clean }],
   }))
-  const relayContext = [{ role: 'user', content: clean }]
+  if (routed.missingCapabilityWarning) pushToast(routed.missingCapabilityWarning, 'info')
+
+  return _executeGroupRelayLoop({
+    topic: clean,
+    plannedMembers: routed.selected,
+    startIndex: 0,
+    relayContext: [{ role: 'user', content: clean }],
+    intentLabel: `${routed.intent.label} (${routed.selected.length} 棒)`,
+  })
+}
+
+async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relayContext, intentLabel }) {
+  const baseEp = resolveEndpointConfig()
+  // 从最新名册回读角色配置，允许用户在暂停期间修改下一棒的模型或人设
+  const latestMembers = plannedMembers.map((pm) => state.group.members.find((m) => m.id === pm.id) || pm)
+
+  groupAbortReason = ''
+  groupAbortCtrl = new AbortController()
+
+  patchSlice('group', {
+    running: true,
+    status: 'running',
+    activeMembers: latestMembers,
+    activeIndex: startIndex,
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    liveReasoning: '',
+    cps: 0,
+    checkpoint: null,
+  })
+
+  let currentIdx = startIndex
+  let livePartial = ''
+
   try {
-    for (const m of members) {
+    for (let i = startIndex; i < latestMembers.length; i++) {
+      currentIdx = i
+      livePartial = ''
+      const m = latestMembers[i]
+      if (groupAbortCtrl.signal.aborted) break
+
+      // 棒次交接瞬间（第 2 棒起播 460ms 实体光梭交棒动画）
+      if (i > startIndex) {
+        const prevName = latestMembers[i - 1].name
+        patchSlice('group', { activeIndex: i, handoffFrom: prevName, handoffTo: m.name, liveContent: '', liveReasoning: '', cps: 0 })
+        await new Promise((r) => setTimeout(r, 460))
+        if (groupAbortCtrl.signal.aborted) break
+      }
+
+      patchSlice('group', { activeIndex: i, handoffFrom: '', handoffTo: '', liveContent: '', liveReasoning: '', cps: 0 })
+
+      const memberEp = {
+        ...baseEp,
+        baseUrl: m.baseUrl || baseEp.baseUrl,
+        model: m.model || baseEp.model,
+        max_tokens: m.maxTokens > 0 ? m.maxTokens : baseEp.max_tokens,
+        reasoning_effort: (m.reasoningTier && m.reasoningTier !== 'auto') ? m.reasoningTier : baseEp.reasoning_effort,
+        thinking_budget: m.customThinkingBudget > 0 ? m.customThinkingBudget : baseEp.thinking_budget,
+      }
+
       const res = await streamChatCompletion({
-        ...ep,
+        baseUrl: memberEp.baseUrl,
+        apiKey: memberEp.apiKey,
+        model: memberEp.model,
+        maxTokens: memberEp.max_tokens,
+        reasoningEffort: memberEp.reasoning_effort,
+        thinkingBudget: memberEp.thinking_budget,
+        customEffort: memberEp.custom_effort,
+        temperature: memberEp.temperature,
+        topP: memberEp.top_p,
+        signal: groupAbortCtrl.signal,
         messages: [
-          { role: 'system', content: `你是群聊接力成员「${m.name}」，职责：${m.role}。请承接前序发言输出简洁高密度结论。` },
+          {
+            role: 'system',
+            content: `你是群聊接力第 ${i + 1}/${latestMembers.length} 棒成员「${m.name}」，专长能力：${(m.capabilities || ['text']).join('/')}，职责：${m.persona}。请承接前序发言输出简洁、可直接落地的高密度结论。`,
+          },
           ...relayContext,
         ],
+        onDelta: ({ reasoning, content, cps }) => {
+          livePartial = content
+          patchSlice('group', { liveReasoning: reasoning, liveContent: content, cps })
+        },
       })
+
       const reply = String(res.content || '').trim()
-      relayContext.push({ role: 'assistant', content: `【${m.name}】\n${reply}` })
+      relayContext.push({ role: 'assistant', content: `【${m.name} (${memberEp.model})】\n${reply}` })
       patchSlice('group', (g) => ({
         ...g,
-        messages: [...g.messages, { id: 'gm_' + Date.now() + '_' + m.id, author: m.name, role: 'assistant', content: reply }],
+        liveContent: '',
+        liveReasoning: '',
+        cps: 0,
+        messages: [
+          ...g.messages,
+          {
+            id: 'gm_' + Date.now() + '_' + m.id,
+            author: `${m.name}`,
+            model: memberEp.model,
+            role: 'assistant',
+            content: reply,
+            reasoning: res.reasoning || '',
+          },
+        ],
       }))
     }
-    const handoff = `【交接文档】\n议题：${clean}\n\n` + relayContext.slice(1).map((x) => x.content).join('\n\n---\n\n')
-    await api.groupFilesWrite(state.group.activeGroupId, '默认群聊', '主持人', clean.slice(0, 32), handoff).catch(() => {})
-    await refreshGroupFiles()
+
+    if (!groupAbortCtrl.signal.aborted) {
+      const handoff = `【交接文档】\n议题：${topic}\n\n` + relayContext.slice(1).map((x) => x.content).join('\n\n---\n\n')
+      await api.groupFilesWrite(state.group.activeGroupId, '默认群聊', '主持人', topic.slice(0, 32), handoff).catch(() => {})
+      await refreshGroupFiles()
+      patchSlice('group', { running: false, status: 'done', activeIndex: latestMembers.length, handoffFrom: '', handoffTo: '', cps: 0, checkpoint: null })
+      pushToast('全员接力完成并已归档交接文档', 'ok')
+    }
   } catch (e) {
-    pushToast(`群聊接力中断：${e.message}`, 'err')
+    if (isAbort(e)) {
+      if (groupAbortReason === 'pause') {
+        if (livePartial.trim()) {
+          const curMember = latestMembers[currentIdx]
+          patchSlice('group', (g) => ({
+            ...g,
+            messages: [...g.messages, { id: 'gm_p_' + Date.now(), author: `${curMember.name}（已暂停部分）`, role: 'assistant', content: livePartial.trim() }],
+          }))
+        }
+        patchSlice('group', {
+          running: false,
+          status: 'paused',
+          activeIndex: currentIdx,
+          handoffFrom: '',
+          handoffTo: '',
+          cps: 0,
+          checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel },
+        })
+        pushToast(`接力已暂停在第 ${currentIdx + 1} 棒，可随时继续`, 'info')
+      }
+    } else {
+      patchSlice('group', {
+        running: false,
+        status: 'paused',
+        activeIndex: currentIdx,
+        cps: 0,
+        checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel },
+      })
+      pushToast(`接力异常（可点继续重试当前棒）：${e.message}`, 'err')
+    }
   } finally {
-    patchSlice('group', { running: false })
+    groupAbortCtrl = null
   }
+}
+
+/** 零 Token 一键演示独立接力轨道 + 光梭交棒动效（避免视觉疲劳的专属科技轨道风格） */
+export function triggerRelayShowcase() {
+  while (relayDemoTimers.length) clearTimeout(relayDemoTimers.pop())
+  const members = state.group.members.length ? state.group.members : GROUP_ROSTER_PRESETS.video.members
+  const at = (ms, fn) => relayDemoTimers.push(setTimeout(fn, ms))
+
+  patchSlice('group', {
+    running: true,
+    status: 'running',
+    activeMembers: members,
+    activeIndex: 0,
+    handoffFrom: '',
+    handoffTo: '',
+    cps: 44,
+    lastIntent: { capability: members[0].capabilities[0] || 'text', label: '接力动画演示' },
+    liveContent: `【${members[0].name}】正在拆解任务边界与首棒核心产出…`,
+    liveReasoning: '',
+  })
+
+  if (members.length >= 2) {
+    at(1250, () => patchSlice('group', {
+      activeIndex: 1,
+      handoffFrom: members[0].name,
+      handoffTo: members[1].name,
+      cps: 58,
+      liveContent: `正在接收 ${members[0].name} 交接方案，准备进入第二棒执行…`,
+    }))
+    at(1800, () => patchSlice('group', {
+      handoffFrom: '',
+      handoffTo: '',
+      cps: 66,
+      liveContent: `【${members[1].name}】已点燃接力站点，正在生成高密度细化方案与执行清单…`,
+    }))
+  }
+
+  if (members.length >= 3) {
+    at(2950, () => patchSlice('group', {
+      activeIndex: 2,
+      handoffFrom: members[1].name,
+      handoffTo: members[2].name,
+      cps: 62,
+      liveContent: `正在接收 ${members[1].name} 交接稿，准备终审收口…`,
+    }))
+    at(3500, () => patchSlice('group', {
+      handoffFrom: '',
+      handoffTo: '',
+      cps: 50,
+      liveContent: `【${members[2].name}】正在做最终一致性核对与交付整理…`,
+    }))
+  }
+
+  at(4550, () => patchSlice('group', {
+    running: false,
+    status: 'done',
+    activeIndex: members.length,
+    handoffFrom: '',
+    handoffTo: '',
+    liveContent: '',
+    cps: 0,
+  }))
 }
 
 export async function refreshGroupFiles() {
