@@ -224,7 +224,8 @@ const server = http.createServer(async (req, res) => {
         analysis: '主持人已按任务特征动态筛选并重排最佳交接顺序',
         plan: ranked.map((r) => ({ id: r.id, taskBrief: `完成${r.name}阶段核心交付` })),
       })
-      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' })
+      // 注意：SSE 头已在本分支上方统一写过（同一请求只允许写一次），
+      // 这里再 writeHead 会抛 ERR_HTTP_HEADERS_SENT —— r10 交付的脚本就是栽在这。
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: modJson } }] })}\n\n`)
       res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 60, total_tokens: 1060, prompt_tokens_details: { cached_tokens: 950 } } })}\n\n`)
       res.write('data: [DONE]\n\n')

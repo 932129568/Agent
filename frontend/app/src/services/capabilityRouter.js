@@ -241,7 +241,16 @@ export function parseModeratorPlan(rawText, members = [], fallbackRouted = null)
   }
 
   // 兜底：使用本地拓扑智能排序（规划 → UI设计 → 实现 → 审查）
-  const fb = fallbackRouted || routeGroupMembers('', list, 'smart', '')
+  // 兜底必须保留**全员**：原实现用空意图去调 routeGroupMembers('')，
+  // 等于按空条件筛人 —— m_ui（无 capabilities 字段）与 m_qa 会被静默丢掉，
+  // 于是模型输出不可用时班组从 4 人缩到 2 人，且界面不会提示。
+  // 改为：调用方给了 fallbackRouted 就用它，否则取全员并按工作流阶段排序。
+  const _fbIntent = classifyTaskIntent('', '')
+  const fb = fallbackRouted || {
+    selected: [...list].sort((a, b) => workflowStageRank(a) - workflowStageRank(b)),
+    // 下游要读 fb.intent.label（本函数末尾的 intentLabel），不能省
+    intent: { ..._fbIntent, label: `全员按序 (${list.length} 棒)` },
+  }
   const fbSelected = fb.selected.map((m) => ({
     ...m,
     taskBrief: m.taskBrief || m.persona,

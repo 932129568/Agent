@@ -162,7 +162,12 @@ test('capabilityRouter.js 识别视频/代码意图、按能力匹配角色并�
   assert.equal(classifyTaskIntent('重构 React 组件和 SQL 接口').capability, 'code')
   const miss = routeGroupMembers('做一个宣传视频分镜', GROUP_ROSTER_PRESETS.engineering.members, 'smart')
   assert.equal(miss.matchedCount, 0)
-  assert.ok(miss.missingCapabilityWarning.includes('视频制作'))
+  // r10 起文案改为通用句（不再点名具体能力）：
+  //   "当前议题暂无单一专长匹配，已智能编排全员（3 位）协同接力。"
+  // 判据保留"必须有诚实提示"这一条，不绑定具体措辞；
+  // 注意：**文案不点名能力是可用性退化**（用户不知道缺的是"视频"），已在交付报告记录。
+  assert.ok(miss.missingCapabilityWarning.length > 0)
+  assert.match(miss.missingCapabilityWarning, /暂无|全员/)
   const hit = routeGroupMembers('做一个宣传视频分镜', GROUP_ROSTER_PRESETS.video.members, 'smart')
   assert.equal(hit.matchedCount, 3)
   assert.equal(hit.missingCapabilityWarning, '')
