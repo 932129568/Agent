@@ -1,37 +1,53 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useSlice, closeModal, toggleDock, fireShellImpact } from '../state/store.js'
-import { playModalFlyOut } from '../platform/kinetic.js'
+import { playModalMorphIn, playModalFlyOut, getMotionAnchorRect } from '../platform/kinetic.js'
 import ContextDock from '../features/dock/ContextDock.jsx'
 import SettingsModal from '../features/settings/SettingsModal.jsx'
 import MarketModal from '../features/market/MarketModal.jsx'
 import CommandPalette from '../features/command/CommandPalette.jsx'
 import './OverlayRoot.css'
 
+const MODAL_HOME = {
+  settings: { anchorId: 'nav-settings', edge: 'left' },
+  market: { anchorId: 'nav-market', edge: 'left' },
+  command: { anchorId: 'btn-command', edge: 'top' },
+}
+
 export default function OverlayRoot() {
   const ui = useSlice('ui')
   const settings = useSlice('settings')
+  const backdropRef = useRef(null)
   const modalRef = useRef(null)
   const closingRef = useRef(false)
 
+  // 打开时 useLayoutEffect 首帧同步执行 FLIP 空间展开（从触发/归属按钮位置丝滑展开，绝不闪开）
+  useLayoutEffect(() => {
+    closingRef.current = false
+    if (!ui.activeModal || !modalRef.current) return
+    const home = MODAL_HOME[ui.activeModal] || { anchorId: 'nav-settings', edge: 'left' }
+    const startRect = ui.modalOriginRect || getMotionAnchorRect(home.anchorId)
+    playModalMorphIn(modalRef.current, backdropRef.current, startRect, home.edge, settings.motion)
+  }, [ui.activeModal])
+
+  // 关闭时：窗口平滑飞向其归属摆放按钮位置 → 撞击瞬间传递真实矢量动量给主壳 + 目标按钮微回弹
   const handleCloseModal = () => {
     if (closingRef.current || !ui.activeModal) return
     closingRef.current = true
-    const edge = ui.activeModal === 'command' ? 'top' : 'left'
+    const home = MODAL_HOME[ui.activeModal] || { anchorId: 'nav-settings', edge: 'left' }
+    const targetRect = getMotionAnchorRect(home.anchorId) || ui.modalOriginRect
     playModalFlyOut(
       modalRef.current,
-      edge,
+      home.edge,
       settings.motion,
-      () => fireShellImpact(edge, 'strong'),
+      (vec) => fireShellImpact(home.edge, 'strong', vec),
       () => {
         closingRef.current = false
-        closeModal(edge)
-      }
+        // 撞击已在飞抵瞬间触发，此处 skipImpact=true 防止重复二次冲击
+        closeModal(home.edge, true)
+      },
+      { backdropEl: backdropRef.current, targetRect, anchorId: home.anchorId }
     )
   }
-
-  useEffect(() => {
-    closingRef.current = false
-  }, [ui.activeModal])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -45,15 +61,15 @@ export default function OverlayRoot() {
   }, [ui.activeModal, ui.dockOpen, settings.motion])
 
   const modalTitle = ui.activeModal === 'settings'
-    ? '设置中心（模型推理 / MCP 沙箱 / 记忆同步 / 真透色与动效）'
-    : (ui.activeModal === 'market' ? '功能市场与多专家团队编排器' : '命令面板 (Ctrl+K)')
+    ? '设置中心（模型推理 / 安全护栏 / 记忆同步 / 真透色与动效）'
+    : (ui.activeModal === 'market' ? '行业专家包、热门 Skill 库与团队编排' : '命令面板 (Ctrl+K)')
 
   return (
     <>
       <ContextDock />
 
       {ui.activeModal && (
-        <div className="ov-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleCloseModal() }}>
+        <div ref={backdropRef} className="ov-backdrop" onClick={(e) => { if (e.target === e.currentTarget) handleCloseModal() }}>
           <div ref={modalRef} className="ov-modal" data-size={ui.activeModal === 'command' ? 'compact' : 'wide'} role="dialog" aria-modal="true">
             <div className="ov-head">
               <h2 className="ov-title">{modalTitle}</h2>

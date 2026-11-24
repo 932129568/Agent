@@ -1,9 +1,10 @@
 /**
- * React 19 全量 Agent 运行引擎（Pack 2 升级版）：
- * - 写后 readFileSet（反斜杠归一）+ listDirsSet 失效 + parsed.diff 消费即剥离（0 Token 膨胀）；
- * - 成本三维熔断（会话预算硬停 / 同工具签名 ×3 循环熔断 / 10 轮无进展暂停）；
- * - CAPTCHA_REQUIRED 自动挂起人工接管（browser_takeover）；
- * - 写文件收尾前三级解析 verifyCmd 自动验收自检闭环（失败回灌 1 次自修）。
+ * React 19 全量 Agent 运行引擎（R6 90%+ KV-Cache + 群聊真工具统一引擎）：
+ * - Append-Only Wire Prefix：会话级冻结静态前缀 + 动态记忆去重后置 + 返回 wiredUserContent / wireTrail 供下轮逐字节复现；
+ * - 护栏细节严格对齐后端 commands.js / guard.js（{ cmd } / { path }），并同时拦截 block 与 deny；
+ * - 写后 readFileSet（反斜杠归一）+ listDirsSet 失效 + parsed.diff 消费即剥离；
+ * - 成本三维熔断 + CAPTCHA_REQUIRED 人工接管 + 写后三级自检闭环；
+ * - 主对话与群聊成员共用同一套工具执行闭环（群聊真正能写文件、跑命令、建网页）。
  */
 import * as api from './bridge.js'
 import { streamChatCompletion } from './modelTransport.js'
@@ -24,12 +25,18 @@ export const WRITE_TOOLS = new Set([
 export const SHELL_TOOLS = new Set(['run_command', 'run_powershell'])
 const _toolsCache = new Map()
 const _frozenPrefixBySid = new Map() // sid -> { key, systemPrompt, tools, hash }
+const _injectedMemoriesBySid = new Map() // sid -> Set<string>（防止每轮重复注入相同记忆破坏缓存）
 const TOOLS_CACHE_TTL_MS = 30000
 
 /** 显式失效会话冻结前缀（仅在切换工作区或手动 /compact 时调用） */
 export function invalidateSessionPrefixCache(sid) {
-  if (sid) _frozenPrefixBySid.delete(String(sid))
-  else _frozenPrefixBySid.clear()
+  if (sid) {
+    _frozenPrefixBySid.delete(String(sid))
+    _injectedMemoriesBySid.delete(String(sid))
+  } else {
+    _frozenPrefixBySid.clear()
+    _injectedMemoriesBySid.clear()
+  }
 }
 
 export function normCachePath(p) {
@@ -77,6 +84,17 @@ export function extractAndStripDiff(toolName, args, rawResult) {
   return { cleanJson: JSON.stringify(parsed), diff, ok }
 }
 
+/** 构造与后端 guard.js / commands.js / files.js 逐字段一致的护栏 detail，确保 confirmToken 摘要 100% 命中 */
+export function buildGuardDetail(name, args = {}) {
+  if (SHELL_TOOLS.has(name) || name === 'run_admin_command') {
+    return { cmd: String(args.cmd || args.command || '').trim() }
+  }
+  if (name === 'delete_path') {
+    return { path: String(args.path || args.file_path || '').trim() }
+  }
+  return args || {}
+}
+
 async function dispatchSingleTool({ name, args, sid, signal, readonlyMode, requestApproval }) {
   if (readonlyMode && (WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name))) {
     return JSON.stringify({ skipped: true, info: '当前处于只读模式，写文件与命令工具已禁用。' })
@@ -87,15 +105,16 @@ async function dispatchSingleTool({ name, args, sid, signal, readonlyMode, reque
 
   if (WRITE_TOOLS.has(name) || SHELL_TOOLS.has(name) || name.startsWith('browser_') || name.startsWith('mcp__') || name === 'software_call') {
     try {
-      const chk = await api.guardCheck(name, args, { sid, signal })
-      if (chk && chk.action === 'deny') {
-        return JSON.stringify({ skipped: true, info: chk.reason || '被安全护栏规则拒绝执行' })
+      const guardDetail = buildGuardDetail(name, args)
+      const chk = await api.guardCheck(name, guardDetail, { sid, signal })
+      if (chk && (chk.action === 'block' || chk.action === 'deny')) {
+        return JSON.stringify({ skipped: true, info: chk.reason || '被安全护栏保护名单拒绝执行' })
       }
       if (chk && chk.action === 'confirm' && typeof requestApproval === 'function') {
         const decision = await requestApproval({
           tool: name,
           args,
-          reason: chk.reason || `AI 请求执行 ${name}`,
+          reason: chk.reason || `安全护栏拦截（${chk.label || name}），请在「设置 → 工具、护栏与沙箱」调整审批档位或点此放行`,
           danger: name === 'delete_path' || SHELL_TOOLS.has(name),
         })
         if (!decision || !decision.ok) {
@@ -107,7 +126,7 @@ async function dispatchSingleTool({ name, args, sid, signal, readonlyMode, reque
         }
         confirmed = true
         if (decision.trustSession) await api.guardSessionTrust(name, { sid }).catch(() => {})
-        const tk = await api.guardConfirmToken(name, args, { sid }).catch(() => null)
+        const tk = await api.guardConfirmToken(name, guardDetail, { sid }).catch(() => null)
         token = (tk && tk.token) || ''
       }
     } catch {}
@@ -150,6 +169,10 @@ export async function runAgentConversation({
   workspacePath = '',
   sessionBudgetRmb = 0,
   correctiveDirective = '',
+  allowTools = true,
+  maxRounds = 14,
+  skipMemoryRecall = false,
+  skipSelfCheck = false,
   signal,
   onEvent,
   requestApproval,
@@ -164,7 +187,8 @@ export async function runAgentConversation({
   // 前沿 KV-Cache 策略 1：会话级冻结静态前缀（传空 query 调 buildSystemPrompt('')，杜绝动态记忆污染 messages[0]）
   const isGlm = /bigmodel\.cn/i.test(endpointConfig.baseUrl || '')
   const includeMcp = !!endpointConfig.hasEnabledMcp
-  const prefixScopeKey = `${workspacePath || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
+  const toolsOn = allowTools !== false && endpointConfig.tool_mode !== 'off'
+  const prefixScopeKey = `${workspacePath || ''}|${toolsOn ? 'on' : 'off'}|${includeMcp}|${isGlm}|${endpointConfig.system_prompt || ''}`
   const existingFrozen = sid ? _frozenPrefixBySid.get(String(sid)) : null
 
   let systemPrompt = endpointConfig.system_prompt || '你是 Harbor 桌面智能工程助手，请始终用简体中文清晰回答。'
@@ -182,7 +206,7 @@ export async function runAgentConversation({
       const sysRes = await api.buildSystemPrompt('', { sid, signal })
       if (typeof sysRes === 'string' && sysRes.trim()) systemPrompt = sysRes
     } catch {}
-    if (endpointConfig.tool_mode !== 'off') {
+    if (toolsOn) {
       const cacheKey = `${sid || ''}|${endpointConfig.tool_mode || 'auto'}|${includeMcp}|${isGlm}`
       const hit = _toolsCache.get(cacheKey)
       if (hit && hit.exp > Date.now()) {
@@ -204,13 +228,23 @@ export async function runAgentConversation({
     }
   }
 
-  // 前沿 KV-Cache 策略 2：动态按 query 检索的记忆不进 messages[0]，后置到最新一轮用户消息的 <system-reminder>
+  // 前沿 KV-Cache 策略 2：动态记忆去重后置（同会话已注入过的记忆绝不重复注入）
   let dynamicMemories = []
-  if (String(userQuery || '').trim()) {
+  if (!skipMemoryRecall && String(userQuery || '').trim()) {
     try {
       const mRes = await api.memorySearch(String(userQuery).trim(), 3, { sid, signal })
       const rawItems = (mRes && (mRes.items || mRes.results)) || (Array.isArray(mRes) ? mRes : [])
-      if (Array.isArray(rawItems)) dynamicMemories = rawItems
+      if (Array.isArray(rawItems)) {
+        const seen = sid ? (_injectedMemoriesBySid.get(String(sid)) || new Set()) : new Set()
+        for (const item of rawItems) {
+          const txt = String(typeof item === 'string' ? item : (item && (item.text || item.content || item.value)) || '').trim()
+          if (txt && !seen.has(txt)) {
+            dynamicMemories.push(txt)
+            seen.add(txt)
+          }
+        }
+        if (sid) _injectedMemoriesBySid.set(String(sid), seen)
+      }
     } catch {}
   }
 
@@ -220,10 +254,21 @@ export async function runAgentConversation({
     readonlyMode: false,
     correctiveDirective,
   })
+  const baseWireMsgs = attachReminderToLatestUserTurn(sanitizeMessagesForApi(historyMessages), tailReminder)
+  // 记录本轮发给模型的精确末条用户内容（供下轮原样回放，保住 90%+ 历史前缀缓存！）
+  let wiredUserContent = ''
+  for (let i = baseWireMsgs.length - 1; i >= 0; i--) {
+    if (baseWireMsgs[i] && baseWireMsgs[i].role === 'user') {
+      wiredUserContent = String(baseWireMsgs[i].content || '')
+      break
+    }
+  }
+
   const workingMsgs = [
     { role: 'system', content: systemPrompt },
-    ...attachReminderToLatestUserTurn(sanitizeMessagesForApi(historyMessages), tailReminder),
+    ...baseWireMsgs,
   ]
+  const wireTrail = [] // 严格记录本轮产生的 assistant(tool_calls) + tool 消息，供下轮 append-only 复现
 
   const readFileSet = new Set()
   const listDirsSet = new Set()
@@ -238,21 +283,21 @@ export async function runAgentConversation({
   let readonlyMode = false
   let factsCount = 0
 
-  for (let round = 0; round < 14; round++) {
+  for (let round = 0; round < maxRounds; round++) {
     if (signal && signal.aborted) break
 
-    // 预算硬停防御
     const budgetHit = defense.checkBudget((session && session.usage ? session.usage.total_tokens : 0) + totalUsage.total_tokens)
     if (budgetHit && typeof requestBudgetDecision === 'function') {
       const dec = await requestBudgetDecision({ kind: 'budget', detail: `本会话累计估算花费 ¥${budgetHit.spent} 已触达上限 ¥${budgetHit.budget}` })
       if (!dec || dec.action === 'stop') {
         emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent || '已按预算上限暂停会话。', cps: 0 })
-        return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true }
+        return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true, wiredUserContent, wireTrail }
       }
       if (dec.action === 'readonly') {
         readonlyMode = true
-        // Manus 状态掩码策略：绝不删改 tools 数组破坏前缀缓存，改为尾部追加只读状态掩码
-        workingMsgs.push({ role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) })
+        const roMsg = { role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) }
+        workingMsgs.push(roMsg)
+        wireTrail.push(roMsg)
       }
     }
 
@@ -263,7 +308,7 @@ export async function runAgentConversation({
       apiKey: endpointConfig.apiKey,
       model: endpointConfig.model,
       messages: workingMsgs,
-      // 严守前缀冻结铁律：即使进入 readonlyMode 也保持 tools 数组 100% 逐字节不变（靠状态掩码 + 执行器拦截）
+      // 严守前缀冻结铁律：即使进入 readonlyMode 也保持 tools 数组 100% 逐字节不变
       tools,
       sid,
       temperature: endpointConfig.temperature,
@@ -301,8 +346,7 @@ export async function runAgentConversation({
     finalContent = res.content || ''
 
     if (!res.toolCalls || !res.toolCalls.length) {
-      // I05 写后自动验收自检闭环（仅在写过文件且尚未自检时执行一次）
-      if (wroteFiles && !selfCheckDone && !(signal && signal.aborted)) {
+      if (!skipSelfCheck && wroteFiles && !selfCheckDone && !(signal && signal.aborted)) {
         selfCheckDone = true
         emit({ phase: 'thinking', stageLabel: '写后自动验收自检中…' })
         const sc = await runSelfCheckAfterWrites({
@@ -311,33 +355,37 @@ export async function runAgentConversation({
           runCommand: (cmd, t) => api.callJsApiRaw('run_command', [cmd, t, ''], { sid, signal, timeoutMs: 120000 }),
         })
         if (sc.ran && !sc.ok && sc.feedbackMessage) {
-          workingMsgs.push({ role: 'assistant', content: finalContent })
-          workingMsgs.push({ role: 'system', content: sc.feedbackMessage })
+          const aMsg = { role: 'assistant', content: finalContent }
+          const fbMsg = { role: 'user', content: sc.feedbackMessage }
+          workingMsgs.push(aMsg, fbMsg)
+          wireTrail.push(aMsg, fbMsg)
           emit({ phase: 'thinking', stageLabel: `自动验收发现异常（${sc.cmd}），回灌模型自修中…` })
           continue
         }
       }
       emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs] })
-      return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false }
+      return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
     }
 
-    // 工具签名循环熔断检测
     const sig = JSON.stringify(res.toolCalls.map((tc) => [tc.function && tc.function.name, tc.function && tc.function.arguments]))
     const loopCheck = defense.registerToolSignature(sig)
     if (loopCheck.loop && typeof requestBudgetDecision === 'function') {
       const dec = await requestBudgetDecision({ kind: 'loop', detail: '检测到模型连续 3 次重复调用相同工具与参数，已触发循环熔断暂停。' })
       if (!dec || dec.action === 'stop') {
         emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent || '已触发循环熔断并暂停。', cps: 0 })
-        return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true }
+        return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: true, wiredUserContent, wireTrail }
       }
       if (dec.action === 'readonly') {
         readonlyMode = true
-        // Manus 状态掩码策略：绝不删改 tools 数组破坏前缀缓存，改为尾部追加只读状态掩码
-        workingMsgs.push({ role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) })
+        const roMsg = { role: 'user', content: buildDynamicTurnReminder({ readonlyMode: true }) }
+        workingMsgs.push(roMsg)
+        wireTrail.push(roMsg)
       }
     }
 
-    workingMsgs.push({ role: 'assistant', content: res.content || '', tool_calls: res.toolCalls })
+    const tcAssistantMsg = { role: 'assistant', content: res.content || '', tool_calls: res.toolCalls }
+    workingMsgs.push(tcAssistantMsg)
+    wireTrail.push(tcAssistantMsg)
 
     for (const tc of res.toolCalls) {
       if (signal && signal.aborted) break
@@ -348,7 +396,7 @@ export async function runAgentConversation({
       const rec = {
         id: tc.id || `tool_${allTools.length}`,
         name: tName,
-        detail: String(args.path || args.cmd || args.query || args.url || '').slice(0, 64),
+        detail: String(args.path || args.cmd || args.command || args.query || args.url || '').slice(0, 64),
         status: 'running',
       }
       allTools.push(rec)
@@ -367,7 +415,6 @@ export async function runAgentConversation({
           if (readKey) readFileSet.add(readKey)
           if (dirKey) listDirsSet.add(dirKey)
           rawOut = await dispatchSingleTool({ name: tName, args, sid, signal, readonlyMode, requestApproval })
-          // 检测浏览器验证码人工接管挂起
           const takeover = detectTakeoverRequired(rawOut)
           if (takeover && typeof requestTakeover === 'function') {
             const action = await requestTakeover(takeover)
@@ -391,12 +438,14 @@ export async function runAgentConversation({
       if (diff) allDiffs.unshift(diff)
       emit({ phase: 'thinking', tools: [...allTools], diffs: [...allDiffs] })
 
-      workingMsgs.push({ role: 'tool', tool_call_id: tc.id, content: cleanJson.slice(0, 24000) })
+      const toolMsg = { role: 'tool', tool_call_id: tc.id, content: cleanJson.slice(0, 24000) }
+      workingMsgs.push(toolMsg)
+      wireTrail.push(toolMsg)
     }
 
     defense.registerProgress(factsCount)
   }
 
   emit({ phase: 'done', reasoning: finalReasoning, answer: finalContent, cps: 0, tools: [...allTools], diffs: [...allDiffs] })
-  return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false }
+  return { content: finalContent, reasoning: finalReasoning, tools: allTools, diffs: allDiffs, usage: totalUsage, paused: false, wiredUserContent, wireTrail }
 }

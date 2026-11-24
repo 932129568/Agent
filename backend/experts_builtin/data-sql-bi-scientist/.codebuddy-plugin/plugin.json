@@ -1,0 +1,61 @@
+{
+  "name": "data-sql-bi-scientist",
+  "version": "1.0.0",
+  "description": "自动分析 CSV/Excel/数据库表结构与异常波动，编写高性能只读 SQL 与 Python 脚本，并用 Harbor 生成式 UI 输出可视化图表。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "data-sql-bi-scientist",
+  "agents": [
+    "./agents/data-sql-bi-scientist.md"
+  ],
+  "skills": [
+    "./skills/csv-auto-insights",
+    "./skills/safe-sql-optimizer",
+    "./skills/python-pandas-eda",
+    "./skills/ui-spec-charts"
+  ],
+  "displayName": {
+    "en": "Data, SQL & BI Scientist",
+    "zh": "数据分析、SQL 与 BI 可视化专家"
+  },
+  "profession": {
+    "en": "Data Analyst & SQL Performance Specialist",
+    "zh": "数据分析与 SQL 优化专家"
+  },
+  "displayDescription": {
+    "en": "Data analysis specialist for CSV/Excel EDA, safe read-only SQL optimization, pandas scripts, and interactive chart dashboards.",
+    "zh": "自动分析 CSV/Excel/数据库表结构与异常波动，编写高性能只读 SQL 与 Python 脚本，并用 Harbor 生成式 UI 输出可视化图表。"
+  },
+  "categoryId": "05-DataResearch",
+  "tags": [
+    {
+      "en": "Data Analysis",
+      "zh": "数据分析"
+    },
+    {
+      "en": "SQL",
+      "zh": "SQL 优化"
+    },
+    {
+      "en": "BI Charts",
+      "zh": "可视化看板"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "读取工作区里的数据表/CSV，做一次探索性分析并用图表总结核心异常",
+      "en": "Inspect the workspace CSV/dataset and summarize anomalies with charts"
+    },
+    {
+      "zh": "帮我优化这条慢 SQL，分析索引命中并给出零锁表改写方案",
+      "en": "Optimize this slow SQL query, analyze index usage, and provide a lock-safe rewrite"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "读取工作区里的数据表/CSV，做一次探索性分析并用图表总结核心异常",
+    "en": "Inspect the workspace CSV/dataset and summarize anomalies with charts"
+  },
+  "x-harbor-source": "csv-data-summarizer · postgres-safe-sql"
+}

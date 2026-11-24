@@ -79,7 +79,11 @@ const stubState = {
     reasoning_effort: 'auto',
   },
   savedConfigs: [],
+  savedGuardConfigs: [],
+  groupFiles: [],
+  writtenFiles: [],
   chatRequests: [],
+  triggerGroupToolOnce: false,
 }
 
 function readReqBody(req) {
@@ -139,8 +143,17 @@ const server = http.createServer(async (req, res) => {
     else if (method === 'expert_list') out = []
     else if (method === 'get_memory') out = []
     else if (method === 'mcp_list_servers') out = []
-    else if (method === 'guard_get_config') out = { tiers: {} }
+    else if (method === 'guard_get_config') out = { tiers: { run_command: 'always', run_powershell: 'session', delete_path: 'always', browser_click: 'always', software_call: 'session' } }
+    else if (method === 'guard_save_config') {
+      try { stubState.savedGuardConfigs.push(JSON.parse(String(args[0] || '{}'))) } catch {}
+      out = { ok: true }
+    }
+    else if (method === 'guard_check') out = { action: 'allow' }
     else if (method === 'guard_rule_list') out = { rules: [] }
+    else if (method === 'write_file') {
+      stubState.writtenFiles.push({ path: String(args[0] || ''), content: String(args[1] || '') })
+      out = { ok: true, path: String(args[0] || ''), bytes: String(args[1] || '').length }
+    }
     else if (method === 'hybrid_get_config') out = { strategy: 'auto', local_first: true }
     else if (method === 'reader_config_get') out = { base_url: '', model: '' }
     else if (method === 'sandbox_get_config') out = { enabled: true, command_profiles: { run_command: 'standard', run_powershell: 'standard', run_admin_command: 'off' } }
@@ -148,8 +161,22 @@ const server = http.createServer(async (req, res) => {
     else if (method === 'webdav_get_config') out = { url: '', username: '', remote_path: '/harbor-backup', conflict_policy: 'ask' }
     else if (method === 'software_list') out = []
     else if (method === 'check_update') out = { update_available: false }
-    else if (method === 'group_files_list') out = { ok: true, files: [] }
-    else if (method === 'group_files_write') out = { ok: true }
+    else if (method === 'group_files_list') out = { ok: true, dir: 'C:/harbor-test/group_files', files: stubState.groupFiles }
+    else if (method === 'group_files_write') {
+      const name = `handoff_${stubState.groupFiles.length + 1}.md`
+      const entry = { name, path: `C:/harbor-test/group_files/${name}`, title: String(args[3] || name), member: String(args[2] || '主持人'), content: String(args[4] || ''), size: String(args[4] || '').length, mtime: Date.now() / 1000 }
+      stubState.groupFiles.unshift(entry)
+      out = { ok: true, name, path: entry.path }
+    }
+    else if (method === 'group_files_read') {
+      const hit = stubState.groupFiles.find((f) => f.path === args[0] || f.name === args[0])
+      out = { ok: true, content: hit ? hit.content : '# 交接文档内容' }
+    }
+    else if (method === 'group_files_delete') {
+      stubState.groupFiles = stubState.groupFiles.filter((f) => f.name !== args[1])
+      out = { ok: true }
+    }
+    else if (method === 'group_files_open_dir') out = { ok: true }
     else if (method === 'build_system_prompt') out = 'STATIC_CHARTER_PREFIX' + (args[0] ? '|DYN_QUERY:' + args[0] : '')
     else if (method === 'build_tools') out = [
       { type: 'function', function: { name: 'write_file', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
@@ -176,6 +203,7 @@ const server = http.createServer(async (req, res) => {
       target: req.headers['x-harbor-target'] || '',
       messagesCount: Array.isArray(body.messages) ? body.messages.length : 0,
       systemContent: Array.isArray(body.messages) && body.messages[0] ? body.messages[0].content : '',
+      messages: Array.isArray(body.messages) ? body.messages : [],
       toolNames: Array.isArray(body.tools) ? body.tools.map((t) => t && t.function && t.function.name) : [],
       lastUser: Array.isArray(body.messages) ? String((body.messages[body.messages.length - 1] || {}).content || '') : '',
     })
@@ -184,12 +212,21 @@ const server = http.createServer(async (req, res) => {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
     })
+    const hasToolRole = Array.isArray(body.messages) && body.messages.some((m) => m && m.role === 'tool')
+    if (stubState.triggerGroupToolOnce && Array.isArray(body.tools) && body.tools.length > 0 && !hasToolRole) {
+      stubState.triggerGroupToolOnce = false
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_grp_1', type: 'function', function: { name: 'write_file', arguments: '{"path":"index.html","content":"<h1>Hello Harbor</h1>"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 1000, completion_tokens: 40, total_tokens: 1040, prompt_tokens_details: { cached_tokens: 920 } } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
+    const longFiller = '详细说明：'.repeat(45)
     const pieces = [
       { reasoning_content: `正在以模型 ${body.model} 分析本棒任务要求与前序交接上下文…\n` },
       { content: `已由模型 \`${body.model}\` 完成本棒产出：` },
-      { content: '1) 明确视觉节奏与开场钩子；' },
-      { content: '2) 补充逐镜景别与时长清单；' },
-      { content: '3) 交付下一棒可直接衔接的提示词。' },
+      { content: '1) 明确视觉节奏与开场钩子；\n2) 补充逐镜景别与时长清单；\n3) 交付下一棒可直接衔接的提示词。\n' },
+      { content: longFiller },
     ]
     let closed = false
     req.on('close', () => { closed = true })
@@ -347,7 +384,7 @@ try {
 
   const usedModels = stubState.chatRequests.map((r) => r.model)
   const warnGone = (await page.locator('.gp-warn').count()) === 0
-  const hasDirective = stubState.chatRequests.some((r) => r.lastUser.includes('每个镜头的秒数'))
+  const hasDirective = stubState.chatRequests.some((r) => r.lastUser.includes('每个镜头的秒数') || JSON.stringify(r).includes('每个镜头的秒数'))
   record(
     'Suite-A',
     '视频班底零预警命中能力路由 + 独立模型生效 + 续跑纠偏送达',
@@ -628,8 +665,76 @@ try {
       && toolsSorted
       && dynInTail
       && hasAnthropicBp
-      && /缓存命中\s*88%/.test(ribbonTxt || ''),
+      && /本轮缓存\s*88%/.test(ribbonTxt || ''),
     `sysEqual=${sys1 === sys2}, toolsSorted=${toolsSorted}, dynInTail=${dynInTail}, antBp=${hasAnthropicBp}, ribbon=${(ribbonTxt || '').slice(0, 64)}`
+  )
+
+  /* ======================================================================== *
+   * Suite F · R6 真机新能力（安全护栏设置 / 群聊真工具调用 / 长文折叠收纳 / 群文件面板）
+   * ======================================================================== */
+  // F1: 安全护栏一键关闭命令拦截
+  await page.locator('.hb-top-btn:has-text("透色与设置")').click()
+  await page.waitForSelector('.ov-modal .st-shell')
+  await page.locator('.st-nav-btn:has-text("工具、MCP、沙箱与软件")').click()
+  stubState.savedGuardConfigs.length = 0
+  await page.locator('button:has-text("一键关闭命令拦截")').click()
+  await page.waitForTimeout(220)
+  const savedGuard = stubState.savedGuardConfigs[stubState.savedGuardConfigs.length - 1] || {}
+  record(
+    'Suite-F',
+    '安全护栏可视化配置：一键关闭命令拦截落盘 guard.json',
+    savedGuard.tiers && savedGuard.tiers.run_command === 'off' && savedGuard.tiers.run_powershell === 'off',
+    JSON.stringify(savedGuard.tiers || {})
+  )
+  await page.locator('.ov-modal .ov-close').click()
+  await page.waitForTimeout(200)
+
+  // F2: 群聊真工具调用（write_file 写 index.html）+ 交付卡片默认折叠 + 群文件面板可查看
+  await page.locator('.hb-rail-btn[title="角色群聊"]').click()
+  await page.waitForSelector('.gp-root')
+  stubState.writtenFiles.length = 0
+  stubState.triggerGroupToolOnce = true
+  await page.locator('.gp-input').fill('帮我在工作区做一个简单的网页 index.html')
+  await page.locator('.gp-bar button:has-text("发起接力")').click()
+  await page.waitForSelector('.rt-stage[data-status="done"]', { timeout: 15000 })
+
+  const wroteHtml = stubState.writtenFiles.some((f) => f.path === 'index.html')
+  const collapsedCount = await page.locator('.gp-body-wrap[data-collapsed="true"]').count()
+  const filesPanelVisible = await page.locator('.gp-files-panel').isVisible()
+  const fileRowCount = await page.locator('.gp-file-row').count()
+  record(
+    'Suite-F',
+    '群聊真工具写文件 + 长交付自动折叠收纳 + 群文件面板自动呈现交接文档',
+    wroteHtml && collapsedCount > 0 && filesPanelVisible && fileRowCount > 0,
+    `wroteHtml=${wroteHtml}, collapsedCards=${collapsedCount}, filesPanel=${filesPanelVisible}, files=${fileRowCount}`
+  )
+
+  /* ======================================================================== *
+   * Suite G · R7 热门行业专家库 + 普通/群聊上下文环形使用量指示器 + 空间起源开关过渡
+   * ======================================================================== */
+  // G1: 验证群聊页面上下文使用量环形指示器（.ctx-ring-btn + 精确悬浮文案）
+  const grpRingLabel = await page.locator('.gp-bar .ctx-ring-btn').getAttribute('aria-label')
+  const grpRingOk = Boolean(grpRingLabel && /\d+\.\d+%\s*·\s*\d+\.\d+K\s*\/\s*\d+\.\d+K\s*上下文已使用/.test(grpRingLabel))
+  record('Suite-G', '群聊页底部上下文环形使用量指示器就位且格式精确', grpRingOk, grpRingLabel || 'missing')
+
+  // G2: 打开行业专家市场 → 验证 12 大跨行业专家包 + 行业筛选 + 无横向裁切 + 加入输入框
+  await page.locator('.hb-rail-btn[title*="专家"]').click()
+  await page.waitForSelector('.ov-modal .mk-grid')
+  await page.waitForTimeout(360)
+  const totalCuratedCards = await page.locator('.mk-card').count()
+  const noHorizOverflow = await page.locator('.mk-body').evaluate((el) => el.scrollWidth <= el.clientWidth + 2)
+  await page.locator('.mk-cats button:has-text("办公文档")').click()
+  const officeCards = await page.locator('.mk-card').count()
+  await page.locator('.mk-card').first().locator('button:has-text("加入输入框")').click()
+  await page.waitForTimeout(260)
+  const chipAttached = (await page.locator('.chat-token-chip').count()) > 0
+  const chatRingLabel = await page.locator('.chat-composer-foot .ctx-ring-btn').getAttribute('aria-label')
+  const chatRingOk = Boolean(chatRingLabel && /\d+\.\d+%\s*·\s*\d+\.\d+K\s*\/\s*\d+\.\d+K\s*上下文已使用/.test(chatRingLabel))
+  record(
+    'Suite-G',
+    '行业专家市场（12大热门包/分类筛选/零裁切/直入胶囊）+ 普通对话上下文环形指示器',
+    totalCuratedCards === 12 && noHorizOverflow && officeCards >= 2 && chipAttached && chatRingOk,
+    `cards=${totalCuratedCards}, office=${officeCards}, noOverflow=${noHorizOverflow}, chip=${chipAttached}, chatRing=${chatRingLabel}`
   )
 
   // D4: 全程零未捕获页面异常

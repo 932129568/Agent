@@ -226,6 +226,27 @@
     line-height: 1.55;
   }
 
+  .rt-tools-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .rt-tool-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-2);
+  }
+  .rt-tool-pill[data-status="done"] { border-color: var(--ok); color: var(--ok); }
+  .rt-tool-pill[data-status="fail"] { border-color: var(--err); color: var(--err); }
+
   .rt-handoff-banner {
     padding: 7px 12px;
     border-radius: var(--radius-sm);

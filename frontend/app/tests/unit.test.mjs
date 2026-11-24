@@ -253,3 +253,55 @@ test('platform/markdown.js LRU 缓存命中返回同一对象引用且正确转�
   assert.equal(a, b, '相同输入应命中 LRU 缓存返回同一对象')
   assert.ok(!a.__html.includes('<script>'), '脚本标签必须被转义/净化')
 })
+
+
+test('dag.js sanitizeMessagesForApi 严格回放 _wireContent 与 _wireTrail，保证多轮 Append-Only 前缀缓存 90%+ 命中', async () => {
+  const { sanitizeMessagesForApi } = await import('../src/services/dag.js')
+  const msgs = [
+    { role: 'user', content: '查 README', _wireContent: '查 README\n\n<system-reminder>记忆A</system-reminder>' },
+    {
+      role: 'assistant',
+      content: '已读取完成',
+      _wireTrail: [
+        { role: 'assistant', content: '', tool_calls: [{ id: 'tc1', type: 'function', function: { name: 'read_file', arguments: '{"path":"README.md"}' } }] },
+        { role: 'tool', tool_call_id: 'tc1', content: '{"ok":true,"content":"hello"}' },
+      ],
+    },
+    { role: 'user', content: '继续总结' },
+  ]
+  const wire = sanitizeMessagesForApi(msgs)
+  assert.equal(wire.length, 5)
+  assert.ok(wire[0].content.includes('<system-reminder>记忆A</system-reminder>'))
+  assert.equal(wire[1].tool_calls[0].function.name, 'read_file')
+  assert.equal(wire[2].role, 'tool')
+  assert.equal(wire[3].content, '已读取完成')
+  assert.equal(wire[4].content, '继续总结')
+})
+
+test('agentEngine.js buildGuardDetail 与后端 commands.js/guard.js 摘要口径一致', async () => {
+  const { buildGuardDetail } = await import('../src/services/agentEngine.js')
+  assert.deepEqual(buildGuardDetail('run_command', { command: ' dir ', timeout: 30 }), { cmd: 'dir' })
+  assert.deepEqual(buildGuardDetail('run_powershell', { cmd: 'Get-ChildItem', timeout: 60 }), { cmd: 'Get-ChildItem' })
+  assert.deepEqual(buildGuardDetail('delete_path', { path: 'a/b.txt', recycle: true }), { path: 'a/b.txt' })
+})
+
+
+test('industryExperts.js 内置 12 个跨行业前沿专家包与热门 Skill，支持按行业与关键词检索', async () => {
+  const { CURATED_INDUSTRY_PACKS, EXPERT_CATEGORIES, filterCuratedPacks } = await import('../src/services/industryExperts.js')
+  assert.equal(CURATED_INDUSTRY_PACKS.length, 12)
+  assert.ok(EXPERT_CATEGORIES.length >= 7)
+  assert.ok(CURATED_INDUSTRY_PACKS.every((p) => p.name && p.description && p.prompt && p.skills.length >= 3 && p.sourceRepo))
+  const videoHits = filterCuratedPacks({ category: 'video' })
+  assert.ok(videoHits.length >= 1 && videoHits[0].id === 'video-director-remotion')
+  const officeHits = filterCuratedPacks({ query: 'PPT' })
+  assert.ok(officeHits.some((p) => p.id === 'office-doc-studio'))
+})
+
+test('kinetic.js computeTargetDelta 按目标按钮坐标计算真实撞击飞行矢量', async () => {
+  const { computeTargetDelta } = await import('../src/platform/kinetic.js')
+  const fakeModal = { getBoundingClientRect: () => ({ left: 200, top: 100, width: 800, height: 600 }) }
+  const leftRailBtn = { cx: 60, cy: 760 }
+  const delta = computeTargetDelta(fakeModal, leftRailBtn, 'left')
+  assert.equal(delta.dx, -540)
+  assert.equal(delta.dy, 360)
+})

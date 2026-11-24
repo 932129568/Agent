@@ -28,6 +28,7 @@ export default function SettingsModal() {
   const [draft, setDraft] = useState(() => ({ ...settings.backendConfig }))
   const [hybridDraft, setHybridDraft] = useState(() => ({ ...settings.hybridConfig }))
   const [sandboxDraft, setSandboxDraft] = useState(() => ({ ...settings.sandboxConfig }))
+  const [guardTiersDraft, setGuardTiersDraft] = useState(() => ({ ...((settings.guardConfig && settings.guardConfig.tiers) || {}) }))
   const [webdavDraft, setWebdavDraft] = useState(() => ({ ...settings.webdavConfig }))
   const [errMsg, setErrMsg] = useState('')
   const [probeRes, setProbeRes] = useState('')
@@ -39,6 +40,7 @@ export default function SettingsModal() {
   useEffect(() => { setDraft({ ...settings.backendConfig }) }, [settings.backendConfig])
   useEffect(() => { setHybridDraft({ ...settings.hybridConfig }) }, [settings.hybridConfig])
   useEffect(() => { setSandboxDraft({ ...settings.sandboxConfig }) }, [settings.sandboxConfig])
+  useEffect(() => { setGuardTiersDraft({ ...((settings.guardConfig && settings.guardConfig.tiers) || {}) }) }, [settings.guardConfig])
   useEffect(() => { setWebdavDraft((prev) => ({ ...settings.webdavConfig, password: prev.password || '' })) }, [settings.webdavConfig])
   useEffect(() => { refreshSettingsAux().catch(() => {}) }, [])
 
@@ -88,6 +90,17 @@ export default function SettingsModal() {
       await api.hybridSaveConfig(hybridDraft)
       await refreshSettingsAux()
       pushToast('云+本地混合路由策略已保存', 'ok')
+    } catch (e) { pushToast(e.message, 'err') }
+  }
+
+  const handleSaveGuardTiers = async (overrideTiers = null) => {
+    try {
+      const nextTiers = overrideTiers || guardTiersDraft
+      const baseCfg = (settings.guardConfig && typeof settings.guardConfig === 'object') ? settings.guardConfig : {}
+      await api.guardSaveConfig({ ...baseCfg, tiers: { ...(baseCfg.tiers || {}), ...nextTiers } })
+      setGuardTiersDraft(nextTiers)
+      await refreshSettingsAux()
+      pushToast('安全护栏审批档位已保存（即时生效）', 'ok')
     } catch (e) { pushToast(e.message, 'err') }
   }
 
@@ -280,7 +293,47 @@ export default function SettingsModal() {
         {domain === 'tools' && (
           <>
             <div className="st-card">
-              <h3>命令沙箱（Windows Job Object 进程隔离）</h3>
+              <h3>安全护栏与命令审批档位（控制是否弹窗拦截授权）</h3>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                说明：<strong>安全护栏</strong>决定命令/删文件是否弹窗确认（与下方进程沙箱隔离相互独立）；若不想每次执行命令都被拦，把 <code>run_command</code> / <code>run_powershell</code> 设为 <code>off（自动放行）</code> 即可。
+              </div>
+              <div className="st-row">
+                {[
+                  ['run_command', '执行命令'],
+                  ['run_powershell', 'PowerShell'],
+                  ['delete_path', '删除文件'],
+                  ['browser_click', '网页点击'],
+                  ['software_call', '外部软件'],
+                ].map(([opKey, lbl]) => (
+                  <label key={opKey} style={{ fontSize: 12 }}>
+                    {lbl}：
+                    <select
+                      className="st-btn"
+                      aria-label={`护栏档位-${opKey}`}
+                      value={guardTiersDraft[opKey] || (opKey === 'run_command' || opKey === 'run_powershell' ? 'off' : 'session')}
+                      onChange={(e) => setGuardTiersDraft({ ...guardTiersDraft, [opKey]: e.target.value })}
+                    >
+                      <option value="off">off（自动放行）</option>
+                      <option value="session">session（每会话确认一次）</option>
+                      <option value="always">always（每次确认）</option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <div className="st-row">
+                <button type="button" className="st-btn st-btn-primary" onClick={() => handleSaveGuardTiers()}>保存护栏档位</button>
+                <button
+                  type="button"
+                  className="st-btn"
+                  onClick={() => handleSaveGuardTiers({ ...guardTiersDraft, run_command: 'off', run_powershell: 'off' })}
+                >
+                  一键关闭命令拦截（自动放行）
+                </button>
+              </div>
+            </div>
+
+            <div className="st-card">
+              <h3>命令沙箱（Windows Job Object 进程资源隔离 · 不控制审批弹窗）</h3>
               <div className="st-row" style={{ justifyContent: 'space-between', fontSize: 12.5 }}>
                 <label className="st-row" style={{ cursor: 'pointer' }}>
                   <input type="checkbox" checked={sandboxDraft.enabled !== false}

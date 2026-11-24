@@ -1,0 +1,61 @@
+{
+  "name": "finance-contract-advisor",
+  "version": "1.0.0",
+  "description": "提供单位经济模型（UE/LTV/CAC/盈亏平衡/现金流跑道测算）以及商业/外包/合作合同红线逐条排雷与替代条款建议。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "finance-contract-advisor",
+  "agents": [
+    "./agents/finance-contract-advisor.md"
+  ],
+  "skills": [
+    "./skills/unit-economics-model",
+    "./skills/cashflow-runway",
+    "./skills/contract-redline",
+    "./skills/pricing-strategy"
+  ],
+  "displayName": {
+    "en": "Finance & Contract Risk Advisor",
+    "zh": "财务建模与商业合同风险顾问"
+  },
+  "profession": {
+    "en": "Financial Modeling & Contract Risk Specialist",
+    "zh": "财务测算与合同排雷专家"
+  },
+  "displayDescription": {
+    "en": "Enterprise advisor for unit economics, cashflow runway modeling, pricing scenarios, and commercial contract redline risk audits.",
+    "zh": "提供单位经济模型（UE/LTV/CAC/盈亏平衡/现金流跑道测算）以及商业/外包/合作合同红线逐条排雷与替代条款建议。"
+  },
+  "categoryId": "07-FinanceLegal",
+  "tags": [
+    {
+      "en": "Unit Economics",
+      "zh": "财务模型"
+    },
+    {
+      "en": "Cashflow",
+      "zh": "现金流跑道"
+    },
+    {
+      "en": "Contract Audit",
+      "zh": "合同排雷"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我审阅这份合作/外包合同，标出高危坑条款并给出可直接替换的修改措辞",
+      "en": "Redline this commercial contract for high-risk clauses with drop-in replacement wording"
+    },
+    {
+      "zh": "帮我搭建一个 SaaS/电商产品的盈亏平衡与 12 个月现金流预测模型",
+      "en": "Build a break-even and 12-month cashflow runway model with sensitivity scenarios"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我审阅这份合作/外包合同，标出高危坑条款并给出可直接替换的修改措辞",
+    "en": "Redline this commercial contract for high-risk clauses with drop-in replacement wording"
+  },
+  "x-harbor-source": "Enterprise Finance & Legal Compliance Playbook"
+}

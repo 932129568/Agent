@@ -28,6 +28,10 @@ import { shouldOfferResume } from '../../services/budgetAndResume.js'
 import { extractUiSpecsFromMarkdown } from '../../services/generative.js'
 import { appendMemory } from '../../services/bridge.js'
 import { copyText, readFileAsText } from '../../platform/dom.js'
+import { captureTriggerRect } from '../../platform/kinetic.js'
+import { estTokens, historyTokens } from '../../services/compaction.js'
+import { CURATED_INDUSTRY_PACKS } from '../../services/industryExperts.js'
+import ContextUsageRing from '../../ui/ContextUsageRing.jsx'
 import MarkdownView from '../../ui/MarkdownView.jsx'
 import GenerativeView from '../../ui/GenerativeView.jsx'
 import LivingChamber from '../../ui/LivingChamber.jsx'
@@ -125,9 +129,19 @@ export default function ChatPanel() {
   const pendingBudgetPause = runtime.pendingBudgetPause && runtime.pendingBudgetPause.sid === sid ? runtime.pendingBudgetPause : null
   const showResume = !isBusy && shouldOfferResume(session)
 
+  const mergedExpertsForAt = useMemo(() => {
+    const disabled = new Set(market.disabledCurated || [])
+    const curated = CURATED_INDUSTRY_PACKS.filter((p) => !disabled.has(p.id)).map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      metadata: { displayName: p.name, description: p.prompt },
+    }))
+    return [...curated, ...(market.experts || [])]
+  }, [market.disabledCurated, market.experts])
+
   const menu = useMemo(
-    () => buildComposerMenuItems(ui.composerDraft, { workspaceEntries: workspace.entries, experts: market.experts }),
-    [ui.composerDraft, workspace.entries, market.experts]
+    () => buildComposerMenuItems(ui.composerDraft, { workspaceEntries: workspace.entries, experts: mergedExpertsForAt }),
+    [ui.composerDraft, workspace.entries, mergedExpertsForAt]
   )
   const activeMenuIdx = Math.min(menuIdx, Math.max(0, menu.items.length - 1))
 
@@ -193,6 +207,16 @@ export default function ChatPanel() {
   }, [])
 
   const messages = (session && Array.isArray(session.messages)) ? session.messages : []
+  const ctxLimit = Number(settings.backendConfig.context_window) || 128000
+  const estCtxUsed = useMemo(() => {
+    const hist = historyTokens(messages)
+    const draft = estTokens(ui.composerDraft)
+    const live = isBusy ? estTokens(run.answer) + Math.ceil(estTokens(run.reasoning) * 0.2) : 0
+    const sysBaseline = messages.length > 0 ? 900 : 0
+    const est = hist + draft + live + sysBaseline
+    const realPrompt = Number(runtime.cacheTotals && runtime.cacheTotals.latestPromptTokens) || 0
+    return messages.length > 0 ? Math.max(est, realPrompt) : draft
+  }, [messages, ui.composerDraft, isBusy, run.answer, run.reasoning, runtime.cacheTotals])
   const liveParsed = useMemo(() => extractUiSpecsFromMarkdown((isBusy || run.isDemo) ? run.answer : ''), [isBusy, run.isDemo, run.answer])
 
   return (
@@ -217,11 +241,11 @@ export default function ChatPanel() {
                 <strong>▶ 演练四幕动效 + 生成式 UI</strong>
                 <span>等待演进舱 → 思考波场 → 正文交棒 → 完成印章与仪表盘</span>
               </button>
-              <button type="button" className="chat-quick-card" onClick={() => openModal('settings')}>
+              <button type="button" className="chat-quick-card" onClick={(e) => openModal('settings', captureTriggerRect(e))}>
                 <strong>⚙ 模型 / 混合路由 / 沙箱 / WebDAV</strong>
                 <span>全套 4 域设置中心 + 真窗外透色与非 ASCII 拦截</span>
               </button>
-              <button type="button" className="chat-quick-card" onClick={() => openModal('market')}>
+              <button type="button" className="chat-quick-card" onClick={(e) => openModal('market', captureTriggerRect(e))}>
                 <strong>✦ 专家市场与多专家团队编排</strong>
                 <span>专家胶囊直入输入框，或启动串行信箱团队编排</span>
               </button>
@@ -369,15 +393,23 @@ export default function ChatPanel() {
               <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleAttachFile} />
               <button type="button" className="chat-mini-btn" onClick={() => fileRef.current && fileRef.current.click()}>+ 附件</button>
               <button type="button" className="chat-mini-btn" onClick={captureScreenshotToComposer}>📸 截屏</button>
-              <button type="button" className="chat-mini-btn" onClick={() => openModal('market')}>✦ 选专家</button>
+              <button type="button" className="chat-mini-btn" onClick={(e) => openModal('market', captureTriggerRect(e))}>✦ 选专家</button>
               <button type="button" className="chat-mini-btn" onClick={() => compactSessionNow(sid, true)}>🗜 压缩 /compact</button>
               <button type="button" className="chat-mini-btn" onClick={() => triggerFourActShowcase(sid)}>▶ 预览四幕</button>
             </div>
-            {isBusy ? (
-              <button type="button" className="chat-send-btn" data-stop="true" onClick={() => stopSessionRun(sid)}>■ 停止生成</button>
-            ) : (
-              <button type="button" className="chat-send-btn" onClick={handleSubmit}>发送 ↑</button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ContextUsageRing
+                usedTokens={estCtxUsed}
+                limitTokens={ctxLimit}
+                cacheHitRate={Number((runtime.cacheTotals && runtime.cacheTotals.latestHitRate) || 0)}
+                onClick={() => compactSessionNow(sid, true)}
+              />
+              {isBusy ? (
+                <button type="button" className="chat-send-btn" data-stop="true" onClick={() => stopSessionRun(sid)}>■ 停止生成</button>
+              ) : (
+                <button type="button" className="chat-send-btn" onClick={handleSubmit}>发送 ↑</button>
+              )}
+            </div>
           </div>
         </div>
       </div>

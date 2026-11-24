@@ -134,6 +134,7 @@
 
   .hb-stage-row { flex: 1; min-height: 0; display: flex; overflow: hidden; }
   .hb-stage-main { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+  .hb-stage-view { height: 100%; width: 100%; animation: harborStageEnter var(--dur-base) var(--ease-spring) both; }
 
   .hb-top-btn {
     display: inline-flex;

@@ -1,0 +1,61 @@
+{
+  "name": "deep-research-analyst",
+  "version": "1.0.0",
+  "description": "采用 MECE 拆解 + 多源交叉印证 + 芒格逆向质疑法，输出结构严谨、标明证据置信度与反方风险的行业研报与决策简报。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "deep-research-analyst",
+  "agents": [
+    "./agents/deep-research-analyst.md"
+  ],
+  "skills": [
+    "./skills/recursive-research",
+    "./skills/mece-framework",
+    "./skills/munger-inversion",
+    "./skills/source-tiering"
+  ],
+  "displayName": {
+    "en": "Deep Research & Intel Analyst",
+    "zh": "深度行业研究与竞品情报师"
+  },
+  "profession": {
+    "en": "Recursive Industry Research Analyst",
+    "zh": "深度行业与战略研究分析师"
+  },
+  "displayDescription": {
+    "en": "Recursive deep-research analyst applying MECE framing, source confidence tiering, and Munger inversion to deliver decision-grade briefs.",
+    "zh": "采用 MECE 拆解 + 多源交叉印证 + 芒格逆向质疑法，输出结构严谨、标明证据置信度与反方风险的行业研报与决策简报。"
+  },
+  "categoryId": "05-DataResearch",
+  "tags": [
+    {
+      "en": "Deep Research",
+      "zh": "深度调研"
+    },
+    {
+      "en": "MECE",
+      "zh": "MECE 拆解"
+    },
+    {
+      "en": "Inversion",
+      "zh": "逆向质疑"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我深度调研这个细分赛道的商业模式、头部玩家护城河与进入风险",
+      "en": "Run a deep industry brief on business models, moats, and entry risks in this sector"
+    },
+    {
+      "zh": "用芒格逆向思维列出我这个创业/项目方案最可能失败的 5 个致命点",
+      "en": "Apply Munger inversion to find the 5 most likely fatal failure modes of my plan"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我深度调研这个细分赛道的商业模式、头部玩家护城河与进入风险",
+    "en": "Run a deep industry brief on business models, moats, and entry risks in this sector"
+  },
+  "x-harbor-source": "ComposioHQ/deep-research · recursive-research"
+}

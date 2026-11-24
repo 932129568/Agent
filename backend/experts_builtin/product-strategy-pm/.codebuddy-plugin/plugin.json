@@ -1,0 +1,108 @@
+{
+  "name": "product-strategy-pm",
+  "version": "1.0.0",
+  "description": "从用户访谈提炼痛点、竞品拆解，到写出开发可直接估工时的可验收 PRD、埋点指标体系与季度路线图。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "pm-director-lead",
+  "agents": [
+    "./agents/pm-director-lead.md",
+    "./agents/prd-spec-architect.md",
+    "./agents/metrics-roadmap-analyst.md"
+  ],
+  "skills": [
+    "./skills/feature-prd-spec",
+    "./skills/competitive-matrix",
+    "./skills/north-star-metrics",
+    "./skills/roadmap-prioritization"
+  ],
+  "displayName": {
+    "en": "Product Strategy & PRD Team",
+    "zh": "产品总监与 PRD 规格专家团"
+  },
+  "profession": {
+    "en": "Product Strategy & PRD Team",
+    "zh": "产品总监与 PRD 规格专家团"
+  },
+  "displayDescription": {
+    "en": "3-role product team covering user research synthesis, competitive analysis, engineering-ready PRDs, metrics, and quarterly roadmaps.",
+    "zh": "3 角色产品团队，覆盖用户痛点提炼、竞品矩阵拆解、开发可验收 PRD、北极星指标体系与季度路线图规划。"
+  },
+  "categoryId": "01-ProductDesign",
+  "tags": [
+    {
+      "en": "PRD",
+      "zh": "PRD 规格"
+    },
+    {
+      "en": "Roadmap",
+      "zh": "路线图"
+    },
+    {
+      "en": "Metrics",
+      "zh": "指标体系"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为这个新功能写一份含用户故事、边界异常、埋点与验收标准的完整 PRD",
+      "en": "Write an engineering-ready PRD with user stories, edge cases, telemetry, and acceptance criteria"
+    },
+    {
+      "zh": "帮我用 RICE 模型给这 8 个需求排优先级并输出 Q1-Q2 路线图",
+      "en": "Prioritize these 8 initiatives with RICE scoring and build a Q1-Q2 roadmap"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "为这个新功能写一份含用户故事、边界异常、埋点与验收标准的完整 PRD",
+    "en": "Write an engineering-ready PRD with user stories, edge cases, telemetry, and acceptance criteria"
+  },
+  "x-harbor-source": "ComposioHQ/awesome-claude-skills · Product Playbook",
+  "teamInfo": {
+    "leadAgent": "pm-director-lead",
+    "memberAgents": [
+      "prd-spec-architect",
+      "metrics-roadmap-analyst"
+    ]
+  },
+  "members": [
+    {
+      "id": "pm-director-lead",
+      "name": {
+        "en": "PM Director",
+        "zh": "产品总监"
+      },
+      "profession": {
+        "en": "Product Strategy Lead",
+        "zh": "产品战略统筹"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "prd-spec-architect",
+      "name": {
+        "en": "PRD Architect",
+        "zh": "规格架构师"
+      },
+      "profession": {
+        "en": "Feature Spec & UX PM",
+        "zh": "功能规格与体验 PM"
+      },
+      "role": "member"
+    },
+    {
+      "id": "metrics-roadmap-analyst",
+      "name": {
+        "en": "Metrics Analyst",
+        "zh": "指标与路线规划师"
+      },
+      "profession": {
+        "en": "Metrics & Prioritization Analyst",
+        "zh": "增长指标与排期分析师"
+      },
+      "role": "member"
+    }
+  ]
+}

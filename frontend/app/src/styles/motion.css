@@ -69,8 +69,13 @@
   }
 
   @keyframes harborDrawerIn {
-    from { opacity: 0; transform: translate3d(28px, 0, 0); }
-    to { opacity: 1; transform: translate3d(0, 0, 0); }
+    from { opacity: 0; transform: translate3d(36px, 0, 0) scale(0.97); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+
+  @keyframes harborStageEnter {
+    from { opacity: 0; transform: translate3d(14px, 0, 0) scale(0.992); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
 
 

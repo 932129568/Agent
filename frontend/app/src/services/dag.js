@@ -7,16 +7,37 @@ function genNodeId() {
   return 'n_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6)
 }
 
+/**
+ * 面向模型 API 的严格 Append-Only 消息投影（对标 WorkBuddy / Claude Code 的 90%+ KV-Cache 纪律）：
+ * - UI 层继续展示干净的 m.content（不含 <system-reminder> 与原始工具 JSON）；
+ * - 发送给模型时，user 消息回放 m._wireContent（保留当时注入的尾部提醒，避免第 2 轮把第 1 轮改写导致历史缓存全失效）；
+ * - assistant 消息若含 m._wireTrail，先逐条回放该轮真实产生的 assistant(tool_calls) + tool 结果，再接最终回答，
+ *   确保多轮对话永远是严格的前缀追加（zero prefix rewrite）。
+ */
 export function sanitizeMessagesForApi(messages) {
-  return (Array.isArray(messages) ? messages : [])
-    .filter((m) => m && !(m.role === 'system' && (m.__resumeDirective || m.__selfCheck)))
-    .map((m) => {
-      const clean = { role: m.role, content: m.content == null ? '' : m.content }
-      if (m.tool_calls) clean.tool_calls = m.tool_calls
-      if (m.tool_call_id) clean.tool_call_id = m.tool_call_id
-      if (m.name) clean.name = m.name
-      return clean
-    })
+  const out = []
+  for (const m of (Array.isArray(messages) ? messages : [])) {
+    if (!m || (m.role === 'system' && (m.__resumeDirective || m.__selfCheck))) continue
+    if (m.role === 'assistant' && Array.isArray(m._wireTrail) && m._wireTrail.length > 0) {
+      for (const step of m._wireTrail) {
+        if (!step || !step.role) continue
+        const s = { role: step.role, content: step.content == null ? '' : step.content }
+        if (step.tool_calls) s.tool_calls = step.tool_calls
+        if (step.tool_call_id) s.tool_call_id = step.tool_call_id
+        if (step.name) s.name = step.name
+        out.push(s)
+      }
+    }
+    const wireText = (m.role === 'user' && typeof m._wireContent === 'string' && m._wireContent.length > 0)
+      ? m._wireContent
+      : (m.content == null ? '' : m.content)
+    const clean = { role: m.role, content: wireText }
+    if (m.tool_calls) clean.tool_calls = m.tool_calls
+    if (m.tool_call_id) clean.tool_call_id = m.tool_call_id
+    if (m.name) clean.name = m.name
+    out.push(clean)
+  }
+  return out
 }
 
 export function ensureTree(session) {

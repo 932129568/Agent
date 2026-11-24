@@ -1,0 +1,61 @@
+{
+  "name": "browser-workflow-operator",
+  "version": "1.0.0",
+  "description": "参考 2026 综合评分第一的 agent-browser 与 webapp-testing 技能：擅长 Playwright 端到端回归脚本编写、抗抖动选择器设计与 MCP 工具链搭建。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "browser-workflow-operator",
+  "agents": [
+    "./agents/browser-workflow-operator.md"
+  ],
+  "skills": [
+    "./skills/agent-browser",
+    "./skills/playwright-e2e",
+    "./skills/mcp-builder",
+    "./skills/flaky-test-fixer"
+  ],
+  "displayName": {
+    "en": "Browser Automation & Playwright QA",
+    "zh": "浏览器自动化与 Playwright 质检专家"
+  },
+  "profession": {
+    "en": "Browser Automation & E2E QA Engineer",
+    "zh": "自动化测试与 MCP 工程专家"
+  },
+  "displayDescription": {
+    "en": "Browser automation and E2E quality specialist covering resilient Playwright suites, anti-flake selectors, negative controls, and MCP servers.",
+    "zh": "参考 2026 综合评分第一的 agent-browser 与 webapp-testing 技能：擅长 Playwright 端到端回归脚本编写、抗抖动选择器设计与 MCP 工具链搭建。"
+  },
+  "categoryId": "08-AutomationQA",
+  "tags": [
+    {
+      "en": "Playwright E2E",
+      "zh": "Playwright 回归"
+    },
+    {
+      "en": "Browser Agent",
+      "zh": "浏览器自动化"
+    },
+    {
+      "en": "MCP Builder",
+      "zh": "MCP 工具搭建"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为当前 Web 应用编写一套零假绿的 Playwright 端到端回归测试脚本",
+      "en": "Write a zero-false-green Playwright E2E regression script for this web app"
+    },
+    {
+      "zh": "帮我设计并实现一个标准的 Node.js MCP Server，接入本地工具给 Agent 调用",
+      "en": "Design and build a standard Node.js MCP server exposing local tools to agents"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "为当前 Web 应用编写一套零假绿的 Playwright 端到端回归测试脚本",
+    "en": "Write a zero-false-green Playwright E2E regression script for this web app"
+  },
+  "x-harbor-source": "vercel-labs/agent-browser · anthropics/webapp-testing"
+}

@@ -1,0 +1,61 @@
+{
+  "name": "security-code-auditor",
+  "version": "1.0.0",
+  "description": "逐行排查 XSS/SQL 注入、SSRF、权限绕过、竞态条件、资源泄漏与供应链依赖风险，输出按 P0/P1/P2 分级的直接修复方案。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "security-code-auditor",
+  "agents": [
+    "./agents/security-code-auditor.md"
+  ],
+  "skills": [
+    "./skills/owasp-audit",
+    "./skills/race-condition-check",
+    "./skills/secret-scan",
+    "./skills/patch-review"
+  ],
+  "displayName": {
+    "en": "Security & Code Auditor",
+    "zh": "安全审计与代码审查官"
+  },
+  "profession": {
+    "en": "Application Security & Code Review Lead",
+    "zh": "应用安全与代码审查专家"
+  },
+  "displayDescription": {
+    "en": "Evidence-driven security and concurrency code auditor covering OWASP Top 10, race conditions, secret leaks, and P0/P1/P2 patch plans.",
+    "zh": "逐行排查 XSS/SQL 注入、SSRF、权限绕过、竞态条件、资源泄漏与供应链依赖风险，输出按 P0/P1/P2 分级的直接修复方案。"
+  },
+  "categoryId": "02-Engineering",
+  "tags": [
+    {
+      "en": "Security Audit",
+      "zh": "安全审计"
+    },
+    {
+      "en": "OWASP",
+      "zh": "漏洞排查"
+    },
+    {
+      "en": "Code Review",
+      "zh": "代码审查"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "对当前工作区做一次安全与竞态代码审查，按 P0/P1/P2 列出证据与修法",
+      "en": "Run a P0/P1/P2 security and race-condition audit on the workspace"
+    },
+    {
+      "zh": "检查这段 API 和认证逻辑是否存在越权、注入或 SSRF 风险",
+      "en": "Audit this API and auth flow for IDOR, injection, or SSRF risks"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "对当前工作区做一次安全与竞态代码审查，按 P0/P1/P2 列出证据与修法",
+    "en": "Run a P0/P1/P2 security and race-condition audit on the workspace"
+  },
+  "x-harbor-source": "VoltAgent/awesome-claude-code-subagents"
+}

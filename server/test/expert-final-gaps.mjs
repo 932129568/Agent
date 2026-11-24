@@ -145,10 +145,10 @@ fs.rmSync(registryFile(), { force: true })
 /* ---------------- GAP-6 内置零进程零网络（间谍在导入期间归零） ---------------- */
 process.env.HARBOR_BUILTIN_EXPERTS_DIR = realBuiltinDir
 const imported = await builtin.importBuiltinExperts(experts.expertImportDirectory)
-assert.equal(imported.ok, true, '8 个内置包应全部导入成功')
-assert.equal(imported.imported, 8, '内置包数量应为 8')
+assert.equal(imported.ok, true, '20 个内置包（原 8 包 + R7 新增 12 套行业专家包）应全部导入成功')
+assert.equal(imported.imported, 20, '内置包数量应为 20')
 assert.equal(spies.calls, 0, '内置导入期间进程/网络间谍必须保持零')
-record('GAP-6a 内置导入零进程零网络', `import_all=8/8，间谍调用=${spies.calls}`)
+record('GAP-6a 内置导入零进程零网络', `import_all=20/20，间谍调用=${spies.calls}`)
 
 const get = async id => parse(await experts.expertGet(id)).package
 // 转换规则：plugin 字段剥离（字段白名单）
@@ -165,7 +165,7 @@ function allSnapshotFiles() {
   if (fs.existsSync(snapshotsRoot)) walk(snapshotsRoot)
   return out
 }
-for (const teamId of ['design-engine', 'product-strategy-team', 'software-company']) {
+for (const teamId of ['design-engine', 'product-strategy-team', 'software-company', 'product-strategy-pm', 'video-director-remotion']) {
   const dir = path.join(snapshotsRoot, teamId)
   assert.ok(fs.existsSync(dir), `${teamId} 应有快照`)
   assert.ok(fs.readdirSync(dir).some(s => fs.existsSync(path.join(dir, s, '.codebuddy-plugin', 'settings.json'))),

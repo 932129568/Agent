@@ -1,14 +1,61 @@
 /**
- * Harbor R4 物理撞击与二阶阻尼弹簧引擎（零 document.querySelector，纯 React Ref 驱动）：
- * - 修复 R3 Suite-D 缩放通道被像素阈值误杀的根因：
- *   位移(px)、旋转(deg)、缩放(ratio) 三轴使用各自物理量纲的收敛阈值（posEps / velEps）；
- * - 校准指标：
- *   1) 强撞击位移峰值 ~4.81px，协同缩放 minScale ≈ 0.989–0.991（< 0.996），微扭矩 0.38°；
- *   2) 收敛时间 ~250ms，过冲 ≤ 2 次，收敛后严格清零 transform（0px 残余）；
- *   3) 接触边触发 140ms 弧形菲涅尔高光脉冲；
- *   4) reduced 动效档下全量静默归零。
+ * Harbor R7 空间起源动效与三轴阻尼物理撞击引擎（零 document.querySelector，纯 React Ref 驱动）：
+ * - 锚点注册表（registerMotionAnchor / captureTriggerRect / pulseMotionAnchor）：
+ *   把每个窗口的“归属摆放位置”（如左侧栏「系统设置」「专家市场」「上下文副屏」、顶栏「Ctrl+K」）绑定为真实坐标；
+ * - 打开过渡（playModalMorphIn）：useLayoutEffect 同步首帧计算 FLIP 矢量，从触发按钮所在位置平滑弹簧展开（绝不闪开）；
+ * - 关闭撞击（playModalFlyOut）：窗口先沿真实矢量向其归属摆放位置加速飞入缩收，撞击瞬间将动量传导至主舞台（峰值 ~4.8–5.8px + scale ~0.989 + 140ms 弧形菲涅尔高光），同时让归属按钮产生一次“接住窗口”的微回弹；
+ * - 侧边抽屉（playDrawerSlideIn / playDrawerSlideOut）：副屏与搜索分栏开关皆带弹簧滑入与回撞收起，零硬切；
+ * - 无障碍负控：reduced 动效档下所有动效与位移严格归零。
  */
 const _bodies = new WeakMap()
+const _anchors = new Map() // anchorId -> HTMLElement (via React ref callback)
+
+export function registerMotionAnchor(id, el) {
+  if (!id) return
+  if (el) _anchors.set(id, el)
+  else _anchors.delete(id)
+}
+
+export function getMotionAnchorRect(id) {
+  const el = id ? _anchors.get(id) : null
+  if (!el || typeof el.getBoundingClientRect !== 'function') return null
+  const r = el.getBoundingClientRect()
+  if (!r || (r.width === 0 && r.height === 0)) return null
+  return { x: r.left, y: r.top, width: r.width, height: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 }
+}
+
+/** 从点击事件或 DOM 元素提取触发起点坐标（用于 FLIP 打开展开） */
+export function captureTriggerRect(eventOrEl) {
+  const el = eventOrEl && eventOrEl.currentTarget ? eventOrEl.currentTarget : eventOrEl
+  if (!el || typeof el.getBoundingClientRect !== 'function') return null
+  const r = el.getBoundingClientRect()
+  if (!r || (r.width === 0 && r.height === 0)) return null
+  return { x: r.left, y: r.top, width: r.width, height: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 }
+}
+
+export function motionScaleForTier(tier) {
+  if (tier === 'reduced') return 0
+  if (tier === 'balanced') return 0.58
+  return 1.0
+}
+
+/** 窗口飞回撞上其归属按钮时，让该按钮产生一次“接住窗口”的弹性回弹微脉冲 */
+export function pulseMotionAnchor(anchorId, motionTier = 'dynamic') {
+  const k = motionScaleForTier(motionTier)
+  const el = anchorId ? _anchors.get(anchorId) : null
+  if (!el || k === 0 || typeof el.animate !== 'function') return
+  try {
+    el.animate(
+      [
+        { transform: 'scale(1)' },
+        { transform: `scale(${(1 - 0.10 * k).toFixed(3)})`, offset: 0.25 },
+        { transform: `scale(${(1 + 0.06 * k).toFixed(3)})`, offset: 0.62 },
+        { transform: 'scale(1)' },
+      ],
+      { duration: 280, easing: 'cubic-bezier(.22, 1, .36, 1)' }
+    )
+  } catch {}
+}
 
 export function createDampedSpring({ omega = 24, zeta = 0.44, posEps = 0.04, velEps = 0.4 } = {}) {
   const w = Math.max(4, Number(omega) || 24)
@@ -32,7 +79,6 @@ export function createDampedSpring({ omega = 24, zeta = 0.44, posEps = 0.04, vel
   }
 }
 
-/** 位移通道离线仿真器（供 L1 单元测试校验峰值位移、收敛时间、过冲次数与残余） */
 export function simulateImpactCurve({ v0 = 260, omega = 24, zeta = 0.44, maxPx = 6.2, dt = 1 / 60, maxMs = 900 } = {}) {
   const stepper = createDampedSpring({ omega, zeta, posEps: 0.04, velEps: 0.4 })
   let pos = 0
@@ -64,7 +110,6 @@ export function simulateImpactCurve({ v0 = 260, omega = 24, zeta = 0.44, maxPx =
   }
 }
 
-/** 缩放通道离线仿真器（独立量纲 posEps=0.0002 / velEps=0.002，防止被 px 阈值误杀） */
 export function simulateScaleCurve({ vsc = -0.62, omega = 28, zeta = 0.50, maxSc = 0.016, dt = 1 / 60, maxMs = 900 } = {}) {
   const stepper = createDampedSpring({ omega, zeta, posEps: 0.0002, velEps: 0.002 })
   let sc = 0
@@ -93,18 +138,31 @@ function softClamp(v, limit) {
   return limit > 0 ? limit * Math.tanh(v / limit) : 0
 }
 
-export function motionScaleForTier(tier) {
-  if (tier === 'reduced') return 0
-  if (tier === 'balanced') return 0.58
-  return 1.0
+/** 计算弹窗中心到目标按钮中心（或兜底边方向）的物理位移矢量 */
+export function computeTargetDelta(cardEl, rect, fallbackEdge = 'left') {
+  if (cardEl && typeof cardEl.getBoundingClientRect === 'function' && rect && Number.isFinite(rect.cx) && Number.isFinite(rect.cy)) {
+    const cr = cardEl.getBoundingClientRect()
+    const mcx = cr.left + cr.width / 2
+    const mcy = cr.top + cr.height / 2
+    return {
+      dx: Math.max(-620, Math.min(620, rect.cx - mcx)),
+      dy: Math.max(-460, Math.min(460, rect.cy - mcy)),
+    }
+  }
+  return {
+    left: { dx: -260, dy: 40 },
+    right: { dx: 260, dy: 40 },
+    top: { dx: 0, dy: -200 },
+    bottom: { dx: 0, dy: 200 },
+  }[fallbackEdge] || { dx: -240, dy: 0 }
 }
 
-/** 对目标 DOM 元素（通过 React ref.current 传入）施加三轴独立量纲校准后的物理撞击冲量 */
+/** 对目标 DOM 元素（React ref）施加三轴独立量纲物理撞击冲量 */
 export function applyKineticImpulse(el, {
   vx = 0,
   vy = 0,
   vrot = 0,
-  vsc = -0.56,
+  vsc = -0.62,
   omega = 24,
   zeta = 0.44,
   maxPx = 6.2,
@@ -175,28 +233,55 @@ export function applyKineticImpulse(el, {
   return true
 }
 
-/** 浮层关闭弹射飞出动画（130ms WAAPI，飞向撞击边后触发回调，reduced 模式立即回调） */
-export function playModalFlyOut(cardEl, edge = 'left', motionTier = 'dynamic', onImpact, onFinish) {
+/**
+ * 浮层打开：从触发按钮（或归属按钮）真实位置平滑弹簧展开（FLIP 起源，绝不闪开）。
+ */
+export function playModalMorphIn(cardEl, backdropEl, sourceRect, fallbackEdge = 'left', motionTier = 'dynamic') {
   const k = motionScaleForTier(motionTier)
+  if (!cardEl || k === 0 || typeof cardEl.animate !== 'function') return
+  const { dx, dy } = computeTargetDelta(cardEl, sourceRect, fallbackEdge)
+  const sx = dx * 0.72 * k
+  const sy = dy * 0.72 * k
+  if (backdropEl && typeof backdropEl.animate === 'function') {
+    backdropEl.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: 220, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'backwards' }
+    )
+  }
+  cardEl.animate(
+    [
+      { transform: `translate3d(${sx.toFixed(1)}px,${sy.toFixed(1)}px,0) scale(${(1 - 0.72 * k).toFixed(3)})`, opacity: 0, offset: 0 },
+      { transform: `translate3d(${(-dx * 0.014 * k).toFixed(1)}px,${(-dy * 0.014 * k).toFixed(1)}px,0) scale(${(1 + 0.016 * k).toFixed(3)})`, opacity: 1, offset: 0.72 },
+      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, offset: 1 },
+    ],
+    { duration: 320, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' }
+  )
+}
+
+/**
+ * 浮层关闭：平滑加速飞向「该窗口摆放归属的按钮位置」，抵达撞击点触发主壳冲击波与目标按钮微回弹。
+ */
+export function playModalFlyOut(cardEl, edge = 'left', motionTier = 'dynamic', onImpact, onFinish, opts = {}) {
+  const k = motionScaleForTier(motionTier)
+  const { backdropEl = null, targetRect = null, anchorId = '' } = opts || {}
   if (!cardEl || k === 0 || typeof cardEl.animate !== 'function') {
-    if (typeof onImpact === 'function') onImpact()
+    if (typeof onImpact === 'function') onImpact({ dx: 0, dy: 0 })
     if (typeof onFinish === 'function') onFinish()
     return
   }
-  const vec = {
-    left: { dx: -180, dy: -20 },
-    right: { dx: 180, dy: -20 },
-    top: { dx: 0, dy: -120 },
-    bottom: { dx: 0, dy: 120 },
-  }[edge] || { dx: -160, dy: 0 }
 
-  const dur = 130
+  const { dx, dy } = computeTargetDelta(cardEl, targetRect, edge)
+  const tx = dx * 0.88 * k
+  const ty = dy * 0.88 * k
+  const dur = 210
   let impacted = false
   let done = false
+
   const fireImpact = () => {
     if (impacted) return
     impacted = true
-    if (typeof onImpact === 'function') onImpact()
+    if (anchorId) pulseMotionAnchor(anchorId, motionTier)
+    if (typeof onImpact === 'function') onImpact({ dx, dy })
   }
   const settle = () => {
     if (done) return
@@ -205,15 +290,73 @@ export function playModalFlyOut(cardEl, edge = 'left', motionTier = 'dynamic', o
     if (typeof onFinish === 'function') onFinish()
   }
 
+  if (backdropEl && typeof backdropEl.animate === 'function') {
+    backdropEl.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: dur, easing: 'cubic-bezier(.32, 0, .67, 0)', fill: 'forwards' }
+    )
+  }
+
   const anim = cardEl.animate(
     [
-      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
-      { transform: `translate3d(${vec.dx * k}px,${vec.dy * k}px,0) scale(0.84)`, opacity: 0 },
+      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, offset: 0 },
+      { transform: `translate3d(${(tx * 0.35).toFixed(1)}px,${(ty * 0.35).toFixed(1)}px,0) scale(0.84)`, opacity: 0.92, offset: 0.45 },
+      { transform: `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(0.22)`, opacity: 0, offset: 1 },
     ],
-    { duration: dur, easing: 'cubic-bezier(.42, 0, 1, .68)', fill: 'forwards' }
+    { duration: dur, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
   )
-  setTimeout(fireImpact, Math.round(dur * 0.78))
+  setTimeout(fireImpact, Math.round(dur * 0.82))
   anim.onfinish = settle
   anim.oncancel = settle
-  setTimeout(settle, dur + 50)
+  setTimeout(settle, dur + 55)
+}
+
+/** 侧边副屏 / 搜索分栏平滑展开（绝不闪开） */
+export function playDrawerSlideIn(el, motionTier = 'dynamic') {
+  const k = motionScaleForTier(motionTier)
+  if (!el || k === 0 || typeof el.animate !== 'function') return
+  el.animate(
+    [
+      { transform: `translate3d(${(56 * k).toFixed(1)}px,0,0) scale(${(1 - 0.04 * k).toFixed(3)})`, opacity: 0, offset: 0 },
+      { transform: `translate3d(${(-4 * k).toFixed(1)}px,0,0) scale(1.004)`, opacity: 1, offset: 0.74 },
+      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, offset: 1 },
+    ],
+    { duration: 290, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' }
+  )
+}
+
+/** 侧边副屏 / 搜索分栏平滑收回并撞击右侧边缘 */
+export function playDrawerSlideOut(el, motionTier = 'dynamic', onImpact, onFinish, anchorId = '') {
+  const k = motionScaleForTier(motionTier)
+  if (!el || k === 0 || typeof el.animate !== 'function') {
+    if (typeof onImpact === 'function') onImpact()
+    if (typeof onFinish === 'function') onFinish()
+    return
+  }
+  const dur = 190
+  let impacted = false
+  let done = false
+  const fire = () => {
+    if (impacted) return
+    impacted = true
+    if (anchorId) pulseMotionAnchor(anchorId, motionTier)
+    if (typeof onImpact === 'function') onImpact()
+  }
+  const end = () => {
+    if (done) return
+    done = true
+    fire()
+    if (typeof onFinish === 'function') onFinish()
+  }
+  const anim = el.animate(
+    [
+      { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
+      { transform: `translate3d(${(88 * k).toFixed(1)}px,0,0) scale(0.94)`, opacity: 0 },
+    ],
+    { duration: dur, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
+  )
+  setTimeout(fire, Math.round(dur * 0.80))
+  anim.onfinish = end
+  anim.oncancel = end
+  setTimeout(end, dur + 50)
 }

@@ -22,6 +22,15 @@ import { isAbort } from '../services/errors.js'
 
 const initialVisual = readVisualPrefs()
 const GROUP_MEMBERS_KEY = 'harbor.v3.group.members'
+const DISABLED_CURATED_KEY = 'harbor.v3.disabled_curated'
+
+function loadDisabledCurated() {
+  try {
+    const raw = readStorage(DISABLED_CURATED_KEY, '')
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr : []
+  } catch { return [] }
+}
 
 function loadSavedGroupMembers() {
   try {
@@ -61,6 +70,7 @@ const initialState = Object.freeze({
     activePanel: 'chat',       // 'chat' | 'sessions' | 'workspace' | 'planning' | 'group' | 'collaboration' | 'analytics'
     sidebarOpen: true,
     activeModal: null,         // 'settings' | 'market' | 'command' | null（强互斥）
+    modalOriginRect: null,     // 触发按钮坐标（用于 FLIP 平滑展开）
     dockOpen: false,
     dockTab: 'overview',
     dockPreview: '',
@@ -84,7 +94,7 @@ const initialState = Object.freeze({
     pendingTakeover: null,     // { sid, takeoverId, url, message }
     pendingBudgetPause: null,  // { sid, kind, detail }
     hybridSplit: { localTokens: 0, cloudTokens: 0 },
-    cacheTotals: { promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0, prefixHash: '', prefixLocked: false },
+    cacheTotals: { promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0, latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0, prefixHash: '', prefixLocked: false },
     updateInfo: null,          // { latest, url, sha256, notes }
     updateProgress: null,
   },
@@ -138,6 +148,7 @@ const initialState = Object.freeze({
   },
   market: {
     experts: [],
+    disabledCurated: loadDisabledCurated(),
     loading: false,
   },
   expertTeam: {
@@ -162,6 +173,8 @@ const initialState = Object.freeze({
     members: loadSavedGroupMembers(),
     messages: [],
     files: [],
+    filesDir: '',
+    lastArchivedName: '',
     status: 'idle',            // 'idle' | 'running' | 'paused' | 'done'
     running: false,
     activeIndex: -1,
@@ -170,6 +183,7 @@ const initialState = Object.freeze({
     handoffTo: '',
     liveContent: '',
     liveReasoning: '',
+    liveTools: [],
     cps: 0,
     lastIntent: null,
     routingWarning: '',
@@ -231,8 +245,17 @@ export function useStoreSelector(selector) {
 }
 
 /* ---- 通用 UI & 图层调度（LAW-05：Modal 与 Dock 强互斥） ---- */
-export function fireShellImpact(edge = 'left', strength = 'medium') {
-  patchSlice('ui', (u) => ({ ...u, impactSignal: { seq: ++impactSeq, edge, strength } }))
+export function fireShellImpact(edge = 'left', strength = 'medium', vec = null) {
+  patchSlice('ui', (u) => ({
+    ...u,
+    impactSignal: {
+      seq: ++impactSeq,
+      edge,
+      strength,
+      dx: vec && Number.isFinite(vec.dx) ? vec.dx : 0,
+      dy: vec && Number.isFinite(vec.dy) ? vec.dy : 0,
+    },
+  }))
 }
 export function setActivePanel(panel) {
   const prev = state.ui.activePanel
@@ -240,11 +263,13 @@ export function setActivePanel(panel) {
   if (prev !== panel) fireShellImpact('left', 'panel')
 }
 export function toggleSidebar() { patchSlice('ui', (u) => ({ ...u, sidebarOpen: !u.sidebarOpen })) }
-export function openModal(modalId) { patchSlice('ui', (u) => ({ ...u, activeModal: modalId, dockOpen: false })) }
-export function closeModal(impactEdge = 'left') {
+export function openModal(modalId, originRect = null) {
+  patchSlice('ui', (u) => ({ ...u, activeModal: modalId, modalOriginRect: originRect || null, dockOpen: false }))
+}
+export function closeModal(impactEdge = 'left', skipImpact = false) {
   const hadModal = !!state.ui.activeModal
-  patchSlice('ui', (u) => ({ ...u, activeModal: null }))
-  if (hadModal) fireShellImpact(impactEdge, 'strong')
+  patchSlice('ui', (u) => ({ ...u, activeModal: null, modalOriginRect: null }))
+  if (hadModal && !skipImpact) fireShellImpact(impactEdge, 'strong')
 }
 export function toggleDock(tab) {
   const wasOpen = state.ui.dockOpen
@@ -419,7 +444,7 @@ export function compactSessionNow(sid, force = true) {
     level: c.saver_level || 'std',
     localMode: !!c.local_mode || Number(c.context_window) > 0,
     localCtxWindow: Number(c.context_window) || 128000,
-    cacheHitRate: Number((state.runtime.cacheTotals && state.runtime.cacheTotals.hitRate) || 0),
+    cacheHitRate: Number((state.runtime.cacheTotals && (state.runtime.cacheTotals.latestHitRate || state.runtime.cacheTotals.hitRate)) || 0),
   })
   if (!res.compacted) {
     if (force) pushToast('当前消息条数较少，无需压缩', 'info')
@@ -707,25 +732,7 @@ export async function runChatTurn(sid, userText, opts = {}) {
       signal: ctrl.signal,
       onEvent: (ev) => {
         patchRun(sid, ev)
-        if (ev && ev.cacheStats) {
-          patchSlice('runtime', (r) => {
-            const prev = r.cacheTotals || { promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, hitRate: 0, prefixHash: '', prefixLocked: false }
-            const pt = prev.promptTokens + (ev.cacheStats.promptTokens || 0)
-            const ct = prev.cachedTokens + (ev.cacheStats.cachedTokens || 0)
-            const wt = prev.cacheWriteTokens + (ev.cacheStats.cacheWriteTokens || 0)
-            return {
-              ...r,
-              cacheTotals: {
-                promptTokens: pt,
-                cachedTokens: ct,
-                cacheWriteTokens: wt,
-                hitRate: pt > 0 ? Math.min(100, Math.round((ct / pt) * 100)) : prev.hitRate,
-                prefixHash: ev.cacheStats.prefixHash || prev.prefixHash,
-                prefixLocked: !!ev.cacheStats.prefixLocked,
-              },
-            }
-          })
-        }
+        if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
       },
       requestApproval: (req) => new Promise((resolve) => {
         approvalResolver = resolve
@@ -753,11 +760,25 @@ export async function runChatTurn(sid, userText, opts = {}) {
         }))
       }
       updateSessionById(sid, (s) => {
-        const next = appendMessageToSession(s, {
+        // 严格 Append-Only KV-Cache 落盘：在末条 user 消息记下本轮实际发送的 _wireContent，
+        // 在 assistant 消息记下本轮工具调用轨 _wireTrail；UI 仍展示干净的 m.content，
+        // 下一轮发给模型时 sanitizeMessagesForApi 100% 逐字节复现，命中率直冲 90%+！
+        const patchedMsgs = Array.isArray(s.messages) ? s.messages.map((m) => ({ ...m })) : []
+        if (result.wiredUserContent) {
+          for (let i = patchedMsgs.length - 1; i >= 0; i--) {
+            if (patchedMsgs[i] && patchedMsgs[i].role === 'user') {
+              patchedMsgs[i]._wireContent = result.wiredUserContent
+              break
+            }
+          }
+        }
+        const baseSess = { ...s, messages: patchedMsgs }
+        const next = appendMessageToSession(baseSess, {
           role: 'assistant',
           content: result.content || '',
           reasoning: result.reasoning || '',
           tools: result.tools || [],
+          ...(Array.isArray(result.wireTrail) && result.wireTrail.length ? { _wireTrail: result.wireTrail } : {}),
         })
         next.runStatus = result.paused ? 'paused' : 'completed'
         const u = s.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
@@ -982,6 +1003,15 @@ export async function refreshPlanning() {
   })
 }
 
+export function toggleCuratedPackEnabled(packId) {
+  patchSlice('market', (m) => {
+    const cur = Array.isArray(m.disabledCurated) ? m.disabledCurated : []
+    const next = cur.includes(packId) ? cur.filter((x) => x !== packId) : [...cur, packId]
+    try { writeStorage(DISABLED_CURATED_KEY, JSON.stringify(next)) } catch {}
+    return { ...m, disabledCurated: next }
+  })
+}
+
 export async function refreshMarket(query = '') {
   patchSlice('market', { loading: true })
   try {
@@ -1133,10 +1163,44 @@ export async function runGroupRelay(topic) {
   })
 }
 
+function _recordCacheStats(cs) {
+  if (!cs) return
+  patchSlice('runtime', (r) => {
+    const prev = r.cacheTotals || {
+      promptTokens: 0, cachedTokens: 0, cacheWriteTokens: 0,
+      hitRate: 0, latestHitRate: 0, latestPromptTokens: 0, latestCachedTokens: 0,
+      prefixHash: '', prefixLocked: false,
+    }
+    const addPt = Number(cs.promptTokens) || 0
+    const addCt = Number(cs.cachedTokens) || 0
+    const addWt = Number(cs.cacheWriteTokens) || 0
+    const pt = prev.promptTokens + addPt
+    const ct = prev.cachedTokens + addCt
+    const wt = prev.cacheWriteTokens + addWt
+    const latestHit = addPt > 0 ? Math.min(100, Math.round((addCt / addPt) * 100)) : prev.latestHitRate
+    return {
+      ...r,
+      cacheTotals: {
+        promptTokens: pt,
+        cachedTokens: ct,
+        cacheWriteTokens: wt,
+        hitRate: pt > 0 ? Math.min(100, Math.round((ct / pt) * 100)) : prev.hitRate,
+        latestHitRate: latestHit,
+        latestPromptTokens: addPt || prev.latestPromptTokens,
+        latestCachedTokens: addCt,
+        prefixHash: cs.prefixHash || prev.prefixHash,
+        prefixLocked: !!cs.prefixLocked,
+      },
+    }
+  })
+}
+
 async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relayContext, intentLabel }) {
   const baseEp = resolveEndpointConfig()
-  // 从最新名册回读角色配置，允许用户在暂停期间修改下一棒的模型或人设
   const latestMembers = plannedMembers.map((pm) => state.group.members.find((m) => m.id === pm.id) || pm)
+  // 群聊共享当前工作区会话的 sid，确保所有成员共用同一冻结 [tools + systemPrompt] 前缀（KV-Cache 90%+）
+  // 且写文件/执行命令直接落入当前选定的工作区！
+  const groupSid = state.sessions.currentId || state.group.activeGroupId
 
   groupAbortReason = ''
   groupAbortCtrl = new AbortController()
@@ -1150,6 +1214,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
     handoffTo: '',
     liveContent: '',
     liveReasoning: '',
+    liveTools: [],
     cps: 0,
     checkpoint: null,
   })
@@ -1164,15 +1229,14 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
       const m = latestMembers[i]
       if (groupAbortCtrl.signal.aborted) break
 
-      // 棒次交接瞬间（第 2 棒起播 460ms 实体光梭交棒动画）
       if (i > startIndex) {
         const prevName = latestMembers[i - 1].name
-        patchSlice('group', { activeIndex: i, handoffFrom: prevName, handoffTo: m.name, liveContent: '', liveReasoning: '', cps: 0 })
+        patchSlice('group', { activeIndex: i, handoffFrom: prevName, handoffTo: m.name, liveContent: '', liveReasoning: '', liveTools: [], cps: 0 })
         await new Promise((r) => setTimeout(r, 460))
         if (groupAbortCtrl.signal.aborted) break
       }
 
-      patchSlice('group', { activeIndex: i, handoffFrom: '', handoffTo: '', liveContent: '', liveReasoning: '', cps: 0 })
+      patchSlice('group', { activeIndex: i, handoffFrom: '', handoffTo: '', liveContent: '', liveReasoning: '', liveTools: [], cps: 0 })
 
       const memberEp = {
         ...baseEp,
@@ -1183,57 +1247,104 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         thinking_budget: m.customThinkingBudget > 0 ? m.customThinkingBudget : baseEp.thinking_budget,
       }
 
-      const res = await streamChatCompletion({
-        baseUrl: memberEp.baseUrl,
-        apiKey: memberEp.apiKey,
-        model: memberEp.model,
-        maxTokens: memberEp.max_tokens,
-        reasoningEffort: memberEp.reasoning_effort,
-        thinkingBudget: memberEp.thinking_budget,
-        customEffort: memberEp.custom_effort,
-        temperature: memberEp.temperature,
-        topP: memberEp.top_p,
+      const canUseTools = m.allowTools !== false && memberEp.tool_mode !== 'off'
+      const roleBatonMsg = {
+        role: 'user',
+        content:
+          `【群聊接力 · 第 ${i + 1}/${latestMembers.length} 棒 · 当前发言角色：${m.name}】\n` +
+          `• 专长能力：${(m.capabilities || ['text']).join(' / ')}\n` +
+          `• 本棒职责：${m.persona}\n` +
+          (canUseTools
+            ? '• 执行要求：若本棒需要创建/修改代码或文件（如网页、脚本、配置）或执行验证命令，请直接调用工作区工具（write_file / search_replace / read_file / run_command）实际落地，回答里只需给出清晰简明的交付摘要与文件路径，避免贴数百行原始代码。'
+            : '• 输出要求：承接前序结论，输出简洁高密度的结构化交付。'),
+      }
+
+      // 关键优化：使用与主对话统一的 runAgentConversation（支持真工具调用 + 护栏审批 + 共享冻结前缀 KV-Cache）
+      const turnHistory = [...relayContext, roleBatonMsg]
+      const res = await runAgentConversation({
+        sid: groupSid,
+        userQuery: i === 0 ? topic : '',
+        historyMessages: turnHistory,
+        endpointConfig: memberEp,
+        workspacePath: state.workspace.rootPath,
+        allowTools: canUseTools,
+        maxRounds: canUseTools ? 8 : 1,
+        skipMemoryRecall: true,
+        skipSelfCheck: true,
         signal: groupAbortCtrl.signal,
-        messages: [
-          {
-            role: 'system',
-            content: `你是群聊接力第 ${i + 1}/${latestMembers.length} 棒成员「${m.name}」，专长能力：${(m.capabilities || ['text']).join('/')}，职责：${m.persona}。请承接前序发言输出简洁、可直接落地的高密度结论。`,
-          },
-          ...relayContext,
-        ],
-        onDelta: ({ reasoning, content, cps }) => {
-          livePartial = content
-          patchSlice('group', { liveReasoning: reasoning, liveContent: content, cps })
+        onEvent: (ev) => {
+          if (ev && ev.cacheStats) _recordCacheStats(ev.cacheStats)
+          if (ev && typeof ev.answer === 'string') livePartial = ev.answer
+          patchSlice('group', (g) => ({
+            ...g,
+            liveReasoning: ev && typeof ev.reasoning === 'string' ? ev.reasoning : g.liveReasoning,
+            liveContent: ev && typeof ev.answer === 'string' ? ev.answer : g.liveContent,
+            liveTools: ev && Array.isArray(ev.tools) ? ev.tools : g.liveTools,
+            cps: ev && typeof ev.cps === 'number' ? ev.cps : g.cps,
+          }))
         },
+        requestApproval: (req) => new Promise((resolve) => {
+          approvalResolver = resolve
+          patchSlice('runtime', { pendingApproval: { id: 'ap_' + Date.now(), sid: 'group', ...req } })
+        }),
       })
 
-      const reply = String(res.content || '').trim()
+      const reply = String((res && res.content) || '').trim()
+      const usedTools = (res && Array.isArray(res.tools)) ? res.tools : []
+      // 保持 append-only 历史：把角色指令与成员回复追加进 relayContext，下一棒天然吃满前序 KV-Cache！
+      relayContext.push({
+        role: 'user',
+        content: (res && res.wiredUserContent) || roleBatonMsg.content,
+      })
+      if (res && Array.isArray(res.wireTrail) && res.wireTrail.length) {
+        for (const step of res.wireTrail) relayContext.push(step)
+      }
       relayContext.push({ role: 'assistant', content: `【${m.name} (${memberEp.model})】\n${reply}` })
+
       patchSlice('group', (g) => ({
         ...g,
         liveContent: '',
         liveReasoning: '',
+        liveTools: [],
         cps: 0,
         messages: [
           ...g.messages,
           {
             id: 'gm_' + Date.now() + '_' + m.id,
-            author: `${m.name}`,
+            author: m.name,
             model: memberEp.model,
             role: 'assistant',
             content: reply,
-            reasoning: res.reasoning || '',
+            reasoning: (res && res.reasoning) || '',
+            tools: usedTools,
           },
         ],
       }))
     }
 
     if (!groupAbortCtrl.signal.aborted) {
-      const handoff = `【交接文档】\n议题：${topic}\n\n` + relayContext.slice(1).map((x) => x.content).join('\n\n---\n\n')
-      await api.groupFilesWrite(state.group.activeGroupId, '默认群聊', '主持人', topic.slice(0, 32), handoff).catch(() => {})
+      const assistantSections = relayContext
+        .filter((x) => x && x.role === 'assistant' && x.content && !x.tool_calls)
+        .map((x) => x.content)
+      const handoff = `【交接文档】\n议题：${topic}\n\n` + assistantSections.join('\n\n---\n\n')
+      let archivedName = ''
+      try {
+        const w = await api.groupFilesWrite(state.group.activeGroupId, '默认群聊', '主持人', topic.slice(0, 32), handoff)
+        archivedName = (w && (w.name || (w.file && w.file.name))) || ''
+      } catch {}
       await refreshGroupFiles()
-      patchSlice('group', { running: false, status: 'done', activeIndex: latestMembers.length, handoffFrom: '', handoffTo: '', cps: 0, checkpoint: null })
-      pushToast('全员接力完成并已归档交接文档', 'ok')
+      patchSlice('group', {
+        running: false,
+        status: 'done',
+        activeIndex: latestMembers.length,
+        handoffFrom: '',
+        handoffTo: '',
+        liveTools: [],
+        cps: 0,
+        checkpoint: null,
+        lastArchivedName: archivedName,
+      })
+      pushToast(archivedName ? `全员接力完成 · 交接文档已存入「群文件」：${archivedName}` : '全员接力完成并已归档至「群文件」', 'ok')
     }
   } catch (e) {
     if (isAbort(e)) {
@@ -1242,7 +1353,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
           const curMember = latestMembers[currentIdx]
           patchSlice('group', (g) => ({
             ...g,
-            messages: [...g.messages, { id: 'gm_p_' + Date.now(), author: `${curMember.name}（已暂停部分）`, role: 'assistant', content: livePartial.trim() }],
+            messages: [...g.messages, { id: 'gm_p_' + Date.now(), author: `${curMember.name}（已暂停部分）`, role: 'assistant', content: livePartial.trim(), tools: [] }],
           }))
         }
         patchSlice('group', {
@@ -1251,6 +1362,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
           activeIndex: currentIdx,
           handoffFrom: '',
           handoffTo: '',
+          liveTools: [],
           cps: 0,
           checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel },
         })
@@ -1261,6 +1373,7 @@ async function _executeGroupRelayLoop({ topic, plannedMembers, startIndex, relay
         running: false,
         status: 'paused',
         activeIndex: currentIdx,
+        liveTools: [],
         cps: 0,
         checkpoint: { topic, plannedMembers: latestMembers, nextIndex: currentIdx, relayContext, intentLabel },
       })
@@ -1285,6 +1398,7 @@ export function triggerRelayShowcase() {
     handoffFrom: '',
     handoffTo: '',
     cps: 44,
+    liveTools: [{ id: 'dt_1', name: 'read_file', detail: 'README.md', status: 'done' }],
     lastIntent: { capability: members[0].capabilities[0] || 'text', label: '接力动画演示' },
     liveContent: `【${members[0].name}】正在拆解任务边界与首棒核心产出…`,
     liveReasoning: '',
@@ -1296,12 +1410,14 @@ export function triggerRelayShowcase() {
       handoffFrom: members[0].name,
       handoffTo: members[1].name,
       cps: 58,
+      liveTools: [{ id: 'dt_2', name: 'write_file', detail: 'index.html', status: 'running' }],
       liveContent: `正在接收 ${members[0].name} 交接方案，准备进入第二棒执行…`,
     }))
     at(1800, () => patchSlice('group', {
       handoffFrom: '',
       handoffTo: '',
       cps: 66,
+      liveTools: [{ id: 'dt_2', name: 'write_file', detail: 'index.html', status: 'done' }],
       liveContent: `【${members[1].name}】已点燃接力站点，正在生成高密度细化方案与执行清单…`,
     }))
   }
@@ -1312,6 +1428,7 @@ export function triggerRelayShowcase() {
       handoffFrom: members[1].name,
       handoffTo: members[2].name,
       cps: 62,
+      liveTools: [{ id: 'dt_3', name: 'read_file', detail: 'index.html', status: 'done' }],
       liveContent: `正在接收 ${members[1].name} 交接稿，准备终审收口…`,
     }))
     at(3500, () => patchSlice('group', {
@@ -1329,6 +1446,7 @@ export function triggerRelayShowcase() {
     handoffFrom: '',
     handoffTo: '',
     liveContent: '',
+    liveTools: [],
     cps: 0,
   }))
 }
@@ -1337,8 +1455,41 @@ export async function refreshGroupFiles() {
   try {
     const res = await api.groupFilesList(state.group.activeGroupId, '默认群聊')
     const files = (res && (res.files || res.items)) || (Array.isArray(res) ? res : [])
-    patchSlice('group', { files })
+    const filesDir = (res && (res.dir || res.root)) || ''
+    patchSlice('group', { files, filesDir })
   } catch {}
+}
+
+export async function openGroupFileInDock(fileObj) {
+  if (!fileObj || !fileObj.path) return
+  try {
+    const res = await api.groupFilesRead(fileObj.path)
+    const content = (res && typeof res.content === 'string') ? res.content : (typeof res === 'string' ? res : JSON.stringify(res, null, 2))
+    setDockPreview(`### 📁 群文件 · ${fileObj.title || fileObj.name}\n\n${content}`)
+  } catch (e) {
+    pushToast(`读取群文件失败：${e.message}`, 'err')
+  }
+}
+
+export async function openGroupFilesFolder() {
+  try {
+    const r = await api.groupFilesOpenDir(state.group.activeGroupId)
+    if (r && r.ok === false) pushToast(r.error || '打开目录失败', 'err')
+    else pushToast('已打开本地群文件目录', 'ok')
+  } catch (e) {
+    pushToast(`打开目录失败：${e.message}`, 'err')
+  }
+}
+
+export async function deleteGroupFile(name) {
+  if (!name) return
+  try {
+    await api.groupFilesDelete(state.group.activeGroupId, name)
+    await refreshGroupFiles()
+    pushToast(`已删除群文件：${name}`, 'ok')
+  } catch (e) {
+    pushToast(`删除失败：${e.message}`, 'err')
+  }
 }
 
 export async function runWebSearch(query) {

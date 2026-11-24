@@ -61,6 +61,7 @@ export function normalizeGroupMember(raw, index = 0) {
     customThinkingBudget: Number(m.customThinkingBudget) || 8192,
     maxTokens: Number(m.maxTokens) || 0,
     contextWindow: Number(m.contextWindow) || 0,
+    allowTools: m.allowTools !== false,
   }
 }
 

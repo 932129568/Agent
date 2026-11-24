@@ -15,6 +15,7 @@ export default function RelayTrackStage({
   handoffTo = '',
   liveContent = '',
   liveReasoning = '',
+  liveTools = [],
   cps = 0,
   intentLabel = '',
   motionTier = 'dynamic',
@@ -119,6 +120,15 @@ export default function RelayTrackStage({
                   : '思考档：继承'}
               </span>
             </div>
+            {Array.isArray(liveTools) && liveTools.length > 0 && (
+              <div className="rt-tools-row">
+                {liveTools.slice(-6).map((t) => (
+                  <span key={t.id} className="rt-tool-pill" data-status={t.status}>
+                    {t.status === 'done' ? '✓' : t.status === 'fail' ? '✗' : '◉'} {t.name}{t.detail ? `(${t.detail})` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="rt-stream-preview">{previewText.slice(-360)}</div>
           </div>
         </div>

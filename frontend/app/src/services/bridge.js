@@ -146,6 +146,7 @@ export const mcpCallTool = (server, tool, argsObj = {}, decision = 'allow', toke
 
 export const expertList = (query = '', opt) => callJsApi('expert_list', [query], opt)
 export const expertGet = (pkgId, snapId = '', opt) => callJsApi('expert_get', [pkgId, snapId], opt)
+export const expertReadResource = (snapId, relPath, opt) => callJsApi('expert_read_resource', [snapId, relPath], opt)
 export const expertSetEnabled = (pkgId, enabled, snapId = '', opt) => callJsApi('expert_set_enabled', [pkgId, !!enabled, snapId], opt)
 export const expertImportDirectory = (dirPath, opt) => callJsApi('expert_import_directory', [dirPath], { ...opt, allowErrorPayload: true })
 
@@ -159,6 +160,8 @@ export const groupFilesList = (groupId, groupName = '', opt) => callJsApi('group
 export const groupFilesWrite = (groupId, groupName, member, title, content, meta = {}, opt) =>
   callJsApi('group_files_write', [groupId, groupName, member, title, content, JSON.stringify(meta)], opt)
 export const groupFilesRead = (filePath, opt) => callJsApi('group_files_read', [filePath], opt)
+export const groupFilesDelete = (groupId, name, opt) => callJsApi('group_files_delete', [groupId, name], opt)
+export const groupFilesOpenDir = (groupId, opt) => callJsApi('group_files_open_dir', [groupId], opt)
 
 export const sandboxGetConfig = (opt) => callJsApi('sandbox_get_config', [], opt)
 export const sandboxSaveConfig = (cfg, opt) => callJsApi('sandbox_save_config', [JSON.stringify(cfg)], opt)

@@ -1,0 +1,61 @@
+{
+  "name": "office-doc-studio",
+  "version": "1.0.0",
+  "description": "覆盖日常高频办公文档：高管汇报 PPT 逐页结构与脚本、Excel 自动化公式与财务表、规范 Word 报告及 PDF 表单信息抽取。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "office-doc-studio",
+  "agents": [
+    "./agents/office-doc-studio.md"
+  ],
+  "skills": [
+    "./skills/docx-builder",
+    "./skills/pptx-deck-architect",
+    "./skills/xlsx-formula-model",
+    "./skills/pdf-extractor"
+  ],
+  "displayName": {
+    "en": "Office Document Studio",
+    "zh": "办公文档全能工坊（DOCX / PPTX / XLSX / PDF）"
+  },
+  "profession": {
+    "en": "Enterprise Office Document Specialist",
+    "zh": "企业办公文档与演示专家"
+  },
+  "displayDescription": {
+    "en": "End-to-end office document studio for executive PPTX decks, formula-driven XLSX workbooks, polished DOCX reports, and PDF extraction.",
+    "zh": "覆盖日常高频办公文档：高管汇报 PPT 逐页结构与脚本、Excel 自动化公式与财务表、规范 Word 报告及 PDF 表单信息抽取。"
+  },
+  "categoryId": "03-OfficeProductivity",
+  "tags": [
+    {
+      "en": "PPTX",
+      "zh": "PPT 汇报"
+    },
+    {
+      "en": "XLSX",
+      "zh": "Excel 公式"
+    },
+    {
+      "en": "DOCX & PDF",
+      "zh": "Word 与 PDF"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我生成一份 12 页 Q4 业务复盘 PPT 的逐页标题、核心论点与图表建议",
+      "en": "Draft a 12-slide Q4 business review PPTX outline with chart recommendations"
+    },
+    {
+      "zh": "帮我设计一份带自动汇总与毛利预警公式的 Excel 经营台账结构",
+      "en": "Design an automated Excel operating ledger with summary and margin alert formulas"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我生成一份 12 页 Q4 业务复盘 PPT 的逐页标题、核心论点与图表建议",
+    "en": "Draft a 12-slide Q4 business review PPTX outline with chart recommendations"
+  },
+  "x-harbor-source": "anthropics/skills (docx · pptx · xlsx · pdf)"
+}

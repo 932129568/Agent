@@ -11,6 +11,7 @@ export const CONTEXT_WINDOW_PRESETS = Object.freeze([
   { value: 65536, label: '64K（长任务）' },
   { value: 128000, label: '128K（超长仓库）' },
   { value: 200000, label: '200K（旗舰长文）' },
+  { value: 1000000, label: '1000K（1M 超大窗口）' },
 ])
 
 export const MAX_OUTPUT_PRESETS = Object.freeze([

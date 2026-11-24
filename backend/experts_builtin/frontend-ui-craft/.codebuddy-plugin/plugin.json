@@ -1,0 +1,61 @@
+{
+  "name": "frontend-ui-craft",
+  "version": "1.0.0",
+  "description": "专治“AI 模板味”界面：提供高审美排版层级、设计令牌、弹簧物理动效、响应式布局与 React 19 性能最佳工程实践。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "frontend-ui-craft",
+  "agents": [
+    "./agents/frontend-ui-craft.md"
+  ],
+  "skills": [
+    "./skills/frontend-design",
+    "./skills/web-design-guidelines",
+    "./skills/react-best-practices",
+    "./skills/motion-physics"
+  ],
+  "displayName": {
+    "en": "Frontend UI Craft Master",
+    "zh": "前端美学与动效交互大师"
+  },
+  "profession": {
+    "en": "Design Engineer & Motion Specialist",
+    "zh": "设计工程师与动效专家"
+  },
+  "displayDescription": {
+    "en": "Anti-slop frontend design engineering covering typography, design tokens, spring motion physics, and React 19 rendering performance.",
+    "zh": "专治“AI 模板味”界面：提供高审美排版层级、设计令牌、弹簧物理动效、响应式布局与 React 19 性能最佳工程实践。"
+  },
+  "categoryId": "01-ProductDesign",
+  "tags": [
+    {
+      "en": "Frontend Design",
+      "zh": "前端设计"
+    },
+    {
+      "en": "Motion Physics",
+      "zh": "物理动效"
+    },
+    {
+      "en": "React 19",
+      "zh": "React 19 性能"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "用反模板化高审美风格帮我做一个现代玻璃拟态单页落地页",
+      "en": "Build a distinctive glassmorphic landing page with strong typographic hierarchy"
+    },
+    {
+      "zh": "审查当前 React 组件与 CSS，指出视觉粗糙点和重渲染性能瓶颈",
+      "en": "Audit this React component and CSS for visual polish issues and render bottlenecks"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "用反模板化高审美风格帮我做一个现代玻璃拟态单页落地页",
+    "en": "Build a distinctive glassmorphic landing page with strong typographic hierarchy"
+  },
+  "x-harbor-source": "anthropics/frontend-design · vercel-labs/agent-skills"
+}

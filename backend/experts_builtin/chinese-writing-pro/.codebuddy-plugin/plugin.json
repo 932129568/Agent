@@ -1,0 +1,61 @@
+{
+  "name": "chinese-writing-pro",
+  "version": "1.0.0",
+  "description": "精通中文公文规范、项目立项/招投标技术方案、架构 RFC、老板汇报摘要与深度长文共创，去套话空话，语言精准有力。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "chinese-writing-pro",
+  "agents": [
+    "./agents/chinese-writing-pro.md"
+  ],
+  "skills": [
+    "./skills/chinese-official-writing",
+    "./skills/doc-coauthoring",
+    "./skills/rfp-proposal",
+    "./skills/exec-summary"
+  ],
+  "displayName": {
+    "en": "Chinese Official & RFC Writing Pro",
+    "zh": "公文、标书与深度写作专家"
+  },
+  "profession": {
+    "en": "Executive Communications & Technical Writer",
+    "zh": "公文写作与技术方案专家"
+  },
+  "displayDescription": {
+    "en": "High-precision Chinese writing specialist for official documents, RFP technical proposals, architecture RFCs, and executive summaries.",
+    "zh": "精通中文公文规范、项目立项/招投标技术方案、架构 RFC、老板汇报摘要与深度长文共创，去套话空话，语言精准有力。"
+  },
+  "categoryId": "03-OfficeProductivity",
+  "tags": [
+    {
+      "en": "Official Writing",
+      "zh": "中文公文"
+    },
+    {
+      "en": "Proposal & RFP",
+      "zh": "立项标书"
+    },
+    {
+      "en": "RFC Co-Author",
+      "zh": "深度共创"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "把这份零散会议纪要整理成给高管看的一页纸决策汇报（结论+风险+动作）",
+      "en": "Turn these rough meeting notes into a 1-page executive decision brief"
+    },
+    {
+      "zh": "帮我起草一份专业的技术改造项目立项申请与排期方案",
+      "en": "Draft a formal technical modernization project proposal and timeline"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "把这份零散会议纪要整理成给高管看的一页纸决策汇报（结论+风险+动作）",
+    "en": "Turn these rough meeting notes into a 1-page executive decision brief"
+  },
+  "x-harbor-source": "SkillHub chinese-official-writing · anthropics/doc-coauthoring"
+}

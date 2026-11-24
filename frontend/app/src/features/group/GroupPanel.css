@@ -1,6 +1,14 @@
 @layer components {
-  .gp-root { padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
-  .gp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .gp-root {
+    padding: 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .gp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; flex-shrink: 0; }
   .gp-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   .gp-chip-btn {
@@ -11,22 +19,25 @@
     color: var(--text-2);
     font-size: 12px;
     cursor: pointer;
+    white-space: nowrap;
     transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   }
   .gp-chip-btn:hover { border-color: var(--primary); color: var(--text); }
   .gp-chip-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
 
-  .gp-roster-panel {
-    padding: 14px 16px;
+  .gp-roster-panel,
+  .gp-files-panel {
+    padding: 13px 15px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-strong);
     background: var(--card-bg);
     box-shadow: var(--elev-1);
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-height: 320px;
+    gap: 10px;
+    max-height: 290px;
     overflow-y: auto;
+    flex-shrink: 0;
   }
   .gp-member-card {
     padding: 10px 12px;
@@ -37,6 +48,26 @@
     flex-direction: column;
     gap: 8px;
   }
+  .gp-file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    font-size: 12.5px;
+  }
+  .gp-file-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+  }
+  .gp-file-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gp-file-sub { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   .gp-member-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .gp-field-sm {
     padding: 6px 10px;
@@ -55,12 +86,64 @@
     background: var(--warn-bg);
     color: var(--text);
     font-size: 12px;
+    flex-shrink: 0;
   }
 
-  .gp-feed { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-  .gp-msg { padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); }
-  .gp-author { font-size: 12.5px; font-weight: 600; color: var(--primary); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .gp-model-tag { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); font-weight: 400; margin-left: 6px; }
+  .gp-feed { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .gp-msg {
+    padding: 12px 15px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    box-shadow: var(--elev-1);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .gp-author {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .gp-author-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .gp-author-actions { display: flex; align-items: center; gap: 6px; }
+  .gp-model-tag { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); font-weight: 400; }
+  .gp-stat-pill {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 1px 8px;
+    border-radius: var(--radius-full);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    font-weight: 500;
+  }
+  .gp-tool-badge { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
+
+  /* 交付卡片折叠容器：默认收纳长文与大段代码，避免撑爆视野；一键展开或送右侧副屏 */
+  .gp-body-wrap { position: relative; }
+  .gp-body-wrap[data-collapsed="true"] {
+    max-height: 112px;
+    overflow: hidden;
+  }
+  .gp-body-fade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 46px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 4px;
+    background: linear-gradient(to bottom, transparent, var(--card-elevated) 78%);
+    cursor: pointer;
+  }
 
   .gp-pause-bar {
     padding: 10px 14px;
@@ -71,9 +154,10 @@
     flex-direction: column;
     gap: 8px;
     font-size: 12.5px;
+    flex-shrink: 0;
   }
 
-  .gp-bar { display: flex; gap: 8px; align-items: center; }
+  .gp-bar { display: flex; gap: 8px; align-items: center; flex-shrink: 0; padding-top: 2px; }
   .gp-input {
     flex: 1;
     padding: 10px 14px;

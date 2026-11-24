@@ -1,0 +1,61 @@
+{
+  "name": "superpowers-tdd-architect",
+  "version": "1.0.0",
+  "description": "强制先写可证伪测试再实现（TDD）、先做根因追踪不盲猜补丁、支持严格架构拷问与防回归收口，大幅减少 AI 幻觉改代码。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "superpowers-tdd-architect",
+  "agents": [
+    "./agents/superpowers-tdd-architect.md"
+  ],
+  "skills": [
+    "./skills/tdd-red-green",
+    "./skills/root-cause-tracing",
+    "./skills/grill-me-review",
+    "./skills/systematic-debugging"
+  ],
+  "displayName": {
+    "en": "Superpowers TDD Architect",
+    "zh": "工程超能力 · TDD 与根因排障"
+  },
+  "profession": {
+    "en": "Principal TDD & Root-Cause Engineer",
+    "zh": "首席 TDD 与根因排障工程师"
+  },
+  "displayDescription": {
+    "en": "Enforces test-first TDD, evidence-backed root-cause tracing, and adversarial architecture review (inspired by obra/superpowers and mattpocock/skills).",
+    "zh": "强制先写可证伪测试再实现（TDD）、先做根因追踪不盲猜补丁、支持严格架构拷问与防回归收口，大幅减少 AI 幻觉改代码。"
+  },
+  "categoryId": "02-Engineering",
+  "tags": [
+    {
+      "en": "TDD",
+      "zh": "测试驱动开发"
+    },
+    {
+      "en": "Debugging",
+      "zh": "根因排障"
+    },
+    {
+      "en": "Architecture",
+      "zh": "架构拷问"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我按根因追踪流程排查这个报错，禁止先猜补丁，先给证据链",
+      "en": "Trace this failure to its root cause with an evidence chain before proposing any patch"
+    },
+    {
+      "zh": "对我当前方案做一次严苛架构拷问（grill-me），挑出并发与边界漏洞",
+      "en": "Run an adversarial grill-me review on my current design to surface race conditions and edge cases"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我按根因追踪流程排查这个报错，禁止先猜补丁，先给证据链",
+    "en": "Trace this failure to its root cause with an evidence chain before proposing any patch"
+  },
+  "x-harbor-source": "obra/superpowers · mattpocock/skills"
+}

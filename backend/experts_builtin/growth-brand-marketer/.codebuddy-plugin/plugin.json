@@ -1,0 +1,61 @@
+{
+  "name": "growth-brand-marketer",
+  "version": "1.0.0",
+  "description": "覆盖产品发布全链路：高转化官网 Hero 文案、SEO 与 AI 搜索 GEO 优化、小红书/公众号/X/B站多平台爆款内容改编与漏斗诊断。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "agent",
+  "agentName": "growth-brand-marketer",
+  "agents": [
+    "./agents/growth-brand-marketer.md"
+  ],
+  "skills": [
+    "./skills/landing-page-copy",
+    "./skills/seo-geo-audit",
+    "./skills/social-content-matrix",
+    "./skills/funnel-diagnosis"
+  ],
+  "displayName": {
+    "en": "Growth, Brand & SEO Marketer",
+    "zh": "品牌增长、SEO 与爆款内容专家"
+  },
+  "profession": {
+    "en": "Growth Marketing & Content Strategist",
+    "zh": "品牌增长与内容营销专家"
+  },
+  "displayDescription": {
+    "en": "Full-funnel growth strategist covering high-converting landing copy, SEO/GEO optimization, multi-platform social content, and funnel audits.",
+    "zh": "覆盖产品发布全链路：高转化官网 Hero 文案、SEO 与 AI 搜索 GEO 优化、小红书/公众号/X/B站多平台爆款内容改编与漏斗诊断。"
+  },
+  "categoryId": "04-MarketingGrowth",
+  "tags": [
+    {
+      "en": "Growth",
+      "zh": "增长策略"
+    },
+    {
+      "en": "SEO & GEO",
+      "zh": "SEO 与 AI 搜索"
+    },
+    {
+      "en": "Copywriting",
+      "zh": "爆款文案"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我把这款产品的核心卖点改写成高转化官网首屏文案 + 3 篇小红书爆款笔记",
+      "en": "Rewrite our value proposition into a landing page hero plus 3 viral social posts"
+    },
+    {
+      "zh": "帮我做一份产品冷启动 30 天增长打法与获客渠道拆解",
+      "en": "Create a 30-day cold-start launch growth playbook and channel plan"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "帮我把这款产品的核心卖点改写成高转化官网首屏文案 + 3 篇小红书爆款笔记",
+    "en": "Rewrite our value proposition into a landing page hero plus 3 viral social posts"
+  },
+  "x-harbor-source": "Brand Build Skills · ComposioHQ Marketing"
+}

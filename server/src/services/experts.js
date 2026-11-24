@@ -387,9 +387,25 @@ export async function expertList(query = '') {
     const snapshots = record.snapshots || []; if (!snapshots.length) continue
     const active = snapshots.find(x => x.digest === record.active_snapshot) || snapshots.at(-1)
     if (q && !id.toLowerCase().includes(q) && !String(active.name || '').toLowerCase().includes(q)) continue
+    let meta = null
+    try {
+      const loaded = loadSnapshot(id, active.digest)
+      if (loaded && loaded.manifest && loaded.manifest.metadata) {
+        const md = loaded.manifest.metadata
+        meta = {
+          displayName: md.displayName || md.name || id,
+          profession: md.profession || '',
+          description: md.displayDescription || md.description || '',
+          categoryId: md.categoryId || '',
+          tags: Array.isArray(md.tags) ? md.tags : [],
+          quickPrompts: Array.isArray(md.quickPrompts) ? md.quickPrompts : [],
+          skillsCount: Array.isArray(loaded.manifest.skills) ? loaded.manifest.skills.length : 0,
+        }
+      }
+    } catch {}
     packages.push({ id, kind: active.kind || 'agent', name: active.name || id, version: active.version,
       enabled: !!record.enabled, valid: active.valid !== false, active_snapshot: record.active_snapshot || '',
-      source: active.source || {}, warnings: active.warnings || [] })
+      source: active.source || {}, warnings: active.warnings || [], ...(meta ? { metadata: meta } : {}) })
   }
   const result = { ok: true, packages }
   // 仅在损坏/未知 schema 恢复时附加诊断字段；正常返回形状逐字节不变。

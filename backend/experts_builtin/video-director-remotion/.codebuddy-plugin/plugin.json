@@ -1,0 +1,108 @@
+{
+  "name": "video-director-remotion",
+  "version": "1.0.0",
+  "description": "涵盖 3 秒完播钩子文案、逐镜景别/运镜/时长分镜表、Sora/可灵/即梦中英双语提示词，以及 Remotion 代码化产品宣传视频。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "video-director-lead",
+  "agents": [
+    "./agents/video-director-lead.md",
+    "./agents/storyboard-designer.md",
+    "./agents/aigc-remotion-producer.md"
+  ],
+  "skills": [
+    "./skills/video-hook-script",
+    "./skills/shot-storyboard",
+    "./skills/aigc-video-prompts",
+    "./skills/remotion-motion"
+  ],
+  "displayName": {
+    "en": "Video Director & Remotion Studio",
+    "zh": "短视频导演、分镜与 Remotion 制作团"
+  },
+  "profession": {
+    "en": "Video Director & Remotion Studio",
+    "zh": "短视频导演、分镜与 Remotion 制作团"
+  },
+  "displayDescription": {
+    "en": "3-role video production team delivering 3-second hook scripts, shot-by-shot storyboards, bilingual AI video prompts, and Remotion motion code.",
+    "zh": "3 角色视频制作团队，覆盖黄金 3 秒钩子脚本、工业级逐镜分镜表、Sora/可灵/即梦双语提示词与 Remotion 代码化视频。"
+  },
+  "categoryId": "06-VideoCreative",
+  "tags": [
+    {
+      "en": "Video Script",
+      "zh": "视频脚本"
+    },
+    {
+      "en": "Storyboard",
+      "zh": "分镜设计"
+    },
+    {
+      "en": "Remotion",
+      "zh": "Remotion 动效"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为我的产品策划一条 60 秒科技宣传片：含口播文案、逐镜分镜与可灵/Sora 提示词",
+      "en": "Plan a 60s product launch video with script, storyboard, and AI video prompts"
+    },
+    {
+      "zh": "用 Remotion 编写一个带丝滑弹簧动画的 15 秒产品发布动态片头组件",
+      "en": "Create a 15-second Remotion product intro component with smooth spring animations"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "为我的产品策划一条 60 秒科技宣传片：含口播文案、逐镜分镜与可灵/Sora 提示词",
+    "en": "Plan a 60s product launch video with script, storyboard, and AI video prompts"
+  },
+  "x-harbor-source": "remotion-dev/remotion-best-practices · ai-video-generation",
+  "teamInfo": {
+    "leadAgent": "video-director-lead",
+    "memberAgents": [
+      "storyboard-designer",
+      "aigc-remotion-producer"
+    ]
+  },
+  "members": [
+    {
+      "id": "video-director-lead",
+      "name": {
+        "en": "Video Director",
+        "zh": "视频总导演"
+      },
+      "profession": {
+        "en": "Creative Director & Script Lead",
+        "zh": "总策划与编剧"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "storyboard-designer",
+      "name": {
+        "en": "Storyboard Artist",
+        "zh": "分镜导演"
+      },
+      "profession": {
+        "en": "Shot & Camera Language Designer",
+        "zh": "分镜与镜头语言师"
+      },
+      "role": "member"
+    },
+    {
+      "id": "aigc-remotion-producer",
+      "name": {
+        "en": "AIGC & Remotion Producer",
+        "zh": "AIGC 与 Remotion 制片"
+      },
+      "profession": {
+        "en": "AI Video Prompt & Remotion Engineer",
+        "zh": "提示词与代码化视频工程师"
+      },
+      "role": "member"
+    }
+  ]
+}

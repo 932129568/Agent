@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyKineticImpulse } from '../platform/kinetic.js'
+import { applyKineticImpulse, registerMotionAnchor, captureTriggerRect } from '../platform/kinetic.js'
 import {
   useSlice,
   hydrateApp,
@@ -54,9 +54,11 @@ export default function AppShell() {
     const isStrong = sig.strength === 'strong'
     const speed = isStrong ? 275 : 210
     const edge = sig.edge || 'left'
+    // 结合真实撞击矢量（窗口飞向归属按钮的纵横偏移），让主壳朝真实落点方向自然受冲微震
+    const yBias = sig.dy ? Math.max(-68, Math.min(68, sig.dy * 0.22)) : (isStrong ? 32 : 18)
     const vx = edge === 'left' ? speed : (edge === 'right' ? -speed : 0)
-    const vy = edge === 'top' ? speed * 0.75 : (edge === 'bottom' ? -speed * 0.75 : (isStrong ? 36 : 22))
-    const vrot = edge === 'left' ? 7.5 : (edge === 'right' ? -7.5 : 0)
+    const vy = edge === 'top' ? speed * 0.78 : (edge === 'bottom' ? -speed * 0.78 : yBias)
+    const vrot = edge === 'left' ? (sig.dy > 40 ? -6.5 : 7.5) : (edge === 'right' ? -7.5 : 0)
     const applied = applyKineticImpulse(el, {
       vx,
       vy,
@@ -124,22 +126,50 @@ export default function AppShell() {
         ))}
 
         <div className="hb-rail-section">扩展与工具</div>
-        <button type="button" className="hb-rail-btn" title="专家市场与团队" data-active={String(ui.activeModal === 'market')} onClick={() => openModal('market')}>
+        <button
+          ref={(el) => registerMotionAnchor('nav-market', el)}
+          type="button"
+          className="hb-rail-btn"
+          title="行业专家包与 Skill 市场"
+          data-active={String(ui.activeModal === 'market')}
+          onClick={(e) => openModal('market', captureTriggerRect(e))}
+        >
           <NavIcon name="market" />
           <span className="hb-rail-label">专家市场</span>
         </button>
-        <button type="button" className="hb-rail-btn" title="网页搜索分栏" data-active={String(ui.searchDockOpen)} onClick={() => toggleSearchDock()}>
+        <button
+          ref={(el) => registerMotionAnchor('nav-search', el)}
+          type="button"
+          className="hb-rail-btn"
+          title="网页搜索分栏"
+          data-active={String(ui.searchDockOpen)}
+          onClick={() => toggleSearchDock()}
+        >
           <NavIcon name="search" />
           <span className="hb-rail-label">网页搜索</span>
         </button>
-        <button type="button" className="hb-rail-btn" title="右侧上下文工作台" data-active={String(ui.dockOpen)} onClick={() => toggleDock()}>
+        <button
+          ref={(el) => registerMotionAnchor('nav-dock', el)}
+          type="button"
+          className="hb-rail-btn"
+          title="右侧上下文工作台"
+          data-active={String(ui.dockOpen)}
+          onClick={() => toggleDock()}
+        >
           <NavIcon name="dock" />
           <span className="hb-rail-label">上下文副屏</span>
         </button>
 
         <div className="hb-rail-spacer" />
 
-        <button type="button" className="hb-rail-btn" title="设置中心" data-active={String(ui.activeModal === 'settings')} onClick={() => openModal('settings')}>
+        <button
+          ref={(el) => registerMotionAnchor('nav-settings', el)}
+          type="button"
+          className="hb-rail-btn"
+          title="设置中心"
+          data-active={String(ui.activeModal === 'settings')}
+          onClick={(e) => openModal('settings', captureTriggerRect(e))}
+        >
           <NavIcon name="settings" />
           <span className="hb-rail-label">系统设置</span>
         </button>
@@ -183,20 +213,35 @@ export default function AppShell() {
               <NavIcon name={settings.theme === 'light' ? 'moon' : 'sun'} />
               <span>{settings.theme === 'light' ? '深色玻璃' : '明亮玻璃'}</span>
             </button>
-            <button type="button" className="hb-top-btn" onClick={() => openModal('command')}>⌘ Ctrl+K</button>
-            <button type="button" className="hb-top-btn" onClick={() => openModal('settings')}>透色与设置</button>
+            <button
+              ref={(el) => registerMotionAnchor('btn-command', el)}
+              type="button"
+              className="hb-top-btn"
+              onClick={(e) => openModal('command', captureTriggerRect(e))}
+            >
+              ⌘ Ctrl+K
+            </button>
+            <button
+              type="button"
+              className="hb-top-btn"
+              onClick={(e) => openModal('settings', captureTriggerRect(e))}
+            >
+              透色与设置
+            </button>
           </div>
         </header>
 
         <div className="hb-stage-row">
           <div className="hb-stage-main">
-            {ui.activePanel === 'chat' && <ChatPanel />}
-            {ui.activePanel === 'sessions' && <SessionsPanel />}
-            {ui.activePanel === 'workspace' && <WorkspacePanel />}
-            {ui.activePanel === 'planning' && <PlanningPanel />}
-            {ui.activePanel === 'group' && <GroupPanel />}
-            {ui.activePanel === 'collaboration' && <CollaborationPanel />}
-            {ui.activePanel === 'analytics' && <AnalyticsPanel />}
+            <div key={ui.activePanel} className="hb-stage-view">
+              {ui.activePanel === 'chat' && <ChatPanel />}
+              {ui.activePanel === 'sessions' && <SessionsPanel />}
+              {ui.activePanel === 'workspace' && <WorkspacePanel />}
+              {ui.activePanel === 'planning' && <PlanningPanel />}
+              {ui.activePanel === 'group' && <GroupPanel />}
+              {ui.activePanel === 'collaboration' && <CollaborationPanel />}
+              {ui.activePanel === 'analytics' && <AnalyticsPanel />}
+            </div>
           </div>
           <SearchDock />
         </div>
@@ -205,7 +250,7 @@ export default function AppShell() {
           <span>
             后端：{runtime.serverHealth && runtime.serverHealth.ok ? 'Fastify 5 在线' : '离线模式'}
             {' · '}窗外透色：{settings.backdrop} ({Math.round(settings.opacity * 100)}%)
-            {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 && ` · 缓存命中 ${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`}
+            {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 && ` · 本轮缓存 ${runtime.cacheTotals.latestHitRate}% / 累计 ${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`}
             {(split.localTokens > 0 || split.cloudTokens > 0) && ` · 本地 ${split.localTokens.toLocaleString()} / 云端 ${split.cloudTokens.toLocaleString()} tok · 省 ≈¥${savedYuan}`}
           </span>
           <span>Harbor · React 19 + Fastify 5</span>

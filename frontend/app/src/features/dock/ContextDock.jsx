@@ -1,4 +1,6 @@
-import { useSlice, toggleDock, setDockTab } from '../../state/store.js'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useSlice, toggleDock, setDockTab, fireShellImpact } from '../../state/store.js'
+import { playDrawerSlideIn, playDrawerSlideOut } from '../../platform/kinetic.js'
 import DiffView from '../../ui/DiffView.jsx'
 import MarkdownView from '../../ui/MarkdownView.jsx'
 import './ContextDock.css'
@@ -8,8 +10,37 @@ export default function ContextDock() {
   const sessionsState = useSlice('sessions')
   const runtime = useSlice('runtime')
   const settings = useSlice('settings')
+  const shouldShow = ui.dockOpen && !ui.activeModal
+  const [mounted, setMounted] = useState(shouldShow)
+  const asideRef = useRef(null)
+  const closingRef = useRef(false)
 
-  if (!ui.dockOpen || ui.activeModal) return null
+  useEffect(() => {
+    if (shouldShow) {
+      closingRef.current = false
+      setMounted(true)
+    } else if (mounted && !closingRef.current) {
+      closingRef.current = true
+      playDrawerSlideOut(
+        asideRef.current,
+        settings.motion,
+        () => fireShellImpact('right', 'strong'),
+        () => {
+          closingRef.current = false
+          setMounted(false)
+        },
+        'nav-dock'
+      )
+    }
+  }, [shouldShow])
+
+  useLayoutEffect(() => {
+    if (mounted && shouldShow && asideRef.current) {
+      playDrawerSlideIn(asideRef.current, settings.motion)
+    }
+  }, [mounted, shouldShow])
+
+  if (!mounted) return null
 
   const session = sessionsState.items.find((s) => s.id === sessionsState.currentId)
   const sid = session ? session.id : ''
@@ -18,7 +49,7 @@ export default function ContextDock() {
   const approxTokens = Math.ceil(msgs.reduce((n, m) => n + String(m.content || '').length, 0) / 1.8)
 
   return (
-    <aside className="dk-root" aria-label="右侧上下文工作台">
+    <aside ref={asideRef} className="dk-root" aria-label="右侧上下文工作台">
       <div className="dk-head">
         <strong>上下文工作台（事件驱动 · 0 轮询）</strong>
         <button type="button" className="dk-close" onClick={() => toggleDock()} aria-label="关闭">×</button>
@@ -46,7 +77,7 @@ export default function ContextDock() {
               <span className="dk-k">前缀缓存命中</span>
               <span className="dk-v">
                 {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0
-                  ? `${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`
+                  ? `本轮 ${runtime.cacheTotals.latestHitRate}% · 累计 ${runtime.cacheTotals.hitRate}% (${runtime.cacheTotals.cachedTokens.toLocaleString()} tok)`
                   : (runtime.cacheTotals && runtime.cacheTotals.prefixLocked ? `已锁定 #${runtime.cacheTotals.prefixHash}` : '首轮预热中')}
               </span>
             </div>

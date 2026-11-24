@@ -34,10 +34,10 @@ export default function AnalyticsPanel() {
         <div className="an-kpi">
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>KV 前缀缓存命中率</div>
           <div className="an-kpi-val" style={{ color: 'var(--ok)' }}>
-            {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 ? `${runtime.cacheTotals.hitRate}%` : '预热中'}
+            {runtime.cacheTotals && runtime.cacheTotals.promptTokens > 0 ? `${runtime.cacheTotals.latestHitRate}%` : '预热中'}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-            已命中 {(runtime.cacheTotals ? runtime.cacheTotals.cachedTokens : 0).toLocaleString()} tok
+            累计 {runtime.cacheTotals ? runtime.cacheTotals.hitRate : 0}% · 已命中 {(runtime.cacheTotals ? runtime.cacheTotals.cachedTokens : 0).toLocaleString()} tok
           </div>
         </div>
       </div>

@@ -23,16 +23,44 @@ check('目录导入生成内容寻址快照', () => {
 })
 const listed = JSON.parse(await experts.expertList('demo'))
 check('列表检索返回版本与启停状态', () => { assert.equal(listed.packages.length, 1); assert.equal(listed.packages[0].enabled, false) })
-// P0-1c E1：内置专家包导入（backend/experts_builtin/ 8 包，source.builtin 标记）
+// P0-1c E1 + R7 行业专家扩容：内置专家包导入（原 8 包 + R7 新增 12 套跨行业专家包 = 20 包，source.builtin 标记）
+const R7_BUILTIN_IDS = [
+  'superpowers-tdd-architect', 'frontend-ui-craft', 'security-code-auditor',
+  'office-doc-studio', 'chinese-writing-pro', 'product-strategy-pm',
+  'growth-brand-marketer', 'deep-research-analyst', 'data-sql-bi-scientist',
+  'video-director-remotion', 'finance-contract-advisor', 'browser-workflow-operator',
+]
 const allPackages = JSON.parse(await experts.expertList(''))
-check('内置包导入 8 个（design-engine 等，source=builtin）', () => {
+check('内置包导入 20 个（原 8 包 + R7 新增 12 套行业专家包，source=builtin）', () => {
   const builtins = allPackages.packages.filter(p => p.source && p.source.kind === 'builtin')
-  assert.equal(builtins.length, 8)
+  assert.equal(builtins.length, 20)
   assert.ok(builtins.some(p => p.id === 'design-engine'))
+  for (const id of R7_BUILTIN_IDS) {
+    const hit = builtins.find(p => p.id === id)
+    assert.ok(hit, `缺少 R7 内置专家包: ${id}`)
+    assert.equal(hit.warnings.length, 0, `${id} 不应产生校验警告: ${JSON.stringify(hit.warnings)}`)
+    assert.ok(hit.metadata && hit.metadata.displayName && hit.metadata.skillsCount === 4, `${id} 应透出 4 个技能元数据`)
+  }
 })
 check('内置 team 包带 AGENT_LIMIT_INTERSECTED 警告（validator maxTurns 超限）', () => {
   const design = allPackages.packages.find(p => p.id === 'design-engine')
   assert.ok(design.warnings.some(w => w.startsWith('AGENT_LIMIT_INTERSECTED:agents/')))
+})
+const r7Sample = JSON.parse(await experts.expertGet('superpowers-tdd-architect'))
+const r7SkillRes = JSON.parse(await experts.expertReadResource(r7Sample.package.snapshot_id, 'skills/tdd-red-green/SKILL.md'))
+check('R7 内置专家包 SKILL.md 归一化且只读资源可读', () => {
+  assert.equal(r7Sample.ok, true)
+  assert.equal(r7Sample.package.skills.length, 4)
+  assert.equal(r7SkillRes.ok, true)
+  assert.ok(r7SkillRes.text.includes('name: "tdd-red-green"'))
+  assert.ok(r7SkillRes.text.includes('TDD 红绿重构工作流'))
+})
+const r7Team = JSON.parse(await experts.expertGet('video-director-remotion'))
+check('R7 新增 team 专家包包含 3 角色与 4 技能', () => {
+  assert.equal(r7Team.ok, true)
+  assert.equal(r7Team.package.kind, 'team')
+  assert.equal(r7Team.package.agents.length, 3)
+  assert.equal(r7Team.package.skills.length, 4)
 })
 const got = JSON.parse(await experts.expertGet('demo-expert'))
 check('读取快照元数据与 agents', () => { assert.equal(got.package.version, '1.2.3'); assert.deepEqual(got.package.agents, ['agents/main.md']) })

@@ -1,0 +1,107 @@
+@layer components {
+  .ctx-ring-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .ctx-ring-btn {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-subtle);
+    color: var(--text-2);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition:
+      transform var(--dur-fast) var(--ease-spring),
+      border-color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out);
+  }
+  .ctx-ring-btn:hover,
+  .ctx-ring-btn:focus-visible {
+    border-color: var(--primary);
+    background: var(--card-elevated);
+    transform: scale(1.06);
+    outline: none;
+  }
+  .ctx-ring-btn[data-level="warn"] { border-color: var(--warn); }
+  .ctx-ring-btn[data-level="danger"] { border-color: var(--err); }
+
+  .ctx-ring-svg {
+    width: 20px;
+    height: 20px;
+    transform: rotate(-90deg);
+  }
+  .ctx-ring-track {
+    fill: none;
+    stroke: var(--border-strong);
+    stroke-width: 2.6;
+  }
+  .ctx-ring-arc {
+    fill: none;
+    stroke: var(--primary-2);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    transition:
+      stroke-dashoffset var(--dur-panel) var(--ease-spring),
+      stroke var(--dur-base) var(--ease-out);
+  }
+  .ctx-ring-btn[data-level="warn"] .ctx-ring-arc { stroke: var(--warn); }
+  .ctx-ring-btn[data-level="danger"] .ctx-ring-arc { stroke: var(--err); }
+
+  /* 悬浮气泡（精准复刻「36.4% · 364.1K / 1000.0K 上下文已使用」胶囊 + 下向尖角） */
+  .ctx-ring-tip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translate3d(-50%, 6px, 0) scale(0.95);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 7px 13px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--card-elevated);
+    box-shadow: var(--elev-2);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    z-index: var(--z-modal);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    transition:
+      opacity var(--dur-fast) var(--ease-out),
+      transform var(--dur-base) var(--ease-spring);
+  }
+  .ctx-ring-tip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--card-elevated);
+    border-right: 1px solid var(--border-strong);
+    border-bottom: 1px solid var(--border-strong);
+    transform: translate(-50%, -4px) rotate(45deg);
+  }
+  .ctx-ring-wrap:hover .ctx-ring-tip,
+  .ctx-ring-wrap:focus-within .ctx-ring-tip {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+  .ctx-ring-sub {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+  }
+}

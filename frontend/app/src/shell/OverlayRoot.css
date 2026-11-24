@@ -9,8 +9,8 @@
     background: rgba(10, 10, 12, 0.48);
   }
   .ov-modal {
-    width: min(880px, calc(100vw - 32px));
-    height: min(82vh, 720px);
+    width: min(920px, calc(100vw - 32px));
+    height: min(84vh, 740px);
     display: flex;
     flex-direction: column;
     border-radius: var(--radius-lg);
@@ -18,7 +18,7 @@
     background: var(--card-elevated);
     box-shadow: var(--elev-3);
     overflow: hidden;
-    animation: harborModalIn var(--dur-panel) var(--ease-spring) both;
+    will-change: transform, opacity;
   }
   .ov-modal[data-size="compact"] {
     width: min(600px, calc(100vw - 32px));
