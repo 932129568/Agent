@@ -33,6 +33,9 @@
   .mk-card {
     min-width: 0;
     padding: 14px 16px;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 230px;
+    contain: layout style;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--surface-subtle);

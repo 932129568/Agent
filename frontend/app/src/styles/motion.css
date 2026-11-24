@@ -150,9 +150,40 @@
     100% { opacity: 0; transform: scale(1.08); }
   }
   @keyframes harborShockwaveRipple {
-    0% { opacity: 0.78; transform: scale(0.42); }
-    45% { opacity: 0.42; }
-    100% { opacity: 0; transform: scale(1.38); }
+    0% { opacity: 0.86; transform: scale(0.32); }
+    38% { opacity: 0.54; }
+    100% { opacity: 0; transform: scale(1.48); }
+  }
+  @keyframes harborLiquidMeniscus {
+    0% { opacity: 0; transform: scaleY(0.68) scaleX(0.75); }
+    18% { opacity: 0.96; transform: scaleY(1.06) scaleX(1.04); }
+    56% { opacity: 0.58; transform: scaleY(0.96) scaleX(1.02); }
+    100% { opacity: 0; transform: scaleY(1.14) scaleX(0.92); }
+  }
+  @keyframes harborLiquidCapillary {
+    0%, 16% { opacity: 0; transform: scale(0.26); }
+    42% { opacity: 0.58; }
+    100% { opacity: 0; transform: scale(1.62); }
+  }
+  @keyframes harborLiquidSheenLeft {
+    0% { opacity: 0; transform: translate3d(-18%, 0, 0) skewX(-16deg); }
+    24% { opacity: 0.52; }
+    100% { opacity: 0; transform: translate3d(112%, 0, 0) skewX(-16deg); }
+  }
+  @keyframes harborLiquidSheenRight {
+    0% { opacity: 0; transform: translate3d(112%, 0, 0) skewX(16deg); }
+    24% { opacity: 0.52; }
+    100% { opacity: 0; transform: translate3d(-18%, 0, 0) skewX(16deg); }
+  }
+  @keyframes harborLiquidSheenTop {
+    0% { opacity: 0; transform: translate3d(0, -24%, 0); }
+    24% { opacity: 0.48; }
+    100% { opacity: 0; transform: translate3d(0, 112%, 0); }
+  }
+  @keyframes harborLiquidSheenBottom {
+    0% { opacity: 0; transform: translate3d(0, 112%, 0); }
+    24% { opacity: 0.48; }
+    100% { opacity: 0; transform: translate3d(0, -24%, 0); }
   }
 
   html[data-motion="reduced"] *,

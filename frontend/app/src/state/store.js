@@ -834,8 +834,43 @@ export async function saveBackendConfig(patch) {
 
 export { resolveEndpointConfig }
 
-/* ---- 并行 Run、审批、验证码接管与熔断协调 ---- */
+/* ---- 并行 Run、审批、验证码接管与熔断协调（R23 性能：高频流式 Delta 按 rAF 合并提交至 60fps） ---- */
+const _pendingRunPatches = new Map()
+let _runFlushRaf = 0
+
+function flushPendingRunPatches(targetSid = '') {
+  if (targetSid) {
+    const p = _pendingRunPatches.get(targetSid)
+    if (!p) return
+    _pendingRunPatches.delete(targetSid)
+    patchSlice('runtime', (r) => {
+      const prev = r.runsBySid[targetSid] || { phase: 'idle', stageLabel: '', reasoning: '', answer: '', cps: 0, elapsedMs: 0, tools: [], diffs: [] }
+      return { ...r, runsBySid: { ...r.runsBySid, [targetSid]: { ...prev, ...p } } }
+    })
+    return
+  }
+  _runFlushRaf = 0
+  if (_pendingRunPatches.size === 0) return
+  const batch = Array.from(_pendingRunPatches.entries())
+  _pendingRunPatches.clear()
+  patchSlice('runtime', (r) => {
+    const nextMap = { ...r.runsBySid }
+    for (const [sId, patchObj] of batch) {
+      const prev = nextMap[sId] || { phase: 'idle', stageLabel: '', reasoning: '', answer: '', cps: 0, elapsedMs: 0, tools: [], diffs: [] }
+      nextMap[sId] = { ...prev, ...patchObj }
+    }
+    return { ...r, runsBySid: nextMap }
+  })
+}
+
 function patchRun(sid, updater) {
+  if (typeof updater !== 'function' && updater && (updater.phase === 'streaming' || updater.phase === 'thinking') && !updater.tools && !updater.diffs && !updater.error && typeof requestAnimationFrame === 'function') {
+    const prevQueued = _pendingRunPatches.get(sid) || {}
+    _pendingRunPatches.set(sid, { ...prevQueued, ...updater })
+    if (!_runFlushRaf) _runFlushRaf = requestAnimationFrame(() => flushPendingRunPatches())
+    return
+  }
+  flushPendingRunPatches(sid)
   patchSlice('runtime', (r) => {
     const prev = r.runsBySid[sid] || { phase: 'idle', stageLabel: '', reasoning: '', answer: '', cps: 0, elapsedMs: 0, tools: [], diffs: [] }
     const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }

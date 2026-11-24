@@ -216,6 +216,7 @@ export function applyKineticImpulse(el, {
 
     if (sx.settled && sy.settled && sr.settled && ss.settled) {
       el.style.transform = ''
+      el.style.willChange = ''
       b.x = b.y = b.rot = b.sc = b.vx = b.vy = b.vrot = b.vsc = 0
       return
     }
@@ -223,18 +224,24 @@ export function applyKineticImpulse(el, {
     const cy = softClamp(b.y, b.maxPx)
     const crot = softClamp(b.rot, b.maxRot)
     const csc = softClamp(b.sc, b.maxSc)
-    // R21 真实感 3D 纵深微倾角：横向受冲产生微弱透视偏航 (rotateY)，纵向产生俯仰 (rotateX)，
-    // 保留 translate3d 精确像素量纲（零眩晕、不破坏阻尼曲线基准）
-    const ry = softClamp(cx * 0.22, 1.35)
-    const rx = softClamp(-cy * 0.18, 1.15)
+    // R23 液态玻璃黏弹性撞击物理：
+    // 1) 体积守恒微压扁回弹（主撞击轴微压 scaleX=1+csc，垂直轴轻度鼓起 scaleY=1-csc*0.42）；
+    // 2) 液态微剪切 skewY（±0.26deg 极细腻液膜晃动，零眩晕）；
+    // 3) 3D 透视倾角 rotateY/rotateX，且严格保持 matrix3d 位移与压缩量纲基准
+    const ry = softClamp(cx * 0.24, 1.40)
+    const rx = softClamp(-cy * 0.19, 1.18)
+    const shearY = softClamp(cx * 0.045, 0.26)
+    const scaleX = 1 + csc
+    const scaleY = 1 - csc * 0.42
     el.style.transform =
       `perspective(1200px) translate3d(${cx.toFixed(2)}px,${cy.toFixed(2)}px,0)` +
       ` rotateY(${ry.toFixed(3)}deg) rotateX(${rx.toFixed(3)}deg) rotate(${crot.toFixed(3)}deg)` +
-      ` scale(${(1 + csc).toFixed(4)})`
+      ` skewY(${shearY.toFixed(3)}deg) scale3d(${scaleX.toFixed(4)},${scaleY.toFixed(4)},1)`
     b.raf = requestAnimationFrame(tick)
   }
 
   if (!b.raf) {
+    el.style.willChange = 'transform'
     b.lastT = typeof performance !== 'undefined' ? performance.now() : Date.now()
     b.raf = requestAnimationFrame(tick)
   }
@@ -379,15 +386,20 @@ export function applySecondaryRecoil(el, { edge = 'left', strength = 'strong', m
   const amp = (strength === 'strong' ? 3.2 : 2.0) * k
   const dx = edge === 'left' ? -amp : (edge === 'right' ? amp : 0)
   const dy = edge === 'top' ? -amp : (edge === 'bottom' ? amp : 0)
+  const horiz = edge === 'left' || edge === 'right'
+  const sqX = horiz ? (1 - 0.012 * k) : (1 + 0.005 * k)
+  const sqY = horiz ? (1 + 0.006 * k) : (1 - 0.012 * k)
+  const rebX = horiz ? (1 + 0.005 * k) : (1 - 0.002 * k)
+  const rebY = horiz ? (1 - 0.002 * k) : (1 + 0.005 * k)
   try {
     el.animate(
       [
-        { transform: 'translate3d(0,0,0) scale(1)', offset: 0 },
-        { transform: `translate3d(${dx.toFixed(2)}px,${dy.toFixed(2)}px,0) scale(${(1 - 0.008 * k).toFixed(4)})`, offset: 0.24 },
-        { transform: `translate3d(${(-dx * 0.34).toFixed(2)}px,${(-dy * 0.34).toFixed(2)}px,0) scale(${(1 + 0.003 * k).toFixed(4)})`, offset: 0.64 },
-        { transform: 'translate3d(0,0,0) scale(1)', offset: 1 },
+        { transform: 'translate3d(0,0,0) scale3d(1,1,1)', offset: 0 },
+        { transform: `translate3d(${dx.toFixed(2)}px,${dy.toFixed(2)}px,0) scale3d(${sqX.toFixed(4)},${sqY.toFixed(4)},1)`, offset: 0.22 },
+        { transform: `translate3d(${(-dx * 0.38).toFixed(2)}px,${(-dy * 0.38).toFixed(2)}px,0) scale3d(${rebX.toFixed(4)},${rebY.toFixed(4)},1)`, offset: 0.62 },
+        { transform: 'translate3d(0,0,0) scale3d(1,1,1)', offset: 1 },
       ],
-      { duration: 290, easing: 'cubic-bezier(.22, 1, .36, 1)' }
+      { duration: 310, easing: 'cubic-bezier(.22, 1, .36, 1)' }
     )
     return true
   } catch {

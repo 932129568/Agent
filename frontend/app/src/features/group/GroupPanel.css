@@ -182,6 +182,9 @@
   }
 
   .gp-msg {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 130px;
+    contain: layout style;
     width: 100%;
     max-width: 920px;
     margin: 0 auto;

@@ -66,6 +66,10 @@ export default function LivingChamber({
 
     const draw = () => {
       if (stopped) return
+      if (typeof document !== 'undefined' && document.hidden) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
       const { w, h } = resize()
       ctx.clearRect(0, 0, w, h)
 

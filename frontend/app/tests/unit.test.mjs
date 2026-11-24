@@ -1046,3 +1046,21 @@ test('toolRouter.js R22 前沿 Agent 自主联网策略（auto 后台 / visible 
   assert.match(buildWebSearchDirective('visible'), /mode="visible"/)
   assert.match(buildWebSearchDirective('off'), /离线模式/)
 })
+
+
+test('R23 专家库 / Skill 库 / MCP 目录均扩展至 50+ 且全部 ID 唯一、预建检索索引毫秒命中', async () => {
+  const { CURATED_INDUSTRY_PACKS, CURATED_SKILLS, filterCuratedPacks, filterCuratedSkills } = await import('../src/services/industryExperts.js')
+  const { CURATED_MCP_SERVERS, filterCuratedMcpServers } = await import('../src/services/mcpCatalog.js')
+
+  assert.ok(CURATED_INDUSTRY_PACKS.length >= 50, `experts=${CURATED_INDUSTRY_PACKS.length}`)
+  assert.ok(CURATED_SKILLS.length >= 50, `skills=${CURATED_SKILLS.length}`)
+  assert.ok(CURATED_MCP_SERVERS.length >= 50, `mcp=${CURATED_MCP_SERVERS.length}`)
+
+  assert.equal(new Set(CURATED_INDUSTRY_PACKS.map((x) => x.id)).size, CURATED_INDUSTRY_PACKS.length)
+  assert.equal(new Set(CURATED_SKILLS.map((x) => x.id)).size, CURATED_SKILLS.length)
+  assert.equal(new Set(CURATED_MCP_SERVERS.map((x) => x.id)).size, CURATED_MCP_SERVERS.length)
+
+  assert.ok(filterCuratedPacks({ query: 'FastAPI' }).some((p) => p.id === 'python-fastapi-architect'))
+  assert.ok(filterCuratedSkills({ query: '去 AI 味' }).some((s) => s.id === 'skill-de-ai-polish'))
+  assert.ok(filterCuratedMcpServers({ query: 'context7' }).some((m) => m.serverKey === 'context7'))
+})

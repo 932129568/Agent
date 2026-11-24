@@ -29,6 +29,7 @@ import { assertLatin1Value } from '../../services/headers.js'
 import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReasoningRequestParams } from '../../services/reasoningPresets.js'
 import { MEDIA_PROVIDER_PRESETS } from '../../services/mediaGen.js'
 import { MODEL_VAULT_PRESETS } from '../../services/modelVault.js'
+import { CURATED_MCP_SERVERS } from '../../services/mcpCatalog.js'
 import './SettingsModal.css'
 
 const DOMAINS = [
@@ -568,7 +569,22 @@ export default function SettingsModal() {
             </div>
 
             <div className="st-card">
-              <h3>MCP 服务器管理</h3>
+              <h3>MCP 服务器管理（已接入 {(settings.mcpServers || []).length} · 内置 {CURATED_MCP_SERVERS.length} 套热门模板）</h3>
+              <div className="st-row">
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>高频一键填入：</span>
+                {CURATED_MCP_SERVERS.slice(0, 8).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className="st-btn"
+                    style={{ fontSize: 11.5, padding: '3px 9px' }}
+                    onClick={() => { setMcpName(m.serverKey); setMcpCmd(m.command) }}
+                    title={m.description}
+                  >
+                    + {m.serverKey}
+                  </button>
+                ))}
+              </div>
               <div className="st-row">
                 <input className="st-input" style={{ width: 150 }} value={mcpName} onChange={(e) => setMcpName(e.target.value)} placeholder="服务名" />
                 <input className="st-input" style={{ flex: 1 }} value={mcpCmd} onChange={(e) => setMcpCmd(e.target.value)} placeholder="启动命令，如 npx -y @modelcontextprotocol/server-filesystem ." />

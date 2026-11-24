@@ -288,4 +288,133 @@
     background: radial-gradient(circle at 50% 100%, transparent 10%, rgba(212, 101, 62, 0.24) 24%, transparent 46%);
     animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
   }
+
+  /* R23 液态玻璃三层光学焦散撞击层（仅撞击瞬间 420ms 挂载，纯 GPU 合成 + contain: strict 零重排） */
+  .hb-liquid-impact {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+    z-index: var(--z-sticky);
+    contain: strict;
+  }
+  .hb-lg-meniscus,
+  .hb-lg-ripple-1,
+  .hb-lg-ripple-2,
+  .hb-lg-sheen {
+    position: absolute;
+    pointer-events: none;
+  }
+  .hb-lg-meniscus {
+    inset: 0;
+    animation: harborLiquidMeniscus var(--dur-stage) var(--ease-out) forwards;
+  }
+  .hb-liquid-impact[data-edge="left"] .hb-lg-meniscus {
+    background: radial-gradient(
+      ellipse 10% 44% at 0% var(--impact-y, 50%),
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(255, 232, 214, 0.62) 22%,
+      rgba(212, 101, 62, 0.34) 42%,
+      rgba(56, 189, 248, 0.24) 62%,
+      rgba(167, 139, 250, 0.14) 76%,
+      transparent 92%
+    );
+  }
+  .hb-liquid-impact[data-edge="right"] .hb-lg-meniscus {
+    background: radial-gradient(
+      ellipse 10% 44% at 100% var(--impact-y, 50%),
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(224, 246, 255, 0.62) 22%,
+      rgba(56, 189, 248, 0.36) 42%,
+      rgba(212, 101, 62, 0.22) 64%,
+      rgba(167, 139, 250, 0.14) 78%,
+      transparent 92%
+    );
+  }
+  .hb-liquid-impact[data-edge="top"] .hb-lg-meniscus {
+    background: radial-gradient(
+      ellipse 44% 12% at 50% 0%,
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(224, 246, 255, 0.58) 24%,
+      rgba(56, 189, 248, 0.32) 48%,
+      rgba(212, 101, 62, 0.18) 70%,
+      transparent 92%
+    );
+  }
+  .hb-liquid-impact[data-edge="bottom"] .hb-lg-meniscus {
+    background: radial-gradient(
+      ellipse 44% 12% at 50% 100%,
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(255, 232, 214, 0.58) 24%,
+      rgba(212, 101, 62, 0.32) 48%,
+      rgba(56, 189, 248, 0.18) 70%,
+      transparent 92%
+    );
+  }
+
+  .hb-lg-ripple-1 {
+    inset: -12%;
+    animation: harborShockwaveRipple var(--dur-panel) var(--ease-out) forwards;
+  }
+  .hb-lg-ripple-2 {
+    inset: -16%;
+    animation: harborLiquidCapillary var(--dur-stage) var(--ease-out) forwards;
+  }
+  .hb-liquid-impact[data-edge="left"] .hb-lg-ripple-1 {
+    background: radial-gradient(circle at 10% var(--impact-y, 50%), transparent 12%, rgba(255, 255, 255, 0.44) 19%, rgba(56, 189, 248, 0.24) 24%, rgba(212, 101, 62, 0.18) 29%, transparent 38%);
+  }
+  .hb-liquid-impact[data-edge="left"] .hb-lg-ripple-2 {
+    background: radial-gradient(circle at 10% var(--impact-y, 50%), transparent 16%, rgba(255, 255, 255, 0.28) 22%, rgba(167, 139, 250, 0.14) 27%, transparent 35%);
+  }
+  .hb-liquid-impact[data-edge="right"] .hb-lg-ripple-1 {
+    background: radial-gradient(circle at 90% var(--impact-y, 50%), transparent 12%, rgba(255, 255, 255, 0.44) 19%, rgba(56, 189, 248, 0.26) 24%, rgba(212, 101, 62, 0.16) 29%, transparent 38%);
+  }
+  .hb-liquid-impact[data-edge="right"] .hb-lg-ripple-2 {
+    background: radial-gradient(circle at 90% var(--impact-y, 50%), transparent 16%, rgba(255, 255, 255, 0.28) 22%, rgba(56, 189, 248, 0.16) 27%, transparent 35%);
+  }
+  .hb-liquid-impact[data-edge="top"] .hb-lg-ripple-1 {
+    background: radial-gradient(circle at 50% 10%, transparent 12%, rgba(255, 255, 255, 0.42) 19%, rgba(56, 189, 248, 0.24) 25%, transparent 36%);
+  }
+  .hb-liquid-impact[data-edge="top"] .hb-lg-ripple-2 {
+    background: radial-gradient(circle at 50% 10%, transparent 16%, rgba(255, 255, 255, 0.24) 22%, transparent 34%);
+  }
+  .hb-liquid-impact[data-edge="bottom"] .hb-lg-ripple-1 {
+    background: radial-gradient(circle at 50% 90%, transparent 12%, rgba(255, 255, 255, 0.42) 19%, rgba(212, 101, 62, 0.24) 25%, transparent 36%);
+  }
+  .hb-liquid-impact[data-edge="bottom"] .hb-lg-ripple-2 {
+    background: radial-gradient(circle at 50% 90%, transparent 16%, rgba(255, 255, 255, 0.24) 22%, transparent 34%);
+  }
+
+  .hb-lg-sheen {
+    top: -10%;
+    bottom: -10%;
+    left: 0;
+    width: 32%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22) 38%, rgba(255, 255, 255, 0.42) 50%, rgba(160, 226, 255, 0.18) 64%, transparent);
+    animation: harborLiquidSheenLeft var(--dur-stage) var(--ease-out) forwards;
+  }
+  .hb-liquid-impact[data-edge="right"] .hb-lg-sheen {
+    animation-name: harborLiquidSheenRight;
+  }
+  .hb-liquid-impact[data-edge="top"] .hb-lg-sheen {
+    left: -10%;
+    right: -10%;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: 30%;
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.34) 50%, transparent);
+    animation-name: harborLiquidSheenTop;
+  }
+  .hb-liquid-impact[data-edge="bottom"] .hb-lg-sheen {
+    left: -10%;
+    right: -10%;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: 30%;
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.34) 50%, transparent);
+    animation-name: harborLiquidSheenBottom;
+  }
 }

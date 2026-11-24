@@ -63,8 +63,10 @@ export default function AppShell() {
   const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [impactEdge, setImpactEdge] = useState('')
   const [impactY, setImpactY] = useState('50%')
+  const [impactSeq, setImpactSeq] = useState(0)
   const shellRef = useRef(null)
   const railRef = useRef(null)
+  const topbarRef = useRef(null)
   const mainRef = useRef(null)
 
   useEffect(() => { hydrateApp().catch(() => {}) }, [])
@@ -128,15 +130,18 @@ export default function AppShell() {
       motionTier: settings.motion,
     })
     if (!applied) return undefined
-    // 耦合反作用力：左侧主导航承重边缘吸收相反方向微回弹，增强真实质量撞击手感
+    // 液态玻璃耦合反作用力：受冲承重玻璃边缘（左栏或顶栏）同步产生体积守恒微回弹
     if (edge === 'left' && railRef.current) {
       applySecondaryRecoil(railRef.current, { edge, strength: sig.strength, motionTier: settings.motion })
+    } else if (edge === 'top' && topbarRef.current) {
+      applySecondaryRecoil(topbarRef.current, { edge, strength: sig.strength, motionTier: settings.motion })
     }
     const pct = sig.dy ? Math.max(16, Math.min(84, Math.round(50 + sig.dy * 0.12))) : 50
     setImpactY(`${pct}%`)
+    setImpactSeq((n) => n + 1)
     setImpactEdge('')
     const t1 = requestAnimationFrame(() => setImpactEdge(edge))
-    const t2 = setTimeout(() => setImpactEdge(''), 240)
+    const t2 = setTimeout(() => setImpactEdge(''), 420)
     return () => {
       cancelAnimationFrame(t1)
       clearTimeout(t2)
@@ -340,17 +345,17 @@ export default function AppShell() {
               type="button"
               className="hb-rail-btn hb-rail-more-toggle"
               title="展开或收起更多功能"
-              aria-expanded={String(moreNavOpen || secondaryActive)}
-              data-active={String(secondaryActive && !moreNavOpen)}
+              aria-expanded={String(moreNavOpen)}
+              data-active={String(secondaryActive)}
               onClick={() => setMoreNavOpen((v) => !v)}
             >
               <NavIcon name="more" />
               <span className="hb-rail-label">更多功能</span>
-              <span className="hb-rail-chev" data-open={String(moreNavOpen || secondaryActive)}>
+              <span className="hb-rail-chev" data-open={String(moreNavOpen)}>
                 <NavIcon name="chevron" />
               </span>
             </button>
-            {(moreNavOpen || secondaryActive) && (
+            {moreNavOpen && (
               <div className="hb-rail-sublist" role="group" aria-label="二级功能菜单">
                 {SECONDARY_NAV.map((item) => (
                   <button
@@ -440,7 +445,15 @@ export default function AppShell() {
       )}
 
       <main ref={mainRef} className="hb-main" data-impact-edge={impactEdge} style={{ '--impact-y': impactY }}>
-        <header className="hb-topbar">
+        {impactEdge && settings.motion !== 'reduced' && (
+          <div key={impactSeq} className="hb-liquid-impact" data-edge={impactEdge} aria-hidden="true">
+            <span className="hb-lg-meniscus" />
+            <span className="hb-lg-ripple-1" />
+            <span className="hb-lg-ripple-2" />
+            <span className="hb-lg-sheen" />
+          </div>
+        )}
+        <header ref={topbarRef} className="hb-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <button type="button" className="hb-top-btn hb-icon-btn" onClick={toggleSidebar} title={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'} aria-label={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>
               <NavIcon name="sidebar" />

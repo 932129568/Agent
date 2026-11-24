@@ -769,6 +769,10 @@ try {
     d3.peakAbs === 0 && d3.sawEdge === '',
     JSON.stringify(d3)
   )
+  // **必须恢复动效档**：负控把 settings.motion 切成了 'reduced'，
+  // 而 AppShell 的液态撞击层渲染条件是 `impactEdge && settings.motion !== 'reduced'`。
+  // 不恢复就会泄漏到后续所有套件 —— Suite S 等 .hb-lg-ripple-2 永远超时的真因就是这个。
+  await page.locator('button.st-btn:has-text("灵动四幕")').click()
 
   /* ======================================================================== *
    * Suite E · 前沿 KV-Cache 前缀冻结、工具字典序锁定、中文路径 ASCII 头保护与实时命中率遥测
@@ -1032,10 +1036,12 @@ try {
   await frameLoc.locator('#subbtn').click()
   await page.waitForTimeout(220)
   const nestedShellAfterForm = await frameLoc.locator('.hb-shell').count()
-  const guardNoticeText = await page.locator('.ac-notice').textContent().catch(() => '')
   await frameLoc.locator('#rel').click()
-  await page.waitForTimeout(220)
+  await page.waitForTimeout(260)
   const nestedShellAfterLink = await frameLoc.locator('.hb-shell').count()
+  // 提示在**点完链接之后**再读：`a[href]` 的 nav_blocked 是最可靠的通知路径
+  // （表单那条在 sandbox 不含 allow-forms 时依赖点击阶段守卫，环境差异下可能不触发）。
+  const guardNoticeText = await page.locator('.ac-notice').textContent().catch(() => '')
   record(
     'Suite-M',
     '防套娃守护：在实时画布内点击网页表单按钮/相对链接绝不重载 Harbor 宿主项目网页',
@@ -1212,7 +1218,14 @@ try {
   await page.locator('.hb-rail-more-toggle').click()
   await page.waitForSelector('.hb-rail-sublist', { timeout: 3000 })
   const secondaryNavCnt = await page.locator('.hb-rail-sub-btn').count()
+  // R23 回归：选中二级菜单里的「会话总览」后，直接再点「更多功能」必须能够立刻收起二级菜单（无需先点一级导航）
+  await page.locator('.hb-rail-sub-btn[title="会话总览"]').click()
+  await page.waitForTimeout(120)
   await page.locator('.hb-rail-more-toggle').click()
+  await page.waitForSelector('.hb-rail-sublist', { state: 'detached', timeout: 3000 })
+  const moreCollapsedWhileActive = (await page.locator('.hb-rail-sublist').count()) === 0
+  await page.locator('.hb-rail-btn[title="智能对话"]').click()
+  await page.waitForSelector('.chat-textarea', { timeout: 3000 })
 
   await page.locator('.hb-topbar button[title*="外观主题"]').click()
   await page.waitForSelector('.dm-panel[aria-label="外观与透色菜单"]', { timeout: 3000 })
@@ -1224,8 +1237,8 @@ try {
   record(
     'Suite-P',
     '发布级一级/二级菜单层级：一级主导航克制为 4 核 + 二级折叠 4 项 + 外观二级菜单支持 Escape 平滑关闭',
-    primaryNavCnt === 4 && secondaryNavCnt === 4 && appearanceHasBackdrop && appearanceClosed,
-    `primary=${primaryNavCnt}, secondary=${secondaryNavCnt}, hasBackdrop=${appearanceHasBackdrop}, escClosed=${appearanceClosed}`
+    primaryNavCnt === 4 && secondaryNavCnt === 4 && moreCollapsedWhileActive && appearanceHasBackdrop && appearanceClosed,
+    `primary=${primaryNavCnt}, secondary=${secondaryNavCnt}, collapsedWhileSecActive=${moreCollapsedWhileActive}, hasBackdrop=${appearanceHasBackdrop}, escClosed=${appearanceClosed}`
   )
 
   await page.locator('.ss-side[data-mode="sessions"] button:has-text("项目会话")').click()
@@ -1316,6 +1329,38 @@ try {
     '前沿 Agent 自主联网：模型后台静默检索 → 内联来源卡 + 联网观测台实时沉淀（零手动搜索框）+ 前台模式可切换',
     sourcesShown && bgSearchMode === 'hidden' && /2 个来源/.test(sourceBarText || '') && !hasManualInput && dockSourceCnt >= 2 && visibleSelected === 'true',
     `shown=${sourcesShown}, searchCalls=${diagSearchCalls}, msgs=${diagAssistantMsgs}, mode=${bgSearchMode}, manualInput=${hasManualInput}, sources=${dockSourceCnt}, vis=${visibleSelected}`
+  )
+
+  /* ======================================================================== *
+   * Suite S · R23 生态扩容（50+ 专家 / 50+ Skill / 50+ MCP 一键接入）+ 液态玻璃焦散撞击层
+   * ======================================================================== */
+  await page.locator('.hb-rail-btn[title*="专家"]').click()
+  await page.waitForSelector('.ov-modal .mk-grid', { timeout: 4000 })
+  const r23ExpertCnt = await page.locator('.mk-card').count()
+  await page.locator('.mk-body button:has-text("热门 Skill 库")').click()
+  await page.waitForSelector('[data-section="skills-grid"] .mk-card', { timeout: 3000 })
+  const r23SkillCnt = await page.locator('[data-section="skills-grid"] .mk-card').count()
+  await page.locator('.mk-body button:has-text("热门 MCP 生态")').click()
+  await page.waitForSelector('[data-section="mcp-grid"] .mk-card', { timeout: 3000 })
+  const r23McpCnt = await page.locator('[data-section="mcp-grid"] .mk-card').count()
+  await page.locator('[data-section="mcp-grid"] .mk-card').first().locator('button:has-text("一键接入")').click()
+  await page.waitForTimeout(180)
+  await page.locator('.ov-modal .ov-close').click()
+  await page.waitForSelector('.ov-modal', { state: 'detached', timeout: 3000 })
+  // 市场弹窗的关闭路径**不触发**撞击层（实测：fireShellImpact 只由 SettingsModal / ContextDock / SearchDock 调用），
+  // 原写法在关闭市场弹窗后等待 .hb-lg-meniscus 必然超时。
+  // 改用 Suite D 已证实的受支持路径：打开系统设置 → 点 .ov-close（会 fireShellImpact('left','strong')）。
+  await page.locator('.hb-rail-btn[title="系统设置"]').click()
+  await page.waitForSelector('.ov-modal', { timeout: 4000 })
+  await page.locator('.ov-modal .ov-close').click()
+  await page.waitForSelector('.hb-liquid-impact .hb-lg-ripple-2', { timeout: 4000 })
+  const sawLiquidLayer = (await page.locator('.hb-liquid-impact .hb-lg-ripple-2').count()) > 0
+  await page.waitForSelector('.ov-modal', { state: 'detached', timeout: 3000 })
+  record(
+    'Suite-S',
+    'R23 生态扩容（专家/Skill/MCP 全 50+）与液态玻璃三层光学焦散撞击层实测就位',
+    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && sawLiquidLayer,
+    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, liquidLayer=${sawLiquidLayer}`
   )
 
   // D4: 全程零未捕获页面异常
