@@ -58,6 +58,7 @@ export default function GlassSandboxOverlay({
       }
     }
 
+    let pendingStart = null
     const onPointerDown = (e) => {
       if (e.button !== 0) return
       const el = findClosestGlassElement(e.target)
@@ -65,9 +66,11 @@ export default function GlassSandboxOverlay({
       const id = ensureGlassElementId(el)
       const startX = e.clientX
       const startY = e.clientY
+      pendingStart = { x: startX, y: startY }
       cancelPendingGrab()
 
       pressTimerRef.current = setTimeout(() => {
+        pendingStart = null
         pressTimerRef.current = 0
         const store = storeRef.current
         if (!store) return
@@ -97,8 +100,11 @@ export default function GlassSandboxOverlay({
     }
 
     const onPointerMove = (e) => {
-      if (pressTimerRef.current) {
-        // 长按判定期间大幅移动则取消长按抓起
+      if (pressTimerRef.current && pendingStart) {
+        if (Math.hypot(e.clientX - pendingStart.x, e.clientY - pendingStart.y) > 8) {
+          cancelPendingGrab()
+          pendingStart = null
+        }
         return
       }
       const d = dragRef.current

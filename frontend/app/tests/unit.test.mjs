@@ -1205,3 +1205,32 @@ test('R28 3D 二次元助手本地优先大脑 + 专属大模型开关 + 动作�
   assert.equal(llmAct.action.type, 'magic_blackhole')
   assert.equal(llmAct.action.fileName, '设计稿.md')
 })
+
+
+test('R29 全自动总管路由 (companionAutopilot)：准确判断 chat+专家+Skill / 原生专家团 / 工作流 / 群聊 / 双模协同与质检评分', async () => {
+  const { planAutopilotLocally, evaluateDeliverableQuality } = await import('../src/services/companionAutopilot.js')
+  const { isAutonomousDelegationRequest } = await import('../src/services/companionBrain.js')
+
+  // 1) 短剧综合创作 → 自动指派 4 人原生「爆款短剧编导制片厂」
+  const pDrama = planAutopilotLocally({ requirement: '帮我创作一集高反转都市悬疑短剧完整剧本和分镜' })
+  assert.equal(pDrama.mode, 'expert_team')
+  assert.equal(pDrama.team.id, 'short-drama-studio')
+
+  // 2) AI 生图/短片流水线 → 自动选中 DAG 工作流
+  const mockWfs = [{ id: 'wf_director', name: 'AI 短片导演流水线', description: '分镜+生图+视频', nodes: [{ id: 'n1', label: '生图', kind: 'image_gen' }] }]
+  const pWf = planAutopilotLocally({ requirement: '帮我跑生图工作流生成一张赛博海报图', workflows: mockWfs })
+  assert.equal(pWf.mode, 'workflow')
+  assert.equal(pWf.workflow.id, 'wf_director')
+
+  // 3) 精准单点任务 → 智能对话 + 自动匹配最佳专家与最佳 Skill
+  const pSql = planAutopilotLocally({ requirement: '帮我写一条不扫全表的 SQL 慢查询优化建议' })
+  assert.equal(pSql.mode, 'chat')
+  assert.ok(pSql.expert && pSql.skill)
+
+  // 4) 实质需求自动识别 & 质检评分
+  assert.equal(isAutonomousDelegationRequest('帮我设计一套高并发微服务架构与发布方案'), true)
+  assert.equal(isAutonomousDelegationRequest('帮我打开系统设置'), false)
+  const qa = evaluateDeliverableQuality('# 架构方案\n- 分层解耦\n- 限流熔断\n```js\nexport const ok = true\n```\n' + '详细落地步骤说明。'.repeat(25), '高并发微服务架构')
+  assert.equal(qa.ok, true)
+  assert.ok(qa.score >= 80, `score=${qa.score}`)
+})

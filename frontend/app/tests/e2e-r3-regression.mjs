@@ -1427,27 +1427,54 @@ try {
   await page.waitForSelector('.hb-shell', { timeout: 15000 })
   const actor = page.locator('[data-companion-actor="true"]')
   await actor.waitFor({ state: 'visible', timeout: 8000 })
-  // 右键助手验证大模型开关与完全大模型驱动开关
+  // T1: 右键助手打开形象工坊，实测工坊内按钮 100% 可点击（修复 R28 pointer-events 穿透 Bug）+ 切换形态与大脑配置页
   await actor.click({ button: 'right' })
   await page.waitForSelector('.cp-ctx', { timeout: 3000 })
   const hasFullLlmToggle = (await page.locator('.cp-ctx button:has-text("完全使用大模型驱动")').count()) === 1
-  await page.locator('.cp-ctx button:has-text("3D 捏脸与换装工坊")').click()
+  await page.locator('.cp-ctx button:has-text("形象工坊与捏脸换装")').click()
   await page.waitForSelector('[data-section="companion-customizer"]', { timeout: 3000 })
-  await page.locator('[data-section="companion-customizer"] button:has-text("赛博小黑")').click()
+  await page.locator('[data-section="companion-customizer"] button:has-text("大肥鱼·鲸鱼娘")').first().click()
+  await page.locator('[data-section="companion-customizer"] button:has-text("无人驾驶与专属大模型")').click()
+  const brainTabOk = (await page.locator('[data-section="companion-customizer"]:has-text("全自动无人驾驶接管")').count()) === 1
   await page.locator('[data-section="companion-customizer"] button[aria-label="关闭捏脸工坊"]').click()
   await page.waitForSelector('[data-section="companion-customizer"]', { state: 'detached', timeout: 3000 })
-  // 左键点击助手 → 点「黑洞取文件」验证黑洞魔法将文件胶囊放入聊天输入框
+  const morphedForm = await actor.getAttribute('data-body-form')
+
+  // T2: 实测拎起大肥鱼并拖动位移
+  const beforeBox = await actor.boundingBox()
+  if (beforeBox) {
+    const sx = beforeBox.x + beforeBox.width / 2
+    const sy = beforeBox.y + beforeBox.height / 2
+    await page.mouse.move(sx, sy)
+    await page.mouse.down()
+    await page.mouse.move(sx - 180, sy - 90, { steps: 8 })
+    await page.mouse.up()
+    await page.waitForTimeout(260)
+  }
+  const afterBox = await actor.boundingBox()
+  const draggedOk = Boolean(beforeBox && afterBox && Math.hypot(afterBox.x - beforeBox.x, afterBox.y - beforeBox.y) > 40)
+
+  // T3: 左键打开总管聊天 → 黑洞取文件 + 触发全自动代办路由规划交稿
   await actor.click()
   await page.waitForSelector('.cp-chat', { timeout: 3000 })
   await page.locator('.cp-chat button:has-text("黑洞取文件")').click()
   await page.waitForSelector('.chat-token-chip:has-text("黑洞文件")', { timeout: 5000 })
   const blackHoleChipOk = (await page.locator('.chat-token-chip:has-text("黑洞文件")').count()) > 0
+  // 投喂小鱼干互动
+  await page.locator('.cp-chat button:has-text("投喂")').click()
+  await page.locator('.cp-chat button:has-text("脆脆小鱼干")').click()
+  await page.waitForTimeout(240)
+  // 发一条需要 SQL 专家+Skill 的实质任务，验证全自动无人驾驶路由决策、自动挂载并监工完成交稿！
+  await page.locator('.cp-chat .cp-chat-input').fill('帮我做一份 MySQL 慢查询优化方案')
+  await page.locator('.cp-chat button:has-text("派发")').click()
+  await page.waitForSelector('.cp-chat .cp-msg:has-text("全自动监工交付验收单")', { timeout: 12000 })
+  const autopilotDelivered = (await page.locator('.cp-chat .cp-msg:has-text("全自动监工交付验收单")').count()) > 0
   await page.locator('.cp-chat button[aria-label="关闭助手聊天"]').click()
   record(
     'Suite-T',
-    '3D 二次元娱乐协助助手：右键大模型驱动开关 + 3D 捏脸工坊换装 + 黑洞魔法取文件投入聊天框',
-    hasFullLlmToggle && blackHoleChipOk,
-    `fullLlmToggle=${hasFullLlmToggle}, blackHoleChip=${blackHoleChipOk}`
+    'R29 大肥鱼/鲸鱼娘旗舰助手：形象工坊可点击 + 拎起拖动物理 + 投喂 + 黑洞取文件 + 全自动总管监工交稿',
+    hasFullLlmToggle && brainTabOk && morphedForm === 'whale_girl' && draggedOk && blackHoleChipOk && autopilotDelivered,
+    `fullLlm=${hasFullLlmToggle}, brainTab=${brainTabOk}, form=${morphedForm}, dragged=${draggedOk}, bh=${blackHoleChipOk}, delivered=${autopilotDelivered}`
   )
 
   // D4: 全程零未捕获页面异常
