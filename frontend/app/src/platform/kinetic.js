@@ -406,3 +406,80 @@ export function applySecondaryRecoil(el, { edge = 'left', strength = 'strong', m
     return false
   }
 }
+
+
+/**
+ * R24 液态玻璃 6 大撞击特效风格与专属弹簧物理人格（全部处于 3.8–6.0px / 0 残余校准包络内）：
+ * - mercury：液态水银玻璃（谐波变形液面波 + RGB 色散三环 + 飞溅水珠回吸）
+ * - prism：棱镜极光折光（晶体焦散扇形光束 + 7 色彩虹色散折射弧 + 浮游 Bokeh）
+ * - ripple：禅意水滴涟漪（3 相位真实水面重力波 + 毛细余波 + 微气泡）
+ * - crystal：冰晶星芒切面（透明棱面折射闪光 + 四角钻石星芒 + 清脆高频弹性）
+ * - aurora：极光磁流体（珊瑚橙/极光青/暮光紫柔性磁流体丝带 + 柔和丝滑阻尼）
+ * - random：灵动变奏（每次撞击自动轮换不同液态玻璃特效，永不单一）
+ */
+export const IMPACT_STYLES = Object.freeze([
+  {
+    id: 'mercury',
+    label: '🫧 液态水银',
+    shortDesc: '谐波液面波 + RGB 色散 + 飞溅水珠',
+    omega: 24,
+    zeta: 0.43,
+    speedMul: 1.0,
+    shearMul: 1.0,
+  },
+  {
+    id: 'prism',
+    label: '🌈 棱镜折光',
+    shortDesc: '扇形晶体焦散光束 + 虹彩折射弧',
+    omega: 25,
+    zeta: 0.44,
+    speedMul: 1.02,
+    shearMul: 0.9,
+  },
+  {
+    id: 'ripple',
+    label: '💧 禅意涟漪',
+    shortDesc: '3 相位清透水波干涉 + 微气泡',
+    omega: 22,
+    zeta: 0.46,
+    speedMul: 0.95,
+    shearMul: 1.12,
+  },
+  {
+    id: 'crystal',
+    label: '❄️ 冰晶星芒',
+    shortDesc: '钻石切面微光 + 四角星芒 + 清脆回弹',
+    omega: 27,
+    zeta: 0.39,
+    speedMul: 1.06,
+    shearMul: 0.72,
+  },
+  {
+    id: 'aurora',
+    label: '🌌 极光磁液',
+    shortDesc: '三色柔性磁流体丝带 + 丝滑浮力',
+    omega: 21,
+    zeta: 0.47,
+    speedMul: 0.96,
+    shearMul: 1.2,
+  },
+  {
+    id: 'random',
+    label: '✨ 灵动变奏',
+    shortDesc: '每次撞击自动切换不同液态光效',
+    omega: 24,
+    zeta: 0.44,
+    speedMul: 1.0,
+    shearMul: 1.0,
+  },
+])
+
+const CONCRETE_IMPACT_IDS = ['mercury', 'prism', 'ripple', 'crystal', 'aurora']
+
+export function resolveImpactStyle(styleId = 'mercury', seq = 0) {
+  if (styleId === 'random') {
+    const picked = CONCRETE_IMPACT_IDS[Math.abs(Number(seq) || 0) % CONCRETE_IMPACT_IDS.length]
+    return IMPACT_STYLES.find((s) => s.id === picked) || IMPACT_STYLES[0]
+  }
+  return IMPACT_STYLES.find((s) => s.id === styleId) || IMPACT_STYLES[0]
+}

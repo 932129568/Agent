@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyKineticImpulse, applySecondaryRecoil, registerMotionAnchor, captureTriggerRect, motionScaleForTier } from '../platform/kinetic.js'
+import { applyKineticImpulse, applySecondaryRecoil, registerMotionAnchor, captureTriggerRect, motionScaleForTier, IMPACT_STYLES, resolveImpactStyle } from '../platform/kinetic.js'
 import { desktopBridge } from '../platform/libs.js'
 import {
   useSlice,
@@ -22,6 +22,7 @@ import {
 import HarborLogo from '../ui/HarborLogo.jsx'
 import { NavIcon } from '../ui/Icons.jsx'
 import DropdownMenu from '../ui/DropdownMenu.jsx'
+import LiquidImpactCanvas from '../ui/LiquidImpactCanvas.jsx'
 import { findSavedModel } from '../services/modelVault.js'
 import ChatPanel from '../features/chat/ChatPanel.jsx'
 import SidebarSessions from '../features/sessions/SidebarSessions.jsx'
@@ -63,7 +64,9 @@ export default function AppShell() {
   const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [impactEdge, setImpactEdge] = useState('')
   const [impactY, setImpactY] = useState('50%')
+  const [impactPct, setImpactPct] = useState(50)
   const [impactSeq, setImpactSeq] = useState(0)
+  const [activeImpactMeta, setActiveImpactMeta] = useState({ styleId: 'mercury', edge: 'left', strength: 'strong' })
   const shellRef = useRef(null)
   const railRef = useRef(null)
   const topbarRef = useRef(null)
@@ -110,8 +113,9 @@ export default function AppShell() {
     const sig = ui.impactSignal
     const el = mainRef.current
     if (!sig || !el) return undefined
+    const stylePreset = resolveImpactStyle(settings.impactStyle || 'mercury', sig.seq)
     const isStrong = sig.strength === 'strong'
-    const speed = isStrong ? 275 : 210
+    const speed = (isStrong ? 275 : 210) * (stylePreset.speedMul || 1)
     const edge = sig.edge || 'left'
     const yBias = sig.dy ? Math.max(-68, Math.min(68, sig.dy * 0.22)) : (isStrong ? 32 : 18)
     const vx = edge === 'left' ? speed : (edge === 'right' ? -speed : 0)
@@ -122,8 +126,8 @@ export default function AppShell() {
       vy,
       vrot,
       vsc: isStrong ? -0.62 : -0.34,
-      omega: 24,
-      zeta: 0.44,
+      omega: stylePreset.omega || 24,
+      zeta: stylePreset.zeta || 0.44,
       maxPx: isStrong ? 6.0 : 4.8,
       maxRot: isStrong ? 0.38 : 0.24,
       maxSc: isStrong ? 0.016 : 0.010,
@@ -137,16 +141,18 @@ export default function AppShell() {
       applySecondaryRecoil(topbarRef.current, { edge, strength: sig.strength, motionTier: settings.motion })
     }
     const pct = sig.dy ? Math.max(16, Math.min(84, Math.round(50 + sig.dy * 0.12))) : 50
+    setImpactPct(pct)
     setImpactY(`${pct}%`)
+    setActiveImpactMeta({ styleId: stylePreset.id, edge, strength: sig.strength || 'strong' })
     setImpactSeq((n) => n + 1)
     setImpactEdge('')
     const t1 = requestAnimationFrame(() => setImpactEdge(edge))
-    const t2 = setTimeout(() => setImpactEdge(''), 420)
+    const t2 = setTimeout(() => setImpactEdge(''), 640)
     return () => {
       cancelAnimationFrame(t1)
       clearTimeout(t2)
     }
-  }, [ui.impactSignal, settings.motion])
+  }, [ui.impactSignal, settings.motion, settings.impactStyle])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -271,6 +277,17 @@ export default function AppShell() {
       active: settings.motion === 'reduced',
       onClick: () => updateVisualSettings({ motion: 'reduced' }),
     },
+    { section: '液态玻璃撞击特效' },
+    ...IMPACT_STYLES.map((st) => ({
+      id: `ap-imp-${st.id}`,
+      label: st.label,
+      hint: st.id === 'random' ? '自动变奏' : '',
+      active: (settings.impactStyle || 'mercury') === st.id,
+      onClick: () => {
+        updateVisualSettings({ impactStyle: st.id })
+        fireShellImpact('left', 'strong')
+      },
+    })),
     { divider: true },
     {
       id: 'ap-guide',
@@ -446,13 +463,22 @@ export default function AppShell() {
 
       <main ref={mainRef} className="hb-main" data-impact-edge={impactEdge} style={{ '--impact-y': impactY }}>
         {impactEdge && settings.motion !== 'reduced' && (
-          <div key={impactSeq} className="hb-liquid-impact" data-edge={impactEdge} aria-hidden="true">
+          <div key={impactSeq} className="hb-liquid-impact" data-edge={impactEdge} data-style={activeImpactMeta.styleId} aria-hidden="true">
             <span className="hb-lg-meniscus" />
             <span className="hb-lg-ripple-1" />
             <span className="hb-lg-ripple-2" />
             <span className="hb-lg-sheen" />
           </div>
         )}
+        <LiquidImpactCanvas
+          seq={impactSeq}
+          edge={activeImpactMeta.edge}
+          impactPct={impactPct}
+          styleId={activeImpactMeta.styleId}
+          strength={activeImpactMeta.strength}
+          motionTier={settings.motion}
+          theme={settings.theme}
+        />
         <header ref={topbarRef} className="hb-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <button type="button" className="hb-top-btn hb-icon-btn" onClick={toggleSidebar} title={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'} aria-label={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>

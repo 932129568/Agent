@@ -1,10 +1,95 @@
 @layer overlays {
-  .et-root { display: flex; flex-direction: column; gap: 12px; }
-  .et-card { padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface-subtle); display: flex; flex-direction: column; gap: 8px; }
-  .et-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .et-chip { padding: 5px 12px; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--card-bg); font-size: 12px; cursor: pointer; }
+  .et-root { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .et-card {
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .et-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .et-sub { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+  .et-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+  .et-preset-btn {
+    text-align: left;
+    padding: 9px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring), background-color var(--dur-fast) var(--ease-out);
+  }
+  .et-preset-btn:hover { border-color: var(--primary); transform: translate3d(0, -1px, 0); }
+  .et-preset-btn strong { font-size: 12.5px; color: var(--text); }
+  .et-preset-btn span { font-size: 11px; color: var(--text-3); }
+
+  .et-roster-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--border-strong);
+    background: var(--card-bg);
+    font-size: 12px;
+  }
+  .et-selected-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    background: var(--primary-soft);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .et-selected-pill button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .et-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 190px; overflow-y: auto; padding-right: 2px; }
+  .et-chip {
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text-2);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  }
+  .et-chip:hover { border-color: var(--primary); color: var(--text); }
   .et-chip[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
-  .et-input { width: 100%; padding: 8px 11px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--card-bg); font-size: 13px; }
-  .et-tl { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; font-size: 12px; }
-  .et-tl-row { padding: 6px 10px; border-radius: var(--radius-sm); border-left: 3px solid var(--primary); background: var(--card-bg); }
+  .et-chip-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  .et-chip-primary:hover { background: var(--primary-hover); color: var(--on-primary); }
+
+  .et-input {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .et-input:focus { border-color: var(--primary); }
+
+  .et-tl { display: flex; flex-direction: column; gap: 6px; max-height: 210px; overflow-y: auto; font-size: 12px; }
+  .et-tl-row { padding: 7px 10px; border-radius: var(--radius-sm); border-left: 3px solid var(--primary); background: var(--card-bg); }
 }

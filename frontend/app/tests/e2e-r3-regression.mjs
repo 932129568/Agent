@@ -153,7 +153,19 @@ const server = http.createServer(async (req, res) => {
     else if (method === 'pick_folder') out = { ok: true, path: 'C:/Users/demo/Desktop/harbor-project' }
     else if (method === 'list_recent_ws') out = { recent: [REPO_ROOT] }
     else if (method === 'list_dir') out = { ok: true, entries: ['README.md', 'package.json'] }
-    else if (method === 'expert_list') out = []
+    else if (method === 'expert_list') out = [
+      {
+        id: 'local-bilingual-expert',
+        name: 'local-bilingual-expert',
+        kind: 'agent',
+        enabled: true,
+        metadata: {
+          displayName: { en: 'Bilingual Local Expert', zh: '双语本地专家测试包' },
+          description: { en: 'Desc EN', zh: '用于验证 {en, zh} 对象绝不触发 React #31 崩溃' },
+          profession: { en: 'QA Lead', zh: '质量架构师' },
+        },
+      },
+    ]
     else if (method === 'get_memory') out = []
     else if (method === 'mcp_list_servers') out = []
     else if (method === 'guard_get_config') out = { tiers: { run_command: 'always', run_powershell: 'session', delete_path: 'always', browser_click: 'always', software_call: 'session' } }
@@ -725,7 +737,7 @@ try {
 
   // D1: 强撞击按钮实测（峰值 3.2–6.5px + 缩放 + 弧形高光 + 收敛 <=450ms + 过冲 <=2 + 残余 <0.5px）
   const d1 = await sampleMainImpact(
-    () => page.locator('button:has-text("试一下物理撞击手感")').click(),
+    () => page.locator('button:has-text("左侧液态撞击")').click(),
     720
   )
   record(
@@ -760,7 +772,7 @@ try {
   await page.locator('.st-nav-btn:has-text("透色、动效与自动更新")').click()
   await page.locator('button.st-btn:has-text("静息无障碍")').click()
   const d3 = await sampleMainImpact(
-    () => page.locator('button:has-text("试一下物理撞击手感")').click(),
+    () => page.locator('button:has-text("左侧液态撞击")').click(),
     360
   )
   record(
@@ -1345,6 +1357,12 @@ try {
   const r23McpCnt = await page.locator('[data-section="mcp-grid"] .mk-card').count()
   await page.locator('[data-section="mcp-grid"] .mk-card').first().locator('button:has-text("一键接入")').click()
   await page.waitForTimeout(180)
+  // R24 回归：点击「✦ 多专家团队」验证带 {en, zh} 元数据的本地包 + 56 大专家零 React #31 崩溃且梦之队预设可用
+  await page.locator('.mk-body button:has-text("多专家团队")').click()
+  await page.waitForSelector('[data-section="expert-team-runner"] .et-presets button', { timeout: 3000 })
+  const etTeamChipCnt = await page.locator('[data-section="expert-team-runner"] .et-chips .et-chip').count()
+  await page.locator('[data-section="expert-team-runner"] .et-presets button').first().click()
+  await page.waitForTimeout(120)
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForSelector('.ov-modal', { state: 'detached', timeout: 3000 })
   // 市场弹窗的关闭路径**不触发**撞击层（实测：fireShellImpact 只由 SettingsModal / ContextDock / SearchDock 调用），
@@ -1352,6 +1370,11 @@ try {
   // 改用 Suite D 已证实的受支持路径：打开系统设置 → 点 .ov-close（会 fireShellImpact('left','strong')）。
   await page.locator('.hb-rail-btn[title="系统设置"]').click()
   await page.waitForSelector('.ov-modal', { timeout: 4000 })
+  await page.locator('.st-nav button:has-text("透色、动效与自动更新")').click()
+  await page.waitForSelector('[data-section="impact-studio"]', { timeout: 3000 })
+  await page.locator('[data-section="impact-studio"] button:has-text("棱镜折光")').click()
+  await page.waitForSelector('canvas.lic-canvas[data-impact-style="prism"]', { timeout: 3000 })
+  await page.locator('[data-section="impact-studio"] button:has-text("液态水银")').click()
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForSelector('.hb-liquid-impact .hb-lg-ripple-2', { timeout: 4000 })
   const sawLiquidLayer = (await page.locator('.hb-liquid-impact .hb-lg-ripple-2').count()) > 0
@@ -1359,8 +1382,8 @@ try {
   record(
     'Suite-S',
     'R23 生态扩容（专家/Skill/MCP 全 50+）与液态玻璃三层光学焦散撞击层实测就位',
-    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && sawLiquidLayer,
-    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, liquidLayer=${sawLiquidLayer}`
+    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && etTeamChipCnt >= 50 && sawLiquidLayer,
+    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, teamPool=${etTeamChipCnt}, liquidLayer=${sawLiquidLayer}`
   )
 
   // D4: 全程零未捕获页面异常

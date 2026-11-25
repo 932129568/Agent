@@ -30,6 +30,7 @@ import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReaso
 import { MEDIA_PROVIDER_PRESETS } from '../../services/mediaGen.js'
 import { MODEL_VAULT_PRESETS } from '../../services/modelVault.js'
 import { CURATED_MCP_SERVERS } from '../../services/mcpCatalog.js'
+import { IMPACT_STYLES } from '../../platform/kinetic.js'
 import './SettingsModal.css'
 
 const DOMAINS = [
@@ -679,8 +680,42 @@ export default function SettingsModal() {
                     <button key={mo} type="button" className="st-btn" data-active={String(settings.motion === mo)}
                       onClick={() => updateVisualSettings({ motion: mo })}>{label}</button>
                   ))}
+                </div>
+              </div>
+              <div className="st-field" data-section="impact-studio">
+                <label>液态玻璃撞击特效风格（实时 Canvas 2D 光学物理模拟 · 点击切换即刻预览）</label>
+                <div className="st-row">
+                  {IMPACT_STYLES.map((st) => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      className="st-btn"
+                      data-active={String((settings.impactStyle || 'mercury') === st.id)}
+                      title={st.shortDesc}
+                      onClick={() => {
+                        updateVisualSettings({ impactStyle: st.id })
+                        fireShellImpact('left', 'strong')
+                      }}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                  {(IMPACT_STYLES.find((s) => s.id === (settings.impactStyle || 'mercury')) || IMPACT_STYLES[0]).shortDesc}
+                </div>
+                <div className="st-row" style={{ marginTop: 4 }}>
                   <button type="button" className="st-btn st-btn-primary" onClick={() => fireShellImpact('left', 'strong')}>
-                    ⚡ 试一下物理撞击手感（5.5px + 弧形高光）
+                    ← 左侧液态撞击
+                  </button>
+                  <button type="button" className="st-btn" onClick={() => fireShellImpact('right', 'strong')}>
+                    → 右侧回撞
+                  </button>
+                  <button type="button" className="st-btn" onClick={() => fireShellImpact('top', 'strong')}>
+                    ↑ 顶部冲击
+                  </button>
+                  <button type="button" className="st-btn" onClick={() => fireShellImpact('bottom', 'strong')}>
+                    ↓ 底部回弹
                   </button>
                 </div>
               </div>

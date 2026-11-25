@@ -1064,3 +1064,18 @@ test('R23 专家库 / Skill 库 / MCP 目录均扩展至 50+ 且全部 ID 唯一
   assert.ok(filterCuratedSkills({ query: '去 AI 味' }).some((s) => s.id === 'skill-de-ai-polish'))
   assert.ok(filterCuratedMcpServers({ query: 'context7' }).some((m) => m.serverKey === 'context7'))
 })
+
+
+test('R24 safeExpertText 兼容 {en, zh} 多语言对象防 React #31 崩溃 + 6 大液态玻璃撞击风格配置完整', async () => {
+  const { safeExpertText, DREAM_TEAM_PRESETS } = await import('../src/services/expertTeam.js')
+  const { IMPACT_STYLES, resolveImpactStyle } = await import('../src/platform/kinetic.js')
+
+  assert.equal(safeExpertText({ en: 'Security Auditor', zh: '安全审计专家' }), '安全审计专家')
+  assert.equal(safeExpertText({ en: 'English Only' }), 'English Only')
+  assert.equal(safeExpertText(null, '兜底名'), '兜底名')
+  assert.ok(DREAM_TEAM_PRESETS.length >= 6)
+
+  assert.equal(IMPACT_STYLES.length, 6)
+  assert.equal(resolveImpactStyle('crystal', 1).id, 'crystal')
+  assert.notEqual(resolveImpactStyle('random', 0).id, resolveImpactStyle('random', 1).id)
+})
