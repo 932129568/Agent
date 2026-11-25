@@ -1033,15 +1033,15 @@ export default function CompanionOverlay({
   }
 
   const cycleDriveMode = () => {
-    if (config.fullLlmDrive) {
-      updateConfigPatch({ llmEnabled: false, fullLlmDrive: false })
-      pushToast('芽露已切换为「🤖 本地全自动总管」（零 Token）', 'info')
-    } else if (config.llmEnabled) {
-      updateConfigPatch({ llmEnabled: true, fullLlmDrive: true })
-      pushToast('芽露已切换为「⚡ 完全大模型驱动」', 'info')
+    // 两态循环（默认已是"模型驱动"）：
+    //   模型驱动（理解意图 + 动作驱动） ⇄ 本地规则（零 Token）
+    const local = String(config.intentMode || 'model') === 'local'
+    if (local) {
+      updateConfigPatch({ intentMode: 'model', llmEnabled: true, fullLlmDrive: true })
+      pushToast('芽露已切换为「🧠 大模型驱动」：先理解你的意图，再去驱动 Harbor', 'info')
     } else {
-      updateConfigPatch({ llmEnabled: true, fullLlmDrive: false })
-      pushToast('芽露已切换为「🧠 大模型闲聊 + 本地总管」', 'info')
+      updateConfigPatch({ intentMode: 'local', llmEnabled: false, fullLlmDrive: false })
+      pushToast('芽露已切换为「🤖 本地规则」（零 Token，只做关键词匹配）', 'info')
     }
   }
 
@@ -1051,9 +1051,9 @@ export default function CompanionOverlay({
   if (!config.visible) return null
 
   const exprAvatarUrl = pickExpressionUrl(pack, actionState, avatar.expressionOverride)
-  const driveLabel = config.fullLlmDrive
-    ? '⚡ 完全大模型'
-    : (config.llmEnabled ? '🧠 闲聊增强' : '🤖 全自动总管')
+  const driveLabel = String(config.intentMode || 'model') === 'local'
+    ? '🤖 本地规则'
+    : '🧠 大模型驱动'
   const lv = affectionLevel(stats.affection)
   const storeNow = sandboxStoreRef && sandboxStoreRef.current
   const hasDamagedGlass = Boolean(

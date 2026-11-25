@@ -116,6 +116,9 @@ export const DEFAULT_COMPANION_CONFIG = Object.freeze({
   visible: true,
   llmEnabled: false,
   fullLlmDrive: false,
+  // 意图理解模式：'model' = 有可用端点时一律让模型理解意图并驱动（默认）
+  //               'local' = 用户显式切回本地规则
+  intentMode: 'model',
   autopilotEnabled: true,
   autonomousLifeEnabled: true, // 自带自然走动、坐边、走出桌面漫游与回窗等活体生命行为
   modelProfileId: '',

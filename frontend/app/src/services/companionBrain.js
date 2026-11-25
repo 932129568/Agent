@@ -256,30 +256,49 @@ export async function askCompanionBrain({
     autopilotEnabled: config.autopilotEnabled !== false,
   })
 
-  if (!config.fullLlmDrive && localPlan.handledLocally) {
-    return { reply: localPlan.reply, action: localPlan.action, engine: 'local' }
+  // ===== 意图理解模式（默认）=====
+  // 原逻辑：本地关键词命中就**直接返回罐头回复**（`handledLocally` 短路），
+  // 于是"默认本地规则"永远听不懂人话、也不会去驱动界面。
+  // 现改为：**只要配了可用端点，一律交给模型理解意图并按动作协议驱动**；
+  // 本地规则只保留两种用途：(a) 用户显式切到本地；(b) 模型调用失败时的兜底。
+  const wantModel = String(config.intentMode || 'model') !== 'local'
+  const hasEndpoint = Boolean(endpointConfig && endpointConfig.apiKey)
+  if (wantModel && !hasEndpoint) {
+    // 想用模型但没端点：**明确说出来**，别再用本地罐头话糊过去。
+    // 这正是"感觉它听不懂"的真相 —— 它在假装。
+    return {
+      reply: '我现在还没接上大模型（没配 API Key），只能按关键词猜你的意思，所以经常答非所问。\n给我配一个模型端点，我就能真正理解你的意图并替你操作 Harbor。',
+      action: { type: 'click', target: 'model' },
+      engine: 'no-endpoint',
+    }
   }
-
-  if (!config.llmEnabled && !config.fullLlmDrive) {
-    return { reply: localPlan.fallbackReply, action: localPlan.action, engine: 'local' }
+  if (!wantModel) {
+    return {
+      reply: localPlan.handledLocally ? localPlan.reply : localPlan.fallbackReply,
+      action: localPlan.handledLocally ? localPlan.action : null,
+      engine: 'local',
+    }
   }
 
   const kbBrief = HARBOR_DEEP_KNOWLEDGE.map((k) => `- ${k.title}：${k.summary}`).join('\n')
   const sysPrompt = `你是 Harbor 桌面工作台的 3D 全能互动助手「${(avatar && avatar.name) || '大肥鱼'}」（形态：${(avatar && avatar.bodyForm) || 'dafeiyu'}）。
-你既可爱又专业，可以完全替代真人操作 Harbor 的各个模块并监工交付。
+你的职责是**先理解用户真实意图，再去驱动 Harbor 完成它**，而不是只陪聊。
+判断标准：只要用户的话里包含"要做什么/想要什么结果"，就必须落到下面某个动作上。
+
 Harbor 核心能力：
 ${kbBrief}
 
-${config.fullLlmDrive
-    ? `【完全大模型驱动动作协议】在回复末尾按需附带唯一动作标签：
-- 全自动选模块/专家/工作流并监工交稿：[[ACTION:autopilot:完整任务需求]]
-- 代点击导航：[[ACTION:click:settings|market|group|workflow|workspace|chat|model|appearance]]
-- 手写输入框：[[ACTION:write:要写入的文本]]
-- 黑洞取文件：[[ACTION:blackhole:文件名.md]]
-- 修补受损玻璃：[[ACTION:repair]]
-- 打开形象工坊：[[ACTION:customizer]]
-- 双形态变身：[[ACTION:morph]]`
-    : '请用生动可爱且真诚的口吻回复，控制在 120 字以内。'}`
+【意图理解与驱动协议】
+1) 先判断意图属于哪一类，再在回复**末尾**附带**唯一**动作标签：
+- 需要多模块协作/出方案/交付成品 → [[ACTION:autopilot:完整任务需求]]
+- 想打开某个界面 → [[ACTION:click:settings|market|group|workflow|workspace|chat|model|appearance]]
+- 想让我代为输入文字 → [[ACTION:write:要写入的文本]]
+- 想取某个文件 → [[ACTION:blackhole:文件名.md]]
+- 玻璃碎了想修 → [[ACTION:repair]]
+- 想换形象/捏脸 → [[ACTION:customizer]]
+- 想变身 → [[ACTION:morph]]
+2) 纯寒暄、纯提问、或信息不足无法执行 → **不要**输出动作标签，直接回答（120 字内），并在需要时反问一句关键信息。
+3) 回复要口语化、简短（≤120 字），先说"我理解你要…"，再说"我去做了/我需要你确认…"。`
 
   const msgs = [
     { role: 'system', content: sysPrompt },
@@ -295,11 +314,12 @@ ${config.fullLlmDrive
       signal,
     })
     const rawContent = String((resp && resp.content) || '').trim()
-    if (config.fullLlmDrive) {
-      const parsed = parseLlmCompanionAction(rawContent)
-      return { reply: parsed.cleanText || '收到！我立刻去执行！', action: parsed.action, engine: 'llm-full' }
+    const parsed = parseLlmCompanionAction(rawContent)
+    return {
+      reply: parsed.cleanText || rawContent || '收到！我立刻去执行！',
+      action: parsed.action || (localPlan.handledLocally ? localPlan.action : null),
+      engine: 'llm-drive',
     }
-    return { reply: rawContent || localPlan.fallbackReply, action: { type: 'happy' }, engine: 'llm-chat' }
   } catch (err) {
     return {
       reply: `（专属大模型连接开小差：${String(err && err.message || err).slice(0, 60)}）\n不过我的本地总管大脑随时在线！${localPlan.handledLocally ? localPlan.reply : ''}`,
