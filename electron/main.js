@@ -53,6 +53,7 @@ const LIB_FILES = new Set([
 ])
 
 const MIME = {
+  '.glb': 'model/gltf-binary',
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -242,6 +243,12 @@ async function boot() {
         if (DIST_FILES.has(rel)) abs = path.join(APP_DIST, rel)
         else if (rel === 'desktop-stage.html') abs = path.join(__dirname, 'desktop-stage.html')
         else if (LIB_FILES.has(rel) || ASSET_FILES.has(rel)) abs = path.join(ROOT, rel)
+        else if (/^assets\/yalu3d\/[a-zA-Z0-9._-]+\.glb$/.test(rel)) {
+          // 用户设计稿的 3D 模型（已减面）：必须显式放行，否则 harbor:// 协议返回 404，
+          // 前端 GLTFLoader 拿不到模型 ⇒ 3D 舞台静默失败（会退回 2D 精灵）。
+          const candDist = path.join(APP_DIST, rel)
+          abs = fs.existsSync(candDist) ? candDist : null
+        }
         else if (/^assets\/yalu\/[a-zA-Z0-9._-]+$/.test(rel)) {
           const candDist = path.join(APP_DIST, rel)
           const candRoot = path.join(ROOT, rel)

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
@@ -99,6 +99,7 @@ export default function YaluModel3D({
 }) {
   const hostRef = useRef(null)
   const canvasRef = useRef(null)
+  const [ready, setReady] = useState(false)
   const stateRef = useRef({ actionState, facing, viewAngle, lookX, lookY, dragTilt, scale })
   stateRef.current = { actionState, facing, viewAngle, lookX, lookY, dragTilt, scale }
 
@@ -108,7 +109,7 @@ export default function YaluModel3D({
 
     // 铁律 LAW-01 禁止在 React 层用 .appendChild：canvas 由 JSX 提供，three 只接管渲染上下文
     const canvasEl = canvasRef.current
-    if (!canvasEl) return undefined
+    if (!canvasEl) { if (onReady) onReady(false); return undefined }
     let renderer
     try {
       renderer = new THREE.WebGLRenderer({
@@ -118,7 +119,9 @@ export default function YaluModel3D({
         powerPreference: 'high-performance',
       })
     } catch {
-      return undefined // 无 WebGL：交给上层回退到 2D 精灵
+      // 无 WebGL（Electron 关闭 GPU 时常见）：明确上报失败，让上层保持 2D 精灵
+      if (onReady) onReady(false)
+      return undefined
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -156,7 +159,7 @@ export default function YaluModel3D({
 
     Promise.all([load(ASSETS.yalu), load(ASSETS.staff), load(ASSETS.bell)]).then(([gYalu, gStaff, gBell]) => {
       if (disposed) return
-      if (!gYalu) { host.dataset.stage3d = 'failed'; return }
+      if (!gYalu) { host.dataset.stage3d = 'failed'; if (onReady) onReady(false); return }
 
       const char = gYalu.scene
       prepareMaterials(char)
@@ -189,6 +192,7 @@ export default function YaluModel3D({
       }
 
       host.dataset.stage3d = 'ready'
+      setReady(true)
       host.dataset.modelHeight = String(fit.height)
       if (onReady) onReady({ hasClip: mixers.length > 0 })
       start()
@@ -274,7 +278,12 @@ export default function YaluModel3D({
       style={{ width: '100%', height: '100%', display: 'block', position: 'relative' }}
       aria-label="芽露三维舞台"
     >
-      <canvas ref={canvasRef} className="yms-canvas" style={{ width: '100%', height: '100%', display: 'block' }} aria-hidden="true" />
+      <canvas
+        ref={canvasRef}
+        className={ready ? 'yms-canvas' : 'yms-canvas-loading'}
+        style={{ width: '100%', height: '100%', display: 'block' }}
+        aria-hidden="true"
+      />
     </div>
   )
 }

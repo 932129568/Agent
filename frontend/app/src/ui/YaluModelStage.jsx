@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import YaluModel3D from './YaluModel3D.jsx'
 import './YaluModelStage.css'
 
@@ -743,6 +743,8 @@ export default function YaluModelStage({
   const canvasRef = useRef(null)
   const physRef = useRef({ yaw: 0, bellAng: 0, bellVel: 0, hairSway: 0, hairVel: 0 })
   const stripsRef = useRef({ idle: null, action: null })
+  // 3D 是否已就绪：就绪才撤掉 2D 精灵（兜底），失败则一直保留 2D
+  const [ready3d, setReady3d] = useState(false)
   const propsRef = useRef({ renderMode, actionState, facing, lookX, lookY, dragTilt, auraTheme, scale, res })
   propsRef.current = { renderMode, actionState, facing, lookX, lookY, dragTilt, auraTheme, scale, res }
 
@@ -858,9 +860,13 @@ export default function YaluModelStage({
   // 真三维路径：模型来自用户设计稿（已减面到 ~3.3 万面 / 贴图 1024 / 合计 14MB）。
   // 注意 e2e 断言 `[data-yalu-stage="yalu_3d"] canvas.yms-canvas` 恰好 1 个，
   // 所以两条路径互斥，且三维 canvas 也复用 yms-canvas 类名。
-  if (renderMode === 'yalu_3d') {
-    return (
-      <div className="yms-stage" style={{ width, height }} data-yalu-stage={renderMode}>
+  const want3d = renderMode === 'yalu_3d'
+
+  return (
+    <div className="yms-stage" style={{ width, height }} data-yalu-stage={renderMode}>
+      {/* 2D 精灵是兜底：3D 未就绪/失败时它就是主角，绝不让舞台空着 */}
+      {!ready3d && <canvas ref={canvasRef} className="yms-canvas" aria-hidden="true" />}
+      {want3d && (
         <YaluModel3D
           actionState={actionState}
           facing={facing}
@@ -871,14 +877,9 @@ export default function YaluModelStage({
           width={width}
           height={height}
           scale={scale}
+          onReady={(ok) => setReady3d(Boolean(ok))}
         />
-      </div>
-    )
-  }
-
-  return (
-    <div className="yms-stage" style={{ width, height }} data-yalu-stage={renderMode}>
-      <canvas ref={canvasRef} className="yms-canvas" aria-hidden="true" />
+      )}
     </div>
   )
 }
