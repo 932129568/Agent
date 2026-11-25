@@ -59,6 +59,9 @@ if (result.errors.length) {
 }
 
 fs.copyFileSync(path.join(HERE, 'index.html'), path.join(DIST, 'index.html'))
+// 用户设计的 3D 模型（已减面）：芽露本体 + 露芽杖 + 酒红铃铛 + 白模
+const YALU3D_SRC = path.join(REPO, 'assets', 'yalu3d')
+const YALU3D_DIST = path.join(DIST, 'assets', 'yalu3d')
 const YALU_SRC = path.join(REPO, 'assets', 'yalu')
 const YALU_DIST = path.join(DIST, 'assets', 'yalu')
 if (fs.existsSync(YALU_SRC)) {
@@ -66,6 +69,14 @@ if (fs.existsSync(YALU_SRC)) {
   for (const fn of fs.readdirSync(YALU_SRC)) {
     const s = path.join(YALU_SRC, fn)
     if (fs.statSync(s).isFile()) fs.copyFileSync(s, path.join(YALU_DIST, fn))
+  }
+}
+
+if (fs.existsSync(YALU3D_SRC)) {
+  fs.mkdirSync(YALU3D_DIST, { recursive: true })
+  for (const fn of fs.readdirSync(YALU3D_SRC)) {
+    const src = path.join(YALU3D_SRC, fn)
+    if (fs.statSync(src).isFile()) fs.copyFileSync(src, path.join(YALU3D_DIST, fn))
   }
 }
 const jsSize = fs.statSync(path.join(DIST, 'app.js')).size

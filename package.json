@@ -24,11 +24,11 @@
     "dist:dir": "npm run dist:check && electron-builder --win --dir --config electron-builder.yml",
     "dist:win": "npm run dist:check && electron-builder --win nsis --config electron-builder.yml"
   },
-  "dependencies": {},
   "devDependencies": {
     "electron": "^45.2.1",
     "electron-builder": "^26.18.0",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "three": "^0.187.0"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

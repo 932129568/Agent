@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import YaluModel3D from './YaluModel3D.jsx'
 import './YaluModelStage.css'
 
 const AURA_GLOW = {
@@ -850,6 +851,27 @@ export default function YaluModelStage({
     return (
       <div className="yms-stage" style={{ width, height }} data-yalu-stage={viewAngle}>
         <img className="yms-ref-img" src={src} alt={`芽露 ${viewAngle}`} draggable={false} />
+      </div>
+    )
+  }
+
+  // 真三维路径：模型来自用户设计稿（已减面到 ~3.3 万面 / 贴图 1024 / 合计 14MB）。
+  // 注意 e2e 断言 `[data-yalu-stage="yalu_3d"] canvas.yms-canvas` 恰好 1 个，
+  // 所以两条路径互斥，且三维 canvas 也复用 yms-canvas 类名。
+  if (renderMode === 'yalu_3d') {
+    return (
+      <div className="yms-stage" style={{ width, height }} data-yalu-stage={renderMode}>
+        <YaluModel3D
+          actionState={actionState}
+          facing={facing}
+          viewAngle="auto"
+          lookX={lookX}
+          lookY={lookY}
+          dragTilt={dragTilt}
+          width={width}
+          height={height}
+          scale={scale}
+        />
       </div>
     )
   }
