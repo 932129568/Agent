@@ -743,8 +743,8 @@ export default function YaluModelStage({
   const canvasRef = useRef(null)
   const physRef = useRef({ yaw: 0, bellAng: 0, bellVel: 0, hairSway: 0, hairVel: 0 })
   const stripsRef = useRef({ idle: null, action: null })
-  // 3D 是否已就绪：就绪才撤掉 2D 精灵（兜底），失败则一直保留 2D
-  const [ready3d, setReady3d] = useState(false)
+  // 3D 状态机：loading（什么都不显示，绝不用 2D 占位，否则会闪旧画面）/ ready / failed（退回 2D）
+  const [stage3d, setStage3d] = useState('loading')
   const propsRef = useRef({ renderMode, actionState, facing, lookX, lookY, dragTilt, auraTheme, scale, res })
   propsRef.current = { renderMode, actionState, facing, lookX, lookY, dragTilt, auraTheme, scale, res }
 
@@ -864,8 +864,11 @@ export default function YaluModelStage({
 
   return (
     <div className="yms-stage" style={{ width, height }} data-yalu-stage={renderMode}>
-      {/* 2D 精灵是兜底：3D 未就绪/失败时它就是主角，绝不让舞台空着 */}
-      {!ready3d && <canvas ref={canvasRef} className="yms-canvas" aria-hidden="true" />}
+      {/* 2D 精灵只在 3D **确实失败**时才出场；loading 期间用透明占位，
+          避免"先闪一帧淘汰的 2D 画面再切 3D"。仍保留 .yms-canvas 计数为 1（e2e 契约）。 */}
+      {stage3d !== 'ready' && (
+        <canvas ref={canvasRef} className="yms-canvas" aria-hidden="true" style={{ opacity: stage3d === 'failed' ? 1 : 0 }} />
+      )}
       {want3d && (
         <YaluModel3D
           actionState={actionState}
@@ -877,7 +880,7 @@ export default function YaluModelStage({
           width={width}
           height={height}
           scale={scale}
-          onReady={(ok) => setReady3d(Boolean(ok))}
+          onReady={(ok) => setStage3d(ok ? 'ready' : 'failed')}
         />
       )}
     </div>

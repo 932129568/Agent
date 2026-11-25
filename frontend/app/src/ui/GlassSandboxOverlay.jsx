@@ -121,7 +121,7 @@ export default function GlassSandboxOverlay({
       setTick((n) => n + 1)
     }
 
-    const onPointerUp = () => {
+    const onPointerUp = (upEvent) => {
       cancelPendingGrab()
       const d = dragRef.current
       if (!d || !storeRef.current) return
@@ -135,6 +135,21 @@ export default function GlassSandboxOverlay({
       const vy = recent.length >= 2 ? (b.y - a.y) / dtS : 0
       const res = releaseGlassBody(storeRef.current, d.id, vx, vy)
       if (res.snapped) setGlassSourceVisibility(d.id, true)
+      // R30 的逃逸判定要求 |v| ≥ 680（高速甩），**慢慢拖到边缘松手永远飞不出去**（用户实测"飞不出去、卡住"）。
+      // 这里补一条等价语义：松手点已经落在窗口边缘/之外 ⇒ 视为"往外扔"，直接给一个朝外的速度，
+      // 复用引擎既有 escape 逻辑（不改物理参数，避免影响正常甩动）。
+      if (!res.snapped && upEvent && typeof upEvent.clientX === 'number') {
+        const cx = upEvent.clientX; const cy = upEvent.clientY
+        const vw = window.innerWidth; const vh = window.innerHeight
+        const body = storeRef.current.bodies.get(d.id)
+        if (body) {
+          const EDGE = 3
+          if (cx <= EDGE) body.vx = -760
+          else if (cx >= vw - EDGE) body.vx = 760
+          else if (cy <= EDGE) body.vy = -760
+          else if (cy >= vh - EDGE) body.vy = 760
+        }
+      }
       setTick((n) => n + 1)
       if (typeof onStateSync === 'function') onStateSync()
     }

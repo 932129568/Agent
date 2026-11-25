@@ -58,6 +58,29 @@ if (result.errors.length) {
   process.exit(1)
 }
 
+// 桌面舞台（electron/desktop-stage.html）专用的 3D 入口：
+// 舞台是独立窗口，加载不到 React bundle，因此单独打一份 IIFE，
+// 与窗口内共用 assets/yalu3d/yalu.glb，彻底消除"窗口内精细、扔出去变糊"的两套渲染。
+const stageResult = await build({
+  entryPoints: [path.join(HERE, 'stage/stage3d.js')],
+  bundle: true,
+  treeShaking: true,
+  format: 'iife',
+  outfile: path.join(DIST, 'desktop-stage.js'),
+  platform: 'browser',
+  target: ['chrome126'],
+  minify: !isDev,
+  sourcemap: false,
+  legalComments: 'none',
+  nodePaths: CANDIDATE_NODE_MODULES,
+  define: { 'process.env.NODE_ENV': isDev ? '"development"' : '"production"' },
+  logLevel: 'warning',
+})
+if (stageResult.errors.length) {
+  console.error('[harbor-app] stage3d build failed')
+  process.exit(1)
+}
+
 fs.copyFileSync(path.join(HERE, 'index.html'), path.join(DIST, 'index.html'))
 // 用户设计的 3D 模型（已减面）：芽露本体 + 露芽杖 + 酒红铃铛 + 白模
 const YALU3D_SRC = path.join(REPO, 'assets', 'yalu3d')

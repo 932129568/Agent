@@ -35,11 +35,14 @@
     will-change: transform;
   }
   .ds-pet:active { cursor: grabbing; }
-  .ds-pet canvas {
+  .ds-pet canvas, .ds-pet harbor-stage-3d {
     width: 132px; height: 192px; display: block; pointer-events: none;
     filter: drop-shadow(0 12px 20px rgba(15, 28, 56, 0.28));
   }
   .ds-bubble {
+    /* 绝对定位：flex 列布局下气泡会把 wrapper 撑到 200+px，
+       宠物贴右边界时整体被切掉一半。 */
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
     margin-bottom: 2px; padding: 6px 11px; border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.82);
     background: rgba(255,255,255,0.92); backdrop-filter: blur(16px);
@@ -51,6 +54,7 @@
 </head>
 <body>
 <div id="stage"></div>
+<script src="./desktop-stage.js"></script>
 <script>
 (() => {
   const api = window.HarborDesktop
@@ -74,6 +78,7 @@
   let petBubbleEl = null
   let petCanvas = null
   let petCtx = null
+  let petStage3d = null
 
   function setInteractive(on) {
     if (hoveringInteractive === on) return
@@ -89,12 +94,23 @@
     petBubbleEl = document.createElement('div')
     petBubbleEl.className = 'ds-bubble'
     petBubbleEl.style.display = 'none'
+    // 与窗口内同一套 three.js 渲染（<harbor-stage-3d> 自定义元素，不污染全局）；
+    // 3D 不可用时回退到 16 帧精灵。
     petCanvas = document.createElement('canvas')
     petCanvas.width = 264
     petCanvas.height = 384
-    petCtx = petCanvas.getContext('2d')
+    try {
+      petStage3d = document.createElement('harbor-stage-3d')
+      // **必须与旧 canvas 的 CSS 尺寸一致（132×192）**：
+      // 舞台的落地钳制是 `pet.y > H - 208`，按 192 高推导的；
+      // 之前我设成 264×384，视觉比物理模型高一倍 ⇒ 看上去"掉到屏幕外"。
+      petStage3d.style.width = '132px'
+      petStage3d.style.height = '192px'
+      petStage3d.style.display = 'block'
+    } catch { petStage3d = null }
+    petCtx = petStage3d ? null : petCanvas.getContext('2d')
     petWrapEl.appendChild(petBubbleEl)
-    petWrapEl.appendChild(petCanvas)
+    petWrapEl.appendChild(petStage3d || petCanvas)
     petWrapEl.onpointerenter = () => setInteractive(true)
     petWrapEl.onpointerleave = () => { if (!draggingBlock && !draggingPet) setInteractive(false) }
     petWrapEl.onpointerdown = (e) => {
@@ -329,6 +345,12 @@
       if (pet.active) {
         ensurePetDom()
         petWrapEl.style.display = 'flex'
+        // 无条件钳制：窗口尺寸/DPI 变化后也可能越界（原来只在漫游分支里钳）
+        const VW = window.innerWidth, VH = window.innerHeight
+        if (pet.x > VW - 140) pet.x = VW - 140
+        if (pet.x < 4) pet.x = 4
+        if (pet.y > VH - 200) pet.y = VH - 200
+        if (pet.y < 4) pet.y = 4
         petWrapEl.style.transform = `translate3d(${pet.x.toFixed(1)}px,${pet.y.toFixed(1)}px,0)`
         if (pet.speech && (now - (pet.speechAt || 0) < 4200)) {
           petBubbleEl.style.display = 'block'; petBubbleEl.textContent = pet.speech
@@ -336,7 +358,12 @@
           petBubbleEl.style.display = 'none'
         }
         // 在透明 Canvas 上丝滑渲染芽露 16 帧动画（彻底告别呆板静态贴图！）
-        const sheet = (moving && stripAct.complete && stripAct.naturalWidth) ? stripAct : (stripIdle.complete && stripIdle.naturalWidth ? stripIdle : null)
+        if (petStage3d) {
+          // 3D 自己渲染；注意这里**不能 return**——那会跳出 loop()，
+          // 末尾的 requestAnimationFrame 不再续帧，整个舞台动画会冻住。
+          petStage3d.state = { moving, facing: pet.facing, tilt: pet.tilt || 0, vx: pet.vx || 0, vy: pet.vy || 0 }
+        }
+        const sheet = petStage3d ? null : ((moving && stripAct.complete && stripAct.naturalWidth) ? stripAct : (stripIdle.complete && stripIdle.naturalWidth ? stripIdle : null))
         if (sheet && petCtx) {
           petCtx.clearRect(0, 0, 264, 384)
           const cw = sheet.naturalWidth / N_FRAMES

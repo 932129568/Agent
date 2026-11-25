@@ -89,7 +89,14 @@ function prepareMaterials(root) {
       if (!m) continue
       if (m.map) m.map.colorSpace = THREE.SRGBColorSpace
       if (m.emissiveMap) m.emissiveMap.colorSpace = THREE.SRGBColorSpace
+      // 三个"材质脏"的真实来源（都在模型里，不是渲染错）：
+      //  glTF doubleSided → 闭合网格前后脸 z-fighting（看上去像水渍/斑块）
+      //  metallicFactor 未定义 → 默认 1.0，无环境贴图时高光斑驳
+      //  roughnessFactor 未定义 → 默认 1.0，配合法线贴图会放大重建噪声
       m.side = THREE.FrontSide
+      if (!Number.isFinite(m.metalness) || m.metalness > 0.2) m.metalness = 0.06
+      if (!Number.isFinite(m.roughness) || m.roughness > 0.9) m.roughness = 0.82
+      if (m.normalMap) m.normalScale.setScalar(0.55)
       m.envMapIntensity = 0.55
       m.needsUpdate = true
     }

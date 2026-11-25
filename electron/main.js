@@ -41,7 +41,7 @@ if (USE_CUSTOM_PROTOCOL) {
 }
 
 /** 协议资源白名单：精确映射 dist 产物与只读 libs，拒绝任何目录遍历。 */
-const DIST_FILES = new Set(['index.html', 'app.js', 'app.css', 'app.js.map', 'app.css.map'])
+const DIST_FILES = new Set(['index.html', 'app.js', 'app.css', 'app.js.map', 'app.css.map', 'desktop-stage.js'])
 const ASSET_FILES = new Set(['harbor.ico', 'harbor-icon.png'])
 const LIB_FILES = new Set([
   'libs/marked.min.js',

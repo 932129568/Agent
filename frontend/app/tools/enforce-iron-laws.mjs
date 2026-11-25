@@ -296,7 +296,23 @@ if (STRICT) {
   const entryFile = path.join(SRC_ROOT, 'main.jsx')
   if (fs.existsSync(entryFile)) {
     const visited = new Set()
-    const q = [entryFile]
+    // 除了 main.jsx，build.mjs 里声明的每个 entryPoints 也是**合法根**：
+    // 桌面舞台 (src/stage/stage3d.js) 被单独打包成 dist/desktop-stage.js 给另一个窗口用，
+    // 它本来就不该被 main.jsx 引用 —— 只认 main.jsx 会把它误判成孤儿。
+    const extraRoots = []
+    try {
+      const buildTxt = fs.readFileSync(path.join(APP_ROOT, 'build.mjs'), 'utf8')
+      // 不用正则（反斜杠易被脚本转义吃掉）：直接按标记切分 build.mjs 的 entryPoints
+      for (const seg of buildTxt.split('entryPoints: [').slice(1)) {
+        const tag = "path.join(HERE, '"
+        const at = seg.indexOf(tag)
+        if (at < 0) continue
+        const s0 = at + tag.length
+        const s1 = seg.indexOf("'", s0)
+        if (s1 > s0) extraRoots.push(path.join(APP_ROOT, seg.slice(s0, s1)))
+      }
+    } catch {}
+    const q = [entryFile, ...extraRoots]
     while (q.length) {
       const cur = q.shift()
       if (visited.has(cur) || !fs.existsSync(cur)) continue
