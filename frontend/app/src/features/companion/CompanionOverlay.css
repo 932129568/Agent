@@ -65,6 +65,38 @@
   }
 
   /* 抛出的液态玻璃星晶小游戏目标 */
+  .cp-expr-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+    border: 1.5px solid var(--glass-border);
+    background: var(--card-bg);
+    flex-shrink: 0;
+  }
+  .cp-recall-pill {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    pointer-events: auto;
+    padding: 8px 14px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--primary);
+    background: var(--card-elevated);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(22px) saturate(1.6);
+    box-shadow: var(--elev-2);
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    animation: harborActionRise var(--dur-base) var(--ease-spring) both;
+  }
+  .cp-recall-pill:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-3); }
+
   .cp-star-toy {
     position: fixed;
     left: 0;

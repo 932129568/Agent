@@ -1,20 +1,62 @@
 /**
- * Harbor 旗舰级 3D 互动桌宠与全自动监工助手 · 形象工坊目录、双形态变身与养成持久化（R29）：
- * - 参考全网高人气「大肥鱼（胖鲸鱼本尊 + 鲸鱼娘萌娘）」「粘土人 Nendoroid 二次元」与「Apple 液态玻璃星核喵」4 大高精建模形态；
- * - 支持一键「大肥鱼 ↔ 鲸鱼娘」双形态即时变身，支持发型/发色/瞳色/异色瞳/头饰/服装/手持物/体型/性格深度定制；
- * - 内置好感度 Lv.1–Lv.10、饱食度、心情、投喂零食目录与持久配置。
+ * Harbor 旗舰级 3D 互动桌宠与全自动监工助手 · 原版「芽露」建模包资产体系与扩展注册表（R30）：
+ * - 以后所有新角色/换装/道具建模均在 `COMPANION_MODEL_PACKS` 中按统一契约扩展，无需重写渲染引擎；
+ * - 默认旗舰角色为「芽露 (Yalu)」原版建模包：完整接入正面定妆立绘、正/侧/背三视图、4 组表情差分、
+ *   专属双道具（露芽杖 + 酒红铃铛）与 60fps 补帧成片；
+ * - 同时保留旧版 Canvas 扩展形态作为可选皮肤，100% 兼容既有单测与历史存档平滑迁移。
  */
 import { readStorage, writeStorage } from '../platform/storage.js'
 
-const AVATAR_KEY = 'harbor.r28.companion.avatar'
+const AVATAR_KEY = 'harbor.r30.companion.avatar'
+const LEGACY_AVATAR_KEY = 'harbor.r28.companion.avatar'
 const CONFIG_KEY = 'harbor.r28.companion.config'
 const STATS_KEY = 'harbor.r29.companion.stats'
 
+export const COMPANION_MODEL_PACKS = Object.freeze([
+  {
+    id: 'yalu_official',
+    name: '🌿 芽露 · 原版精绘建模',
+    tagline: '自带正/侧/背三视图、4 组表情差分、露芽杖 & 酒红铃铛双道具与 60fps 补帧成片',
+    badge: '原版建模',
+    assets: {
+      front: './assets/yalu/yalu-front.webp',
+      turnFront: './assets/yalu/yalu-turn-front.webp',
+      side: './assets/yalu/yalu-turn-side.webp',
+      back: './assets/yalu/yalu-turn-back.webp',
+      expressions: [
+        { id: 'happy', label: '元气微笑', src: './assets/yalu/yalu-expr-1.webp' },
+        { id: 'focus', label: '认真监工', src: './assets/yalu/yalu-expr-2.webp' },
+        { id: 'flustered', label: '慌张害羞', src: './assets/yalu/yalu-expr-3.webp' },
+        { id: 'proud', label: '摇铃交稿', src: './assets/yalu/yalu-expr-4.webp' },
+      ],
+      props: {
+        staff: { id: 'staff', label: '🌿 露芽杖', src: './assets/yalu/prop-staff.webp' },
+        bell: { id: 'bell', label: '🔔 酒红铃铛', src: './assets/yalu/prop-bell.webp' },
+      },
+      showcaseVideo: './assets/yalu/yalu-showcase.mp4',
+    },
+  },
+])
+
+export const YALU_PROP_LOADOUTS = Object.freeze([
+  { id: 'both', label: '🌿 露芽杖 + 🔔 酒红铃铛（双持）' },
+  { id: 'staff', label: '🌿 仅持露芽杖' },
+  { id: 'bell', label: '🔔 仅挂酒红铃铛' },
+  { id: 'none', label: '✨ 轻装无道具' },
+])
+
+export const YALU_AURA_THEMES = Object.freeze([
+  { id: 'natural', label: '原版晨露光', filter: 'none', glow: 'rgba(130, 212, 168, 0.36)' },
+  { id: 'starlight', label: '星穹微光', filter: 'saturate(1.08) brightness(1.04)', glow: 'rgba(96, 190, 250, 0.42)' },
+  { id: 'crimson', label: '酒红暖光', filter: 'saturate(1.1) contrast(1.03)', glow: 'rgba(218, 92, 118, 0.40)' },
+  { id: 'glass', label: '液态通透', filter: 'brightness(1.06) contrast(1.04)', glow: 'rgba(255, 255, 255, 0.50)' },
+])
+
 export const COMPANION_BODY_FORMS = Object.freeze([
-  { id: 'dafeiyu', label: '🐳 大肥鱼·胖鲸鱼', desc: '经典圆滚滚高光瓷感胖鲸鱼，头顶喷水柱、尾巴会拍打扑腾' },
-  { id: 'whale_girl', label: '🎀 大肥鱼·鲸鱼娘', desc: '精致 2.2 头身粘土人鲸鱼娘，赛璐璐发丝高光+鲸尾发饰' },
-  { id: 'chibi_anime', label: '✨ 星见二次元萌娘', desc: '精细日系 Q 版看板娘，立体刘海光环+宝石星光大眼' },
-  { id: 'liquid_cat', label: '🫧 液态玻璃星核喵', desc: '半透明液态玻璃软萌团子猫，耳尖微光+悬浮星环' },
+  { id: 'yalu_model', label: '🌿 芽露·原版建模 (默认)', desc: '你亲手设计的芽露原版立绘+三视图+表情差分+露芽杖&酒红铃铛+60fps成片' },
+  { id: 'dafeiyu', label: '🐳 备用·大肥鱼', desc: '备用皮肤：圆滚滚瓷感胖鲸鱼' },
+  { id: 'whale_girl', label: '🎀 备用·鲸鱼娘', desc: '备用皮肤：2.2头身鲸鱼娘' },
+  { id: 'liquid_cat', label: '🫧 备用·液态星核喵', desc: '备用皮肤：半透明液态玻璃团子猫' },
 ])
 
 export const COMPANION_HAIRSTYLES = Object.freeze([
@@ -25,18 +67,17 @@ export const COMPANION_HAIRSTYLES = Object.freeze([
   { id: 'wolf', label: '飒爽狼尾短发' },
   { id: 'sidetail', label: '俏皮侧马尾' },
   { id: 'drill', label: '大小姐双螺旋' },
-  { id: 'hime', label: '公主切长发' },
 ])
 
 export const COMPANION_HAIR_COLORS = Object.freeze([
-  { id: 'ocean', label: '深海鲸蓝', hex: '#4B8BF5', shade: '#2452B0', light: '#99CCFF' },
-  { id: 'sky', label: '晴空冰蓝', hex: '#6AC4FA', shade: '#2D7CC2', light: '#C8EDFF' },
-  { id: 'sakura', label: '樱花奶粉', hex: '#F79EC2', shade: '#C55B8A', light: '#FFD6E8' },
-  { id: 'silver', label: '月光冰银', hex: '#D8E3F4', shade: '#8E9FBC', light: '#FFFFFF' },
-  { id: 'honey', label: '蜜糖奶油金', hex: '#F8CE70', shade: '#C48A2B', light: '#FFF0C2' },
-  { id: 'obsidian', label: '星夜墨黑', hex: '#2F384C', shade: '#141925', light: '#687899' },
-  { id: 'mint', label: '薄荷海盐', hex: '#6BE2C4', shade: '#2A9D82', light: '#C7FFF0' },
-  { id: 'lilac', label: '星穹丁香紫', hex: '#B99CF9', shade: '#7456C6', light: '#E6DAFF' },
+  { id: 'ocean', label: '深海鲸蓝', hex: '#4B8BF5', shade: '#2452B0' },
+  { id: 'sky', label: '晴空冰蓝', hex: '#6AC4FA', shade: '#2D7CC2' },
+  { id: 'sakura', label: '樱花奶粉', hex: '#F79EC2', shade: '#C55B8A' },
+  { id: 'silver', label: '月光冰银', hex: '#D8E3F4', shade: '#8E9FBC' },
+  { id: 'honey', label: '蜜糖奶油金', hex: '#F8CE70', shade: '#C48A2B' },
+  { id: 'obsidian', label: '星夜墨黑', hex: '#2F384C', shade: '#141925' },
+  { id: 'mint', label: '薄荷海盐', hex: '#6BE2C4', shade: '#2A9D82' },
+  { id: 'lilac', label: '星穹丁香紫', hex: '#B99CF9', shade: '#7456C6' },
 ])
 
 export const COMPANION_EYE_STYLES = Object.freeze([
@@ -49,14 +90,14 @@ export const COMPANION_EYE_STYLES = Object.freeze([
 ])
 
 export const COMPANION_EYE_COLORS = Object.freeze([
-  { id: 'sapphire', label: '深海蓝', hex: '#257BE8', glow: '#8BD3FF' },
-  { id: 'cyan', label: '冰晶青', hex: '#14B8C4', glow: '#99F6FF' },
-  { id: 'amber', label: '琥珀金', hex: '#E69A28', glow: '#FFE299' },
-  { id: 'rose', label: '蔷薇粉', hex: '#E85C8B', glow: '#FFC2D9' },
-  { id: 'emerald', label: '翡翠绿', hex: '#22A874', glow: '#9BF6D3' },
-  { id: 'violet', label: '星穹紫', hex: '#8A5CF6', glow: '#D5C2FF' },
-  { id: 'crimson', label: '绯红宝石', hex: '#DF4545', glow: '#FFB8B8' },
-  { id: 'hetero', label: '异色双瞳', hex: '#257BE8', rightHex: '#F2992E', glow: '#B8E8FF' },
+  { id: 'sapphire', label: '深海蓝', hex: '#257BE8' },
+  { id: 'cyan', label: '冰晶青', hex: '#14B8C4' },
+  { id: 'amber', label: '琥珀金', hex: '#E69A28' },
+  { id: 'rose', label: '蔷薇粉', hex: '#E85C8B' },
+  { id: 'emerald', label: '翡翠绿', hex: '#22A874' },
+  { id: 'violet', label: '星穹紫', hex: '#8A5CF6' },
+  { id: 'crimson', label: '绯红宝石', hex: '#DF4545' },
+  { id: 'hetero', label: '异色双瞳', hex: '#257BE8', rightHex: '#F2992E' },
 ])
 
 export const COMPANION_HEADGEARS = Object.freeze([
@@ -67,77 +108,141 @@ export const COMPANION_HEADGEARS = Object.freeze([
   { id: 'bunny_ears', label: '垂耳兔耳' },
   { id: 'ribbon', label: '大蝴蝶结' },
   { id: 'halo', label: '星辰光环' },
-  { id: 'headphones', label: '赛博猫耳耳机' },
-  { id: 'none', label: '无头饰' },
 ])
 
 export const COMPANION_OUTFITS = Object.freeze([
-  { id: 'maid', label: '清甜服务女仆装', primary: '#253252', accent: '#FFFFFF', trim: '#60BDF8' },
-  { id: 'sailor', label: '深海学院水手服', primary: '#2E62C8', accent: '#FFFFFF', trim: '#F48260' },
-  { id: 'cyber', label: '赛博机能外套', primary: '#1E273B', accent: '#38BDF8', trim: '#A78BFA' },
-  { id: 'mage', label: '星穹魔导师斗篷', primary: '#563DB8', accent: '#F8D064', trim: '#C4B5FD' },
-  { id: 'pajama', label: '软糯鲨鱼睡衣', primary: '#7BC8F6', accent: '#FFFDF7', trim: '#F79EC2' },
-  { id: 'hanfu', label: '流光轻汉服', primary: '#E86E58', accent: '#FFF4E8', trim: '#F6C860' },
+  { id: 'maid', label: '清甜女仆装', primary: '#253252', accent: '#FFFFFF' },
+  { id: 'sailor', label: '深海水手服', primary: '#2E62C8', accent: '#FFFFFF' },
+  { id: 'cyber', label: '赛博机能衣', primary: '#1E273B', accent: '#38BDF8' },
+  { id: 'mage', label: '星穹魔导袍', primary: '#563DB8', accent: '#F8D064' },
+  { id: 'pajama', label: '软糯睡衣', primary: '#7BC8F6', accent: '#FFFDF7' },
+  { id: 'hanfu', label: '流光轻汉服', primary: '#E86E58', accent: '#FFF4E8' },
 ])
 
 export const COMPANION_ACCESSORIES = Object.freeze([
   { id: 'stylus', label: '星光手写笔' },
   { id: 'fish_cookie', label: '小鱼干零食' },
-  { id: 'wand', label: '星辰指挥棒' },
+  { id: 'wand', label: '露芽杖' },
+  { id: 'bell', label: '酒红铃铛' },
   { id: 'glasses', label: '监工圆眼镜' },
-  { id: 'ribbon_tail', label: '发光小鲸尾' },
-  { id: 'wings', label: '半透明精灵翼' },
-  { id: 'none', label: '无配饰' },
+  { id: 'ribbon_tail', label: '发光尾饰' },
+  { id: 'wings', label: '精灵翼' },
 ])
 
 export const COMPANION_SKINS = Object.freeze([
-  { id: 'porcelain', label: '瓷白奶油肌', hex: '#FFF2E9', shade: '#F2CDBE' },
-  { id: 'peach', label: '蜜桃元气肌', hex: '#FFE4D2', shade: '#E8B69E' },
-  { id: 'warm', label: '暖光杏肌', hex: '#F8D4BA', shade: '#D9A889' },
-  { id: 'cool', label: '清冷月白肌', hex: '#FBF5F8', shade: '#DECED8' },
+  { id: 'porcelain', label: '瓷白奶油肌', hex: '#FFF2E9' },
+  { id: 'peach', label: '蜜桃元气肌', hex: '#FFE4D2' },
+  { id: 'warm', label: '暖光杏肌', hex: '#F8D4BA' },
+  { id: 'cool', label: '清冷月白肌', hex: '#FBF5F8' },
 ])
 
 export const COMPANION_PERSONALITIES = Object.freeze([
   {
-    id: 'dafeiyu_cute',
-    label: '呆萌贪吃·大肥鱼',
-    greeting: '咕噜噜～我是你的「大肥鱼」全能桌面总管！把任何复杂任务直接丢给我，我会自己挑最合适的专家团、技能或工作流全程监工交稿～闲着没事也可以拎起我晃晃、摸摸头或投喂小鱼干哦！',
-    idleQuips: ['咕噜～今天有什么大工程交给我统筹呀？', '肚皮有点饿了…要不要喂我一颗小鱼干？', '我随时可以帮你跑去调度 12 支原生专家团和工作流哦！'],
+    id: 'yalu_gentle',
+    label: '灵动治愈·芽露',
+    greeting: '叮铃铃～🌿 我是你的「芽露」！挥动露芽杖就能帮你全自动挑选专家团、技能或工作流并监工交稿～你也可以直接拎着我走出窗口去桌面散步、摇响酒红铃铛，或者把液态玻璃方块甩出窗外玩哦！',
   },
   {
     id: 'energetic',
     label: '元气靠谱·小管家',
-    greeting: '嗨呀！我是你的专属全能助手～发一句需求我就自动判断调哪个模块、哪个专家、哪个工作流并盯到交稿，也能陪你玩液态玻璃沙盒和接星星！',
-    idleQuips: ['能量满满！点我直接派发全自动任务吧 ✨', '把需求丢给我，我替你全流程监工交稿！'],
+    greeting: '叮铃～元气满满的芽露随时待命！直接发需求给我，我自动调度全站能力盯到交稿！',
   },
   {
     id: 'tsundere',
-    label: '傲娇毒舌·监工长',
-    greeting: '哼，才不是专门等你发需求的！把麻烦事丢过来吧，选专家、跑工作流、审终稿我全包了——顺便别老拎我尾巴！',
-    idleQuips: ['哼，你再不摸我头我可去啃玻璃了哦。', '这任务交给我监工，保证比你自己点快十倍！'],
+    label: '傲娇认真·监工长',
+    greeting: '叮铃！把最麻烦的需求丢给我吧，选专家团、跑工作流、验收终稿我全包了——不准老拎着我乱甩！',
   },
   {
     id: 'gentle',
-    label: '温柔治愈·大姐姐',
-    greeting: '辛苦啦～我是你的专属桌面伙伴。想省心完成复杂任务时，把目标发给我，我会悄悄为你调配最合适的专家与工作流并认真把关交付。',
-    idleQuips: ['工作累了可以点「番茄钟」让我安静陪你哦 🍅', '一切都准备好了，随时把需求交给我吧～'],
+    label: '温柔陪伴·晨露',
+    greeting: '辛苦啦～我是芽露，累了就点个番茄钟让我安静陪你，有重活全部交给我自动监工吧 🌿',
   },
 ])
 
 export const COMPANION_SNACKS = Object.freeze([
-  { id: 'dried_fish', name: '脆脆小鱼干', icon: '🐟', energy: 25, affection: 6, quote: '咔嚓咔嚓！超香的小鱼干～饱饱的就不去啃玻璃啦！' },
-  { id: 'glass_candy', name: '液态玻璃糖', icon: '🍬', energy: 18, affection: 8, quote: '哇！亮晶晶的液态玻璃糖，比界面的按钮还甜一百倍！' },
-  { id: 'token_donut', name: '算力甜甜圈', icon: '🍩', energy: 35, affection: 5, quote: '满血复活！我现在能一口气监工十个专家团交付！' },
-  { id: 'star_milk', name: '星穹奶茶', icon: '🧋', energy: 22, affection: 10, quote: '咕嘟咕嘟～好幸福，好感度暴涨啦 ♡' },
+  { id: 'dew_drop', name: '晨露蜜糖', icon: '💧', energy: 26, affection: 8, quote: '好清甜的晨露蜜糖！露芽杖都亮晶晶的啦 🌿✨' },
+  { id: 'berry_cake', name: '酒红莓果挞', icon: '🍓', energy: 24, affection: 9, quote: '叮铃铃～和酒红铃铛一样可爱的莓果挞，超级好吃！' },
+  { id: 'glass_candy', name: '液态玻璃糖', icon: '🍬', energy: 20, affection: 7, quote: '咔嚓！比按钮还甜一百倍，饱饱的就不偷啃玻璃啦～' },
+  { id: 'star_milk', name: '星穹青提茶', icon: '🧋', energy: 30, affection: 10, quote: '满血复活！我现在能一口气监工十支原生专家团交稿！' },
 ])
 
 export const COMPANION_PRESETS = Object.freeze([
   {
+    id: 'yalu_default',
+    name: '🌿 芽露·原版定妆 (默认)',
+    avatar: {
+      name: '芽露',
+      bodyForm: 'yalu_model',
+      modelPackId: 'yalu_official',
+      propLoadout: 'both',
+      auraTheme: 'natural',
+      expressionOverride: 'auto',
+      hairStyle: 'long',
+      hairColor: 'mint',
+      eyeStyle: 'star',
+      eyeColor: 'emerald',
+      headgear: 'ribbon',
+      outfit: 'hanfu',
+      accessory: 'wand',
+      skin: 'porcelain',
+      personality: 'yalu_gentle',
+      scale: 1.0,
+    },
+  },
+  {
+    id: 'yalu_staff_mage',
+    name: '🪄 芽露·露芽杖监工',
+    avatar: {
+      name: '芽露',
+      bodyForm: 'yalu_model',
+      modelPackId: 'yalu_official',
+      propLoadout: 'staff',
+      auraTheme: 'starlight',
+      expressionOverride: 'focus',
+      hairStyle: 'long',
+      hairColor: 'mint',
+      eyeStyle: 'star',
+      eyeColor: 'emerald',
+      headgear: 'ribbon',
+      outfit: 'hanfu',
+      accessory: 'wand',
+      skin: 'porcelain',
+      personality: 'tsundere',
+      scale: 1.02,
+    },
+  },
+  {
+    id: 'yalu_bell_chime',
+    name: '🔔 芽露·酒红铃铛',
+    avatar: {
+      name: '芽露',
+      bodyForm: 'yalu_model',
+      modelPackId: 'yalu_official',
+      propLoadout: 'bell',
+      auraTheme: 'crimson',
+      expressionOverride: 'proud',
+      hairStyle: 'long',
+      hairColor: 'mint',
+      eyeStyle: 'star',
+      eyeColor: 'emerald',
+      headgear: 'ribbon',
+      outfit: 'hanfu',
+      accessory: 'bell',
+      skin: 'porcelain',
+      personality: 'energetic',
+      scale: 1.0,
+    },
+  },
+  {
     id: 'dafeiyu_classic',
-    name: '🐳 经典大肥鱼 (默认)',
+    name: '🐳 备用皮肤·大肥鱼',
     avatar: {
       name: '大肥鱼',
       bodyForm: 'dafeiyu',
+      modelPackId: 'yalu_official',
+      propLoadout: 'none',
+      auraTheme: 'natural',
+      expressionOverride: 'auto',
       hairStyle: 'twintails',
       hairColor: 'ocean',
       eyeStyle: 'star',
@@ -146,98 +251,8 @@ export const COMPANION_PRESETS = Object.freeze([
       outfit: 'sailor',
       accessory: 'fish_cookie',
       skin: 'porcelain',
-      personality: 'dafeiyu_cute',
-      scale: 1.0,
-    },
-  },
-  {
-    id: 'dafeiyu_whale_girl',
-    name: '🎀 大肥鱼·鲸鱼娘',
-    avatar: {
-      name: '大肥鱼娘',
-      bodyForm: 'whale_girl',
-      hairStyle: 'long',
-      hairColor: 'sky',
-      eyeStyle: 'star',
-      eyeColor: 'sapphire',
-      headgear: 'sailor_hat',
-      outfit: 'maid',
-      accessory: 'ribbon_tail',
-      skin: 'porcelain',
-      personality: 'dafeiyu_cute',
-      scale: 1.0,
-    },
-  },
-  {
-    id: 'sakura_milu',
-    name: '🌸 樱花星见米露',
-    avatar: {
-      name: '米露',
-      bodyForm: 'chibi_anime',
-      hairStyle: 'twintails',
-      hairColor: 'sakura',
-      eyeStyle: 'heart',
-      eyeColor: 'rose',
-      headgear: 'cat_ears',
-      outfit: 'sailor',
-      accessory: 'stylus',
-      skin: 'porcelain',
       personality: 'energetic',
       scale: 1.0,
-    },
-  },
-  {
-    id: 'cyber_kuro',
-    name: '⚡ 赛博黑猫监工',
-    avatar: {
-      name: '小黑',
-      bodyForm: 'chibi_anime',
-      hairStyle: 'wolf',
-      hairColor: 'obsidian',
-      eyeStyle: 'cool',
-      eyeColor: 'hetero',
-      headgear: 'headphones',
-      outfit: 'cyber',
-      accessory: 'glasses',
-      skin: 'cool',
-      personality: 'tsundere',
-      scale: 1.0,
-    },
-  },
-  {
-    id: 'liquid_mochi_cat',
-    name: '🫧 液态玻璃星核喵',
-    avatar: {
-      name: '琉璃喵',
-      bodyForm: 'liquid_cat',
-      hairStyle: 'bob',
-      hairColor: 'silver',
-      eyeStyle: 'cat',
-      eyeColor: 'cyan',
-      headgear: 'halo',
-      outfit: 'mage',
-      accessory: 'wings',
-      skin: 'porcelain',
-      personality: 'gentle',
-      scale: 1.0,
-    },
-  },
-  {
-    id: 'pink_whale',
-    name: '🍑 蜜桃粉肥鱼',
-    avatar: {
-      name: '粉肥鱼',
-      bodyForm: 'dafeiyu',
-      hairStyle: 'buns',
-      hairColor: 'sakura',
-      eyeStyle: 'bright',
-      eyeColor: 'rose',
-      headgear: 'crown',
-      outfit: 'pajama',
-      accessory: 'wand',
-      skin: 'peach',
-      personality: 'energetic',
-      scale: 1.04,
     },
   },
 ])
@@ -248,7 +263,7 @@ export const DEFAULT_COMPANION_CONFIG = Object.freeze({
   visible: true,
   llmEnabled: false,
   fullLlmDrive: false,
-  autopilotEnabled: true, // 默认开启「全自动路由监工交稿」能力！
+  autopilotEnabled: true,
   modelProfileId: '',
   customBaseUrl: '',
   customApiKey: '',
@@ -258,25 +273,33 @@ export const DEFAULT_COMPANION_CONFIG = Object.freeze({
 })
 
 export const DEFAULT_COMPANION_STATS = Object.freeze({
-  affection: 35,
-  energy: 86,
-  mood: '元气满满',
+  affection: 40,
+  energy: 90,
+  mood: '晨露元气',
   tasksDelivered: 0,
   snacksEaten: 0,
   headPats: 0,
 })
 
+export function getActiveModelPack(packId = 'yalu_official') {
+  return COMPANION_MODEL_PACKS.find((p) => p.id === packId) || COMPANION_MODEL_PACKS[0]
+}
+
 export function loadCompanionAvatar() {
   try {
     const raw = readStorage(AVATAR_KEY, '')
-    if (!raw) return { ...DEFAULT_COMPANION_AVATAR }
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_COMPANION_AVATAR }
-    // 兼容旧 R28 无 bodyForm 存档：自动平滑升级为精致鲸鱼娘/大肥鱼
-    const bodyForm = COMPANION_BODY_FORMS.some((f) => f.id === parsed.bodyForm)
-      ? parsed.bodyForm
-      : (parsed.name === '米露' ? 'whale_girl' : 'dafeiyu')
-    return { ...DEFAULT_COMPANION_AVATAR, ...parsed, bodyForm }
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return { ...DEFAULT_COMPANION_AVATAR, ...parsed }
+    }
+    const legacyRaw = readStorage(LEGACY_AVATAR_KEY, '')
+    if (legacyRaw) {
+      const lp = JSON.parse(legacyRaw)
+      if (lp && typeof lp === 'object') {
+        return { ...DEFAULT_COMPANION_AVATAR, scale: Number(lp.scale) || 1.0 }
+      }
+    }
+    return { ...DEFAULT_COMPANION_AVATAR }
   } catch {
     return { ...DEFAULT_COMPANION_AVATAR }
   }
@@ -325,10 +348,7 @@ export function loadCompanionStats() {
 }
 
 export function saveCompanionStats(stats) {
-  const next = {
-    ...DEFAULT_COMPANION_STATS,
-    ...(stats || {}),
-  }
+  const next = { ...DEFAULT_COMPANION_STATS, ...(stats || {}) }
   next.affection = Math.max(0, Math.min(1000, Number(next.affection) || 0))
   next.energy = Math.max(0, Math.min(100, Number(next.energy) || 0))
   try { writeStorage(STATS_KEY, JSON.stringify(next)) } catch {}

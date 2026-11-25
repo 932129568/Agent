@@ -190,6 +190,43 @@
     38% { opacity: 0.72; transform: translate3d(-50%, -50%, 0) scale(1.12); }
     100% { opacity: 0; transform: translate3d(-50%, -50%, 0) scale(1.95); }
   }
+  @keyframes yaluBreathe {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1, 1); }
+    50% { transform: translate3d(0, -4px, 0) scale(1.015, 0.99); }
+  }
+  @keyframes yaluWalkHop {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(-2deg); }
+    50% { transform: translate3d(0, -9px, 0) rotate(3deg); }
+  }
+  @keyframes yaluJoyBounce {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1, 1); }
+    35% { transform: translate3d(0, -12px, 0) scale(0.96, 1.05); }
+    70% { transform: translate3d(0, 1px, 0) scale(1.05, 0.95); }
+  }
+  @keyframes yaluDangle {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(0.94, 1.08) rotate(-5deg); }
+    50% { transform: translate3d(0, 2px, 0) scale(0.94, 1.08) rotate(5deg); }
+  }
+  @keyframes yaluFloatHover {
+    0%, 100% { transform: translate3d(0, -3px, 0); }
+    50% { transform: translate3d(0, -10px, 0); }
+  }
+  @keyframes yaluStaffFloat {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(8deg); }
+    50% { transform: translate3d(0, -6px, 0) rotate(13deg); }
+  }
+  @keyframes yaluStaffCast {
+    0%, 100% { transform: translate3d(-2px, -4px, 0) rotate(-14deg) scale(1.06); }
+    50% { transform: translate3d(4px, -12px, 0) rotate(18deg) scale(1.12); }
+  }
+  @keyframes yaluBellSway {
+    0%, 100% { transform: rotate(-6deg); }
+    50% { transform: rotate(6deg); }
+  }
+  @keyframes yaluBellRing {
+    0%, 100% { transform: rotate(-22deg) scale(1.08); }
+    50% { transform: rotate(22deg) scale(1.14); }
+  }
   @keyframes harborGlassPickup {
     0% { transform: scale(1); }
     45% { transform: scale(1.10, 0.92); }

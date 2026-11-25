@@ -41,9 +41,14 @@ function pickZhText(val, fallback = '') {
 }
 
 export default function MarketModal() {
+  const ui = useSlice('ui')
   const market = useSlice('market')
   const settings = useSlice('settings')
-  const [tab, setTab] = useState('industry') // 'industry' | 'skills' | 'mcp' | 'local' | 'team'
+  const [tab, setTab] = useState(() => ui.marketTab || 'industry')
+
+  useEffect(() => {
+    if (ui.marketTab && ui.marketTab !== tab) setTab(ui.marketTab)
+  }, [ui.marketTab])
   const [category, setCategory] = useState('all')
   const [skillCategory, setSkillCategory] = useState('all')
   const [mcpCategory, setMcpCategory] = useState('all')

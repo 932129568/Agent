@@ -256,6 +256,7 @@ export async function startExpertTeamRun({ goal, lead, members, useRecovery = fa
   patchSlice('expertTeam', (t) => ({
     ...t,
     running: true,
+    lastError: '',
     timeline: useRecovery ? t.timeline : [],
     finalReport: '',
   }))
@@ -272,15 +273,19 @@ export async function startExpertTeamRun({ goal, lead, members, useRecovery = fa
     patchSlice('expertTeam', (t) => ({
       ...t,
       running: false,
+      lastError: '',
       timeline: res.timeline,
       mailbox: res.mailbox,
       checkpoint: res.checkpoint,
       finalReport: res.finalReport,
     }))
     if (res.status === 'completed') pushToast('专家团队编排已完成交付', 'ok')
+    return { ok: res.status === 'completed', status: res.status, finalReport: res.finalReport || '', error: '' }
   } catch (e) {
-    patchSlice('expertTeam', { running: false })
-    if (!isAbort(e)) pushToast(`团队编排失败：${e.message}`, 'err')
+    const errMsg = String((e && e.message) || e || '团队编排异常')
+    patchSlice('expertTeam', { running: false, lastError: isAbort(e) ? '' : errMsg })
+    if (!isAbort(e)) pushToast(`团队编排失败：${errMsg}`, 'err')
+    return { ok: false, status: isAbort(e) ? 'aborted' : 'failed', finalReport: '', error: errMsg }
   } finally {
     teamAbortCtrl = null
   }

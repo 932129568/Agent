@@ -178,8 +178,32 @@ if (fs.existsSync(elecMain)) {
   if (/\battachWallpaperToWindow\s*\(/.test(cleanMain)) {
     fail('LAW-11', elecMain, 1, 'electron/main.js 仍残留假桌面壁纸镜像 attachWallpaperToWindow()，请改用原生 backgroundMaterial')
   }
-  if (/backgroundMaterial\s*:/.test(cleanMain) && /transparent\s*:\s*true/.test(cleanMain)) {
-    fail('LAW-11', elecMain, 1, 'Windows Electron 中 transparent:true 与 backgroundMaterial 冲突会导致原生亚克力失效，请只用 backgroundColor:"#00000000" + backgroundMaterial')
+  // 原判定是**整个文件级**的「同时出现」——r30 新增了全屏透明舞台窗口（desktopStageWin，
+  // 承载 3D 内容，本就需要 transparent:true 且不设 backgroundMaterial），于是被误伤。
+  // 真正要防的是**同一个窗口**既 transparent:true 又 backgroundMaterial（亚克力会失效）。
+  // 改为按 window 选项块判定：切出每个 new BrowserWindow({...}) 的花括号块再各自检查。
+  const winBlocks = []
+  {
+    const tag = 'new BrowserWindow('
+    let from = 0
+    while (true) {
+      const at = cleanMain.indexOf(tag, from)
+      if (at < 0) break
+      let i = cleanMain.indexOf('{', at)
+      if (i < 0) break
+      let depth = 0
+      for (; i < cleanMain.length; i++) {
+        const ch = cleanMain[i]
+        if (ch === '{') depth++
+        else if (ch === '}') { depth--; if (depth === 0) { i++; break } }
+      }
+      winBlocks.push(cleanMain.slice(at, i))
+      from = i
+    }
+  }
+  const badWin = winBlocks.find((blk) => /backgroundMaterial\s*:/.test(blk) && /transparent\s*:\s*true/.test(blk))
+  if (badWin) {
+    fail('LAW-11', elecMain, 1, '同一 BrowserWindow 内 transparent:true 与 backgroundMaterial 混用会导致原生亚克力失效，请只用 backgroundColor:"#00000000" + backgroundMaterial')
   }
 }
 

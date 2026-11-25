@@ -1234,3 +1234,32 @@ test('R29 全自动总管路由 (companionAutopilot)：准确判断 chat+专家+
   assert.equal(qa.ok, true)
   assert.ok(qa.score >= 80, `score=${qa.score}`)
 })
+
+
+test('R30 液态玻璃方块高速甩出窗口逃逸物理 (allowEscape) + 芽露官方建模包完整资产契约', async () => {
+  const { createGlassSandboxState, grabGlassBody, releaseGlassBody, stepGlassSandbox, recallGlassBody } = await import('../src/platform/glassSandboxEngine.js')
+  const { COMPANION_MODEL_PACKS, getActiveModelPack, DEFAULT_COMPANION_AVATAR } = await import('../src/services/companionCatalog.js')
+
+  // 1) allowEscape=true 时高速甩向右边界直接逃逸出窗（status='escaped' + escape 事件），长按空槽可召回
+  const st = createGlassSandboxState()
+  grabGlassBody(st, { id: 'btn_esc', label: '智能对话', x: 1180, y: 200, w: 120, h: 36 })
+  releaseGlassBody(st, 'btn_esc', 1100, 0)
+  const evs = stepGlassSandbox(st, 0.02, 1280, 800, { allowEscape: true })
+  assert.ok(evs.some((e) => e.type === 'escape' && e.side === 'right'), `events=${JSON.stringify(evs)}`)
+  assert.equal(st.bodies.get('btn_esc').status, 'escaped')
+  recallGlassBody(st, 'btn_esc')
+  assert.equal(st.bodies.get('btn_esc').status, 'recalling')
+
+  // 2) 默认助手模型为芽露原版建模包，含三视图/4表情/双道具/60fps成片
+  assert.equal(DEFAULT_COMPANION_AVATAR.bodyForm, 'yalu_model')
+  assert.equal(DEFAULT_COMPANION_AVATAR.name, '芽露')
+  const yalu = getActiveModelPack('yalu_official')
+  assert.ok(COMPANION_MODEL_PACKS.length >= 1)
+  assert.ok(yalu.assets.front.endsWith('yalu-front.webp'))
+  assert.ok(yalu.assets.side.endsWith('yalu-turn-side.webp'))
+  assert.ok(yalu.assets.back.endsWith('yalu-turn-back.webp'))
+  assert.equal(yalu.assets.expressions.length, 4)
+  assert.ok(yalu.assets.props.staff.src.endsWith('prop-staff.webp'))
+  assert.ok(yalu.assets.props.bell.src.endsWith('prop-bell.webp'))
+  assert.ok(yalu.assets.showcaseVideo.endsWith('yalu-showcase.mp4'))
+})

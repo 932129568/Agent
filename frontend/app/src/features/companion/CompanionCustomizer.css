@@ -128,6 +128,28 @@
     outline: none;
   }
   .cc-input:focus { border-color: var(--primary); background: var(--card-bg); box-shadow: var(--focus-ring); }
+  .cc-expr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 8px;
+  }
+  .cc-expr-card {
+    padding: 8px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--card-bg);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+  }
+  .cc-expr-card:hover { border-color: var(--primary); transform: translate3d(0, -1px, 0); }
+  .cc-expr-card[data-active="true"] { border-color: var(--primary); background: var(--primary-soft); box-shadow: var(--focus-ring); }
+  .cc-expr-card img { width: 72px; height: 72px; object-fit: contain; border-radius: var(--radius-sm); }
+  .cc-expr-card span { font-size: 11px; font-weight: 600; color: var(--text-2); }
+
   .cc-switch-card {
     padding: 12px 14px;
     border-radius: var(--radius-md);

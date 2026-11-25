@@ -11,6 +11,7 @@ files:
   - frontend/app/dist/**/*
   - assets/harbor.ico
   - assets/harbor-preview.png
+  - assets/yalu/**/*
   - harbor.ico
   - harbor-icon.png
   - libs/**/*

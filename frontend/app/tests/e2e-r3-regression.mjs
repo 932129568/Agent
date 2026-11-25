@@ -59,6 +59,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.ico': 'image/x-icon',
   '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
   '.svg': 'image/svg+xml',
 }
 
@@ -1427,20 +1429,22 @@ try {
   await page.waitForSelector('.hb-shell', { timeout: 15000 })
   const actor = page.locator('[data-companion-actor="true"]')
   await actor.waitFor({ state: 'visible', timeout: 8000 })
-  // T1: 右键助手打开形象工坊，实测工坊内按钮 100% 可点击（修复 R28 pointer-events 穿透 Bug）+ 切换形态与大脑配置页
+  const yaluSpriteVisible = (await page.locator('[data-companion-actor="true"] [data-yalu-stage="sprite"] img.yms-sprite').count()) === 1
+  // T1: 右键打开芽露建模工坊 → 验证三视图/道具/60fps成片与大脑页签 100% 可点击
   await actor.click({ button: 'right' })
   await page.waitForSelector('.cp-ctx', { timeout: 3000 })
   const hasFullLlmToggle = (await page.locator('.cp-ctx button:has-text("完全使用大模型驱动")').count()) === 1
-  await page.locator('.cp-ctx button:has-text("形象工坊与捏脸换装")').click()
+  await page.locator('.cp-ctx button:has-text("芽露建模工坊")').click()
   await page.waitForSelector('[data-section="companion-customizer"]', { timeout: 3000 })
-  await page.locator('[data-section="companion-customizer"] button:has-text("大肥鱼·鲸鱼娘")').first().click()
+  await page.locator('[data-section="companion-customizer"] button:has-text("侧面")').click()
+  await page.locator('[data-section="companion-customizer"] button:has-text("60fps成片")').click()
+  const videoStageMounted = (await page.locator('[data-section="companion-customizer"] video.yms-video').count()) === 1
   await page.locator('[data-section="companion-customizer"] button:has-text("无人驾驶与专属大模型")').click()
   const brainTabOk = (await page.locator('[data-section="companion-customizer"]:has-text("全自动无人驾驶接管")').count()) === 1
   await page.locator('[data-section="companion-customizer"] button[aria-label="关闭捏脸工坊"]').click()
   await page.waitForSelector('[data-section="companion-customizer"]', { state: 'detached', timeout: 3000 })
-  const morphedForm = await actor.getAttribute('data-body-form')
 
-  // T2: 实测拎起大肥鱼并拖动位移
+  // T2: 实测拎起芽露拖动位移
   const beforeBox = await actor.boundingBox()
   if (beforeBox) {
     const sx = beforeBox.x + beforeBox.width / 2
@@ -1454,27 +1458,25 @@ try {
   const afterBox = await actor.boundingBox()
   const draggedOk = Boolean(beforeBox && afterBox && Math.hypot(afterBox.x - beforeBox.x, afterBox.y - beforeBox.y) > 40)
 
-  // T3: 左键打开总管聊天 → 黑洞取文件 + 触发全自动代办路由规划交稿
+  // T3: 左键打开总管面板 → 黑洞取文件 + 投喂 + 实测「全自动代办交稿」(自动选原生专家团并直切 team 页签绝不卡住，完成验收交稿！)
   await actor.click()
   await page.waitForSelector('.cp-chat', { timeout: 3000 })
   await page.locator('.cp-chat button:has-text("黑洞取文件")').click()
   await page.waitForSelector('.chat-token-chip:has-text("黑洞文件")', { timeout: 5000 })
   const blackHoleChipOk = (await page.locator('.chat-token-chip:has-text("黑洞文件")').count()) > 0
-  // 投喂小鱼干互动
   await page.locator('.cp-chat button:has-text("投喂")').click()
-  await page.locator('.cp-chat button:has-text("脆脆小鱼干")').click()
-  await page.waitForTimeout(240)
-  // 发一条需要 SQL 专家+Skill 的实质任务，验证全自动无人驾驶路由决策、自动挂载并监工完成交稿！
-  await page.locator('.cp-chat .cp-chat-input').fill('帮我做一份 MySQL 慢查询优化方案')
-  await page.locator('.cp-chat button:has-text("派发")').click()
-  await page.waitForSelector('.cp-chat .cp-msg:has-text("全自动监工交付验收单")', { timeout: 12000 })
+  await page.locator('.cp-chat button:has-text("晨露蜜糖")').click()
+  await page.waitForTimeout(220)
+  // 直接点「🤖 全自动代办交稿」：会路由到 expert_team（全栈软件研发公司），验证自动切到 team 页签且丝滑跑到交付验收单！
+  await page.locator('.cp-chat button:has-text("全自动代办交稿")').click()
+  await page.waitForSelector('.cp-chat .cp-msg:has-text("全自动监工交付验收单")', { timeout: 15000 })
   const autopilotDelivered = (await page.locator('.cp-chat .cp-msg:has-text("全自动监工交付验收单")').count()) > 0
   await page.locator('.cp-chat button[aria-label="关闭助手聊天"]').click()
   record(
     'Suite-T',
-    'R29 大肥鱼/鲸鱼娘旗舰助手：形象工坊可点击 + 拎起拖动物理 + 投喂 + 黑洞取文件 + 全自动总管监工交稿',
-    hasFullLlmToggle && brainTabOk && morphedForm === 'whale_girl' && draggedOk && blackHoleChipOk && autopilotDelivered,
-    `fullLlm=${hasFullLlmToggle}, brainTab=${brainTabOk}, form=${morphedForm}, dragged=${draggedOk}, bh=${blackHoleChipOk}, delivered=${autopilotDelivered}`
+    'R30 芽露原版建模与全自动监工：原版立绘/60fps成片 + 拎起拖动 + 黑洞取文件 + 自动选专家团零卡死完成交稿',
+    yaluSpriteVisible && hasFullLlmToggle && videoStageMounted && brainTabOk && draggedOk && blackHoleChipOk && autopilotDelivered,
+    `yalu=${yaluSpriteVisible}, video=${videoStageMounted}, brain=${brainTabOk}, dragged=${draggedOk}, bh=${blackHoleChipOk}, delivered=${autopilotDelivered}`
   )
 
   // D4: 全程零未捕获页面异常

@@ -11,7 +11,7 @@
  *      （严禁混用 transparent:true），macOS 用 vibrancy:'under-window'；
  *   3. harbor://app/ 严格白名单映射 frontend/app/dist/* 与 libs/*（补齐 .css/.svg/.woff2 MIME）。
  */
-const { app, BrowserWindow, dialog, safeStorage, protocol, ipcMain, Menu } = require('electron')
+const { app, BrowserWindow, dialog, safeStorage, protocol, ipcMain, Menu, screen } = require('electron')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -61,11 +61,15 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
   '.woff2': 'font/woff2',
 }
 
 /** @type {BrowserWindow|null} */
 let win = null
+/** @type {BrowserWindow|null} */
+let desktopStageWin = null
 /** @type {import('fastify').FastifyInstance|null} */
 let serverApp = null
 let dbModule
@@ -205,6 +209,29 @@ async function boot() {
   ipcMain.removeHandler('harbor:get-backdrop')
   ipcMain.handle('harbor:get-backdrop', () => ({ ok: currentBackdrop !== 'none', mode: currentBackdrop, platform: process.platform }))
 
+  ipcMain.removeHandler('harbor:get-desktop-metrics')
+  ipcMain.handle('harbor:get-desktop-metrics', () => {
+    const display = screen.getPrimaryDisplay()
+    const winBounds = win && !win.isDestroyed() ? win.getBounds() : { x: 100, y: 100, width: 1320, height: 840 }
+    return { ok: true, winBounds, displayBounds: display ? display.bounds : { x: 0, y: 0, width: 1920, height: 1080 } }
+  })
+  ipcMain.removeAllListeners('harbor:desktop-stage-sync')
+  ipcMain.on('harbor:desktop-stage-sync', (_e, payload) => {
+    if (!desktopStageWin || desktopStageWin.isDestroyed()) return
+    const wb = win && !win.isDestroyed() ? win.getBounds() : { x: 100, y: 100, width: 1320, height: 840 }
+    try { desktopStageWin.webContents.send('harbor:desktop-stage-sync', { ...(payload || {}), winBounds: wb }) } catch {}
+  })
+  ipcMain.removeAllListeners('harbor:desktop-stage-ignore')
+  ipcMain.on('harbor:desktop-stage-ignore', (_e, ignore) => {
+    if (!desktopStageWin || desktopStageWin.isDestroyed()) return
+    try { desktopStageWin.setIgnoreMouseEvents(Boolean(ignore), { forward: true }) } catch {}
+  })
+  ipcMain.removeAllListeners('harbor:desktop-stage-event')
+  ipcMain.on('harbor:desktop-stage-event', (_e, ev) => {
+    if (!win || win.isDestroyed()) return
+    try { win.webContents.send('harbor:desktop-stage-event', ev) } catch {}
+  })
+
   if (USE_CUSTOM_PROTOCOL) {
     protocol.handle(HARBOR_SCHEME, async (request) => {
       try {
@@ -213,11 +240,41 @@ async function boot() {
         const rel = decodeURIComponent(u.pathname.replace(/^\/+/, '')) || 'index.html'
         let abs = null
         if (DIST_FILES.has(rel)) abs = path.join(APP_DIST, rel)
+        else if (rel === 'desktop-stage.html') abs = path.join(__dirname, 'desktop-stage.html')
         else if (LIB_FILES.has(rel) || ASSET_FILES.has(rel)) abs = path.join(ROOT, rel)
-        if (!abs) return new Response('not found', { status: 404 })
+        else if (/^assets\/yalu\/[a-zA-Z0-9._-]+$/.test(rel)) {
+          const candDist = path.join(APP_DIST, rel)
+          const candRoot = path.join(ROOT, rel)
+          abs = fs.existsSync(candDist) ? candDist : (fs.existsSync(candRoot) ? candRoot : null)
+        }
+        if (!abs || !fs.existsSync(abs)) return new Response('not found', { status: 404 })
+        const type = MIME[path.extname(rel).toLowerCase()] || 'application/octet-stream'
+        const rangeHeader = request.headers.get('range')
+        if (rangeHeader && type === 'video/mp4') {
+          const st = await fs.promises.stat(abs)
+          const m = /bytes=(\d+)-(\d*)/.exec(rangeHeader)
+          if (m) {
+            const start = Math.min(st.size - 1, Number(m[1]))
+            const end = m[2] ? Math.min(st.size - 1, Number(m[2])) : st.size - 1
+            const len = Math.max(0, end - start + 1)
+            const fh = await fs.promises.open(abs, 'r')
+            try {
+              const buf = Buffer.alloc(len)
+              await fh.read(buf, 0, len, start)
+              return new Response(buf, {
+                status: 206,
+                headers: {
+                  'Content-Type': type,
+                  'Accept-Ranges': 'bytes',
+                  'Content-Range': `bytes ${start}-${end}/${st.size}`,
+                  'Content-Length': String(len),
+                },
+              })
+            } finally { await fh.close() }
+          }
+        }
         const body = await fs.promises.readFile(abs)
-        const type = MIME[path.extname(rel)] || 'application/octet-stream'
-        return new Response(body, { headers: { 'Content-Type': type } })
+        return new Response(body, { headers: { 'Content-Type': type, 'Accept-Ranges': 'bytes' } })
       } catch (error) {
         console.error('[harbor] protocol.handle 失败:', error && error.message)
         return new Response('error', { status: 500 })
@@ -310,6 +367,8 @@ async function boot() {
       if (forceClosing) return
       forceClosing = true
       if (opacityTimer) { clearInterval(opacityTimer); opacityTimer = null }
+      try { if (desktopStageWin && !desktopStageWin.isDestroyed()) desktopStageWin.destroy() } catch {}
+      desktopStageWin = null
       try { if (currentWin && !currentWin.isDestroyed()) currentWin.hide() } catch {}
       try { if (currentWin && !currentWin.isDestroyed()) currentWin.destroy() } catch {}
     }
@@ -363,6 +422,39 @@ async function boot() {
   __mark('window-loaded')
   if (!SMOKE) setTimeout(revealWindowSmoothly, 80)
   console.log('[harbor] React 19 window loaded; bridge base =', process.env.HARBOR_API_BASE, '| backdrop =', currentBackdrop)
+
+  if (!SMOKE && !HEADLESS) {
+    try {
+      const disp = screen.getPrimaryDisplay()
+      const b = disp ? disp.bounds : { x: 0, y: 0, width: 1920, height: 1080 }
+      desktopStageWin = new BrowserWindow({
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        transparent: true,
+        frame: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        hasShadow: false,
+        focusable: false,
+        resizable: false,
+        movable: false,
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+        },
+      })
+      desktopStageWin.setIgnoreMouseEvents(true, { forward: true })
+      const stageUrl = USE_CUSTOM_PROTOCOL
+        ? `${HARBOR_SCHEME}://app/desktop-stage.html`
+        : pathToFileURL(path.join(__dirname, 'desktop-stage.html')).href
+      desktopStageWin.loadURL(stageUrl).catch(() => {})
+    } catch (e) {
+      console.warn('[harbor] desktopStageWin init skipped:', e && e.message)
+    }
+  }
 
   if (SMOKE) {
     const actual = win.webContents.getURL()

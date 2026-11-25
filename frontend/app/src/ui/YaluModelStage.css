@@ -1,0 +1,119 @@
+@layer components {
+  .yms-stage {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    pointer-events: none;
+    user-select: none;
+  }
+  .yms-aura {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    width: 68%;
+    height: 16%;
+    border-radius: var(--radius-full);
+    transform: translate3d(-50%, 0, 0);
+    background: radial-gradient(ellipse at center, var(--yms-glow, rgba(130, 212, 168, 0.42)), transparent 74%);
+    filter: blur(6px);
+  }
+  .yms-rig {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    transform-origin: 50% 88%;
+    will-change: transform;
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .yms-rig[data-action="idle"] { animation: yaluBreathe var(--dur-stream) var(--ease-out) infinite; }
+  .yms-rig[data-action="run"],
+  .yms-rig[data-action="collect_shards"] { animation: yaluWalkHop var(--dur-panel) var(--ease-out) infinite; }
+  .yms-rig[data-action="dance"],
+  .yms-rig[data-action="deliver"],
+  .yms-rig[data-action="happy"] { animation: yaluJoyBounce var(--dur-stage) var(--ease-spring) infinite; }
+  .yms-rig[data-action="grabbed"],
+  .yms-rig[data-action="thrown"] { animation: yaluDangle var(--dur-base) var(--ease-out) infinite; }
+  .yms-rig[data-action="supervising"] { animation: yaluFloatHover var(--dur-stream) var(--ease-out) infinite; }
+
+  .yms-sprite {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 18px rgba(15, 28, 56, 0.24));
+    will-change: transform;
+  }
+
+  .yms-prop-staff {
+    position: absolute;
+    right: -10px;
+    bottom: 12px;
+    width: 34%;
+    height: auto;
+    object-fit: contain;
+    transform-origin: 45% 80%;
+    filter: drop-shadow(0 6px 14px rgba(84, 198, 152, 0.42));
+    animation: yaluStaffFloat var(--dur-stream) var(--ease-out) infinite;
+  }
+  .yms-rig[data-action="magic_blackhole"] .yms-prop-staff,
+  .yms-rig[data-action="repair_glass"] .yms-prop-staff,
+  .yms-rig[data-action="write_input"] .yms-prop-staff,
+  .yms-rig[data-action="supervising"] .yms-prop-staff {
+    animation: yaluStaffCast var(--dur-panel) var(--ease-spring) infinite;
+  }
+
+  .yms-prop-bell {
+    position: absolute;
+    left: -8px;
+    top: 10px;
+    width: 28%;
+    height: auto;
+    object-fit: contain;
+    transform-origin: 50% 15%;
+    filter: drop-shadow(0 6px 12px rgba(176, 46, 78, 0.36));
+    animation: yaluBellSway var(--dur-stream) var(--ease-out) infinite;
+  }
+  .yms-rig[data-action="deliver"] .yms-prop-bell,
+  .yms-rig[data-action="happy"] .yms-prop-bell,
+  .yms-rig[data-action="pat"] .yms-prop-bell,
+  .yms-rig[data-action="dance"] .yms-prop-bell {
+    animation: yaluBellRing var(--dur-base) var(--ease-spring) infinite;
+  }
+
+  .yms-blackhole {
+    position: absolute;
+    left: -34px;
+    top: 38%;
+    width: 54px;
+    height: 54px;
+    border-radius: var(--radius-full);
+    background: radial-gradient(circle, #080b16 28%, #5b3df5 60%, #38bdf8 82%, transparent 100%);
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.78);
+    animation: rtOrbitSpin var(--dur-stream) linear infinite;
+  }
+  .yms-supervise-ring {
+    position: absolute;
+    inset: 6px;
+    border-radius: var(--radius-full);
+    border: 1.5px dashed rgba(56, 189, 248, 0.68);
+    animation: rtOrbitSpin var(--dur-stream) linear infinite;
+  }
+  .yms-mood-float {
+    position: absolute;
+    top: -6px;
+    right: 6px;
+    font-size: 16px;
+    animation: harborActionRise var(--dur-base) var(--ease-spring) both;
+  }
+
+  .yms-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    pointer-events: auto;
+  }
+}

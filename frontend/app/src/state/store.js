@@ -79,6 +79,7 @@ import {
   toggleSidebar,
   toggleZenMode,
   openModal,
+  setMarketView,
   closeModal,
   toggleDock,
   setDockTab,
@@ -201,6 +202,8 @@ const initialState = Object.freeze({
     sidebarOpen: true,
     activeModal: null,         // 'settings' | 'market' | 'command' | null（强互斥）
     onboardingOpen: readStorage('harbor.v5.onboarding.seen', '') !== '1',
+    marketTab: 'industry',
+    marketTeamId: 'software-company',
     modalOriginRect: null,     // 触发按钮坐标（用于 FLIP 平滑展开）
     zenMode: false,
     dockOpen: false,
@@ -381,6 +384,7 @@ export {
   toggleSidebar,
   toggleZenMode,
   openModal,
+  setMarketView,
   closeModal,
   toggleDock,
   setDockTab,

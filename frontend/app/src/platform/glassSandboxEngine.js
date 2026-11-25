@@ -9,6 +9,7 @@
  */
 
 export const CRACK_SPEED_THRESHOLD = 420
+export const ESCAPE_SPEED_THRESHOLD = 680
 export const MAX_GLASS_HP = 3
 export const HEAL_HOLD_MS = 2000
 
@@ -152,6 +153,10 @@ export function releaseGlassBody(store, id, vx = 0, vy = 0) {
 export function recallGlassBody(store, id) {
   const b = store.bodies.get(id)
   if (!b || b.status === 'shattered') return null
+  if (b.status === 'escaped') {
+    b.x = clamp(b.x, 12, Math.max(20, b.origin.x + 120))
+    b.y = clamp(b.y, 12, Math.max(20, b.origin.y + 80))
+  }
   b.status = 'recalling'
   b.vx = 0
   b.vy = 0
@@ -247,7 +252,7 @@ export function setRepairProgress(store, id, progress) {
 }
 
 /** 步进物理世界（dt 秒），返回本帧产生的撞击事件列表（供触发液态玻璃波纹、裂痕与碎裂回调） */
-export function stepGlassSandbox(store, dtSec, vw, vh) {
+export function stepGlassSandbox(store, dtSec, vw, vh, { allowEscape = false } = {}) {
   const dt = clamp(Number(dtSec) || 0.016, 0.002, 0.04)
   const W = Math.max(320, Number(vw) || 1280)
   const H = Math.max(240, Number(vh) || 800)
@@ -322,6 +327,28 @@ export function stepGlassSandbox(store, dtSec, vw, vh) {
     if (Math.abs(b.vx) < 3) b.vx = 0
     if (Math.abs(b.vy) < 3) b.vy = 0
     if (Math.abs(b.vrot) < 2) b.vrot = 0
+
+    // R30 破壁飞出窗口（allowEscape=true）：高速甩向边缘或拖出窗口边时冲出 Harbor 飞向真实桌面！
+    const outLeft = b.x < -b.w * 0.16 || (b.x < 4 && Math.abs(b.vx) >= ESCAPE_SPEED_THRESHOLD)
+    const outRight = b.x + b.w > W + b.w * 0.16 || (b.x + b.w > W - 4 && Math.abs(b.vx) >= ESCAPE_SPEED_THRESHOLD)
+    const outTop = b.y < -b.h * 0.16 || (b.y < 4 && Math.abs(b.vy) >= ESCAPE_SPEED_THRESHOLD)
+    const outBottom = b.y + b.h > H + b.h * 0.16 || (b.y + b.h > H - 4 && Math.abs(b.vy) >= ESCAPE_SPEED_THRESHOLD)
+    if (allowEscape && (outLeft || outRight || outTop || outBottom)) {
+      const escSide = outLeft ? 'left' : (outRight ? 'right' : (outTop ? 'top' : 'bottom'))
+      b.status = 'escaped'
+      b.escapedSide = escSide
+      events.push({
+        type: 'escape',
+        id: b.id,
+        side: escSide,
+        x: clamp(b.x + b.w / 2, 10, W - 10),
+        y: clamp(b.y + b.h / 2, 10, H - 10),
+        vx: b.vx,
+        vy: b.vy,
+        body: { ...b },
+      })
+      continue
+    }
 
     // 4 面屏幕边框真实物理反弹 + 凹陷 + 高速裂痕/碎裂！
     let hitSide = ''

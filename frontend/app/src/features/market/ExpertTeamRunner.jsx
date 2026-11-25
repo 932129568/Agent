@@ -1,14 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSlice, startExpertTeamRun, stopExpertTeamRun, setDockPreview } from '../../state/store.js'
 import { TEAM_CATEGORIES, buildAvailableTeams, safeExpertText } from '../../services/expertTeam.js'
 import MarkdownView from '../../ui/MarkdownView.jsx'
 import './ExpertTeamRunner.css'
 
 export default function ExpertTeamRunner() {
+  const ui = useSlice('ui')
   const market = useSlice('market')
   const team = useSlice('expertTeam')
   const [cat, setCat] = useState('all')
-  const [selectedTeamId, setSelectedTeamId] = useState('software-company')
+  const [selectedTeamId, setSelectedTeamId] = useState(() => ui.marketTeamId || 'software-company')
+
+  useEffect(() => {
+    if (ui.marketTeamId && ui.marketTeamId !== selectedTeamId) setSelectedTeamId(ui.marketTeamId)
+  }, [ui.marketTeamId])
   const [goal, setGoal] = useState('')
 
   const allTeams = useMemo(() => buildAvailableTeams(market.experts || []), [market.experts])

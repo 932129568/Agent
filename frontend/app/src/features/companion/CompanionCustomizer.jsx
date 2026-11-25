@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
+  COMPANION_MODEL_PACKS,
+  YALU_PROP_LOADOUTS,
+  YALU_AURA_THEMES,
   COMPANION_BODY_FORMS,
   COMPANION_HAIRSTYLES,
   COMPANION_HAIR_COLORS,
@@ -11,7 +14,9 @@ import {
   COMPANION_SKINS,
   COMPANION_PERSONALITIES,
   COMPANION_PRESETS,
+  getActiveModelPack,
 } from '../../services/companionCatalog.js'
+import YaluModelStage from '../../ui/YaluModelStage.jsx'
 import Companion3DCanvas from '../../ui/Companion3DCanvas.jsx'
 import ModelPicker from '../../ui/ModelPicker.jsx'
 import './CompanionCustomizer.css'
@@ -29,6 +34,7 @@ export default function CompanionCustomizer({
 }) {
   const [tab, setTab] = useState(initialTab)
   const [previewPose, setPreviewPose] = useState('idle')
+  const [viewAngle, setViewAngle] = useState('auto') // 'auto' | 'front' | 'side' | 'back' | 'video'
 
   useEffect(() => {
     if (open) setTab(initialTab || 'avatar')
@@ -48,7 +54,17 @@ export default function CompanionCustomizer({
 
   if (!open) return null
 
-  const isWhaleForm = avatar.bodyForm === 'dafeiyu' || avatar.bodyForm === 'liquid_cat'
+  const isYaluModel = (avatar.bodyForm || 'yalu_model') === 'yalu_model'
+  const pack = getActiveModelPack(avatar.modelPackId)
+  const packAssets = {
+    front: pack.assets.front,
+    turnFront: pack.assets.turnFront,
+    side: pack.assets.side,
+    back: pack.assets.back,
+    staff: pack.assets.props.staff.src,
+    bell: pack.assets.props.bell.src,
+    showcaseVideo: pack.assets.showcaseVideo,
+  }
 
   return (
     <div className="cc-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -56,15 +72,15 @@ export default function CompanionCustomizer({
         className="cc-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="3D 助手形象工坊与无人驾驶大脑设置"
+        aria-label="芽露原版建模工坊与无人驾驶大脑设置"
         data-section="companion-customizer"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cc-head">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span className="cc-title">🐳 大肥鱼 & 二次元全能助手 · 形象工坊与总管大脑</span>
+            <span className="cc-title">🌿 芽露 · 原版建模工坊与全自动总管大脑</span>
             <div className="cc-tabs">
-              <button type="button" className="cc-btn" data-active={String(tab === 'avatar')} onClick={() => setTab('avatar')}>🎨 形态与捏脸换装</button>
+              <button type="button" className="cc-btn" data-active={String(tab === 'avatar')} onClick={() => setTab('avatar')}>🎨 建模视图与道具工坊</button>
               <button type="button" className="cc-btn" data-active={String(tab === 'llm')} onClick={() => setTab('llm')}>🧠 无人驾驶与专属大模型</button>
             </div>
           </div>
@@ -73,22 +89,59 @@ export default function CompanionCustomizer({
 
         <div className="cc-body">
           <aside className="cc-stage">
-            <div className="cc-stage-card">
-              <Companion3DCanvas avatar={avatar} actionState={previewPose} size={208} spinPreview={previewPose === 'idle'} />
+            <div className="cc-stage-card" style={{ padding: viewAngle === 'video' ? 4 : 8 }}>
+              {isYaluModel ? (
+                <YaluModelStage
+                  assets={packAssets}
+                  actionState={previewPose}
+                  propLoadout={avatar.propLoadout || 'both'}
+                  auraTheme={avatar.auraTheme || 'natural'}
+                  viewAngle={viewAngle}
+                  scale={1}
+                  width={212}
+                  height={212}
+                />
+              ) : (
+                <Companion3DCanvas avatar={avatar} actionState={previewPose} size={208} spinPreview={previewPose === 'idle'} />
+              )}
             </div>
-            <strong style={{ fontSize: 15, color: 'var(--text)' }}>{avatar.name || '大肥鱼'}</strong>
-            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>实时赛璐璐立体渲染 · 动作预览</span>
+            <strong style={{ fontSize: 15, color: 'var(--text)' }}>{avatar.name || '芽露'}</strong>
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+              {isYaluModel ? '原版建模三视图 · 双道具 · 60fps 成片' : '备用 3D 皮肤实时预览'}
+            </span>
+
+            {isYaluModel && (
+              <div className="cc-pose-row" aria-label="三视图与 60fps 成片切换">
+                {[
+                  ['auto', '自动'],
+                  ['front', '正面'],
+                  ['side', '侧面'],
+                  ['back', '背面'],
+                  ['video', '🎬 60fps成片'],
+                ].map(([vid, lbl]) => (
+                  <button
+                    key={vid}
+                    type="button"
+                    className="cc-btn"
+                    style={{ padding: '3px 9px', fontSize: 11 }}
+                    data-active={String(viewAngle === vid)}
+                    onClick={() => setViewAngle(vid)}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="cc-pose-row">
               {[
                 ['idle', '待机'],
+                ['run', '侧身小跑'],
                 ['grabbed', '被拎起'],
-                ['pat', '摸摸头'],
-                ['dance', '转圈舞'],
-                ['eat_snack', '吃零食'],
-                ['supervising', '监工中'],
-                ['deliver', '交稿啦'],
+                ['supervising', '挥杖监工'],
+                ['deliver', '摇铃交稿'],
                 ['magic_blackhole', '黑洞'],
-                ['sleep', '打盹'],
+                ['dance', '转圈'],
               ].map(([id, lbl]) => (
                 <button
                   key={id}
@@ -96,7 +149,7 @@ export default function CompanionCustomizer({
                   className="cc-btn"
                   style={{ padding: '3px 9px', fontSize: 11 }}
                   data-active={String(previewPose === id)}
-                  onClick={() => setPreviewPose(id)}
+                  onClick={() => { setViewAngle('auto'); setPreviewPose(id) }}
                 >
                   {lbl}
                 </button>
@@ -108,29 +161,29 @@ export default function CompanionCustomizer({
             {tab === 'avatar' ? (
               <>
                 <div className="cc-group">
-                  <span className="cc-label">一键套用热门旗舰造型（含经典大肥鱼 & 鲸鱼娘）</span>
-                  <div className="cc-chips">
-                    {COMPANION_PRESETS.map((p) => (
-                      <button key={p.id} type="button" className="cc-btn" onClick={() => onUpdateAvatar({ ...p.avatar })}>
-                        {p.name}
+                  <span className="cc-label">已载入官方建模包（后续新建模包均在此架构扩展）</span>
+                  <div className="cc-form-grid">
+                    {COMPANION_MODEL_PACKS.map((mp) => (
+                      <button
+                        key={mp.id}
+                        type="button"
+                        className="cc-form-card"
+                        data-active={String(isYaluModel && (avatar.modelPackId || 'yalu_official') === mp.id)}
+                        onClick={() => onUpdateAvatar({ bodyForm: 'yalu_model', modelPackId: mp.id, name: '芽露' })}
+                      >
+                        <strong>{mp.name}</strong>
+                        <span>{mp.tagline}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="cc-group">
-                  <span className="cc-label">选择核心建模形态（4 大精绘模型）</span>
-                  <div className="cc-form-grid">
-                    {COMPANION_BODY_FORMS.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        className="cc-form-card"
-                        data-active={String((avatar.bodyForm || 'dafeiyu') === f.id)}
-                        onClick={() => onUpdateAvatar({ bodyForm: f.id })}
-                      >
-                        <strong>{f.label}</strong>
-                        <span>{f.desc}</span>
+                  <span className="cc-label">一键套用预设造型</span>
+                  <div className="cc-chips">
+                    {COMPANION_PRESETS.map((p) => (
+                      <button key={p.id} type="button" className="cc-btn" onClick={() => onUpdateAvatar({ ...p.avatar })}>
+                        {p.name}
                       </button>
                     ))}
                   </div>
@@ -144,7 +197,7 @@ export default function CompanionCustomizer({
                       style={{ maxWidth: 210 }}
                       value={avatar.name || ''}
                       onChange={(e) => onUpdateAvatar({ name: e.target.value.slice(0, 12) })}
-                      placeholder="起个喜欢的名字"
+                      placeholder="芽露"
                     />
                     <input
                       type="range"
@@ -156,89 +209,111 @@ export default function CompanionCustomizer({
                   </div>
                 </div>
 
-                <div className="cc-group">
-                  <span className="cc-label">{isWhaleForm ? '主色调与瓷感涂装（8 色）' : '发色与光泽（8 色）'}</span>
-                  <div className="cc-chips">
-                    {COMPANION_HAIR_COLORS.map((c) => (
-                      <button key={c.id} type="button" className="cc-btn" data-active={String(avatar.hairColor === c.id)} onClick={() => onUpdateAvatar({ hairColor: c.id })}>
-                        <span className="cc-swatch" style={{ background: c.hex }} />
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {!isWhaleForm && (
-                  <div className="cc-group">
-                    <span className="cc-label">发型（{COMPANION_HAIRSTYLES.length} 款）</span>
-                    <div className="cc-chips">
-                      {COMPANION_HAIRSTYLES.map((h) => (
-                        <button key={h.id} type="button" className="cc-btn" data-active={String(avatar.hairStyle === h.id)} onClick={() => onUpdateAvatar({ hairStyle: h.id })}>
-                          {h.label}
-                        </button>
-                      ))}
+                {isYaluModel ? (
+                  <>
+                    <div className="cc-group">
+                      <span className="cc-label">原版专属道具装配（露芽杖 & 酒红铃铛）</span>
+                      <div className="cc-chips">
+                        {YALU_PROP_LOADOUTS.map((pl) => (
+                          <button
+                            key={pl.id}
+                            type="button"
+                            className="cc-btn"
+                            data-active={String((avatar.propLoadout || 'both') === pl.id)}
+                            onClick={() => onUpdateAvatar({ propLoadout: pl.id })}
+                          >
+                            {pl.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+
+                    <div className="cc-group">
+                      <span className="cc-label">原版 4 组表情差分（实时联动聊天头像与心情）</span>
+                      <div className="cc-expr-grid">
+                        {pack.assets.expressions.map((ex) => (
+                          <button
+                            key={ex.id}
+                            type="button"
+                            className="cc-expr-card"
+                            data-active={String((avatar.expressionOverride || 'auto') === ex.id)}
+                            onClick={() => onUpdateAvatar({ expressionOverride: avatar.expressionOverride === ex.id ? 'auto' : ex.id })}
+                          >
+                            <img src={ex.src} alt={ex.label} />
+                            <span>{ex.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="cc-group">
+                      <span className="cc-label">光晕氛围色调</span>
+                      <div className="cc-chips">
+                        {YALU_AURA_THEMES.map((au) => (
+                          <button
+                            key={au.id}
+                            type="button"
+                            className="cc-btn"
+                            data-active={String((avatar.auraTheme || 'natural') === au.id)}
+                            onClick={() => onUpdateAvatar({ auraTheme: au.id })}
+                          >
+                            <span className="cc-swatch" style={{ background: au.glow }} />
+                            {au.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="cc-group">
+                      <span className="cc-label">备用皮肤细节（发色 / 发型 / 眼型 / 头饰 / 服装）</span>
+                      <div className="cc-chips">
+                        {COMPANION_HAIR_COLORS.map((c) => (
+                          <button key={c.id} type="button" className="cc-btn" data-active={String(avatar.hairColor === c.id)} onClick={() => onUpdateAvatar({ hairColor: c.id })}>
+                            <span className="cc-swatch" style={{ background: c.hex }} />{c.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="cc-chips">
+                        {COMPANION_HAIRSTYLES.map((h) => (
+                          <button key={h.id} type="button" className="cc-btn" data-active={String(avatar.hairStyle === h.id)} onClick={() => onUpdateAvatar({ hairStyle: h.id })}>{h.label}</button>
+                        ))}
+                      </div>
+                      <div className="cc-chips">
+                        {COMPANION_EYE_STYLES.map((e) => (
+                          <button key={e.id} type="button" className="cc-btn" data-active={String(avatar.eyeStyle === e.id)} onClick={() => onUpdateAvatar({ eyeStyle: e.id })}>{e.label}</button>
+                        ))}
+                        {COMPANION_EYE_COLORS.map((c) => (
+                          <button key={c.id} type="button" className="cc-btn" data-active={String(avatar.eyeColor === c.id)} onClick={() => onUpdateAvatar({ eyeColor: c.id })}>
+                            <span className="cc-swatch" style={{ background: c.hex }} />{c.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="cc-chips">
+                        {COMPANION_HEADGEARS.map((g) => (
+                          <button key={g.id} type="button" className="cc-btn" data-active={String(avatar.headgear === g.id)} onClick={() => onUpdateAvatar({ headgear: g.id })}>{g.label}</button>
+                        ))}
+                        {COMPANION_OUTFITS.map((o) => (
+                          <button key={o.id} type="button" className="cc-btn" data-active={String(avatar.outfit === o.id)} onClick={() => onUpdateAvatar({ outfit: o.id })}>{o.label}</button>
+                        ))}
+                        {COMPANION_SKINS.map((s) => (
+                          <button key={s.id} type="button" className="cc-btn" data-active={String(avatar.skin === s.id)} onClick={() => onUpdateAvatar({ skin: s.id })}>{s.label}</button>
+                        ))}
+                        {COMPANION_ACCESSORIES.map((a) => (
+                          <button key={a.id} type="button" className="cc-btn" data-active={String(avatar.accessory === a.id)} onClick={() => onUpdateAvatar({ accessory: a.id })}>{a.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <div className="cc-group">
-                  <span className="cc-label">眼型与宝石瞳色（含异色双瞳）</span>
+                  <span className="cc-label">切换形态 / 性格声线</span>
                   <div className="cc-chips">
-                    {COMPANION_EYE_STYLES.map((e) => (
-                      <button key={e.id} type="button" className="cc-btn" data-active={String(avatar.eyeStyle === e.id)} onClick={() => onUpdateAvatar({ eyeStyle: e.id })}>
-                        {e.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="cc-chips">
-                    {COMPANION_EYE_COLORS.map((c) => (
-                      <button key={c.id} type="button" className="cc-btn" data-active={String(avatar.eyeColor === c.id)} onClick={() => onUpdateAvatar({ eyeColor: c.id })}>
-                        <span className="cc-swatch" style={{ background: c.rightHex ? `linear-gradient(90deg, ${c.hex} 50%, ${c.rightHex} 50%)` : c.hex }} />
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="cc-group">
-                  <span className="cc-label">头饰 / 喷水浪花 / 兽耳（{COMPANION_HEADGEARS.length} 款）</span>
-                  <div className="cc-chips">
-                    {COMPANION_HEADGEARS.map((g) => (
-                      <button key={g.id} type="button" className="cc-btn" data-active={String(avatar.headgear === g.id)} onClick={() => onUpdateAvatar({ headgear: g.id })}>
-                        {g.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {!isWhaleForm && (
-                  <div className="cc-group">
-                    <span className="cc-label">服装与肤色</span>
-                    <div className="cc-chips">
-                      {COMPANION_OUTFITS.map((o) => (
-                        <button key={o.id} type="button" className="cc-btn" data-active={String(avatar.outfit === o.id)} onClick={() => onUpdateAvatar({ outfit: o.id })}>
-                          <span className="cc-swatch" style={{ background: o.primary }} />
-                          {o.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="cc-chips">
-                      {COMPANION_SKINS.map((s) => (
-                        <button key={s.id} type="button" className="cc-btn" data-active={String(avatar.skin === s.id)} onClick={() => onUpdateAvatar({ skin: s.id })}>
-                          <span className="cc-swatch" style={{ background: s.hex }} />
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="cc-group">
-                  <span className="cc-label">随身配饰 & 性格人设</span>
-                  <div className="cc-chips">
-                    {COMPANION_ACCESSORIES.map((a) => (
-                      <button key={a.id} type="button" className="cc-btn" data-active={String(avatar.accessory === a.id)} onClick={() => onUpdateAvatar({ accessory: a.id })}>
-                        {a.label}
+                    {COMPANION_BODY_FORMS.map((f) => (
+                      <button key={f.id} type="button" className="cc-btn" data-active={String((avatar.bodyForm || 'yalu_model') === f.id)} onClick={() => onUpdateAvatar({ bodyForm: f.id })}>
+                        {f.label}
                       </button>
                     ))}
                   </div>
@@ -257,7 +332,7 @@ export default function CompanionCustomizer({
                   <div>
                     <strong style={{ fontSize: 13 }}>🤖 全自动无人驾驶接管（推荐开启）</strong>
                     <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                      把任何真实需求发给助手，它会自动判断该用「智能对话+专家+Skill / 12支原生专家团 / 工作流 DAG / 多角色群聊 / 双模协同」，亲自操作运行并监工验收交稿。
+                      把任何真实需求发给芽露，她会自动挑选「智能对话+专家+Skill / 12支原生专家团 / 工作流 DAG / 多角色群聊 / 双模协同」，自动切到对应页面运行并实时监工交稿。
                     </div>
                   </div>
                   <button
@@ -272,9 +347,9 @@ export default function CompanionCustomizer({
 
                 <div className="cc-switch-card">
                   <div>
-                    <strong style={{ fontSize: 13 }}>🧠 启用大模型（仅用于拟人闲聊与可选路由增强）</strong>
+                    <strong style={{ fontSize: 13 }}>🧠 启用大模型（拟人闲聊与路由增强）</strong>
                     <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                      默认本地优先零 Token 消耗；开启后支持与大肥鱼自由畅聊，并增强复杂任务的路线判断。
+                      默认本地优先零 Token 消耗；开启后支持与芽露自由畅聊，并增强复杂任务的路线判断。
                     </div>
                   </div>
                   <button
@@ -291,7 +366,7 @@ export default function CompanionCustomizer({
                   <div>
                     <strong style={{ fontSize: 13 }}>⚡ 完全使用大模型驱动</strong>
                     <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                      开启后所有动作决策、对话、自主路由均由助手专属大模型全面接管（会消耗所选模型 Token）。
+                      开启后所有动作决策、对话、自主路由均由助手专属大模型全面接管。
                     </div>
                   </div>
                   <button
@@ -330,7 +405,7 @@ export default function CompanionCustomizer({
                   <div>
                     <strong style={{ fontSize: 13 }}>🍪 趣味互动：偷啃液态玻璃 & 主动拾碎片修补</strong>
                     <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                      饱食度低时偶尔溜过去啃一口玻璃（投喂小鱼干可安抚）；甩碎玻璃后会自动跑去拾碎片修补。
+                      饱食度低时偶尔溜过去啃一口玻璃；甩碎玻璃后会自动跑去拾碎片修补。
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>

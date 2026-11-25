@@ -14,6 +14,7 @@ import {
   setGlassSourceVisibility,
 } from '../platform/dom.js'
 import { computeViewportCoords } from '../platform/kinetic.js'
+import { desktopBridge } from '../platform/libs.js'
 import './GlassSandboxOverlay.css'
 
 /**
@@ -42,7 +43,7 @@ export default function GlassSandboxOverlay({
     const store = storeRef.current
     if (!store) return
     for (const b of store.bodies.values()) {
-      const shouldHideOrigin = b.status === 'dragging' || b.status === 'floating' || b.status === 'recalling' || b.status === 'shattered' || (b.status === 'repairing' && b.repairMode === 'shatter')
+      const shouldHideOrigin = b.status === 'dragging' || b.status === 'floating' || b.status === 'escaped' || b.status === 'recalling' || b.status === 'shattered' || (b.status === 'repairing' && b.repairMode === 'shatter')
       setGlassSourceVisibility(b.id, !shouldHideOrigin)
     }
   }
@@ -162,7 +163,7 @@ export default function GlassSandboxOverlay({
       const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
       const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
       const prevIds = new Set(store.bodies.keys())
-      const events = stepGlassSandbox(store, dt, vw, vh)
+      const events = stepGlassSandbox(store, dt, vw, vh, { allowEscape: true })
       for (const oldId of prevIds) {
         if (!store.bodies.has(oldId)) setGlassSourceVisibility(oldId, true)
       }
@@ -177,6 +178,28 @@ export default function GlassSandboxOverlay({
             edge: ev.side || 'pointer',
           })
         }
+        if (ev.type === 'escape' && ev.body) {
+          const desk = desktopBridge()
+          if (desk && typeof desk.getDesktopMetrics === 'function' && typeof desk.syncDesktopStage === 'function') {
+            desk.getDesktopMetrics().then((m) => {
+              const wb = (m && m.winBounds) || { x: 100, y: 100 }
+              desk.syncDesktopStage({
+                addBlock: {
+                  id: ev.body.id,
+                  label: ev.body.label,
+                  x: wb.x + ev.body.x,
+                  y: wb.y + ev.body.y,
+                  w: ev.body.w,
+                  h: ev.body.h,
+                  radius: ev.body.radius,
+                  vx: ev.vx,
+                  vy: ev.vy,
+                  hp: ev.body.hp,
+                },
+              })
+            }).catch(() => {})
+          }
+        }
         if (ev.type === 'shatter' && typeof onBlockShattered === 'function') {
           onBlockShattered(ev.id)
         }
@@ -190,7 +213,33 @@ export default function GlassSandboxOverlay({
       lastTRef.current = performance.now()
       rafRef.current = requestAnimationFrame(loop)
     }
+    const desk = desktopBridge()
+    const unsubDesk = desk && typeof desk.onDesktopStageEvent === 'function'
+      ? desk.onDesktopStageEvent((ev) => {
+        const st = storeRef.current
+        if (!ev || !st) return
+        if (ev.type === 'block_return' && ev.id) {
+          const b = st.bodies.get(ev.id)
+          if (b) {
+            b.status = 'floating'
+            b.x = ev.relX
+            b.y = ev.relY
+            b.vx = ev.vx || 0
+            b.vy = ev.vy || 0
+            setTick((n) => n + 1)
+          }
+        } else if (ev.type === 'block_shattered_desktop' && ev.id) {
+          const b = st.bodies.get(ev.id)
+          if (b) {
+            b.status = 'shattered'
+            setTick((n) => n + 1)
+            if (typeof onBlockShattered === 'function') onBlockShattered(ev.id)
+          }
+        }
+      })
+      : null
     return () => {
+      if (typeof unsubDesk === 'function') unsubDesk()
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = 0
@@ -233,6 +282,8 @@ export default function GlassSandboxOverlay({
           restoreShatteredBody(store, body.id)
           setGlassSourceVisibility(body.id, true)
         } else {
+          const desk = desktopBridge()
+          if (desk && typeof desk.syncDesktopStage === 'function') desk.syncDesktopStage({ removeBlockId: body.id })
           recallGlassBody(store, body.id)
         }
         setTick((n) => n + 1)
@@ -283,7 +334,9 @@ export default function GlassSandboxOverlay({
               ? `修补中 ${Math.round(b.repairProgress * 100)}%`
               : (isShattered
                 ? (holding ? `恢复 ${Math.round(holding.progress * 100)}%` : '碎裂·长按2s恢复')
-                : (holding ? '磁力吸回…' : '空槽·长按召回'))}
+                : (b.status === 'escaped'
+                  ? (holding ? '召回中…' : '🌌 飞出窗外·长按召回')
+                  : (holding ? '磁力吸回…' : '空槽·长按召回')))}
             {(holding || isRepairing) && (
               <svg className="gsb-hold-ring" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
                 <rect
@@ -314,7 +367,7 @@ export default function GlassSandboxOverlay({
       ))}
 
       {/* 3. 浮动中的液态玻璃主体 & 原位被助手啃咬的咬痕同步层 */}
-      {bodies.filter((b) => b.status !== 'shattered').map((b) => {
+      {bodies.filter((b) => b.status !== 'shattered' && b.status !== 'escaped').map((b) => {
         const isInPlaceBite = b.status === 'bitten_in_place' || (b.status === 'repairing' && b.repairMode === 'bite')
         const dentScaleX = 1 - Math.abs(b.dentX) * b.dentAmt * 0.14 + Math.abs(b.dentY) * b.dentAmt * 0.07
         const dentScaleY = 1 - Math.abs(b.dentY) * b.dentAmt * 0.14 + Math.abs(b.dentX) * b.dentAmt * 0.07

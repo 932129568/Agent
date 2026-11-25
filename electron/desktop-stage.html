@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Harbor Desktop Stage</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100vw; height: 100vh;
+    overflow: hidden; background: transparent !important;
+    user-select: none; font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  }
+  #stage { position: fixed; inset: 0; pointer-events: none; }
+  .ds-block {
+    position: fixed; left: 0; top: 0; pointer-events: auto; cursor: grab;
+    display: flex; align-items: center; justify-content: center; padding: 0 12px;
+    border-radius: 14px; border: 1.5px solid rgba(255,255,255,0.82);
+    background: linear-gradient(155deg, rgba(255,255,255,0.80), rgba(235,244,255,0.54));
+    backdrop-filter: blur(18px) saturate(1.6);
+    box-shadow: 0 18px 40px -10px rgba(15,23,42,0.34), inset 0 1.5px 1px rgba(255,255,255,0.95);
+    color: #141926; font-size: 12.5px; font-weight: 700; white-space: nowrap;
+    will-change: transform;
+  }
+  .ds-block:active { cursor: grabbing; }
+  .ds-shard {
+    position: fixed; left: 0; top: 0; pointer-events: none;
+    background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(140,212,255,0.55), rgba(212,101,62,0.28));
+    border: 1px solid rgba(255,255,255,0.88);
+    clip-path: polygon(16% 0%, 100% 24%, 78% 100%, 0% 76%);
+    will-change: transform;
+  }
+  .ds-pet {
+    position: fixed; left: 0; top: 0; pointer-events: auto; cursor: grab;
+    display: flex; flex-direction: column; align-items: center;
+    will-change: transform;
+  }
+  .ds-pet:active { cursor: grabbing; }
+  .ds-pet img.sprite {
+    width: 112px; height: auto; max-height: 184px; object-fit: contain;
+    filter: drop-shadow(0 12px 20px rgba(15, 28, 56, 0.30));
+    pointer-events: none;
+    transition: transform 140ms ease-out;
+  }
+  .ds-bubble {
+    margin-bottom: 4px; padding: 6px 11px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.82);
+    background: rgba(255,255,255,0.92); backdrop-filter: blur(16px);
+    box-shadow: 0 8px 22px rgba(15,23,42,0.18);
+    font-size: 11.5px; color: #161925; max-width: 220px; text-align: center;
+    pointer-events: none;
+  }
+  .ds-tag {
+    margin-top: -6px; padding: 2px 9px; border-radius: 999px;
+    background: rgba(255,255,255,0.92); border: 1px solid rgba(255,255,255,0.85);
+    box-shadow: 0 4px 12px rgba(15,23,42,0.16);
+    font-size: 10.5px; font-weight: 700; color: #2d3748; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+(() => {
+  const api = window.HarborDesktop
+  if (!api) return
+  const stage = document.getElementById('stage')
+  const blocks = new Map()
+  let pet = null
+  let winBounds = { x: 100, y: 100, width: 1320, height: 840 }
+  let draggingBlock = null
+  let draggingPet = null
+  let hoveringInteractive = false
+
+  function setInteractive(on) {
+    if (hoveringInteractive === on) return
+    hoveringInteractive = on
+    api.setDesktopStageIgnore(!on)
+  }
+
+  function renderAll() {
+    stage.innerHTML = ''
+    for (const b of blocks.values()) {
+      if (b.shattered) {
+        for (const sh of (b.shards || [])) {
+          const s = document.createElement('div')
+          s.className = 'ds-shard'
+          s.style.width = sh.size + 'px'
+          s.style.height = sh.size + 'px'
+          s.style.transform = `translate3d(${sh.x.toFixed(1)}px,${sh.y.toFixed(1)}px,0) rotate(${sh.rot.toFixed(0)}deg)`
+          stage.appendChild(s)
+        }
+        continue
+      }
+      const el = document.createElement('div')
+      el.className = 'ds-block'
+      el.style.width = b.w + 'px'
+      el.style.height = b.h + 'px'
+      el.style.borderRadius = (b.radius || 14) + 'px'
+      el.style.transform = `translate3d(${b.x.toFixed(1)}px,${b.y.toFixed(1)}px,0) rotate(${(b.rot || 0).toFixed(1)}deg)`
+      el.textContent = b.label || '液态玻璃'
+      el.title = '桌面自由液态玻璃 · 可拖回 Harbor 窗口内或甩动弹屏幕边'
+      el.onpointerenter = () => setInteractive(true)
+      el.onpointerleave = () => { if (!draggingBlock && !draggingPet) setInteractive(false) }
+      el.onpointerdown = (e) => {
+        e.stopPropagation()
+        setInteractive(true)
+        draggingBlock = { id: b.id, offX: e.clientX - b.x, offY: e.clientY - b.y, lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), vx: 0, vy: 0 }
+      }
+      stage.appendChild(el)
+    }
+
+    if (pet && pet.active) {
+      const wrap = document.createElement('div')
+      wrap.className = 'ds-pet'
+      wrap.style.transform = `translate3d(${pet.x.toFixed(1)}px,${pet.y.toFixed(1)}px,0)`
+      if (pet.speech) {
+        const sp = document.createElement('div')
+        sp.className = 'ds-bubble'
+        sp.textContent = pet.speech
+        wrap.appendChild(sp)
+      }
+      const img = document.createElement('img')
+      img.className = 'sprite'
+      img.src = pet.spriteUrl || './assets/yalu/yalu-front.webp'
+      const flip = pet.facing > 0 ? -1 : 1
+      const tilt = pet.tilt || 0
+      img.style.transform = `scaleX(${flip}) rotate(${tilt.toFixed(1)}deg)`
+      wrap.appendChild(img)
+      const tag = document.createElement('div')
+      tag.className = 'ds-tag'
+      tag.textContent = `🌿 ${pet.name || '芽露'} · 桌面漫游中`
+      wrap.appendChild(tag)
+      wrap.title = '按住可拖着芽露满桌面逛或拖回 Harbor · 双击回主窗口'
+      wrap.onpointerenter = () => setInteractive(true)
+      wrap.onpointerleave = () => { if (!draggingBlock && !draggingPet) setInteractive(false) }
+      wrap.onpointerdown = (e) => {
+        e.stopPropagation()
+        setInteractive(true)
+        draggingPet = { offX: e.clientX - pet.x, offY: e.clientY - pet.y, lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), vx: 0, vy: 0 }
+      }
+      wrap.ondblclick = () => {
+        pet.active = false
+        setInteractive(false)
+        api.emitDesktopStageEvent({ type: 'pet_return', relX: Math.max(80, winBounds.width - 170), relY: Math.max(80, winBounds.height - 200) })
+        renderAll()
+      }
+      stage.appendChild(wrap)
+    }
+  }
+
+  window.addEventListener('pointermove', (e) => {
+    const now = performance.now()
+    if (draggingBlock) {
+      const b = blocks.get(draggingBlock.id)
+      if (!b) return
+      const dt = Math.max(0.01, (now - draggingBlock.lastT) / 1000)
+      draggingBlock.vx = (e.clientX - draggingBlock.lastX) / dt
+      draggingBlock.vy = (e.clientY - draggingBlock.lastY) / dt
+      draggingBlock.lastX = e.clientX; draggingBlock.lastY = e.clientY; draggingBlock.lastT = now
+      b.x = e.clientX - draggingBlock.offX
+      b.y = e.clientY - draggingBlock.offY
+      b.vx = 0; b.vy = 0
+      renderAll()
+    } else if (draggingPet && pet) {
+      const dt = Math.max(0.01, (now - draggingPet.lastT) / 1000)
+      draggingPet.vx = (e.clientX - draggingPet.lastX) / dt
+      draggingPet.vy = (e.clientY - draggingPet.lastY) / dt
+      draggingPet.lastX = e.clientX; draggingPet.lastY = e.clientY; draggingPet.lastT = now
+      pet.x = e.clientX - draggingPet.offX
+      pet.y = e.clientY - draggingPet.offY
+      pet.vx = 0; pet.vy = 0
+      pet.tilt = Math.max(-24, Math.min(24, -draggingPet.vx * 0.02))
+      pet.facing = draggingPet.vx >= 0 ? 1 : -1
+      renderAll()
+    }
+  })
+
+  window.addEventListener('pointerup', () => {
+    if (draggingBlock) {
+      const b = blocks.get(draggingBlock.id)
+      if (b) {
+        const cx = b.x + b.w / 2, cy = b.y + b.h / 2
+        const insideHarbor = cx > winBounds.x + 12 && cx < winBounds.x + winBounds.width - 12 && cy > winBounds.y + 12 && cy < winBounds.y + winBounds.height - 12
+        if (insideHarbor) {
+          blocks.delete(b.id)
+          api.emitDesktopStageEvent({ type: 'block_return', id: b.id, relX: b.x - winBounds.x, relY: b.y - winBounds.y, vx: draggingBlock.vx, vy: draggingBlock.vy })
+        } else {
+          b.vx = Math.max(-2200, Math.min(2200, draggingBlock.vx))
+          b.vy = Math.max(-2200, Math.min(2200, draggingBlock.vy))
+        }
+      }
+      draggingBlock = null
+      setInteractive(false)
+      renderAll()
+    }
+    if (draggingPet && pet) {
+      const cx = pet.x + 56, cy = pet.y + 84
+      const insideHarbor = cx > winBounds.x + 16 && cx < winBounds.x + winBounds.width - 16 && cy > winBounds.y + 16 && cy < winBounds.y + winBounds.height - 16
+      if (insideHarbor) {
+        pet.active = false
+        api.emitDesktopStageEvent({ type: 'pet_return', relX: pet.x - winBounds.x, relY: pet.y - winBounds.y, vx: draggingPet.vx, vy: draggingPet.vy })
+      } else {
+        pet.vx = Math.max(-1400, Math.min(1400, draggingPet.vx))
+        pet.vy = Math.max(-1400, Math.min(1400, draggingPet.vy))
+        pet.tilt = 0
+      }
+      draggingPet = null
+      setInteractive(false)
+      renderAll()
+    }
+  })
+
+  api.onDesktopStageSync((payload) => {
+    if (!payload) return
+    if (payload.winBounds) winBounds = payload.winBounds
+    if (payload.addBlock) blocks.set(payload.addBlock.id, { ...payload.addBlock })
+    if (payload.removeBlockId) blocks.delete(payload.removeBlockId)
+    if (payload.clearAllBlocks) blocks.clear()
+    if (payload.pet) pet = { ...payload.pet }
+    if (payload.hidePet && pet) pet.active = false
+    renderAll()
+  })
+
+  let lastT = performance.now()
+  function loop(now) {
+    const dt = Math.min(0.032, Math.max(0.008, (now - lastT) / 1000))
+    lastT = now
+    const W = window.innerWidth
+    const H = window.innerHeight
+    let dirty = false
+
+    for (const b of blocks.values()) {
+      if (draggingBlock && draggingBlock.id === b.id) continue
+      if (b.shattered) {
+        for (const sh of (b.shards || [])) {
+          sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.vy += 420 * dt; sh.vx *= 0.96
+          if (sh.y > H - 24) { sh.y = H - 24; sh.vy *= -0.3 }
+          sh.rot += sh.vrot * dt
+        }
+        dirty = true
+        continue
+      }
+      if (Math.abs(b.vx) > 2 || Math.abs(b.vy) > 2) {
+        b.x += b.vx * dt; b.y += b.vy * dt
+        b.rot = (b.rot || 0) + (b.vx * 0.04) * dt
+        b.vx *= Math.pow(0.986, dt * 60)
+        b.vy *= Math.pow(0.986, dt * 60)
+        let hit = false
+        if (b.x < 4) { b.x = 4; b.vx = Math.abs(b.vx) * 0.72; hit = true }
+        else if (b.x + b.w > W - 4) { b.x = W - b.w - 4; b.vx = -Math.abs(b.vx) * 0.72; hit = true }
+        if (b.y < 4) { b.y = 4; b.vy = Math.abs(b.vy) * 0.72; hit = true }
+        else if (b.y + b.h > H - 4) { b.y = H - b.h - 4; b.vy = -Math.abs(b.vy) * 0.72; hit = true }
+        if (hit && Math.hypot(b.vx, b.vy) > 360) {
+          b.hp = (b.hp || 3) - 1
+          if (b.hp <= 0) {
+            b.shattered = true
+            b.shards = Array.from({ length: 12 }, (_, i) => ({
+              x: b.x + b.w / 2, y: b.y + b.h / 2,
+              vx: Math.cos(i * 0.52) * 180, vy: Math.sin(i * 0.52) * 160 - 80,
+              rot: i * 31, vrot: (i % 2 ? 1 : -1) * 210, size: 8 + (i % 4) * 3,
+            }))
+            api.emitDesktopStageEvent({ type: 'block_shattered_desktop', id: b.id })
+          }
+        }
+        dirty = true
+      }
+    }
+
+    if (pet && pet.active && !draggingPet) {
+      if (Math.abs(pet.vx || 0) > 6 || Math.abs(pet.vy || 0) > 6 || pet.y < H - 210) {
+        pet.vy = (pet.vy || 0) + 1200 * dt
+        pet.x += (pet.vx || 0) * dt
+        pet.y += pet.vy * dt
+        pet.vx = (pet.vx || 0) * 0.985
+        if (pet.x < 8) { pet.x = 8; pet.vx = Math.abs(pet.vx) * 0.55 }
+        else if (pet.x > W - 128) { pet.x = W - 128; pet.vx = -Math.abs(pet.vx) * 0.55 }
+        if (pet.y > H - 204) { pet.y = H - 204; pet.vy = Math.abs(pet.vy) > 120 ? -Math.abs(pet.vy) * 0.4 : 0; pet.vx *= 0.8 }
+        if (pet.y < 10) { pet.y = 10; pet.vy = Math.abs(pet.vy) * 0.45 }
+        dirty = true
+      } else if (pet.roaming) {
+        pet.roamTimer = (pet.roamTimer || 0) - dt
+        if (pet.roamTimer <= 0) {
+          pet.roamDir = (Math.random() > 0.5 ? 1 : -1)
+          pet.roamTimer = 2.6 + Math.random() * 3.2
+          pet.facing = pet.roamDir
+          pet.spriteUrl = pet.sideUrl || pet.spriteUrl
+        }
+        pet.x = Math.max(16, Math.min(W - 136, pet.x + (pet.roamDir || 1) * 52 * dt))
+        if (pet.x <= 18 || pet.x >= W - 138) {
+          pet.roamDir = -(pet.roamDir || 1)
+          pet.facing = pet.roamDir
+        }
+        dirty = true
+      }
+    }
+
+    if (dirty) renderAll()
+    requestAnimationFrame(loop)
+  }
+  requestAnimationFrame(loop)
+})()
+</script>
+</body>
+</html>

@@ -49,8 +49,23 @@ export function toggleZenMode(force) {
   })
 }
 
-export function openModal(modalId, originRect = null) {
-  patchSlice('ui', (u) => ({ ...u, activeModal: modalId, modalOriginRect: originRect || null, dockOpen: false }))
+export function openModal(modalId, originRect = null, opts = null) {
+  patchSlice('ui', (u) => ({
+    ...u,
+    activeModal: modalId,
+    modalOriginRect: originRect || null,
+    dockOpen: false,
+    ...(opts && opts.marketTab ? { marketTab: opts.marketTab } : {}),
+    ...(opts && opts.marketTeamId ? { marketTeamId: opts.marketTeamId } : {}),
+  }))
+}
+
+export function setMarketView({ tab = '', teamId = '' } = {}) {
+  patchSlice('ui', (u) => ({
+    ...u,
+    ...(tab ? { marketTab: tab } : {}),
+    ...(teamId ? { marketTeamId: teamId } : {}),
+  }))
 }
 
 export function closeModal(impactEdge = 'left', skipImpact = false) {

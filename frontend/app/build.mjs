@@ -59,6 +59,15 @@ if (result.errors.length) {
 }
 
 fs.copyFileSync(path.join(HERE, 'index.html'), path.join(DIST, 'index.html'))
+const YALU_SRC = path.join(REPO, 'assets', 'yalu')
+const YALU_DIST = path.join(DIST, 'assets', 'yalu')
+if (fs.existsSync(YALU_SRC)) {
+  fs.mkdirSync(YALU_DIST, { recursive: true })
+  for (const fn of fs.readdirSync(YALU_SRC)) {
+    const s = path.join(YALU_SRC, fn)
+    if (fs.statSync(s).isFile()) fs.copyFileSync(s, path.join(YALU_DIST, fn))
+  }
+}
 const jsSize = fs.statSync(path.join(DIST, 'app.js')).size
 const cssPath = path.join(DIST, 'app.css')
 const cssSize = fs.existsSync(cssPath) ? fs.statSync(cssPath).size : 0

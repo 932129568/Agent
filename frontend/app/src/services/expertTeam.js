@@ -475,18 +475,25 @@ export async function runExpertTeam({
       : `你是成建制专家团队成员「${member.name}（${member.role}）」。核心职责：${member.description || '提供专业分析与可执行产出'}。请给出结构化高密度结论。`
 
     let resp
+    const stepCtrl = new AbortController()
+    const onOuterAbort = () => stepCtrl.abort()
+    if (signal) signal.addEventListener('abort', onOuterAbort, { once: true })
+    const stepTimer = setTimeout(() => stepCtrl.abort(new Error(`成员「${member.name}」响应超时`)), 45000)
     try {
       resp = await streamChatCompletion({
         ...endpointConfig,
-        signal,
+        signal: stepCtrl.signal,
         messages: [
           { role: 'system', content: sysPersona },
           { role: 'user', content: `【团队目标】\n${goal}${inboxText}` },
         ],
       })
     } catch (err) {
-      if (isAbort(err) || (signal && signal.aborted)) return buildPauseResult()
+      if (signal && signal.aborted) return buildPauseResult()
       throw err
+    } finally {
+      clearTimeout(stepTimer)
+      if (signal) signal.removeEventListener('abort', onOuterAbort)
     }
     const output = String(resp.content || '').trim()
     completedMap.set(member.name, output)
