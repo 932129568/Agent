@@ -325,14 +325,23 @@ export function playModalFlyOut(cardEl, edge = 'left', motionTier = 'dynamic', o
     )
   }
 
-  const flyTilt = tx < 0 ? -3.2 * k : (tx > 0 ? 3.2 * k : 0)
+  // R28 窗口关闭「变形胶囊高速撞回原位」过渡：先收束为原位胶囊比例与圆角，再高速撞击目标位置！
+  const cr = typeof cardEl.getBoundingClientRect === 'function' ? cardEl.getBoundingClientRect() : null
+  const sxCap = (cr && cr.width > 40 && targetRect && targetRect.width > 18)
+    ? Math.max(0.14, Math.min(0.45, targetRect.width / cr.width))
+    : 0.22
+  const syCap = (cr && cr.height > 40 && targetRect && targetRect.height > 18)
+    ? Math.max(0.06, Math.min(0.32, targetRect.height / cr.height))
+    : 0.12
+  const flyTilt = tx < 0 ? -3.6 * k : (tx > 0 ? 3.6 * k : 0)
   const anim = cardEl.animate(
     [
-      { transform: 'translate3d(0,0,0) scale(1) rotate(0deg)', opacity: 1, offset: 0 },
-      { transform: `translate3d(${(tx * 0.36).toFixed(1)}px,${(ty * 0.36).toFixed(1)}px,0) scale(0.84) rotate(${(flyTilt * 0.45).toFixed(2)}deg)`, opacity: 0.92, offset: 0.44 },
-      { transform: `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(0.20) rotate(${flyTilt.toFixed(2)}deg)`, opacity: 0, offset: 1 },
+      { transform: 'translate3d(0,0,0) scale(1,1) rotate(0deg)', borderRadius: '22px', opacity: 1, offset: 0 },
+      { transform: `translate3d(${(tx * 0.34).toFixed(1)}px,${(ty * 0.34).toFixed(1)}px,0) scale(${(0.56).toFixed(3)},${(0.36).toFixed(3)}) rotate(${(flyTilt * 0.5).toFixed(2)}deg)`, borderRadius: '999px', opacity: 0.94, offset: 0.46 },
+      { transform: `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(${sxCap.toFixed(3)},${syCap.toFixed(3)}) rotate(${flyTilt.toFixed(2)}deg)`, borderRadius: '999px', opacity: 0.12, offset: 0.94 },
+      { transform: `translate3d(${(tx * 1.04).toFixed(1)}px,${(ty * 1.04).toFixed(1)}px,0) scale(${(sxCap * 0.82).toFixed(3)},${(syCap * 1.18).toFixed(3)}) rotate(0deg)`, borderRadius: '999px', opacity: 0, offset: 1 },
     ],
-    { duration: dur, easing: 'cubic-bezier(.36, 0, .84, .32)', fill: 'forwards' }
+    { duration: dur + 45, easing: 'cubic-bezier(.34, 0, .82, .28)', fill: 'forwards' }
   )
   setTimeout(fireImpact, Math.round(dur * 0.82))
   anim.onfinish = settle
@@ -580,4 +589,63 @@ export function computeDirectionalImpulse({ nx = null, ny = null, edge = 'left',
     maxSc: isStrong ? 0.016 : (isLight ? 0.008 : 0.012),
     maxTilt: isStrong ? 1.85 : (isLight ? 0.95 : 1.35),
   }
+}
+
+
+/**
+ * R26 局部玻璃元素定点按压物理（纯数学解算，便于单测验证）：
+ * 计算在单个卡片/按钮内局部坐标 (lx, ly) ∈ [0,1]² 按下时的 3D 杠杆倾角与体积守恒微压缩：
+ * - 点左侧 (lx < 0.5)：左侧向内下沉 (ry < 0)；点右侧 (lx > 0.5)：右侧向内下沉 (ry > 0)；
+ * - 点顶部 (ly < 0.5)：顶部向内下沉 (rx > 0)；点底部 (ly > 0.5)：底部向内下沉 (rx < 0)。
+ */
+export function computeLocalPressTransform(lx = 0.5, ly = 0.5, scaleFactor = 1) {
+  const cx = Math.max(0, Math.min(1, Number.isFinite(lx) ? lx : 0.5)) - 0.5
+  const cy = Math.max(0, Math.min(1, Number.isFinite(ly) ? ly : 0.5)) - 0.5
+  const k = Math.max(0, Math.min(1.5, Number(scaleFactor) || 0))
+  const ry = Number((cx * 9.5 * k).toFixed(2))
+  const rx = Number((-cy * 9.5 * k).toFixed(2))
+  const tx = Number((cx * 2.4 * k).toFixed(2))
+  const ty = Number((cy * 2.4 * k).toFixed(2))
+  const sc = Number((1 - 0.022 * k).toFixed(4))
+  return { rx, ry, tx, ty, sc }
+}
+
+/** 对被点击的单个液态玻璃控件施加真实局部位置下压与液态回弹动画 */
+export function applyLocalGlassPress(el, clientX, clientY, motionTier = 'dynamic') {
+  const k = motionScaleForTier(motionTier)
+  if (!el || k === 0 || typeof el.getBoundingClientRect !== 'function' || typeof el.animate !== 'function') return false
+  const rect = el.getBoundingClientRect()
+  if (!rect || rect.width < 12 || rect.height < 12 || rect.width > 720) return false
+  const lx = (clientX - rect.left) / rect.width
+  const ly = (clientY - rect.top) / rect.height
+  const p = computeLocalPressTransform(lx, ly, k)
+  try {
+    el.animate(
+      [
+        { transform: 'perspective(680px) translate3d(0,0,0) rotateX(0deg) rotateY(0deg) scale(1)', offset: 0 },
+        {
+          transform: `perspective(680px) translate3d(${p.tx}px,${p.ty}px,0) rotateX(${p.rx}deg) rotateY(${p.ry}deg) scale(${p.sc})`,
+          offset: 0.28,
+        },
+        {
+          transform: `perspective(680px) translate3d(${(-p.tx * 0.28).toFixed(2)}px,${(-p.ty * 0.28).toFixed(2)}px,0) rotateX(${(-p.rx * 0.25).toFixed(2)}deg) rotateY(${(-p.ry * 0.25).toFixed(2)}deg) scale(${(1 + 0.006 * k).toFixed(4)})`,
+          offset: 0.68,
+        },
+        { transform: 'perspective(680px) translate3d(0,0,0) rotateX(0deg) rotateY(0deg) scale(1)', offset: 1 },
+      ],
+      { duration: 300, easing: 'cubic-bezier(.22, 1, .36, 1)' }
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+
+export function computeViewportCoords(clientX, clientY, vw, vh) {
+  const w = Math.max(1, Number(vw) || 1)
+  const h = Math.max(1, Number(vh) || 1)
+  const nx = Math.max(0.01, Math.min(0.99, (Number(clientX) || 0) / w))
+  const ny = Math.max(0.01, Math.min(0.99, (Number(clientY) || 0) / h))
+  return { nx: Number(nx.toFixed(4)), ny: Number(ny.toFixed(4)) }
 }

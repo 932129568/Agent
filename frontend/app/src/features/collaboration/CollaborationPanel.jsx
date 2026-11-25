@@ -7,6 +7,8 @@ import {
   setDockPreview,
 } from '../../state/store.js'
 import MarkdownView from '../../ui/MarkdownView.jsx'
+import ModelPicker from '../../ui/ModelPicker.jsx'
+import GlassSelect from '../../ui/GlassSelect.jsx'
 import './CollaborationPanel.css'
 
 export default function CollaborationPanel() {
@@ -32,42 +34,40 @@ export default function CollaborationPanel() {
 
       <div className="co-card">
         <div className="co-row">
-          <label style={{ fontSize: 12.5 }}>
-            隐私上传范围：
-            <select className="co-btn" style={{ marginLeft: 6 }} value={cfg.upload_scope}
-              onChange={(e) => updateCollaborationConfig({ upload_scope: e.target.value })}>
-              <option value="task_summary_only">仅传脱敏摘要 (task_summary_only)</option>
-              <option value="selected_results_only">精选结果摘要 (selected_results_only)</option>
-              <option value="local_only">纯本地离线不上传 (local_only)</option>
-            </select>
-          </label>
-          <label style={{ fontSize: 12.5 }}>
-            评审轮数：
-            <select className="co-btn" style={{ marginLeft: 6 }} value={cfg.max_review_rounds}
-              onChange={(e) => updateCollaborationConfig({ max_review_rounds: Number(e.target.value) })}>
-              <option value={0}>0 轮（仅规划+执行）</option>
-              <option value={1}>1 轮评审修订</option>
-              <option value={2}>2 轮严格评审</option>
-            </select>
-          </label>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+            <span>隐私上传：</span>
+            <GlassSelect ariaLabel="隐私上传范围" value={cfg.upload_scope} onChange={(v) => updateCollaborationConfig({ upload_scope: v })}
+              options={[{ value: 'task_summary_only', label: '仅传脱敏摘要', hint: '推荐' }, { value: 'selected_results_only', label: '精选结果摘要' }, { value: 'local_only', label: '纯本地离线不上传' }]} />
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+            <span>评审轮数：</span>
+            <GlassSelect ariaLabel="评审轮数" value={cfg.max_review_rounds} onChange={(v) => updateCollaborationConfig({ max_review_rounds: Number(v) })}
+              options={[{ value: 0, label: '0 轮（仅规划+执行）' }, { value: 1, label: '1 轮评审修订' }, { value: 2, label: '2 轮严格评审' }]} />
+          </div>
           {savedChatModels.length > 0 && (
             <>
-              <label style={{ fontSize: 12.5 }}>
-                云端规划模型：
-                <select className="co-btn" style={{ marginLeft: 6 }} value={cfg.cloud_model_id || ''}
-                  onChange={(e) => updateCollaborationConfig({ cloud_model_id: e.target.value })}>
-                  <option value="">默认云端端点</option>
-                  {savedChatModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </label>
-              <label style={{ fontSize: 12.5 }}>
-                本地执行模型：
-                <select className="co-btn" style={{ marginLeft: 6 }} value={cfg.local_model_id || ''}
-                  onChange={(e) => updateCollaborationConfig({ local_model_id: e.target.value })}>
-                  <option value="">默认本地端点</option>
-                  {savedChatModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </label>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                <span>云端规划：</span>
+                <ModelPicker
+                  direction="down"
+                  ariaLabel="选择云端规划模型"
+                  value={cfg.cloud_model_id || ''}
+                  defaultModel="默认云端端点"
+                  models={savedChatModels}
+                  onChange={(id) => updateCollaborationConfig({ cloud_model_id: id })}
+                />
+              </div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                <span>本地执行：</span>
+                <ModelPicker
+                  direction="down"
+                  ariaLabel="选择本地执行模型"
+                  value={cfg.local_model_id || ''}
+                  defaultModel="默认本地端点"
+                  models={savedChatModels}
+                  onChange={(id) => updateCollaborationConfig({ local_model_id: id })}
+                />
+              </div>
             </>
           )}
           <label style={{ fontSize: 12.5 }}>

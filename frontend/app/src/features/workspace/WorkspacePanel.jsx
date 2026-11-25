@@ -9,6 +9,7 @@ import {
   addWorkspaceGuardRule,
   removeWorkspaceGuardRule,
 } from '../../state/store.js'
+import GlassSelect from '../../ui/GlassSelect.jsx'
 import './WorkspacePanel.css'
 
 export default function WorkspacePanel() {
@@ -72,12 +73,7 @@ export default function WorkspacePanel() {
       <div className="ws-card">
         <div style={{ fontWeight: 600 }}>护栏白名单规则（{(ws.guardRules || []).length}）</div>
         <div className="ws-row">
-          <select className="ws-btn" value={ruleOp} onChange={(e) => setRuleOp(e.target.value)}>
-            <option value="write_file">write_file</option>
-            <option value="search_replace">search_replace</option>
-            <option value="run_command">run_command</option>
-            <option value="delete_path">delete_path</option>
-          </select>
+          <GlassSelect ariaLabel="审批规则操作类型" value={ruleOp} onChange={(v) => setRuleOp(v)} options={['write_file', 'search_replace', 'run_command', 'delete_path']} />
           <input className="ws-input" value={rulePat} onChange={(e) => setRulePat(e.target.value)} placeholder="路径或命令匹配模式…" />
           <button type="button" className="ws-btn ws-btn-primary" onClick={handleAddRule}>添加规则</button>
         </div>

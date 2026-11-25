@@ -3,7 +3,11 @@
   .an-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
   .an-kpi { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); }
   .an-kpi-val { font-size: 24px; font-weight: 700; font-family: var(--font-mono); margin-top: 6px; }
-  .an-card { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); display: flex; flex-direction: column; gap: 10px; }
+  .an-card {
+    border-color: var(--glass-border);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: var(--elev-1); padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); display: flex; flex-direction: column; gap: 10px; }
   .an-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .an-kpi { transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out); }
   .an-kpi:hover { border-color: var(--border-strong); box-shadow: var(--elev-2); }

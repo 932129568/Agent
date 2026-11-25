@@ -185,6 +185,24 @@
     24% { opacity: 0.48; }
     100% { opacity: 0; transform: translate3d(0, -24%, 0); }
   }
+  @keyframes harborGlassLensPop {
+    0% { opacity: 0.92; transform: translate3d(-50%, -50%, 0) scale(0.24); }
+    38% { opacity: 0.72; transform: translate3d(-50%, -50%, 0) scale(1.12); }
+    100% { opacity: 0; transform: translate3d(-50%, -50%, 0) scale(1.95); }
+  }
+  @keyframes harborGlassPickup {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.10, 0.92); }
+    100% { transform: scale(1.04); }
+  }
+  @keyframes harborSocketPulse {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50% { opacity: 0.95; transform: scale(1.02); }
+  }
+  @keyframes harborBlackHoleSpin {
+    from { transform: translate3d(-50%, -50%, 0) rotate(0deg); }
+    to { transform: translate3d(-50%, -50%, 0) rotate(360deg); }
+  }
 
   html[data-motion="reduced"] *,
   html[data-motion="reduced"] *::before,

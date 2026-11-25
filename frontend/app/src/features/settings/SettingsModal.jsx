@@ -30,7 +30,8 @@ import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, REASONING_TIERS, buildReaso
 import { MEDIA_PROVIDER_PRESETS } from '../../services/mediaGen.js'
 import { MODEL_VAULT_PRESETS } from '../../services/modelVault.js'
 import { CURATED_MCP_SERVERS } from '../../services/mcpCatalog.js'
-import { IMPACT_STYLES } from '../../platform/kinetic.js'
+import { IMPACT_STYLES, computeDirectionalImpulse, computeViewportCoords } from '../../platform/kinetic.js'
+import GlassSelect from '../../ui/GlassSelect.jsx'
 import './SettingsModal.css'
 
 const DOMAINS = [
@@ -51,6 +52,7 @@ export default function SettingsModal() {
   const [guardTiersDraft, setGuardTiersDraft] = useState(() => ({ ...((settings.guardConfig && settings.guardConfig.tiers) || {}) }))
   const [webdavDraft, setWebdavDraft] = useState(() => ({ ...settings.webdavConfig }))
   const [errMsg, setErrMsg] = useState('')
+  const [hitTelemetry, setHitTelemetry] = useState(null)
   const [probeRes, setProbeRes] = useState('')
   const [newMem, setNewMem] = useState('')
   const [mcpName, setMcpName] = useState('')
@@ -144,6 +146,13 @@ export default function SettingsModal() {
       <div className="st-body">
         {domain === 'model' && (
           <>
+            <div className="st-hero">
+              <div><h2>模型与推理引擎</h2><p>统一管理多厂商对话、生图、视频模型，调节上下文窗口与多级思考预算</p></div>
+              <div className="st-hero-pills">
+                <span className="st-hero-pill">已保存 {(settings.savedModels || []).length} 套</span>
+                <span className="st-hero-pill">主力：{draft.model || 'glm-4.5-flash'}</span>
+              </div>
+            </div>
             <div className="st-card" data-section="model-vault">
               <div className="st-row" style={{ justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0 }}>🧠 模型保存中心（已保存 {(settings.savedModels || []).length} 个 · 全站随时切换）</h3>
@@ -197,33 +206,42 @@ export default function SettingsModal() {
                 ))}
               </div>
 
-              <div className="st-row">
-                <input
-                  className="st-input"
-                  style={{ flex: 1.2, minWidth: 140 }}
-                  aria-label="保存模型显示名称"
-                  value={vaultDraft.label}
-                  onChange={(e) => setVaultDraft({ ...vaultDraft, label: e.target.value })}
-                  placeholder="自定义显示名称（如：DeepSeek 代码主力）"
-                />
-                <input
-                  className="st-input"
-                  style={{ flex: 1, minWidth: 130 }}
-                  aria-label="保存模型ID"
-                  value={vaultDraft.model}
-                  onChange={(e) => setVaultDraft({ ...vaultDraft, model: e.target.value })}
-                  placeholder="模型标识（如：deepseek-chat）"
-                />
-                <select
-                  className="st-btn"
-                  aria-label="保存模型类型"
-                  value={vaultDraft.kind}
-                  onChange={(e) => setVaultDraft({ ...vaultDraft, kind: e.target.value })}
-                >
-                  <option value="chat">对话模型</option>
-                  <option value="image">图片生成</option>
-                  <option value="video">视频生成</option>
-                </select>
+              <div className="st-vault-form">
+                <div className="st-vault-seg" role="group" aria-label="保存模型类型">
+                  {[['chat', '💬 对话模型'], ['image', '🎨 图片生成'], ['video', '🎬 视频生成']].map(([kd, lbl]) => (
+                    <button
+                      key={kd}
+                      type="button"
+                      className="st-btn"
+                      data-active={String((vaultDraft.kind || 'chat') === kd)}
+                      onClick={() => setVaultDraft({ ...vaultDraft, kind: kd })}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                <div className="st-vault-grid">
+                  <div className="st-field">
+                    <label>显示名称</label>
+                    <input
+                      className="st-input"
+                      aria-label="保存模型显示名称"
+                      value={vaultDraft.label}
+                      onChange={(e) => setVaultDraft({ ...vaultDraft, label: e.target.value })}
+                      placeholder="如：DeepSeek 代码主力"
+                    />
+                  </div>
+                  <div className="st-field">
+                    <label>模型 ID</label>
+                    <input
+                      className="st-input"
+                      aria-label="保存模型ID"
+                      value={vaultDraft.model}
+                      onChange={(e) => setVaultDraft({ ...vaultDraft, model: e.target.value })}
+                      placeholder="如：deepseek-chat / glm-4.5-flash"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="st-row">
@@ -244,16 +262,9 @@ export default function SettingsModal() {
                   onChange={(e) => setVaultDraft({ ...vaultDraft, apiKey: e.target.value })}
                   placeholder="独立 API Key（留空继承）"
                 />
-                <select
-                  className="st-btn"
-                  value={vaultDraft.reasoningTier || 'auto'}
-                  onChange={(e) => setVaultDraft({ ...vaultDraft, reasoningTier: e.target.value })}
-                  title="默认思考档位"
-                >
-                  {REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => (
-                    <option key={t.id} value={t.id}>思考:{t.label}</option>
-                  ))}
-                </select>
+                <GlassSelect ariaLabel="保存模型默认思考档位" title="默认思考档位" prefix="思考:" value={vaultDraft.reasoningTier || 'auto'}
+                  onChange={(v) => setVaultDraft({ ...vaultDraft, reasoningTier: v })}
+                  options={REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => ({ value: t.id, label: t.label }))} />
                 <button
                   type="button"
                   className="st-btn st-btn-primary"
@@ -272,25 +283,27 @@ export default function SettingsModal() {
               </div>
 
               {(settings.savedModels || []).length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                  {(settings.savedModels || []).map((m) => (
-                    <div key={m.id} className="st-mem-row" data-saved-model-id={m.id}>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <strong style={{ fontSize: 12.5 }}>
-                          {m.kind === 'image' ? '🎨 ' : (m.kind === 'video' ? '🎬 ' : (m.isLocal ? '💻 ' : '☁ '))}
-                          {m.label}
-                        </strong>
-                        <span style={{ marginLeft: 8, fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
-                          {m.model}{m.baseUrl ? ` · ${m.baseUrl}` : ' · 继承主端点'}
-                        </span>
+                <div className="st-vault-cards">
+                  {(settings.savedModels || []).map((m) => {
+                    const isGlobal = m.model === (draft.model || settings.backendConfig.model)
+                    return (
+                      <div key={m.id} className="st-mem-row st-model-card" data-saved-model-id={m.id} data-active={String(isGlobal)}>
+                        <div className="st-model-card-top">
+                          <span className="st-model-kind">{m.kind === 'image' ? '🎨 生图' : (m.kind === 'video' ? '🎬 视频' : (m.isLocal ? '💻 本地' : '☁ 云端'))}</span>
+                          <strong className="st-model-name">{m.label}</strong>
+                          {isGlobal && <span className="st-model-live">默认中</span>}
+                        </div>
+                        <div className="st-model-meta" title={`${m.model} · ${m.baseUrl || '继承主端点'}`}>
+                          {m.model} · {m.baseUrl ? m.baseUrl.replace(/^https?:\/\//i, '') : '继承主端点'}
+                        </div>
+                        <div className="st-row" style={{ marginTop: 'auto' }}>
+                          <button type="button" className="st-btn" onClick={() => activateSavedModelGlobal(m.id)}>设为默认</button>
+                          <button type="button" className="st-btn" onClick={() => setVaultDraft({ ...m })}>编辑</button>
+                          <button type="button" className="st-btn" onClick={() => deleteModelProfile(m.id)}>删除</button>
+                        </div>
                       </div>
-                      <div className="st-row">
-                        <button type="button" className="st-btn" onClick={() => activateSavedModelGlobal(m.id)}>设为默认</button>
-                        <button type="button" className="st-btn" onClick={() => setVaultDraft({ ...m })}>编辑</button>
-                        <button type="button" className="st-btn" onClick={() => deleteModelProfile(m.id)}>删除</button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -497,16 +510,10 @@ export default function SettingsModal() {
                 ].map(([opKey, lbl]) => (
                   <label key={opKey} style={{ fontSize: 12 }}>
                     {lbl}：
-                    <select
-                      className="st-btn"
-                      aria-label={`护栏档位-${opKey}`}
+                    <GlassSelect ariaLabel={`护栏档位-${opKey}`} align="right"
                       value={guardTiersDraft[opKey] || (opKey === 'run_command' || opKey === 'run_powershell' ? 'off' : 'session')}
-                      onChange={(e) => setGuardTiersDraft({ ...guardTiersDraft, [opKey]: e.target.value })}
-                    >
-                      <option value="off">off（自动放行）</option>
-                      <option value="session">session（每会话确认一次）</option>
-                      <option value="always">always（每次确认）</option>
-                    </select>
+                      onChange={(v) => setGuardTiersDraft({ ...guardTiersDraft, [opKey]: v })}
+                      options={[{ value: 'off', label: 'off（自动放行）' }, { value: 'session', label: 'session（每会话确认一次）' }, { value: 'always', label: 'always（每次确认）' }]} />
                   </label>
                 ))}
               </div>
@@ -538,15 +545,9 @@ export default function SettingsModal() {
                 {['run_command', 'run_powershell', 'run_admin_command'].map((cls) => (
                   <label key={cls} style={{ fontSize: 12 }}>
                     {cls}：
-                    <select className="st-btn" value={(sandboxDraft.command_profiles && sandboxDraft.command_profiles[cls]) || 'standard'}
-                      onChange={(e) => setSandboxDraft({
-                        ...sandboxDraft,
-                        command_profiles: { ...(sandboxDraft.command_profiles || {}), [cls]: e.target.value },
-                      })}>
-                      <option value="off">off</option>
-                      <option value="standard">standard</option>
-                      <option value="strict">strict</option>
-                    </select>
+                    <GlassSelect ariaLabel={`沙箱档位-${cls}`} align="right" value={(sandboxDraft.command_profiles && sandboxDraft.command_profiles[cls]) || 'standard'}
+                      onChange={(v) => setSandboxDraft({ ...sandboxDraft, command_profiles: { ...(sandboxDraft.command_profiles || {}), [cls]: v } })}
+                      options={['off', 'standard', 'strict']} />
                   </label>
                 ))}
                 <button type="button" className="st-btn st-btn-primary" onClick={handleSaveSandbox}>保存沙箱档位</button>
@@ -620,11 +621,9 @@ export default function SettingsModal() {
               <div className="st-row">
                 <input className="st-input" style={{ flex: 1 }} value={webdavDraft.username || ''} onChange={(e) => setWebdavDraft({ ...webdavDraft, username: e.target.value })} placeholder="用户名" />
                 <input className="st-input" style={{ flex: 1 }} type="password" value={webdavDraft.password || ''} onChange={(e) => setWebdavDraft({ ...webdavDraft, password: e.target.value })} placeholder="密码（不回显，仅修改或测试时输入）" />
-                <select className="st-btn" value={webdavDraft.conflict_policy || 'ask'} onChange={(e) => setWebdavDraft({ ...webdavDraft, conflict_policy: e.target.value })}>
-                  <option value="ask">冲突询问</option>
-                  <option value="local">本地优先</option>
-                  <option value="remote">远端优先</option>
-                </select>
+                <GlassSelect ariaLabel="WebDAV 同步冲突策略" value={webdavDraft.conflict_policy || 'ask'}
+                  onChange={(v) => setWebdavDraft({ ...webdavDraft, conflict_policy: v })}
+                  options={[{ value: 'ask', label: '冲突询问' }, { value: 'local', label: '本地优先' }, { value: 'remote', label: '远端优先' }]} />
               </div>
               <div className="st-row">
                 <button type="button" className="st-btn" onClick={() => handleWebdav('test')}>测试连接</button>
@@ -653,6 +652,13 @@ export default function SettingsModal() {
 
         {domain === 'optics' && (
           <>
+            <div className="st-hero">
+              <div><h2>Apple Liquid Glass 光学物理与沙盒</h2><p>全视口二维浅水波折射、长按抓起自由甩动/裂痕碎裂、3D 液态助手联动</p></div>
+              <div className="st-hero-pills">
+                <span className="st-hero-pill">透色：{settings.backdrop}</span>
+                <span className="st-hero-pill">物理：{settings.impactStyle || 'mercury'}</span>
+              </div>
+            </div>
             <div className="st-card">
               <h3>真窗外实时透色与四幕大动画强度</h3>
               <div className="st-field">
@@ -712,13 +718,22 @@ export default function SettingsModal() {
                   onPointerDown={(e) => {
                     const r = e.currentTarget.getBoundingClientRect()
                     if (!r || !r.width || !r.height) return
-                    const nx = Math.max(0.03, Math.min(0.97, (e.clientX - r.left) / r.width))
-                    const ny = Math.max(0.03, Math.min(0.97, (e.clientY - r.top) / r.height))
-                    fireShellImpact('pointer', 'strong', { nx, ny, pointer: true })
+                    const padNx = Math.max(0.03, Math.min(0.97, (e.clientX - r.left) / r.width))
+                    const padNy = Math.max(0.03, Math.min(0.97, (e.clientY - r.top) / r.height))
+                    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
+                    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
+                    const vp = computeViewportCoords(e.clientX, e.clientY, vw, vh)
+                    const phys = computeDirectionalImpulse({ nx: padNx, ny: padNy, strength: 'strong' })
+                    setHitTelemetry({ xPct: Math.round(padNx * 100), yPct: Math.round(padNy * 100), edge: phys.edge, rx: (phys.vrx / 35).toFixed(2), ry: (phys.vry / 35).toFixed(2) })
+                    fireShellImpact(phys.edge, 'strong', { nx: vp.nx, ny: vp.ny, pointer: true })
                   }}
                 >
-                  <strong>🫧 点击这块液态玻璃板的任意角落 / 中心</strong>
-                  <span>二维流体波动方程 + 3D 杠杆力矩引擎将从你精确点击的位置推开并向四边反射</span>
+                  <strong>🫧 点击这块液态玻璃板的任意角落 / 中心（穿透弹窗实时折射）</strong>
+                  <span>
+                    {hitTelemetry
+                      ? `精确落点 (${hitTelemetry.xPct}%, ${hitTelemetry.yPct}%) · 响应边 ${hitTelemetry.edge} · 3D 力矩 rx=${hitTelemetry.rx}° / ry=${hitTelemetry.ry}°`
+                      : '全视口 120×72 二维流体波动方程 + SVG 透镜折射将从你鼠标正下方实时绽放并向四壁反射'}
+                  </span>
                 </div>
                 <div className="st-row" style={{ marginTop: 4 }}>
                   <button type="button" className="st-btn st-btn-primary" onClick={() => fireShellImpact('left', 'strong')}>

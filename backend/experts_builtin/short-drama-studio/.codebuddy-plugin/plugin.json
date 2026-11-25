@@ -1,0 +1,118 @@
+{
+  "name": "short-drama-studio",
+  "version": "1.0.0",
+  "description": "4 角色短剧编导制片室：覆盖每 30 秒钩子节拍、多视角戏剧反讽、去说教潜台词对白与镜头动作外化。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "drama-showrunner",
+  "agents": [
+    "./agents/drama-showrunner.md",
+    "./agents/drama-beat-architect.md",
+    "./agents/drama-subtext-writer.md",
+    "./agents/drama-visual-director.md"
+  ],
+  "skills": [
+    "./skills/hook-twist-pacing",
+    "./skills/dramatic-irony-setup",
+    "./skills/subtext-dialogue-craft",
+    "./skills/scene-beat-sheet"
+  ],
+  "displayName": {
+    "en": "Short-Drama Writers Room",
+    "zh": "爆款短剧编导制片厂"
+  },
+  "profession": {
+    "en": "Short-Drama Writers Room",
+    "zh": "爆款短剧编导制片厂"
+  },
+  "displayDescription": {
+    "en": "4-role drama writers room delivering 30s beat hooks, dramatic irony, subtext dialogue, and visual direction.",
+    "zh": "4 角色短剧编导制片室：覆盖每 30 秒钩子节拍、多视角戏剧反讽、去说教潜台词对白与镜头动作外化。"
+  },
+  "categoryId": "06-VideoCreative",
+  "tags": [
+    {
+      "en": "Short Drama",
+      "zh": "短剧剧本"
+    },
+    {
+      "en": "Subtext",
+      "zh": "潜台词对白"
+    },
+    {
+      "en": "Visual Directing",
+      "zh": "镜头外化"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "创作一集 2 分钟高张力都市悬疑反转短剧：用视角差与潜台词拉满戏剧冲突",
+      "en": "Write a high-tension 2-minute urban suspense short drama episode with dramatic irony and subtext"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "创作一集 2 分钟高张力都市悬疑反转短剧：用视角差与潜台词拉满戏剧冲突",
+    "en": "Write a high-tension 2-minute urban suspense short drama episode with dramatic irony and subtext"
+  },
+  "x-harbor-source": "Harbor Narrative Cinema Studio",
+  "teamInfo": {
+    "leadAgent": "drama-showrunner",
+    "memberAgents": [
+      "drama-beat-architect",
+      "drama-subtext-writer",
+      "drama-visual-director"
+    ]
+  },
+  "members": [
+    {
+      "id": "drama-showrunner",
+      "name": {
+        "en": "Showrunner Director",
+        "zh": "短剧总编剧导演"
+      },
+      "profession": {
+        "en": "Story Arc & Final Cut Lead",
+        "zh": "剧作总控与终审导演"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "drama-beat-architect",
+      "name": {
+        "en": "Beat & Hook Architect",
+        "zh": "结构与钩子策划"
+      },
+      "profession": {
+        "en": "30s Twist & Cliffhanger Designer",
+        "zh": "每 30 秒反转节拍师"
+      },
+      "role": "member"
+    },
+    {
+      "id": "drama-subtext-writer",
+      "name": {
+        "en": "Subtext Dialogue Writer",
+        "zh": "对白与潜台词编剧"
+      },
+      "profession": {
+        "en": "Anti-Exposition Dialogue Specialist",
+        "zh": "锋利潜台词编剧"
+      },
+      "role": "member"
+    },
+    {
+      "id": "drama-visual-director",
+      "name": {
+        "en": "Visual Mood Director",
+        "zh": "镜头与情绪导演"
+      },
+      "profession": {
+        "en": "Action Externalization & Editing",
+        "zh": "动作外化与剪辑导演"
+      },
+      "role": "member"
+    }
+  ]
+}

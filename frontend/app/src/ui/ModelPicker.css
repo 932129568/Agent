@@ -1,115 +1,42 @@
 @layer components {
-  .mp-wrap { position: relative; display: inline-flex; align-items: center; }
+  .mp-wrap { position: relative; display: inline-flex; align-items: center; max-width: 100%; }
   .mp-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 4px 11px 4px 9px;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--glass-border);
-    background: var(--card-bg);
-    background-image: var(--glass-specular);
-    box-shadow: var(--elev-1);
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    max-width: 240px;
-    transition:
-      border-color var(--dur-fast) var(--ease-out),
-      transform var(--dur-fast) var(--ease-spring),
-      background-color var(--dur-fast) var(--ease-out);
+    display: inline-flex; align-items: center; gap: 7px; padding: 4.5px 11px 4.5px 9px;
+    border-radius: var(--radius-full); border: 1px solid var(--glass-border);
+    background: var(--card-bg); background-image: var(--glass-specular); box-shadow: var(--elev-1);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; max-width: 250px;
+    transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring), background-color var(--dur-fast) var(--ease-out);
   }
   .mp-trigger:hover { border-color: var(--primary); background-color: var(--surface-hover); transform: translate3d(0, -1px, 0); }
   .mp-trigger[aria-expanded="true"] { border-color: var(--primary); box-shadow: var(--focus-ring); }
-  .mp-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: var(--radius-full);
-    flex-shrink: 0;
-    background: var(--primary-2);
-    box-shadow: 0 0 8px rgba(15, 132, 212, 0.55);
-  }
+  .mp-dot { width: 7px; height: 7px; border-radius: var(--radius-full); flex-shrink: 0; background: var(--primary-2); box-shadow: 0 0 8px rgba(15, 132, 212, 0.55); }
   .mp-dot[data-custom="true"] { background: var(--primary); box-shadow: 0 0 8px rgba(212, 101, 62, 0.55); }
   .mp-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mp-chev { font-size: 10px; opacity: 0.65; flex-shrink: 0; }
-
   .mp-panel {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    right: 0;
-    width: 318px;
-    max-height: 370px;
-    display: flex;
-    flex-direction: column;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    background: var(--card-elevated);
-    background-image: var(--glass-specular);
-    backdrop-filter: blur(30px) saturate(1.6);
-    box-shadow: var(--elev-3);
-    z-index: var(--z-menu);
-    overflow: hidden;
+    position: absolute; bottom: calc(100% + 8px); right: 0; width: 342px; max-height: 410px;
+    display: flex; flex-direction: column; border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border); background: var(--card-elevated); background-image: var(--glass-specular);
+    backdrop-filter: blur(34px) saturate(1.65); box-shadow: var(--elev-3); z-index: var(--z-menu); overflow: hidden;
     animation: harborMenuPopUp var(--dur-fast) var(--ease-spring) both;
   }
   .mp-panel[data-direction="down"] { bottom: auto; top: calc(100% + 8px); animation-name: harborMenuPopDown; }
-  .mp-head {
-    padding: 10px 12px 8px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--text-2);
-  }
-  .mp-list {
-    overflow-y: auto;
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .mp-item {
-    width: 100%;
-    text-align: left;
-    padding: 9px 11px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    background: transparent;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-  }
+  .mp-panel[data-align="left"] { right: auto; left: 0; }
+  .mp-head { padding: 10px 13px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 7px; }
+  .mp-head-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; color: var(--text-2); }
+  .mp-search { width: 100%; padding: 6px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--glass-well); color: var(--text); font-size: 12px; outline: none; }
+  .mp-search:focus { border-color: var(--primary); background: var(--card-bg); }
+  .mp-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .mp-item { width: 100%; text-align: left; padding: 9px 11px; border-radius: var(--radius-sm); border: 1px solid transparent; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
   .mp-item:hover { background: var(--surface-hover); border-color: var(--border); }
-  .mp-item[data-active="true"] {
-    background: var(--primary-soft);
-    border-color: var(--primary);
-  }
-  .mp-item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .mp-item[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); }
+  .mp-item-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+  .mp-item-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .mp-item-title { font-size: 12.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mp-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--radius-full); background: var(--glass-well); border: 1px solid var(--border); color: var(--text-3); flex-shrink: 0; }
   .mp-item-meta { font-size: 10.5px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mp-check { font-size: 12px; font-weight: 700; color: var(--primary); flex-shrink: 0; }
-  .mp-foot {
-    padding: 7px 8px;
-    border-top: 1px solid var(--border);
-    background: var(--surface-subtle);
-  }
-  .mp-manage-btn {
-    width: 100%;
-    padding: 6px 10px;
-    border-radius: var(--radius-sm);
-    border: 1px dashed var(--border-strong);
-    background: transparent;
-    color: var(--primary);
-    font-size: 11.5px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-  }
+  .mp-foot { padding: 8px; border-top: 1px solid var(--border); background: var(--surface-subtle); }
+  .mp-manage-btn { width: 100%; padding: 6.5px 10px; border-radius: var(--radius-sm); border: 1px dashed var(--border-strong); background: transparent; color: var(--primary); font-size: 11.5px; font-weight: 600; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
   .mp-manage-btn:hover { background: var(--primary-soft); border-color: var(--primary); }
 }

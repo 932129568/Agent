@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyKineticImpulse, applySecondaryRecoil, computeDirectionalImpulse, registerMotionAnchor, captureTriggerRect, motionScaleForTier, IMPACT_STYLES, resolveImpactStyle } from '../platform/kinetic.js'
+import { applyKineticImpulse, applySecondaryRecoil, applyLocalGlassPress, computeDirectionalImpulse, computeViewportCoords, registerMotionAnchor, captureTriggerRect, motionScaleForTier, IMPACT_STYLES, resolveImpactStyle } from '../platform/kinetic.js'
+import { createGlassSandboxState } from '../platform/glassSandboxEngine.js'
 import { desktopBridge } from '../platform/libs.js'
 import {
   useSlice,
@@ -13,10 +14,6 @@ import {
   setSessionModelOverride,
   activateSavedModelGlobal,
   toggleDock,
-  // r25 起 AppShell 里新增了指针轻撞与强撞两处调用（176/311 行），
-  // 但导入清单漏了这个符号 ⇒ 运行期 ReferenceError: fireShellImpact is not defined，
-  // 指针撞击完全不工作且 pageErrors 被污染。
-  fireShellImpact,
   toggleSearchDock,
   createNewSession,
   createNewGroup,
@@ -27,6 +24,9 @@ import HarborLogo from '../ui/HarborLogo.jsx'
 import { NavIcon } from '../ui/Icons.jsx'
 import DropdownMenu from '../ui/DropdownMenu.jsx'
 import LiquidImpactCanvas from '../ui/LiquidImpactCanvas.jsx'
+import ModelPicker from '../ui/ModelPicker.jsx'
+import GlassSandboxOverlay from '../ui/GlassSandboxOverlay.jsx'
+import CompanionOverlay from '../features/companion/CompanionOverlay.jsx'
 import { findSavedModel } from '../services/modelVault.js'
 import ChatPanel from '../features/chat/ChatPanel.jsx'
 import SidebarSessions from '../features/sessions/SidebarSessions.jsx'
@@ -72,6 +72,12 @@ export default function AppShell() {
   const [impactSeq, setImpactSeq] = useState(0)
   const [activeImpactMeta, setActiveImpactMeta] = useState({ styleId: 'mercury', edge: 'left', strength: 'strong' })
   const lastPointerRef = useRef({ nx: null, ny: null, at: 0 })
+  const glintRafRef = useRef(0)
+  const sandboxStoreRef = useRef(null)
+  if (!sandboxStoreRef.current) sandboxStoreRef.current = createGlassSandboxState()
+  const [shatterSignal, setShatterSignal] = useState(0)
+  const [companionSummonSeq, setCompanionSummonSeq] = useState(0)
+  const [, setSandboxRefresh] = useState(0)
   const shellRef = useRef(null)
   const railRef = useRef(null)
   const topbarRef = useRef(null)
@@ -166,19 +172,31 @@ export default function AppShell() {
     }
   }, [ui.impactSignal, settings.motion, settings.impactStyle])
 
-  // R25 全局指针坐标捕获：点击任意按钮、导航项、卡片时记录精确坐标，并向液态玻璃主舞台注入真实位置触感波
+  // R28 全视口精确点击坐标引擎（零左栏截断、穿透弹窗）+ 动态镜面高光追踪
   const handleShellPointerDown = (e) => {
-    if (settings.motion === 'reduced' || !mainRef.current || e.button !== 0) return
-    const rect = mainRef.current.getBoundingClientRect()
-    if (!rect || rect.width < 10 || rect.height < 10) return
-    const nx = Math.max(0.02, Math.min(0.98, (e.clientX - rect.left) / rect.width))
-    const ny = Math.max(0.02, Math.min(0.98, (e.clientY - rect.top) / rect.height))
+    if (settings.motion === 'reduced' || e.button !== 0) return
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
+    const { nx, ny } = computeViewportCoords(e.clientX, e.clientY, vw, vh)
     lastPointerRef.current = { nx, ny, at: Date.now() }
     const hitInteractive = e.target && typeof e.target.closest === 'function'
-      && e.target.closest('button, a, .chat-quick-card, .wf-node, .ss-item, .gp-msg, .sd-source')
-    if (hitInteractive && !e.target.closest('.ov-modal, .st-hit-pad')) {
-      fireShellImpact('pointer', 'light', { nx, ny, pointer: true })
+      && e.target.closest('button, a, .chat-quick-card, .mk-card, .et-team-card, .ss-item, .sd-source, .st-btn, .gs-trigger, .mp-trigger')
+    if (hitInteractive && !e.target.closest('.cp-root, .gsb-layer')) {
+      applyLocalGlassPress(hitInteractive, e.clientX, e.clientY, settings.motion)
+      if (!e.target.closest('.st-hit-pad')) {
+        fireShellImpact('pointer', 'light', { nx, ny, pointer: true })
+      }
     }
+  }
+  const handleShellPointerMove = (e) => {
+    if (settings.motion === 'reduced' || !shellRef.current || glintRafRef.current) return
+    const cx = e.clientX, cy = e.clientY
+    glintRafRef.current = requestAnimationFrame(() => {
+      glintRafRef.current = 0
+      if (!shellRef.current) return
+      shellRef.current.style.setProperty('--glint-x', `${cx}px`)
+      shellRef.current.style.setProperty('--glint-y', `${cy}px`)
+    })
   }
 
   useEffect(() => {
@@ -245,6 +263,12 @@ export default function AppShell() {
       label: 'Agent 联网动态与来源',
       active: ui.searchDockOpen,
       onClick: () => toggleSearchDock(),
+    },
+    {
+      id: 'tb-companion',
+      icon: '🐾',
+      label: '唤出 3D 娱乐协助助手',
+      onClick: () => setCompanionSummonSeq((n) => n + 1),
     },
   ]
 
@@ -333,7 +357,7 @@ export default function AppShell() {
   ]
 
   return (
-    <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)} onPointerDownCapture={handleShellPointerDown}>
+    <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)} onPointerDownCapture={handleShellPointerDown} onPointerMove={handleShellPointerMove}>
       <nav ref={railRef} className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
         <div className="hb-rail-brand" onClick={() => setCompactRail((v) => !v)} style={{ cursor: 'pointer' }} title="点击切换导航栏宽/窄形态">
           <HarborLogo size={26} />
@@ -497,62 +521,36 @@ export default function AppShell() {
             <span className="hb-lg-sheen" />
           </div>
         )}
-        <LiquidImpactCanvas
-          seq={impactSeq}
-          nx={impactPos.nx}
-          ny={impactPos.ny}
-          styleId={activeImpactMeta.styleId}
-          strength={activeImpactMeta.strength}
-          motionTier={settings.motion}
-          theme={settings.theme}
-        />
+
         <header ref={topbarRef} className="hb-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <button type="button" className="hb-top-btn hb-icon-btn" onClick={toggleSidebar} title={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'} aria-label={ui.sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>
               <NavIcon name="sidebar" />
             </button>
-            <DropdownMenu
+            <ModelPicker
               align="left"
               direction="down"
               ariaLabel="快速切换保存的模型"
-              items={[
-                { section: '当前会话模型切换' },
-                {
-                  id: 'mdl-default',
-                  icon: '●',
-                  label: `跟随全局默认 (${globalModel})`,
-                  active: !(currentSession && currentSession.modelProfileId),
-                  onClick: () => currentSession && setSessionModelOverride(currentSession.id, ''),
-                },
-                ...chatSavedModels.map((m) => ({
-                  id: `mdl_${m.id}`,
-                  icon: m.isLocal ? '💻' : '☁',
-                  label: m.label,
-                  hint: m.model,
-                  active: Boolean(currentSession && currentSession.modelProfileId === m.id),
-                  onClick: () => {
-                    if (currentSession) setSessionModelOverride(currentSession.id, m.id)
-                    else activateSavedModelGlobal(m.id)
-                  },
-                })),
-                { divider: true },
-                {
-                  id: 'mdl-manage',
-                  icon: '🧠',
-                  label: `管理模型保存中心 (${savedModels.length})…`,
-                  hint: '添加/编辑',
-                  onClick: (e) => openModal('settings', captureTriggerRect(e)),
-                },
-              ]}
+              value={(currentSession && currentSession.modelProfileId) || ''}
+              defaultModel={globalModel}
+              models={savedModels}
+              onChange={(id) => {
+                if (currentSession) setSessionModelOverride(currentSession.id, id)
+                else if (id) activateSavedModelGlobal(id)
+              }}
+              onOpenVault={(e) => openModal('settings', captureTriggerRect(e))}
               renderTrigger={({ open, toggle }) => (
                 <button
                   type="button"
                   className="hb-island"
-                  data-busy={String(busy)}
-                  aria-expanded={String(open)}
                   onClick={toggle}
-                  title="点击快速切换已保存的模型，或进入模型保存中心"
+                  aria-expanded={String(open)}
+                  title="点击快捷切换当前会话或全局保存的模型"
                 >
+                  {/* r28 这里引用了两个**从未定义**的变量（islandDotState / islandText），
+                      且用了 CSS 里不存在的 data-state —— 整个应用一渲染就
+                      ReferenceError: islandDotState is not defined，外壳挂不上。
+                      恢复为与 AppShell.css（[data-busy="true"]）和 e2e（断言灵岛文本含模型名）一致的写法。 */}
                   <span className="hb-island-dot" data-busy={String(busy)} />
                   <strong>{topTitle}</strong>
                   <span>· {topSubStatus}</span>
@@ -639,6 +637,28 @@ export default function AppShell() {
       </main>
 
       <OverlayRoot />
+      <GlassSandboxOverlay
+        storeRef={sandboxStoreRef}
+        motionTier={settings.motion}
+        onGlassImpact={(ev) => fireShellImpact(ev.edge || 'pointer', ev.strength || 'medium', { nx: ev.nx, ny: ev.ny, pointer: true })}
+        onBlockShattered={() => setShatterSignal((n) => n + 1)}
+        onStateSync={() => setSandboxRefresh((n) => n + 1)}
+      />
+      <LiquidImpactCanvas
+        seq={impactSeq}
+        nx={impactPos.nx}
+        ny={impactPos.ny}
+        styleId={activeImpactMeta.styleId}
+        strength={activeImpactMeta.strength}
+        motionTier={settings.motion}
+        theme={settings.theme}
+      />
+      <CompanionOverlay
+        sandboxStoreRef={sandboxStoreRef}
+        shatterSignal={shatterSignal}
+        forceOpenSignal={companionSummonSeq}
+        onForceRefreshSandbox={() => setSandboxRefresh((n) => n + 1)}
+      />
     </div>
   )
 }

@@ -141,6 +141,31 @@
   .st-btn-primary:hover { background: var(--primary-hover); color: var(--on-primary); }
   .st-err { padding: 9px 13px; border-radius: var(--radius-sm); background: var(--err-bg); border: 1px solid rgba(192, 53, 39, 0.28); color: var(--err); font-size: 12.5px; }
 
+  .st-vault-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--glass-well);
+    border: 1px solid var(--border);
+  }
+  .st-vault-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .st-hero { padding: 16px 20px; border-radius: var(--radius-md); border: 1px solid var(--glass-border); background: linear-gradient(135deg, var(--primary-soft), var(--card-bg) 52%, rgba(15, 132, 212, 0.08)); box-shadow: var(--elev-1); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .st-hero h2 { margin: 0; font-size: 16px; font-weight: 750; letter-spacing: -0.015em; color: var(--text); }
+  .st-hero p { margin: 3px 0 0; font-size: 12px; color: var(--text-2); }
+  .st-hero-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .st-hero-pill { font-size: 11px; font-family: var(--font-mono); padding: 3px 10px; border-radius: var(--radius-full); background: var(--card-bg); border: 1px solid var(--glass-border); color: var(--text-2); box-shadow: var(--rim-top); }
+  .st-vault-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+  .st-vault-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; margin-top: 6px; }
+  .st-model-card { flex-direction: column; align-items: stretch; gap: 7px; padding: 13px 14px; border-radius: var(--radius-md); background: var(--card-bg); background-image: var(--glass-specular); box-shadow: var(--elev-1); }
+  .st-model-card[data-active="true"] { border-color: var(--primary); box-shadow: var(--focus-ring); }
+  .st-model-card-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .st-model-kind { font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: var(--radius-full); background: var(--glass-well); border: 1px solid var(--border); color: var(--text-2); white-space: nowrap; }
+  .st-model-name { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .st-model-live { font-size: 10px; font-weight: 700; padding: 1.5px 7px; border-radius: var(--radius-full); background: var(--ok-bg); color: var(--ok); white-space: nowrap; }
+  .st-model-meta { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* 液态玻璃条目卡片（用于 Model Vault / MCP / Memory 列表） */
   .st-mem-row {
     display: flex;

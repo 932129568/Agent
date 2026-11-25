@@ -1,0 +1,118 @@
+{
+  "name": "security-red-blue-team",
+  "version": "1.0.0",
+  "description": "4 角色红蓝对抗安全团：红队攻击链推演、OWASP 源码逐行审计与蓝队零破坏最小加固补丁。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "ciso-lead",
+  "agents": [
+    "./agents/ciso-lead.md",
+    "./agents/red-team-attacker.md",
+    "./agents/owasp-code-auditor.md",
+    "./agents/blue-team-defender.md"
+  ],
+  "skills": [
+    "./skills/threat-model-stride",
+    "./skills/owasp-source-review",
+    "./skills/prompt-injection-defense",
+    "./skills/minimal-hardening-patch"
+  ],
+  "displayName": {
+    "en": "Red & Blue Security Audit Team",
+    "zh": "红蓝对抗安全审计团"
+  },
+  "profession": {
+    "en": "Red & Blue Security Audit Team",
+    "zh": "红蓝对抗安全审计团"
+  },
+  "displayDescription": {
+    "en": "4-role SecOps team performing adversarial threat modeling, OWASP code auditing, and minimal defense hardening.",
+    "zh": "4 角色红蓝对抗安全团：红队攻击链推演、OWASP 源码逐行审计与蓝队零破坏最小加固补丁。"
+  },
+  "categoryId": "01-Engineering",
+  "tags": [
+    {
+      "en": "Red Team",
+      "zh": "红队渗透"
+    },
+    {
+      "en": "OWASP",
+      "zh": "源码审计"
+    },
+    {
+      "en": "Defense",
+      "zh": "最小权限加固"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "对当前应用的本地代理、文件沙箱与浏览器工具链路进行红蓝对抗审计并输出修复补丁",
+      "en": "Run a red/blue adversarial security audit on local proxy, file sandbox, and browser tool chains"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "对当前应用的本地代理、文件沙箱与浏览器工具链路进行红蓝对抗审计并输出修复补丁",
+    "en": "Run a red/blue adversarial security audit on local proxy, file sandbox, and browser tool chains"
+  },
+  "x-harbor-source": "OWASP ASVS · MITRE ATT&CK",
+  "teamInfo": {
+    "leadAgent": "ciso-lead",
+    "memberAgents": [
+      "red-team-attacker",
+      "owasp-code-auditor",
+      "blue-team-defender"
+    ]
+  },
+  "members": [
+    {
+      "id": "ciso-lead",
+      "name": {
+        "en": "Chief Security Architect",
+        "zh": "首席安全架构师"
+      },
+      "profession": {
+        "en": "Risk Triage & Hardening Lead",
+        "zh": "风险定级与加固总监"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "red-team-attacker",
+      "name": {
+        "en": "Red Team Specialist",
+        "zh": "红队渗透攻击专家"
+      },
+      "profession": {
+        "en": "Exploit Chain & Prompt Injection",
+        "zh": "攻击链与提示注入专家"
+      },
+      "role": "member"
+    },
+    {
+      "id": "owasp-code-auditor",
+      "name": {
+        "en": "OWASP Code Auditor",
+        "zh": "OWASP 源码审计师"
+      },
+      "profession": {
+        "en": "Auth, SSRF & TOCTOU Reviewer",
+        "zh": "鉴权与竞态排查师"
+      },
+      "role": "member"
+    },
+    {
+      "id": "blue-team-defender",
+      "name": {
+        "en": "Blue Team Architect",
+        "zh": "蓝队加固架构师"
+      },
+      "profession": {
+        "en": "Least-Privilege Guardrail Engineer",
+        "zh": "最小权限护栏架构师"
+      },
+      "role": "member"
+    }
+  ]
+}

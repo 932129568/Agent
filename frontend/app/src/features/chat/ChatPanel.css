@@ -33,32 +33,49 @@
   }
 
   .chat-welcome {
-    max-width: 740px;
+    position: relative;
+    max-width: 760px;
     width: 100%;
     margin: auto;
-    padding: 28px;
+    padding: 32px 30px;
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     background: var(--card-bg);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(28px) saturate(1.55);
     box-shadow: var(--elev-2);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
+    overflow: hidden;
   }
-  .chat-welcome h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
-  .chat-welcome p { margin: 0; color: var(--text-2); font-size: 13.5px; }
-  .chat-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .chat-welcome::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 28px;
+    right: 28px;
+    height: 1.5px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.92), transparent);
+    pointer-events: none;
+  }
+  .chat-welcome h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.025em; }
+  .chat-welcome p { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
+  .chat-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
   .chat-quick-card {
     text-align: left;
-    padding: 12px 14px;
+    padding: 15px 16px;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     background: var(--surface-subtle);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow: var(--elev-1);
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring);
+    gap: 5px;
+    transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
   }
   .chat-quick-card:hover { border-color: var(--primary); transform: translate3d(0, -3px, 0); box-shadow: var(--elev-2); }
   .chat-quick-card:active { transform: scale(0.98); }
@@ -194,14 +211,16 @@
   .chat-composer {
     max-width: 820px;
     margin: 0 auto;
-    padding: 10px 12px;
+    padding: 11px 14px;
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--glass-border);
     background: var(--card-elevated);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(28px) saturate(1.55);
     box-shadow: var(--elev-2);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
     transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   }
   .chat-composer:focus-within {

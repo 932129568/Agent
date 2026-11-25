@@ -1,6 +1,10 @@
 @layer components {
   .ws-root { padding: 24px 28px; max-width: 1120px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; }
   .ws-card {
+    border-color: var(--glass-border);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: var(--elev-1);
     padding: 16px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);

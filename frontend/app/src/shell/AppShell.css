@@ -1,16 +1,26 @@
 @layer components {
-  .hb-shell { display: flex; width: 100%; height: 100%; background: transparent; }
+  .hb-shell { position: relative; display: flex; width: 100%; height: 100%; background: transparent; }
+  .hb-shell::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: var(--z-base);
+    background: radial-gradient(340px circle at var(--glint-x, 50%) var(--glint-y, 20%), rgba(255, 255, 255, 0.14), rgba(160, 224, 255, 0.04) 42%, transparent 72%);
+  }
   .hb-shell[data-zen="true"] .hb-rail { display: none; }
 
   .hb-rail {
-    width: 170px;
+    width: 174px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 12px 10px;
     background: var(--rail-bg);
-    border-right: 1px solid var(--border);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(26px) saturate(1.55);
+    border-right: 1px solid var(--glass-border);
     box-shadow: var(--rim-top);
     transition: width var(--dur-base) var(--ease-spring);
   }
@@ -125,14 +135,16 @@
   .hb-rail-spacer { flex: 1; }
 
   .hb-sidebar {
-    width: 232px;
+    width: 238px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
     padding: 14px 12px;
     background: var(--rail-bg);
-    border-right: 1px solid var(--border);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(24px) saturate(1.48);
+    border-right: 1px solid var(--glass-border);
     min-height: 0;
   }
   .hb-side-head {
@@ -147,13 +159,16 @@
 
   .hb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--stage-bg); position: relative; will-change: transform; }
   .hb-topbar {
-    height: 50px;
+    height: 52px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
+    padding: 0 18px;
+    background: var(--surface-subtle);
+    backdrop-filter: blur(22px) saturate(1.5);
+    border-bottom: 1px solid var(--glass-border);
+    box-shadow: var(--rim-top);
     z-index: var(--z-sticky);
     gap: 12px;
   }
@@ -161,10 +176,12 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 13px;
+    padding: 5.5px 14px;
     border-radius: var(--radius-full);
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     background: var(--card-bg);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(20px) saturate(1.5);
     box-shadow: var(--elev-1);
     font-size: 12.5px;
     color: var(--text-2);
@@ -246,7 +263,7 @@
   }
   .hb-ribbon-btn:hover { color: var(--text); }
 
-  .hb-main::before,
+    .hb-main::before,
   .hb-main::after {
     content: "";
     position: absolute;
@@ -256,40 +273,24 @@
     border-radius: inherit;
     z-index: var(--z-sticky);
   }
+  /* R26 纯净液态玻璃受冲微折射边线（彻底移除廉价光波，视觉主舞台完全交由 2D 流体 PDE 玻璃法线引擎） */
   .hb-main[data-impact-edge="left"]::before {
-    background: radial-gradient(ellipse 16% 56% at 0% var(--impact-y, 50%), rgba(255, 248, 238, 0.85), rgba(212, 101, 62, 0.34) 44%, transparent 76%);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.56), transparent 6%);
     animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
-  }
-  .hb-main[data-impact-edge="left"]::after {
-    background: radial-gradient(circle at 0% var(--impact-y, 50%), transparent 10%, rgba(212, 101, 62, 0.26) 22%, rgba(56, 189, 248, 0.14) 34%, transparent 48%);
-    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
   }
   .hb-main[data-impact-edge="right"]::before {
-    background: radial-gradient(ellipse 16% 56% at 100% var(--impact-y, 50%), rgba(255, 248, 238, 0.85), rgba(82, 180, 245, 0.34) 44%, transparent 76%);
+    background: linear-gradient(270deg, rgba(255, 255, 255, 0.56), transparent 6%);
     animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
-  }
-  .hb-main[data-impact-edge="right"]::after {
-    background: radial-gradient(circle at 100% var(--impact-y, 50%), transparent 10%, rgba(82, 180, 245, 0.26) 22%, transparent 46%);
-    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
   }
   .hb-main[data-impact-edge="top"]::before {
-    background: radial-gradient(ellipse 52% 16% at 50% 0%, rgba(255, 248, 238, 0.85), rgba(82, 180, 245, 0.30) 44%, transparent 76%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), transparent 6%);
     animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
-  }
-  .hb-main[data-impact-edge="top"]::after {
-    background: radial-gradient(circle at 50% 0%, transparent 10%, rgba(82, 180, 245, 0.24) 24%, transparent 46%);
-    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
   }
   .hb-main[data-impact-edge="bottom"]::before {
-    background: radial-gradient(ellipse 52% 16% at 50% 100%, rgba(255, 248, 238, 0.85), rgba(212, 101, 62, 0.30) 44%, transparent 76%);
+    background: linear-gradient(0deg, rgba(255, 255, 255, 0.52), transparent 6%);
     animation: harborImpactArcFlash var(--dur-base) var(--ease-out) forwards;
   }
-  .hb-main[data-impact-edge="bottom"]::after {
-    background: radial-gradient(circle at 50% 100%, transparent 10%, rgba(212, 101, 62, 0.24) 24%, transparent 46%);
-    animation: harborShockwaveRipple var(--dur-base) var(--ease-out) forwards;
-  }
 
-  /* R23 液态玻璃三层光学焦散撞击层（仅撞击瞬间 420ms 挂载，纯 GPU 合成 + contain: strict 零重排） */
   .hb-liquid-impact {
     position: absolute;
     inset: 0;
@@ -308,90 +309,22 @@
   }
   .hb-lg-meniscus {
     inset: 0;
-    animation: harborLiquidMeniscus var(--dur-stage) var(--ease-out) forwards;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+    animation: harborLiquidMeniscus var(--dur-panel) var(--ease-out) forwards;
   }
-  .hb-liquid-impact[data-edge="left"] .hb-lg-meniscus {
-    background: radial-gradient(
-      ellipse 10% 44% at 0% var(--impact-y, 50%),
-      rgba(255, 255, 255, 0.94) 0%,
-      rgba(255, 232, 214, 0.62) 22%,
-      rgba(212, 101, 62, 0.34) 42%,
-      rgba(56, 189, 248, 0.24) 62%,
-      rgba(167, 139, 250, 0.14) 76%,
-      transparent 92%
-    );
-  }
-  .hb-liquid-impact[data-edge="right"] .hb-lg-meniscus {
-    background: radial-gradient(
-      ellipse 10% 44% at 100% var(--impact-y, 50%),
-      rgba(255, 255, 255, 0.94) 0%,
-      rgba(224, 246, 255, 0.62) 22%,
-      rgba(56, 189, 248, 0.36) 42%,
-      rgba(212, 101, 62, 0.22) 64%,
-      rgba(167, 139, 250, 0.14) 78%,
-      transparent 92%
-    );
-  }
-  .hb-liquid-impact[data-edge="top"] .hb-lg-meniscus {
-    background: radial-gradient(
-      ellipse 44% 12% at 50% 0%,
-      rgba(255, 255, 255, 0.94) 0%,
-      rgba(224, 246, 255, 0.58) 24%,
-      rgba(56, 189, 248, 0.32) 48%,
-      rgba(212, 101, 62, 0.18) 70%,
-      transparent 92%
-    );
-  }
-  .hb-liquid-impact[data-edge="bottom"] .hb-lg-meniscus {
-    background: radial-gradient(
-      ellipse 44% 12% at 50% 100%,
-      rgba(255, 255, 255, 0.94) 0%,
-      rgba(255, 232, 214, 0.58) 24%,
-      rgba(212, 101, 62, 0.32) 48%,
-      rgba(56, 189, 248, 0.18) 70%,
-      transparent 92%
-    );
-  }
-
-  .hb-lg-ripple-1 {
-    inset: -12%;
-    animation: harborShockwaveRipple var(--dur-panel) var(--ease-out) forwards;
-  }
+  .hb-lg-ripple-1,
   .hb-lg-ripple-2 {
-    inset: -16%;
-    animation: harborLiquidCapillary var(--dur-stage) var(--ease-out) forwards;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+    animation: harborImpactArcFlash var(--dur-panel) var(--ease-out) forwards;
   }
-  .hb-liquid-impact[data-edge="left"] .hb-lg-ripple-1 {
-    background: radial-gradient(circle at 10% var(--impact-y, 50%), transparent 12%, rgba(255, 255, 255, 0.44) 19%, rgba(56, 189, 248, 0.24) 24%, rgba(212, 101, 62, 0.18) 29%, transparent 38%);
-  }
-  .hb-liquid-impact[data-edge="left"] .hb-lg-ripple-2 {
-    background: radial-gradient(circle at 10% var(--impact-y, 50%), transparent 16%, rgba(255, 255, 255, 0.28) 22%, rgba(167, 139, 250, 0.14) 27%, transparent 35%);
-  }
-  .hb-liquid-impact[data-edge="right"] .hb-lg-ripple-1 {
-    background: radial-gradient(circle at 90% var(--impact-y, 50%), transparent 12%, rgba(255, 255, 255, 0.44) 19%, rgba(56, 189, 248, 0.26) 24%, rgba(212, 101, 62, 0.16) 29%, transparent 38%);
-  }
-  .hb-liquid-impact[data-edge="right"] .hb-lg-ripple-2 {
-    background: radial-gradient(circle at 90% var(--impact-y, 50%), transparent 16%, rgba(255, 255, 255, 0.28) 22%, rgba(56, 189, 248, 0.16) 27%, transparent 35%);
-  }
-  .hb-liquid-impact[data-edge="top"] .hb-lg-ripple-1 {
-    background: radial-gradient(circle at 50% 10%, transparent 12%, rgba(255, 255, 255, 0.42) 19%, rgba(56, 189, 248, 0.24) 25%, transparent 36%);
-  }
-  .hb-liquid-impact[data-edge="top"] .hb-lg-ripple-2 {
-    background: radial-gradient(circle at 50% 10%, transparent 16%, rgba(255, 255, 255, 0.24) 22%, transparent 34%);
-  }
-  .hb-liquid-impact[data-edge="bottom"] .hb-lg-ripple-1 {
-    background: radial-gradient(circle at 50% 90%, transparent 12%, rgba(255, 255, 255, 0.42) 19%, rgba(212, 101, 62, 0.24) 25%, transparent 36%);
-  }
-  .hb-liquid-impact[data-edge="bottom"] .hb-lg-ripple-2 {
-    background: radial-gradient(circle at 50% 90%, transparent 16%, rgba(255, 255, 255, 0.24) 22%, transparent 34%);
-  }
-
   .hb-lg-sheen {
     top: -10%;
     bottom: -10%;
     left: 0;
-    width: 32%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22) 38%, rgba(255, 255, 255, 0.42) 50%, rgba(160, 226, 255, 0.18) 64%, transparent);
+    width: 24%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16) 50%, transparent);
     animation: harborLiquidSheenLeft var(--dur-stage) var(--ease-out) forwards;
   }
   .hb-liquid-impact[data-edge="right"] .hb-lg-sheen {
@@ -403,8 +336,8 @@
     top: 0;
     bottom: auto;
     width: auto;
-    height: 30%;
-    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.34) 50%, transparent);
+    height: 22%;
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.16) 50%, transparent);
     animation-name: harborLiquidSheenTop;
   }
   .hb-liquid-impact[data-edge="bottom"] .hb-lg-sheen {
@@ -413,8 +346,8 @@
     top: 0;
     bottom: auto;
     width: auto;
-    height: 30%;
-    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.34) 50%, transparent);
+    height: 22%;
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.16) 50%, transparent);
     animation-name: harborLiquidSheenBottom;
   }
 }

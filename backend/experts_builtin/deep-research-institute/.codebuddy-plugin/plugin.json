@@ -1,0 +1,118 @@
+{
+  "name": "deep-research-institute",
+  "version": "1.0.0",
+  "description": "4 角色深度研究院：融合 MECE 拆解、一手信源分级、量化图表建模与芒格逆向批判审查，零幻觉水文。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "chief-researcher-lead",
+  "agents": [
+    "./agents/chief-researcher-lead.md",
+    "./agents/source-hunter.md",
+    "./agents/bi-quant-analyst.md",
+    "./agents/inversion-critic.md"
+  ],
+  "skills": [
+    "./skills/mece-thesis-tree",
+    "./skills/primary-source-tiering",
+    "./skills/quant-table-modeling",
+    "./skills/munger-inversion-audit"
+  ],
+  "displayName": {
+    "en": "Deep Research Institute",
+    "zh": "深度研报与顶会科研院"
+  },
+  "profession": {
+    "en": "Deep Research Institute",
+    "zh": "深度研报与顶会科研院"
+  },
+  "displayDescription": {
+    "en": "4-role research institute applying MECE synthesis, source tiering, quantitative BI charts, and Munger inversion critique.",
+    "zh": "4 角色深度研究院：融合 MECE 拆解、一手信源分级、量化图表建模与芒格逆向批判审查，零幻觉水文。"
+  },
+  "categoryId": "05-DataResearch",
+  "tags": [
+    {
+      "en": "MECE",
+      "zh": "深度研报"
+    },
+    {
+      "en": "Source Tiering",
+      "zh": "一手信源"
+    },
+    {
+      "en": "Inversion",
+      "zh": "逆向批判"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "输出 2026 桌面端本地+云端混合 AI Agent 商业化趋势决策级深度行业研报",
+      "en": "Deliver a decision-grade MECE industry research report on hybrid local-cloud desktop AI agents"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "输出 2026 桌面端本地+云端混合 AI Agent 商业化趋势决策级深度行业研报",
+    "en": "Deliver a decision-grade MECE industry research report on hybrid local-cloud desktop AI agents"
+  },
+  "x-harbor-source": "McKinsey MECE · Munger Inversion",
+  "teamInfo": {
+    "leadAgent": "chief-researcher-lead",
+    "memberAgents": [
+      "source-hunter",
+      "bi-quant-analyst",
+      "inversion-critic"
+    ]
+  },
+  "members": [
+    {
+      "id": "chief-researcher-lead",
+      "name": {
+        "en": "Chief Research Dean",
+        "zh": "首席研究院长"
+      },
+      "profession": {
+        "en": "Synthesis & Executive Thesis Lead",
+        "zh": "核心结论与终稿定稿"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "source-hunter",
+      "name": {
+        "en": "Primary Source Analyst",
+        "zh": "一手信源与文献研究员"
+      },
+      "profession": {
+        "en": "Evidence Tiering & Fact Check",
+        "zh": "证据分层与事实核查"
+      },
+      "role": "member"
+    },
+    {
+      "id": "bi-quant-analyst",
+      "name": {
+        "en": "Quantitative BI Analyst",
+        "zh": "数据统计与图表建模师"
+      },
+      "profession": {
+        "en": "Metrics & Visualization Specs",
+        "zh": "量化测算与可视化建模"
+      },
+      "role": "member"
+    },
+    {
+      "id": "inversion-critic",
+      "name": {
+        "en": "Inversion Review Editor",
+        "zh": "逆向批判与定稿主编"
+      },
+      "profession": {
+        "en": "Bias Audit & Anti-Fluff Polish",
+        "zh": "逻辑排雷与去 AI 腔主编"
+      },
+      "role": "member"
+    }
+  ]
+}

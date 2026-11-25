@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useSlice, openModal, closeModal, toggleDock, fireShellImpact, resolvePendingClarify, cancelDeleteGroup, confirmDeleteGroup, closeProjectSessionModal, confirmProjectSessionModal, browseProjectFolder, closeOnboardingModal } from '../state/store.js'
-import { playModalMorphIn, playModalFlyOut, getMotionAnchorRect } from '../platform/kinetic.js'
+import { playModalMorphIn, playModalFlyOut, getMotionAnchorRect, computeViewportCoords } from '../platform/kinetic.js'
 import ContextDock from '../features/dock/ContextDock.jsx'
 import SettingsModal from '../features/settings/SettingsModal.jsx'
 import MarketModal from '../features/market/MarketModal.jsx'
@@ -45,7 +45,12 @@ export default function OverlayRoot() {
       modalRef.current,
       home.edge,
       settings.motion,
-      (vec) => fireShellImpact(home.edge, 'strong', vec),
+      (vec) => {
+        const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
+        const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
+        const anchorCoords = targetRect ? computeViewportCoords(targetRect.cx, targetRect.cy, vw, vh) : {}
+        fireShellImpact(home.edge, 'strong', { ...(vec || {}), ...anchorCoords })
+      },
       () => {
         closingRef.current = false
         // 撞击已在飞抵瞬间触发，此处 skipImpact=true 防止重复二次冲击

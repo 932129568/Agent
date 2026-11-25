@@ -1,0 +1,118 @@
+{
+  "name": "game-studio-pod",
+  "version": "1.0.0",
+  "description": "4 角色独立游戏制作组：覆盖核心玩法循环 GDD、关卡心流曲线、防通胀数值经济与分支世界观叙事。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "game-producer-lead",
+  "agents": [
+    "./agents/game-producer-lead.md",
+    "./agents/gameplay-level-designer.md",
+    "./agents/economy-math-designer.md",
+    "./agents/narrative-world-writer.md"
+  ],
+  "skills": [
+    "./skills/core-loop-gdd",
+    "./skills/level-flow-pacing",
+    "./skills/economy-faucet-sink",
+    "./skills/branching-dialogue-tree"
+  ],
+  "displayName": {
+    "en": "Indie Game Design Studio",
+    "zh": "独立游戏策划与数值工作室"
+  },
+  "profession": {
+    "en": "Indie Game Design Studio",
+    "zh": "独立游戏策划与数值工作室"
+  },
+  "displayDescription": {
+    "en": "4-role game studio delivering core loop GDDs, level pacing curves, anti-inflation economy math, and branching dialogue.",
+    "zh": "4 角色独立游戏制作组：覆盖核心玩法循环 GDD、关卡心流曲线、防通胀数值经济与分支世界观叙事。"
+  },
+  "categoryId": "06-VideoCreative",
+  "tags": [
+    {
+      "en": "Game GDD",
+      "zh": "玩法策划"
+    },
+    {
+      "en": "Economy Math",
+      "zh": "数值平衡"
+    },
+    {
+      "en": "Narrative",
+      "zh": "分支剧情"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "设计一款赛博都市题材轻度肉鸽卡牌独立游戏的核心循环、数值成长曲线与首章分支剧情",
+      "en": "Design a roguelite deckbuilder GDD with core loop, economy balance math, and branching chapter 1"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "设计一款赛博都市题材轻度肉鸽卡牌独立游戏的核心循环、数值成长曲线与首章分支剧情",
+    "en": "Design a roguelite deckbuilder GDD with core loop, economy balance math, and branching chapter 1"
+  },
+  "x-harbor-source": "Harbor Game Systems Lab",
+  "teamInfo": {
+    "leadAgent": "game-producer-lead",
+    "memberAgents": [
+      "gameplay-level-designer",
+      "economy-math-designer",
+      "narrative-world-writer"
+    ]
+  },
+  "members": [
+    {
+      "id": "game-producer-lead",
+      "name": {
+        "en": "Executive Game Producer",
+        "zh": "游戏制作人"
+      },
+      "profession": {
+        "en": "Fun Loop & Scope Lead",
+        "zh": "玩法爽感与体量总监"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "gameplay-level-designer",
+      "name": {
+        "en": "Gameplay & Level Designer",
+        "zh": "核心玩法与关卡策划"
+      },
+      "profession": {
+        "en": "30s Loop & Flow Pacing",
+        "zh": "核心循环与心流策划"
+      },
+      "role": "member"
+    },
+    {
+      "id": "economy-math-designer",
+      "name": {
+        "en": "Economy Balance Designer",
+        "zh": "经济与数值平衡师"
+      },
+      "profession": {
+        "en": "Faucet-Sink & Damage Curves",
+        "zh": "水龙头经济与成长曲线"
+      },
+      "role": "member"
+    },
+    {
+      "id": "narrative-world-writer",
+      "name": {
+        "en": "Branching Narrative Writer",
+        "zh": "世界观与分支编剧"
+      },
+      "profession": {
+        "en": "Faction Lore & Choice Trees",
+        "zh": "阵营世界观与分支对白"
+      },
+      "role": "member"
+    }
+  ]
+}

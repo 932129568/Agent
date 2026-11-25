@@ -1,0 +1,118 @@
+{
+  "name": "ai-agent-lab",
+  "version": "1.0.0",
+  "description": "4 角色大模型 Agent 实验室：专注 95%+ KV-Cache 优化、动态工具路由、MCP 契约与自动化评测。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "agent-chief-lead",
+  "agents": [
+    "./agents/agent-chief-lead.md",
+    "./agents/prompt-cache-expert.md",
+    "./agents/rag-mcp-builder.md",
+    "./agents/eval-cost-router.md"
+  ],
+  "skills": [
+    "./skills/kv-cache-prefix-freeze",
+    "./skills/progressive-tool-routing",
+    "./skills/mcp-contract-design",
+    "./skills/agent-golden-eval"
+  ],
+  "displayName": {
+    "en": "Frontier AI Agent Lab",
+    "zh": "前沿 AI Agent 架构实验室"
+  },
+  "profession": {
+    "en": "Frontier AI Agent Lab",
+    "zh": "前沿 AI Agent 架构实验室"
+  },
+  "displayDescription": {
+    "en": "4-role AI engineering lab specializing in 95%+ KV-Cache optimization, dynamic tool routing, MCP, and evals.",
+    "zh": "4 角色大模型 Agent 实验室：专注 95%+ KV-Cache 优化、动态工具路由、MCP 契约与自动化评测。"
+  },
+  "categoryId": "02-AIArchitecture",
+  "tags": [
+    {
+      "en": "KV-Cache",
+      "zh": "缓存优化"
+    },
+    {
+      "en": "MCP",
+      "zh": "工具协议"
+    },
+    {
+      "en": "Agent Eval",
+      "zh": "自动化评测"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "优化桌面 AI Agent 引擎上下文与工具加载架构，将多轮 Prompt Cache 命中率提升至 92%+",
+      "en": "Optimize desktop AI agent context and tool loading to reach 92%+ prompt cache hit rate"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "优化桌面 AI Agent 引擎上下文与工具加载架构，将多轮 Prompt Cache 命中率提升至 92%+",
+    "en": "Optimize desktop AI agent context and tool loading to reach 92%+ prompt cache hit rate"
+  },
+  "x-harbor-source": "Anthropic Context Engineering · MCP Spec",
+  "teamInfo": {
+    "leadAgent": "agent-chief-lead",
+    "memberAgents": [
+      "prompt-cache-expert",
+      "rag-mcp-builder",
+      "eval-cost-router"
+    ]
+  },
+  "members": [
+    {
+      "id": "agent-chief-lead",
+      "name": {
+        "en": "Chief Agent Architect",
+        "zh": "Agent 首席架构师"
+      },
+      "profession": {
+        "en": "System Latency & Context Lead",
+        "zh": "上下文与系统架构总监"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "prompt-cache-expert",
+      "name": {
+        "en": "Prompt Cache Engineer",
+        "zh": "Prompt 与缓存工程师"
+      },
+      "profession": {
+        "en": "Append-Only Prefix Specialist",
+        "zh": "前缀冻结与缓存优化师"
+      },
+      "role": "member"
+    },
+    {
+      "id": "rag-mcp-builder",
+      "name": {
+        "en": "RAG & MCP Engineer",
+        "zh": "RAG 与 MCP 工具工程师"
+      },
+      "profession": {
+        "en": "Tool Schema & Hybrid Retrieval",
+        "zh": "工具契约与检索工程师"
+      },
+      "role": "member"
+    },
+    {
+      "id": "eval-cost-router",
+      "name": {
+        "en": "Eval & Routing Specialist",
+        "zh": "评测与成本路由师"
+      },
+      "profession": {
+        "en": "Golden Eval & Tiered Routing",
+        "zh": "评测基准与成本路由师"
+      },
+      "role": "member"
+    }
+  ]
+}

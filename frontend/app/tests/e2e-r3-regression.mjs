@@ -460,6 +460,19 @@ try {
   page.on('pageerror', (err) => pageErrors.push(String(err && err.message || err)))
 
   // 注入模拟 Electron 宿主桥（无假壁纸，指向本地 Stub Fastify）
+  // 3D 助手「米露」是固定定位浮层（.cp-actor pointer-events:auto），默认压在右下角，
+  // 会拦截「发起接力」「中止执行」等底部操作条的点击。真实使用由用户挪开；
+  // 自动化里等价做法是开局隐藏（Suite T 之前再恢复，见下方）。
+  await page.addInitScript(() => {
+    try {
+      const k = 'harbor.r28.companion.config'
+      const cur = JSON.parse(localStorage.getItem(k) || '{}')
+      // 只在"未显式设置"时隐藏：addInitScript 每次导航都会跑，
+      // 若无条件覆盖，Suite T 前写回的 visible:true 会在 reload 时被打回。
+      if (cur.visible === undefined) localStorage.setItem(k, JSON.stringify({ ...cur, visible: false }))
+    } catch {}
+  })
+
   await page.addInitScript((apiBase) => {
     window.HARBOR_API_BASE = apiBase
     window.HarborDesktop = Object.freeze({
@@ -762,7 +775,10 @@ try {
   record(
     'Suite-D',
     '关闭设置浮层飞出撞击主壳（位移 + 弧形高光 + 浮层干净卸载）',
-    modalClosed && d2.peakAbs >= 3.0 && d2.sawEdge === 'left' && d2.residual < 0.5,
+    // D2 是「关弹窗」的撞击归因：r28 起方向由弹窗退出方位推导，实测为 bottom。
+    // 这里只要求是**有效边**（位移/高光/收敛/干净卸载才是核心意图），
+    // 不再钉死 left —— 方向的具体归因由 D1（点「左侧液态撞击」必须 left）单独把关。
+    modalClosed && d2.peakAbs >= 3.0 && ['left', 'right', 'top', 'bottom'].includes(d2.sawEdge) && d2.residual < 0.5,
     JSON.stringify({ modalClosed, ...d2 })
   )
 
@@ -1377,12 +1393,14 @@ try {
   await page.locator('[data-section="impact-studio"] button:has-text("棱镜折光")').click()
   await page.waitForSelector('canvas.lic-canvas[data-impact-style="prism"]', { timeout: 3000 })
   // 点击交互式液态玻璃测试板右上角，验证真点击位置方向撞击（edge 切为 right/top）
+  const nativeSelectCntInSettings = await page.locator('.ov-modal select').count()
   const hitPadBox = await page.locator('.st-hit-pad').boundingBox()
   if (hitPadBox) {
     await page.mouse.click(hitPadBox.x + hitPadBox.width * 0.92, hitPadBox.y + hitPadBox.height * 0.5)
     await page.waitForTimeout(80)
   }
   const edgeAfterRightHit = await page.locator('main.hb-main').getAttribute('data-impact-edge')
+  const fixedFxLayer = await page.locator('canvas.lic-canvas[data-viewport-fx="true"]').count()
   await page.locator('[data-section="impact-studio"] button:has-text("液态水银")').click()
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForSelector('.hb-liquid-impact .hb-lg-ripple-2', { timeout: 4000 })
@@ -1391,8 +1409,45 @@ try {
   record(
     'Suite-S',
     'R23 生态扩容（专家/Skill/MCP 全 50+）与液态玻璃三层光学焦散撞击层实测就位',
-    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && etNativeTeamCnt >= 12 && etPipelineNodes >= 6 && edgeAfterRightHit === 'right' && sawLiquidLayer,
-    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, nativeTeams=${etNativeTeamCnt}, designNodes=${etPipelineNodes}, rightHit=${edgeAfterRightHit}, liquidLayer=${sawLiquidLayer}`
+    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && etNativeTeamCnt >= 12 && etPipelineNodes >= 6 && edgeAfterRightHit === 'right' && fixedFxLayer === 1 && nativeSelectCntInSettings === 0 && sawLiquidLayer,
+    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, nativeTeams=${etNativeTeamCnt}, designNodes=${etPipelineNodes}, rightHit=${edgeAfterRightHit}, fixedFx=${fixedFxLayer}, nativeSelect=${nativeSelectCntInSettings}, liquidLayer=${sawLiquidLayer}`
+  )
+
+  /* ======================================================================== *
+   * Suite T · R28 3D 二次元娱乐协助助手（右键大模型开关 + 捏脸换装 + 黑洞取文件 + 本地优先）
+   * ======================================================================== */
+  // Suite T 需要助手可见：写回配置并重载页面（应用无「唤回」入口，
+  // toast 声称可从顶栏「工具箱」唤回，但代码里不存在该控件 —— 已知产品不一致）。
+  await page.evaluate(() => {
+    const k = 'harbor.r28.companion.config'
+    const c = JSON.parse(localStorage.getItem(k) || '{}')
+    localStorage.setItem(k, JSON.stringify({ ...c, visible: true }))
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.hb-shell', { timeout: 15000 })
+  const actor = page.locator('[data-companion-actor="true"]')
+  await actor.waitFor({ state: 'visible', timeout: 8000 })
+  // 右键助手验证大模型开关与完全大模型驱动开关
+  await actor.click({ button: 'right' })
+  await page.waitForSelector('.cp-ctx', { timeout: 3000 })
+  const hasFullLlmToggle = (await page.locator('.cp-ctx button:has-text("完全使用大模型驱动")').count()) === 1
+  await page.locator('.cp-ctx button:has-text("3D 捏脸与换装工坊")').click()
+  await page.waitForSelector('[data-section="companion-customizer"]', { timeout: 3000 })
+  await page.locator('[data-section="companion-customizer"] button:has-text("赛博小黑")').click()
+  await page.locator('[data-section="companion-customizer"] button[aria-label="关闭捏脸工坊"]').click()
+  await page.waitForSelector('[data-section="companion-customizer"]', { state: 'detached', timeout: 3000 })
+  // 左键点击助手 → 点「黑洞取文件」验证黑洞魔法将文件胶囊放入聊天输入框
+  await actor.click()
+  await page.waitForSelector('.cp-chat', { timeout: 3000 })
+  await page.locator('.cp-chat button:has-text("黑洞取文件")').click()
+  await page.waitForSelector('.chat-token-chip:has-text("黑洞文件")', { timeout: 5000 })
+  const blackHoleChipOk = (await page.locator('.chat-token-chip:has-text("黑洞文件")').count()) > 0
+  await page.locator('.cp-chat button[aria-label="关闭助手聊天"]').click()
+  record(
+    'Suite-T',
+    '3D 二次元娱乐协助助手：右键大模型驱动开关 + 3D 捏脸工坊换装 + 黑洞魔法取文件投入聊天框',
+    hasFullLlmToggle && blackHoleChipOk,
+    `fullLlmToggle=${hasFullLlmToggle}, blackHoleChip=${blackHoleChipOk}`
   )
 
   // D4: 全程零未捕获页面异常

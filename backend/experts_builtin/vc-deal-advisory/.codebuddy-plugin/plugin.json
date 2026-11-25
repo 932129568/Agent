@@ -1,0 +1,118 @@
+{
+  "name": "vc-deal-advisory",
+  "version": "1.0.0",
+  "description": "4 合伙人投融资尽调团：覆盖一线 VC 叙事、12 个月 UE 现金流模型、中国商法合规排雷与投资人拷问。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "vc-partner-lead",
+  "agents": [
+    "./agents/vc-partner-lead.md",
+    "./agents/ue-finance-modeler.md",
+    "./agents/legal-ip-counsel.md",
+    "./agents/skeptic-vc-grill.md"
+  ],
+  "skills": [
+    "./skills/vc-pitch-narrative",
+    "./skills/ue-runway-model",
+    "./skills/term-sheet-redline",
+    "./skills/investor-qa-prep"
+  ],
+  "displayName": {
+    "en": "VC Pitch & Deal Advisory",
+    "zh": "融资 BP 与商业法务尽调团"
+  },
+  "profession": {
+    "en": "VC Pitch & Deal Advisory",
+    "zh": "融资 BP 与商业法务尽调团"
+  },
+  "displayDescription": {
+    "en": "4-partner advisory team covering Sequoia-grade pitch narratives, UE cashflow models, CN legal compliance, and VC Q&A.",
+    "zh": "4 合伙人投融资尽调团：覆盖一线 VC 叙事、12 个月 UE 现金流模型、中国商法合规排雷与投资人拷问。"
+  },
+  "categoryId": "07-FinanceLegal",
+  "tags": [
+    {
+      "en": "Pitch Deck",
+      "zh": "融资 BP"
+    },
+    {
+      "en": "Unit Economics",
+      "zh": "财务建模"
+    },
+    {
+      "en": "CN Legal",
+      "zh": "商法合规"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "打磨天使轮创业项目融资 BP 核心叙事，附 12 个月盈亏平衡模型与软件合规排雷清单",
+      "en": "Craft a seed-round VC pitch narrative with 12-month unit economics and legal compliance checklist"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "打磨天使轮创业项目融资 BP 核心叙事，附 12 个月盈亏平衡模型与软件合规排雷清单",
+    "en": "Craft a seed-round VC pitch narrative with 12-month unit economics and legal compliance checklist"
+  },
+  "x-harbor-source": "Sequoia Pitch Framework · YC Startup School",
+  "teamInfo": {
+    "leadAgent": "vc-partner-lead",
+    "memberAgents": [
+      "ue-finance-modeler",
+      "legal-ip-counsel",
+      "skeptic-vc-grill"
+    ]
+  },
+  "members": [
+    {
+      "id": "vc-partner-lead",
+      "name": {
+        "en": "Managing Deal Partner",
+        "zh": "投融资战略合伙人"
+      },
+      "profession": {
+        "en": "Storyline & Valuation Lead",
+        "zh": "商业叙事与估值总监"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "ue-finance-modeler",
+      "name": {
+        "en": "Unit Economics Modeler",
+        "zh": "财务与 UE 建模师"
+      },
+      "profession": {
+        "en": "LTV/CAC & Cash Runway Analyst",
+        "zh": "单位经济与现金流建模"
+      },
+      "role": "member"
+    },
+    {
+      "id": "legal-ip-counsel",
+      "name": {
+        "en": "Legal & IP Counsel",
+        "zh": "法务与知产合规官"
+      },
+      "profession": {
+        "en": "PIPL, OSS License & Term Sheet",
+        "zh": "隐私、开源与条款合规"
+      },
+      "role": "member"
+    },
+    {
+      "id": "skeptic-vc-grill",
+      "name": {
+        "en": "Skeptic VC Examiner",
+        "zh": "模拟投资人拷问官"
+      },
+      "profession": {
+        "en": "Moat & Risk Stress Tester",
+        "zh": "投资人死穴压力测试"
+      },
+      "role": "member"
+    }
+  ]
+}

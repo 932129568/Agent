@@ -1,0 +1,118 @@
+{
+  "name": "growth-war-room",
+  "version": "1.0.0",
+  "description": "4 角色全域增长作战部：贯通小红书/抖音爆款矩阵、高转化官网落地页与 7 天私域成交 SOP。",
+  "author": {
+    "name": "Harbor Curated Ecosystem"
+  },
+  "expertType": "team",
+  "agentName": "growth-vp-lead",
+  "agents": [
+    "./agents/growth-vp-lead.md",
+    "./agents/viral-content-lead.md",
+    "./agents/cro-landing-expert.md",
+    "./agents/lifecycle-crm-ops.md"
+  ],
+  "skills": [
+    "./skills/viral-title-matrix",
+    "./skills/landing-page-cro-spec",
+    "./skills/private-domain-7day-sop",
+    "./skills/growth-experiment-backlog"
+  ],
+  "displayName": {
+    "en": "Omni-Channel Growth War Room",
+    "zh": "全域增长与电商爆单作战部"
+  },
+  "profession": {
+    "en": "Omni-Channel Growth War Room",
+    "zh": "全域增长与电商爆单作战部"
+  },
+  "displayDescription": {
+    "en": "4-role growth team covering viral social matrices, high-CRO landing pages, and private-domain retention SOPs.",
+    "zh": "4 角色全域增长作战部：贯通小红书/抖音爆款矩阵、高转化官网落地页与 7 天私域成交 SOP。"
+  },
+  "categoryId": "04-MarketingGrowth",
+  "tags": [
+    {
+      "en": "Growth",
+      "zh": "增长操盘"
+    },
+    {
+      "en": "Viral Copy",
+      "zh": "爆款种草"
+    },
+    {
+      "en": "CRO",
+      "zh": "高转化落地页"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为一款新产品制定 30 天零预算冷启动增长方案、5 组小红书爆文与私域成交 SOP",
+      "en": "Design a 30-day zero-budget launch growth plan with viral social hooks and retention SOPs"
+    }
+  ],
+  "defaultInitPrompt": {
+    "zh": "为一款新产品制定 30 天零预算冷启动增长方案、5 组小红书爆文与私域成交 SOP",
+    "en": "Design a 30-day zero-budget launch growth plan with viral social hooks and retention SOPs"
+  },
+  "x-harbor-source": "Harbor Growth Playbook",
+  "teamInfo": {
+    "leadAgent": "growth-vp-lead",
+    "memberAgents": [
+      "viral-content-lead",
+      "cro-landing-expert",
+      "lifecycle-crm-ops"
+    ]
+  },
+  "members": [
+    {
+      "id": "growth-vp-lead",
+      "name": {
+        "en": "VP of Growth",
+        "zh": "增长总操盘手"
+      },
+      "profession": {
+        "en": "ROI & Channel Strategy Lead",
+        "zh": "增长 ROI 总控"
+      },
+      "role": "lead"
+    },
+    {
+      "id": "viral-content-lead",
+      "name": {
+        "en": "Viral Content Director",
+        "zh": "社媒爆款内容编导"
+      },
+      "profession": {
+        "en": "Xiaohongshu & Douyin CTR Lead",
+        "zh": "小红书/抖音流量编导"
+      },
+      "role": "member"
+    },
+    {
+      "id": "cro-landing-expert",
+      "name": {
+        "en": "Landing Page CRO Expert",
+        "zh": "转化率与落地页专家"
+      },
+      "profession": {
+        "en": "Value Prop & Pricing Anchor",
+        "zh": "落地页与定价锚点专家"
+      },
+      "role": "member"
+    },
+    {
+      "id": "lifecycle-crm-ops",
+      "name": {
+        "en": "Lifecycle & CRM Specialist",
+        "zh": "私域与直播成交师"
+      },
+      "profession": {
+        "en": "7-Day Nurture & Winback SOP",
+        "zh": "私域留存与复购操盘"
+      },
+      "role": "member"
+    }
+  ]
+}

@@ -11,6 +11,9 @@
   --z-dock: 40;
   --z-menu: 65;
   --z-modal: 100;
+  --z-sandbox: 145;
+  --z-fx: 160;
+  --z-companion: 175;
   --z-toast: 200;
 
   --dur-fast: 140ms;

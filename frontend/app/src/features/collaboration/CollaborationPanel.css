@@ -1,6 +1,10 @@
 @layer components {
   .co-root { padding: 24px 28px; max-width: 1120px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; height: 100%; overflow-y: auto; }
-  .co-card { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); display: flex; flex-direction: column; gap: 10px; }
+  .co-card {
+    border-color: var(--glass-border);
+    background-image: var(--glass-specular);
+    backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: var(--elev-1); padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card-bg); box-shadow: var(--elev-1); display: flex; flex-direction: column; gap: 10px; }
   .co-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .co-input { flex: 1; min-width: 180px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-subtle); font-size: 13px; }
   .co-btn { padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--surface-subtle); cursor: pointer; font-size: 12.5px; }

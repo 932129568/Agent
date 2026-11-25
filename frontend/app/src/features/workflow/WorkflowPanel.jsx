@@ -27,6 +27,8 @@ import { REASONING_TIERS } from '../../services/reasoningPresets.js'
 import { SAMPLE_CUSTOM_PLUGIN_JSON } from '../../services/pluginRegistry.js'
 import { copyText, downloadTextFile } from '../../platform/dom.js'
 import WorkflowGraph from '../../ui/WorkflowGraph.jsx'
+import ModelPicker from '../../ui/ModelPicker.jsx'
+import GlassSelect from '../../ui/GlassSelect.jsx'
 import DropdownMenu from '../../ui/DropdownMenu.jsx'
 import './WorkflowPanel.css'
 
@@ -532,16 +534,10 @@ export default function WorkflowPanel() {
                   onChange={(e) => setNewNodeLabel(e.target.value)}
                   placeholder="新节点名称（如：代码审查）"
                 />
-                <select className="wf-select" style={{ width: 140 }} value={newNodeKind} onChange={(e) => setNewNodeKind(e.target.value)}>
-                  {WORKFLOW_NODE_KINDS.filter((k) => k.id !== 'input').map((k) => (
-                    <option key={k.id} value={k.id}>{k.badge} · {k.label}</option>
-                  ))}
-                </select>
-                <select className="wf-select" style={{ width: 170 }} value={newNodeFrom} onChange={(e) => setNewNodeFrom(e.target.value)}>
-                  {activeWf.nodes.map((n) => (
-                    <option key={n.id} value={n.id}>接在「{n.label}」之后</option>
-                  ))}
-                </select>
+                <GlassSelect ariaLabel="新增节点类型" style={{ minWidth: 140 }} value={newNodeKind} onChange={(v) => setNewNodeKind(v)}
+                  options={WORKFLOW_NODE_KINDS.filter((k) => k.id !== 'input').map((k) => ({ value: k.id, label: `${k.badge} · ${k.label}` }))} />
+                <GlassSelect ariaLabel="新增节点前置挂载点" style={{ minWidth: 168 }} value={newNodeFrom} onChange={(v) => setNewNodeFrom(v)}
+                  options={activeWf.nodes.map((n) => ({ value: n.id, label: `接在「${n.label}」之后` }))} />
                 <button type="button" className="wf-btn" onClick={handleAddNode}>添加并连线</button>
               </div>
             )}
@@ -611,28 +607,17 @@ export default function WorkflowPanel() {
                               <label className="wf-field">
                                 节点模型（可从模型保存中心选或手填）
                                 {savedModels.filter((sm) => !sm.kind || sm.kind === 'chat').length > 0 && (
-                                  <select
-                                    className="wf-select"
-                                    aria-label="选择工作流节点保存模型"
+                                  <ModelPicker direction="down" align="left" ariaLabel="选择工作流节点保存模型"
                                     value={savedModels.some((sm) => sm.id === editingNode.model) ? editingNode.model : ''}
-                                    onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })}
-                                  >
-                                    <option value="">继承全局默认模型</option>
-                                    {savedModels.filter((sm) => !sm.kind || sm.kind === 'chat').map((sm) => (
-                                      <option key={sm.id} value={sm.id}>🧠 {sm.label} ({sm.model})</option>
-                                    ))}
-                                  </select>
+                                    defaultModel="继承全局默认" models={savedModels} onChange={(id) => setEditingNode({ ...editingNode, model: id })} />
                                 )}
                                 <input className="wf-input" value={editingNode.model || ''} onChange={(e) => setEditingNode({ ...editingNode, model: e.target.value })} placeholder="例如：deepseek-chat / glm-4.5-flash" />
                               </label>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'end' }}>
                                 <label className="wf-field">
                                   思考档位
-                                  <select className="wf-select" value={editingNode.reasoningTier || 'auto'} onChange={(e) => setEditingNode({ ...editingNode, reasoningTier: e.target.value })}>
-                                    {REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => (
-                                      <option key={t.id} value={t.id}>{t.label}</option>
-                                    ))}
-                                  </select>
+                                  <GlassSelect block ariaLabel="工作流节点思考档位" value={editingNode.reasoningTier || 'auto'} onChange={(v) => setEditingNode({ ...editingNode, reasoningTier: v })}
+                                    options={REASONING_TIERS.filter((t) => t.id !== 'custom').map((t) => ({ value: t.id, label: t.label }))} />
                                 </label>
                                 <button
                                   type="button"
@@ -653,9 +638,7 @@ export default function WorkflowPanel() {
                             <>
                               <label className="wf-field">
                                 直调工具名
-                                <select className="wf-select" value={editingNode.toolName || 'list_dir'} onChange={(e) => setEditingNode({ ...editingNode, toolName: e.target.value })}>
-                                  {TOOL_PRESET_NAMES.map((tn) => <option key={tn} value={tn}>{tn}</option>)}
-                                </select>
+                                <GlassSelect block ariaLabel="工作流工具名称" value={editingNode.toolName || 'list_dir'} onChange={(v) => setEditingNode({ ...editingNode, toolName: v })} options={TOOL_PRESET_NAMES} />
                               </label>
                               <label className="wf-field">
                                 工具参数 JSON（支持模板插值）
@@ -667,17 +650,9 @@ export default function WorkflowPanel() {
                             <>
                               <label className="wf-field">
                                 判断操作符
-                                <select
-                                  className="wf-select"
-                                  value={(editingNode.condition && editingNode.condition.op) || 'contains'}
-                                  onChange={(e) => setEditingNode({ ...editingNode, condition: { ...(editingNode.condition || {}), op: e.target.value } })}
-                                >
-                                  <option value="contains">包含关键词 (contains)</option>
-                                  <option value="not_contains">不包含关键词 (not_contains)</option>
-                                  <option value="min_length">最小字数 (min_length)</option>
-                                  <option value="regex">正则匹配 (regex)</option>
-                                  <option value="always">恒真 (always)</option>
-                                </select>
+                                <GlassSelect block ariaLabel="条件分支运算符" value={(editingNode.condition && editingNode.condition.op) || 'contains'}
+                                  onChange={(v) => setEditingNode({ ...editingNode, condition: { ...(editingNode.condition || {}), op: v } })}
+                                  options={[{ value: 'contains', label: '包含关键词', hint: 'contains' }, { value: 'not_contains', label: '不包含关键词', hint: 'not_contains' }, { value: 'min_length', label: '最小字数', hint: 'min_length' }, { value: 'regex', label: '正则匹配', hint: 'regex' }, { value: 'always', label: '恒真', hint: 'always' }]} />
                               </label>
                               <label className="wf-field">
                                 匹配值 / 阈值
@@ -711,24 +686,15 @@ export default function WorkflowPanel() {
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                                 <label className="wf-field">
                                   画幅比例
-                                  <select
-                                    className="wf-select"
-                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.aspectRatio) || '1:1'}
-                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), aspectRatio: e.target.value } })}
-                                  >
-                                    {['1:1', '16:9', '9:16', '4:3', '3:4', '21:9'].map((r) => <option key={r} value={r}>{r}</option>)}
-                                  </select>
+                                  <GlassSelect block ariaLabel="生图画幅比例" value={(editingNode.mediaConfig && editingNode.mediaConfig.aspectRatio) || '1:1'}
+                                    onChange={(v) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), aspectRatio: v } })}
+                                    options={['1:1', '16:9', '9:16', '4:3', '3:4', '21:9']} />
                                 </label>
                                 <label className="wf-field">
                                   画质档位
-                                  <select
-                                    className="wf-select"
-                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.quality) || 'hd'}
-                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), quality: e.target.value } })}
-                                  >
-                                    <option value="standard">standard（快速）</option>
-                                    <option value="hd">hd（高清）</option>
-                                  </select>
+                                  <GlassSelect block ariaLabel="生图画质" value={(editingNode.mediaConfig && editingNode.mediaConfig.quality) || 'hd'}
+                                    onChange={(v) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), quality: v } })}
+                                    options={[{ value: 'standard', label: 'standard（快速）' }, { value: 'hd', label: 'hd（高清）' }]} />
                                 </label>
                               </div>
                               <label className="wf-field">
@@ -749,38 +715,21 @@ export default function WorkflowPanel() {
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                                 <label className="wf-field">
                                   时长(秒)
-                                  <select
-                                    className="wf-select"
-                                    value={Number((editingNode.mediaConfig && editingNode.mediaConfig.duration) || 5)}
-                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), duration: Number(e.target.value) } })}
-                                  >
-                                    <option value={5}>5 秒</option>
-                                    <option value={10}>10 秒</option>
-                                  </select>
+                                  <GlassSelect block ariaLabel="视频时长" value={Number((editingNode.mediaConfig && editingNode.mediaConfig.duration) || 5)}
+                                    onChange={(v) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), duration: Number(v) } })}
+                                    options={[{ value: 5, label: '5 秒' }, { value: 10, label: '10 秒' }]} />
                                 </label>
                                 <label className="wf-field">
                                   画幅
-                                  <select
-                                    className="wf-select"
-                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.aspectRatio) || '16:9'}
-                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), aspectRatio: e.target.value } })}
-                                  >
-                                    <option value="16:9">16:9 横屏</option>
-                                    <option value="9:16">9:16 竖屏</option>
-                                    <option value="1:1">1:1 方形</option>
-                                  </select>
+                                  <GlassSelect block ariaLabel="视频画幅比例" value={(editingNode.mediaConfig && editingNode.mediaConfig.aspectRatio) || '16:9'}
+                                    onChange={(v) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), aspectRatio: v } })}
+                                    options={[{ value: '16:9', label: '16:9 横屏' }, { value: '9:16', label: '9:16 竖屏' }, { value: '1:1', label: '1:1 方形' }]} />
                                 </label>
                                 <label className="wf-field">
                                   分辨率
-                                  <select
-                                    className="wf-select"
-                                    value={(editingNode.mediaConfig && editingNode.mediaConfig.resolution) || '1080p'}
-                                    onChange={(e) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), resolution: e.target.value } })}
-                                  >
-                                    <option value="720p">720p</option>
-                                    <option value="1080p">1080p</option>
-                                    <option value="4k">4K</option>
-                                  </select>
+                                  <GlassSelect block ariaLabel="视频分辨率" value={(editingNode.mediaConfig && editingNode.mediaConfig.resolution) || '1080p'}
+                                    onChange={(v) => setEditingNode({ ...editingNode, mediaConfig: { ...(editingNode.mediaConfig || {}), resolution: v } })}
+                                    options={[{ value: '720p', label: '720p' }, { value: '1080p', label: '1080p' }, { value: '4k', label: '4K' }]} />
                                 </label>
                               </div>
                               <label className="wf-field">
@@ -858,23 +807,11 @@ export default function WorkflowPanel() {
                               })}
                               {connectableTargets.length > 0 && (
                                 <div className="wf-edge-add">
-                                  <select
-                                    className="wf-select"
-                                    style={{ flex: 1 }}
-                                    value={edgeTargetId || connectableTargets[0].id}
-                                    onChange={(e) => setEdgeTargetId(e.target.value)}
-                                    aria-label="选择连线下游节点"
-                                  >
-                                    {connectableTargets.map((n) => (
-                                      <option key={n.id} value={n.id}>连到「{n.label}」</option>
-                                    ))}
-                                  </select>
+                                  <GlassSelect block style={{ flex: 1 }} ariaLabel="选择连线下游节点" value={edgeTargetId || connectableTargets[0].id}
+                                    onChange={(v) => setEdgeTargetId(v)} options={connectableTargets.map((n) => ({ value: n.id, label: `连到「${n.label}」` }))} />
                                   {selectedNode.kind === 'condition' && (
-                                    <select className="wf-select" style={{ width: 76 }} value={edgeWhen} onChange={(e) => setEdgeWhen(e.target.value)}>
-                                      <option value="true">TRUE</option>
-                                      <option value="false">FALSE</option>
-                                      <option value="always">总是</option>
-                                    </select>
+                                    <GlassSelect ariaLabel="条件分支触发条件" value={edgeWhen} onChange={(v) => setEdgeWhen(v)}
+                                      options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }, { value: 'always', label: '总是' }]} />
                                   )}
                                   <button type="button" className="wf-chip" data-active="true" onClick={handleAddEdge}>+ 连线</button>
                                 </div>

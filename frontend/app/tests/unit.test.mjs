@@ -1112,3 +1112,96 @@ test('R25 真实点击位置二维力矩物理（右上 vs 左下反向推力与
   ])
   assert.ok(merged.some((t) => t.id === 'custom-ops-team' && t.name === '本地自定义运维团'))
 })
+
+
+test('R26 局部液态玻璃定点按压物理（点左上/右下 3D 倾角严格相反，点正中心零偏心纯压缩）', async () => {
+  const { computeLocalPressTransform } = await import('../src/platform/kinetic.js')
+
+  const topLeft = computeLocalPressTransform(0.08, 0.12, 1)
+  const botRight = computeLocalPressTransform(0.92, 0.88, 1)
+  const center = computeLocalPressTransform(0.5, 0.5, 1)
+
+  assert.ok(topLeft.ry < 0 && topLeft.rx > 0, `topLeft=${JSON.stringify(topLeft)}`)
+  assert.ok(botRight.ry > 0 && botRight.rx < 0, `botRight=${JSON.stringify(botRight)}`)
+  assert.equal(center.rx, 0)
+  assert.equal(center.ry, 0)
+  assert.ok(center.sc < 1 && center.sc > 0.95)
+})
+
+
+test('R28 液态玻璃物理沙盒：抓起/慢滑不归位/快甩弹墙裂痕碎裂/绝不自愈/长按召回/助手啃咬与同步修补', async () => {
+  const {
+    createGlassSandboxState, grabGlassBody, releaseGlassBody, recallGlassBody,
+    biteGlassBody, startRepairBody, setRepairProgress, stepGlassSandbox,
+  } = await import('../src/platform/glassSandboxEngine.js')
+
+  const st = createGlassSandboxState()
+  // 1) 抓起并慢放 -> 缓慢液态滑行，绝不主动归位
+  grabGlassBody(st, { id: 'btn_set', label: '系统设置', x: 20, y: 120, w: 120, h: 36 })
+  const relSlow = releaseGlassBody(st, 'btn_set', 20, 10)
+  assert.equal(relSlow.snapped, false)
+  for (let i = 0; i < 40; i++) stepGlassSandbox(st, 0.02, 1280, 800)
+  assert.ok(st.bodies.has('btn_set') && st.bodies.get('btn_set').status === 'floating', '停稳松手不应主动归位')
+
+  // 2) 高速甩向屏幕右墙 3 次重击 -> 产生裂痕并最终整块碎裂成碎片消失（绝不自动恢复）
+  const body = st.bodies.get('btn_set')
+  for (let hit = 0; hit < 3; hit++) {
+    body.x = 1150; body.vx = 980; body.vy = 0
+    stepGlassSandbox(st, 0.02, 1280, 800)
+  }
+  assert.equal(body.status, 'shattered')
+  assert.ok(body.shards.length >= 10, `shards=${body.shards.length}`)
+  for (let i = 0; i < 30; i++) stepGlassSandbox(st, 0.02, 1280, 800)
+  assert.equal(st.bodies.get('btn_set').status, 'shattered', '碎裂后绝不自动恢复')
+
+  // 3) 助手同步修补碎裂方块 -> 进度到 1 恢复消失的实体
+  startRepairBody(st, 'btn_set')
+  assert.equal(setRepairProgress(st, 'btn_set', 0.5).done, false)
+  assert.equal(setRepairProgress(st, 'btn_set', 1).done, true)
+  assert.equal(st.bodies.has('btn_set'), false)
+
+  // 4) 助手偷啃液态玻璃 -> 留下真实咬痕，且不会自愈；修补进度满后彻底愈合
+  const bitten = biteGlassBody(st, { id: 'btn_chat', label: '智能对话', x: 16, y: 80, w: 130, h: 36 })
+  assert.equal(bitten.biteNotches.length, 1)
+  startRepairBody(st, 'btn_chat')
+  setRepairProgress(st, 'btn_chat', 1)
+  assert.equal(st.bodies.has('btn_chat'), false)
+
+  // 5) 长按原位召回浮动方块
+  grabGlassBody(st, { id: 'btn_grp', label: '角色群聊', x: 16, y: 140, w: 120, h: 36 })
+  st.bodies.get('btn_grp').x = 600; st.bodies.get('btn_grp').y = 300
+  releaseGlassBody(st, 'btn_grp', 10, 0)
+  recallGlassBody(st, 'btn_grp')
+  for (let i = 0; i < 60; i++) stepGlassSandbox(st, 0.02, 1280, 800)
+  assert.equal(st.bodies.has('btn_grp'), false, '长按原位召回后应准确回到原位')
+})
+
+test('R28 3D 二次元助手本地优先大脑 + 专属大模型开关 + 动作指令解析 + 丰富捏脸部位', async () => {
+  const { planLocalCompanionResponse, parseLlmCompanionAction } = await import('../src/services/companionBrain.js')
+  const { COMPANION_HAIRSTYLES, COMPANION_HEADGEARS, COMPANION_OUTFITS, COMPANION_ACCESSORIES } = await import('../src/services/companionCatalog.js')
+
+  assert.ok(COMPANION_HAIRSTYLES.length >= 7 && COMPANION_HEADGEARS.length >= 7 && COMPANION_OUTFITS.length >= 6 && COMPANION_ACCESSORIES.length >= 7)
+
+  const rClick = planLocalCompanionResponse('帮我打开系统设置')
+  assert.equal(rClick.handledLocally, true)
+  assert.equal(rClick.action.type, 'crouch_click')
+  assert.equal(rClick.action.target, 'settings')
+
+  const rWrite = planLocalCompanionResponse('帮我写：测试一下自动手写')
+  assert.equal(rWrite.handledLocally, true)
+  assert.equal(rWrite.action.type, 'write_input')
+  assert.match(rWrite.action.text, /测试一下自动手写/)
+
+  const rBh = planLocalCompanionResponse('用黑洞帮我把 spec.md 放进输入框')
+  assert.equal(rBh.handledLocally, true)
+  assert.equal(rBh.action.type, 'magic_blackhole')
+  assert.equal(rBh.action.fileName, 'spec.md')
+
+  const rRep = planLocalCompanionResponse('快去把啃掉的玻璃修补好', { damagedCount: 2 })
+  assert.equal(rRep.handledLocally, true)
+  assert.equal(rRep.action.type, 'repair_all')
+
+  const llmAct = parseLlmCompanionAction('好的我马上过去！[[ACTION:blackhole:设计稿.md]]')
+  assert.equal(llmAct.action.type, 'magic_blackhole')
+  assert.equal(llmAct.action.fileName, '设计稿.md')
+})

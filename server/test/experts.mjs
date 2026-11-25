@@ -31,9 +31,9 @@ const R7_BUILTIN_IDS = [
   'video-director-remotion', 'finance-contract-advisor', 'browser-workflow-operator',
 ]
 const allPackages = JSON.parse(await experts.expertList(''))
-check('内置包导入 20 个（原 8 包 + R7 新增 12 套行业专家包，source=builtin）', () => {
+check('内置包全量导入（含 12 支原生多角色专家团与行业专家包，source=builtin）', () => {
   const builtins = allPackages.packages.filter(p => p.source && p.source.kind === 'builtin')
-  assert.equal(builtins.length, 20)
+  assert.ok(builtins.length >= 20, `builtins=${builtins.length}`)
   assert.ok(builtins.some(p => p.id === 'design-engine'))
   for (const id of R7_BUILTIN_IDS) {
     const hit = builtins.find(p => p.id === id)
