@@ -704,6 +704,22 @@ export default function SettingsModal() {
                 <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
                   {(IMPACT_STYLES.find((s) => s.id === (settings.impactStyle || 'mercury')) || IMPACT_STYLES[0]).shortDesc}
                 </div>
+                <div
+                  className="st-hit-pad"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="液态玻璃任意位置撞击测试板"
+                  onPointerDown={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    if (!r || !r.width || !r.height) return
+                    const nx = Math.max(0.03, Math.min(0.97, (e.clientX - r.left) / r.width))
+                    const ny = Math.max(0.03, Math.min(0.97, (e.clientY - r.top) / r.height))
+                    fireShellImpact('pointer', 'strong', { nx, ny, pointer: true })
+                  }}
+                >
+                  <strong>🫧 点击这块液态玻璃板的任意角落 / 中心</strong>
+                  <span>二维流体波动方程 + 3D 杠杆力矩引擎将从你精确点击的位置推开并向四边反射</span>
+                </div>
                 <div className="st-row" style={{ marginTop: 4 }}>
                   <button type="button" className="st-btn st-btn-primary" onClick={() => fireShellImpact('left', 'strong')}>
                     ← 左侧液态撞击

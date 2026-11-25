@@ -37,3 +37,12 @@ export function downloadTextFile(filename, text, mimeType = 'text/plain;charset=
     setTimeout(() => { try { URL.revokeObjectURL(url) } catch {} }, 800)
   }
 }
+
+
+export function createOffscreenCanvas(width, height) {
+  if (typeof document === 'undefined') return null
+  const c = document.createElement('canvas')
+  c.width = width
+  c.height = height
+  return c
+}

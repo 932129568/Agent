@@ -1,9 +1,9 @@
-/* Harbor Design Tokens v4 (R20 Release Polish) · 唯一真理源（原生 Acrylic/Vibrancy + 6 级图层 + 动效令牌） */
+/* Harbor Design Tokens v5 (R25 Apple Liquid Glass Flagship) · 唯一真理源 */
 @layer reset, base, components, overlays;
 
 :root {
   color-scheme: light;
-  --font-sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --font-sans: "Segoe UI Variable", "SF Pro Display", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
   --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 
   --z-base: 1;
@@ -26,86 +26,92 @@
     1.045 43%, 1.051 52%, 1.031 62%, 1.012 72%, 1.002 82%, 0.999 91%, 1
   );
 
-  --glass-rail: 0.38;
-  --glass-stage: 0.46;
-  --glass-card: 0.72;
-  --glass-modal: 0.90;
+  --glass-rail: 0.36;
+  --glass-stage: 0.44;
+  --glass-card: 0.68;
+  --glass-modal: 0.84;
 
-  --bg-solid: #F3F0E9;
-  --rail-bg: rgba(255, 254, 251, var(--glass-rail));
-  --stage-bg: rgba(255, 254, 252, var(--glass-stage));
+  --bg-solid: #EEF1F6;
+  --rail-bg: rgba(255, 255, 255, var(--glass-rail));
+  --stage-bg: rgba(252, 253, 255, var(--glass-stage));
   --card-bg: rgba(255, 255, 255, var(--glass-card));
   --card-elevated: rgba(255, 255, 255, var(--glass-modal));
-  --surface-subtle: rgba(255, 255, 255, 0.46);
-  --surface-hover: rgba(255, 255, 255, 0.72);
-  --scroll-thumb: rgba(22, 21, 19, 0.16);
-  --scroll-thumb-hover: rgba(22, 21, 19, 0.30);
+  --surface-subtle: rgba(255, 255, 255, 0.44);
+  --surface-hover: rgba(255, 255, 255, 0.78);
+  --glass-well: rgba(15, 23, 42, 0.042);
+  --glass-specular: linear-gradient(160deg, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.24) 38%, rgba(255, 255, 255, 0.05) 100%);
+  --scroll-thumb: rgba(15, 23, 42, 0.16);
+  --scroll-thumb-hover: rgba(15, 23, 42, 0.32);
 
-  --text: #161513;
-  --text-2: #48453F;
-  --text-3: #6C6860;
-  --border: rgba(22, 21, 19, 0.09);
-  --border-strong: rgba(22, 21, 19, 0.16);
-  --rim-top: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --text: #11141B;
+  --text-2: #444B59;
+  --text-3: #6B7280;
+  --border: rgba(15, 23, 42, 0.09);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --glass-border: rgba(255, 255, 255, 0.72);
+  --rim-top: inset 0 1px 0.5px rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(15, 23, 42, 0.05);
 
   --primary: #D4653E;
-  --primary-2: #1282C8;
+  --primary-2: #0F84D4;
   --primary-hover: #BF542F;
   --primary-soft: rgba(212, 101, 62, 0.13);
-  --focus-ring: 0 0 0 2.5px rgba(212, 101, 62, 0.28);
+  --focus-ring: 0 0 0 3px rgba(212, 101, 62, 0.24);
   --on-primary: #FFFFFF;
-  --ok: #23744C;
-  --ok-bg: rgba(35, 116, 76, 0.13);
+  --ok: #1E7A4C;
+  --ok-bg: rgba(30, 122, 76, 0.13);
   --warn: #A36014;
   --warn-bg: rgba(163, 96, 20, 0.13);
-  --err: #BD3627;
-  --err-bg: rgba(189, 54, 39, 0.13);
+  --err: #C03527;
+  --err-bg: rgba(192, 53, 39, 0.13);
 
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-sm: 11px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
   --radius-full: 999px;
 
-  --elev-1: 0 2px 10px rgba(20, 19, 18, 0.055), var(--rim-top);
-  --elev-2: 0 12px 30px -8px rgba(20, 19, 18, 0.12), var(--rim-top);
-  --elev-3: 0 24px 58px -12px rgba(20, 19, 18, 0.20), 0 0 0 1px rgba(212, 101, 62, 0.22), var(--rim-top);
+  --elev-1: 0 4px 14px -2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.52), var(--rim-top);
+  --elev-2: 0 14px 34px -8px rgba(15, 23, 42, 0.13), 0 0 0 1px rgba(255, 255, 255, 0.62), var(--rim-top);
+  --elev-3: 0 28px 68px -12px rgba(15, 23, 42, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.78), var(--rim-top);
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg-solid: #1B1D24;
-  --rail-bg: rgba(34, 37, 46, var(--glass-rail));
-  --stage-bg: rgba(40, 44, 54, var(--glass-stage));
-  --card-bg: rgba(50, 54, 66, var(--glass-card));
-  --card-elevated: rgba(54, 58, 72, var(--glass-modal));
-  --surface-subtle: rgba(255, 255, 255, 0.075);
-  --surface-hover: rgba(255, 255, 255, 0.135);
+  --bg-solid: #141720;
+  --rail-bg: rgba(26, 30, 42, var(--glass-rail));
+  --stage-bg: rgba(30, 34, 46, var(--glass-stage));
+  --card-bg: rgba(42, 47, 62, var(--glass-card));
+  --card-elevated: rgba(38, 43, 58, var(--glass-modal));
+  --surface-subtle: rgba(255, 255, 255, 0.065);
+  --surface-hover: rgba(255, 255, 255, 0.13);
+  --glass-well: rgba(0, 0, 0, 0.24);
+  --glass-specular: linear-gradient(160deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.005) 100%);
   --scroll-thumb: rgba(255, 255, 255, 0.16);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.30);
 
-  --text: #FAF9F5;
-  --text-2: #D4D1C8;
-  --text-3: #A5A299;
-  --border: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.22);
-  --rim-top: inset 0 1px 0 rgba(255, 255, 255, 0.20);
+  --text: #F8FAFC;
+  --text-2: #CBD5E1;
+  --text-3: #94A3B8;
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.21);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --rim-top: inset 0 1px 0.5px rgba(255, 255, 255, 0.24), inset 0 -1px 0 rgba(0, 0, 0, 0.28);
 
-  --primary: #EB8562;
-  --primary-2: #62BEF7;
-  --primary-hover: #F59676;
-  --primary-soft: rgba(235, 133, 98, 0.19);
-  --focus-ring: 0 0 0 2.5px rgba(235, 133, 98, 0.34);
-  --on-primary: #171614;
-  --ok: #68C894;
-  --ok-bg: rgba(104, 200, 148, 0.18);
-  --warn: #ECB362;
-  --warn-bg: rgba(236, 179, 98, 0.18);
-  --err: #F2796B;
-  --err-bg: rgba(242, 121, 107, 0.18);
+  --primary: #F08A64;
+  --primary-2: #60C2FA;
+  --primary-hover: #FA9B78;
+  --primary-soft: rgba(240, 138, 100, 0.19);
+  --focus-ring: 0 0 0 3px rgba(240, 138, 100, 0.32);
+  --on-primary: #141210;
+  --ok: #68D396;
+  --ok-bg: rgba(104, 211, 150, 0.18);
+  --warn: #F0B660;
+  --warn-bg: rgba(240, 182, 96, 0.18);
+  --err: #F57B6E;
+  --err-bg: rgba(245, 123, 110, 0.18);
 
-  --elev-1: 0 2px 10px rgba(0, 0, 0, 0.22), var(--rim-top);
-  --elev-2: 0 12px 30px -6px rgba(0, 0, 0, 0.36), var(--rim-top);
-  --elev-3: 0 24px 58px -10px rgba(0, 0, 0, 0.54), 0 0 0 1px rgba(235, 133, 98, 0.26), var(--rim-top);
+  --elev-1: 0 4px 14px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08), var(--rim-top);
+  --elev-2: 0 14px 36px -6px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(255, 255, 255, 0.12), var(--rim-top);
+  --elev-3: 0 28px 68px -10px rgba(0, 0, 0, 0.64), 0 0 0 1px rgba(255, 255, 255, 0.18), var(--rim-top);
 }
 
 html[data-backdrop="none"] {

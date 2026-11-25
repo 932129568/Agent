@@ -11,6 +11,8 @@ const WEB_SEARCH_MODE_KEY = 'harbor.v5.web_search_mode'
 let impactSeq = 0
 
 export function fireShellImpact(edge = 'left', strength = 'medium', vec = null) {
+  const hasNx = vec && Number.isFinite(vec.nx)
+  const hasNy = vec && Number.isFinite(vec.ny)
   patchSlice('ui', (u) => ({
     ...u,
     impactSignal: {
@@ -19,6 +21,9 @@ export function fireShellImpact(edge = 'left', strength = 'medium', vec = null) 
       strength,
       dx: vec && Number.isFinite(vec.dx) ? vec.dx : 0,
       dy: vec && Number.isFinite(vec.dy) ? vec.dy : 0,
+      nx: hasNx ? Math.max(0.02, Math.min(0.98, vec.nx)) : null,
+      ny: hasNy ? Math.max(0.02, Math.min(0.98, vec.ny)) : null,
+      pointer: Boolean(vec && vec.pointer),
     },
   }))
 }

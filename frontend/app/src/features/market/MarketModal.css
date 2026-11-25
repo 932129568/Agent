@@ -5,55 +5,71 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 16px 20px;
+    padding: 18px 22px 24px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
   .mk-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+  .mk-seg-bar {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 5px;
+    border-radius: var(--radius-md);
+    background: var(--glass-well);
+    border: 1px solid var(--border);
+    box-shadow: var(--rim-top);
+  }
   .mk-cats { display: flex; gap: 6px; flex-wrap: wrap; }
   .mk-search {
     flex: 1;
-    min-width: 180px;
-    padding: 8px 13px;
+    min-width: 200px;
+    padding: 9px 15px;
     border-radius: var(--radius-full);
-    border: 1px solid var(--border-strong);
-    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    background: var(--card-bg);
+    box-shadow: var(--elev-1);
     color: var(--text);
+    font-size: 13px;
     outline: none;
+    transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   }
-  .mk-search:focus { border-color: var(--primary); }
+  .mk-search:focus { border-color: var(--primary); box-shadow: var(--focus-ring); }
 
   .mk-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 14px;
     min-width: 0;
   }
   .mk-card {
+    position: relative;
     min-width: 0;
-    padding: 14px 16px;
+    padding: 16px 18px;
     content-visibility: auto;
-    contain-intrinsic-size: auto 230px;
+    contain-intrinsic-size: auto 235px;
     contain: layout style;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    background: var(--card-bg);
+    background-image: var(--glass-specular);
+    box-shadow: var(--elev-1);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
+    overflow: hidden;
     transition:
       border-color var(--dur-fast) var(--ease-out),
       transform var(--dur-fast) var(--ease-spring),
-      background-color var(--dur-fast) var(--ease-out);
+      box-shadow var(--dur-fast) var(--ease-out);
   }
   .mk-card:hover {
     border-color: var(--primary);
-    background: var(--card-bg);
     transform: translate3d(0, -2px, 0);
     box-shadow: var(--elev-2);
   }
-  .mk-card[data-disabled="true"] { opacity: 0.56; }
+  .mk-card[data-disabled="true"] { opacity: 0.54; }
 
   .mk-card-head {
     display: flex;
@@ -61,13 +77,13 @@
     align-items: flex-start;
     gap: 8px;
   }
-  .mk-card-title { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.35; }
+  .mk-card-title { font-size: 14.5px; font-weight: 700; color: var(--text); line-height: 1.35; letter-spacing: -0.01em; }
   .mk-card-sub { font-size: 11px; font-family: var(--font-mono); color: var(--text-3); margin-top: 2px; }
   .mk-badge {
     flex-shrink: 0;
     font-size: 10.5px;
     font-weight: 600;
-    padding: 2px 8px;
+    padding: 2.5px 9px;
     border-radius: var(--radius-full);
     background: var(--primary-soft);
     color: var(--primary);
@@ -79,9 +95,9 @@
   .mk-skill-tag {
     font-size: 11px;
     font-family: var(--font-mono);
-    padding: 2px 7px;
+    padding: 2.5px 8px;
     border-radius: var(--radius-sm);
-    background: var(--card-bg);
+    background: var(--glass-well);
     border: 1px solid var(--border);
     color: var(--text-2);
   }
@@ -96,33 +112,39 @@
   .mk-prompts { display: flex; flex-direction: column; gap: 4px; }
   .mk-prompt-btn {
     text-align: left;
-    padding: 5px 9px;
+    padding: 6px 10px;
     border-radius: var(--radius-sm);
     border: 1px dashed var(--border-strong);
-    background: transparent;
+    background: var(--surface-subtle);
     color: var(--text-2);
     font-size: 11.5px;
     cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
   }
-  .mk-prompt-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .mk-prompt-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
 
-  .mk-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+  .mk-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--border); }
   .mk-btn {
-    padding: 5px 12px;
+    padding: 6px 13px;
     border-radius: var(--radius-full);
     border: 1px solid var(--border-strong);
     background: var(--card-bg);
+    box-shadow: var(--rim-top);
     color: var(--text-2);
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
-    transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-spring);
   }
-  .mk-btn:hover { border-color: var(--primary); color: var(--text); }
+  .mk-btn:hover { border-color: var(--primary); color: var(--text); transform: translate3d(0, -1px, 0); }
   .mk-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
   .mk-btn-primary:hover { background: var(--primary-hover); color: var(--on-primary); }
   .mk-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }

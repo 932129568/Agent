@@ -1,88 +1,184 @@
 @layer overlays {
   .st-shell { display: flex; flex: 1; min-height: 0; overflow: hidden; }
   .st-nav {
-    width: 210px;
+    width: 224px;
     flex-shrink: 0;
-    padding: 14px 12px;
+    padding: 16px 12px;
     border-right: 1px solid var(--border);
     background: var(--surface-subtle);
+    backdrop-filter: blur(22px) saturate(1.3);
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
   .st-search {
     width: 100%;
-    padding: 7px 10px;
-    margin-bottom: 6px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--glass-border);
     background: var(--card-bg);
-    font-size: 12px;
+    box-shadow: var(--elev-1);
+    color: var(--text);
+    font-size: 12.5px;
     outline: none;
   }
+  .st-search:focus { border-color: var(--primary); box-shadow: var(--focus-ring); }
+
   .st-nav-btn {
     position: relative;
     text-align: left;
-    padding: 9px 12px;
+    padding: 10px 13px;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-2);
     font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
-    transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-spring);
   }
+  .st-nav-btn:hover { background: var(--surface-hover); color: var(--text); }
   .st-nav-btn[data-active="true"]::before {
     content: "";
     position: absolute;
-    left: 2px;
-    top: 7px;
-    bottom: 7px;
+    left: 3px;
+    top: 8px;
+    bottom: 8px;
     width: 3px;
     border-radius: var(--radius-full);
     background: var(--primary);
   }
   .st-nav-btn[data-active="true"] {
-    background: var(--primary-soft);
+    background: var(--card-bg);
+    background-image: var(--glass-specular);
     border-color: var(--primary);
+    box-shadow: var(--elev-1);
     color: var(--primary);
-    font-weight: 600;
+    font-weight: 700;
   }
-  .st-body { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; }
-  .st-card {
-    padding: 14px 16px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: var(--surface-subtle);
+
+  .st-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px 28px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 16px;
   }
-  .st-card h3 { margin: 0; font-size: 14px; }
-  .st-field { display: flex; flex-direction: column; gap: 5px; }
-  .st-field label { font-size: 12px; color: var(--text-2); }
+  .st-card {
+    position: relative;
+    padding: 18px 20px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--card-bg);
+    background-image: var(--glass-specular);
+    box-shadow: var(--elev-1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .st-card h3 {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .st-field { display: flex; flex-direction: column; gap: 6px; }
+  .st-field label { font-size: 12px; font-weight: 600; color: var(--text-2); }
   .st-input {
     width: 100%;
-    padding: 8px 11px;
+    padding: 9px 12px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-strong);
-    background: var(--card-bg);
+    background: var(--surface-subtle);
+    color: var(--text);
     font-size: 13px;
     outline: none;
+    transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   }
-  .st-input:focus { border-color: var(--primary); }
+  .st-input:focus { border-color: var(--primary); background: var(--card-bg); box-shadow: var(--focus-ring); }
+
   .st-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .st-btn {
-    padding: 6px 14px;
+    padding: 6.5px 14px;
     border-radius: var(--radius-full);
     border: 1px solid var(--border-strong);
     background: var(--card-bg);
+    box-shadow: var(--rim-top);
     color: var(--text-2);
     font-size: 12.5px;
+    font-weight: 500;
     cursor: pointer;
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-spring);
   }
-  .st-btn[data-active="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
-  .st-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
-  .st-err { padding: 8px 12px; border-radius: var(--radius-sm); background: var(--err-bg); color: var(--err); font-size: 12.5px; }
-  .st-mem-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .st-btn:hover { border-color: var(--primary); color: var(--text); transform: translate3d(0, -1px, 0); }
+  .st-btn[data-active="true"] {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 700;
+    box-shadow: var(--elev-1);
+  }
+  .st-btn-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--on-primary);
+    font-weight: 600;
+  }
+  .st-btn-primary:hover { background: var(--primary-hover); color: var(--on-primary); }
+  .st-err { padding: 9px 13px; border-radius: var(--radius-sm); background: var(--err-bg); border: 1px solid rgba(192, 53, 39, 0.28); color: var(--err); font-size: 12.5px; }
+
+  /* 液态玻璃条目卡片（用于 Model Vault / MCP / Memory 列表） */
+  .st-mem-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    box-shadow: var(--rim-top);
+    font-size: 12.5px;
+    transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  }
+  .st-mem-row:hover { border-color: var(--primary); background: var(--surface-hover); }
+
+  /* R25 液态玻璃物理触控测试板（点哪里就从哪里激发真实方向力矩与流体折射波！） */
+  .st-hit-pad {
+    position: relative;
+    height: 116px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background:
+      radial-gradient(circle at 22% 24%, rgba(255, 255, 255, 0.65), transparent 55%),
+      radial-gradient(circle at 80% 78%, rgba(15, 132, 212, 0.16), transparent 52%),
+      var(--glass-well);
+    box-shadow: var(--elev-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: crosshair;
+    user-select: none;
+    overflow: hidden;
+    transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .st-hit-pad:hover { border-color: var(--primary); box-shadow: var(--elev-2); }
+  .st-hit-pad strong { font-size: 13px; color: var(--text); pointer-events: none; }
+  .st-hit-pad span { font-size: 11.5px; color: var(--text-3); pointer-events: none; }
 }

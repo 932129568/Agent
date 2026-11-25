@@ -1,334 +1,316 @@
 import { useEffect, useRef } from 'react'
 import { motionScaleForTier } from '../platform/kinetic.js'
+import { createOffscreenCanvas } from '../platform/dom.js'
 import './LiquidImpactCanvas.css'
 
-function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3) }
-function easeOutQuart(t) { return 1 - Math.pow(1 - t, 4) }
+const GRID_W = 96
+const GRID_H = 60
 
-function originForEdge(edge, w, h, impactPct) {
-  const frac = Math.max(0.14, Math.min(0.86, (Number(impactPct) || 50) / 100))
-  if (edge === 'right') return { ox: w, oy: h * frac, nx: -1, ny: 0 }
-  if (edge === 'top') return { ox: w * frac, oy: 0, nx: 0, ny: 1 }
-  if (edge === 'bottom') return { ox: w * frac, oy: h, nx: 0, ny: -1 }
-  return { ox: 0, oy: h * frac, nx: 1, ny: 0 }
-}
-
-function drawHarmonicArc(ctx, ox, oy, radius, startA, endA, phase, wobbleAmp, seed) {
-  const steps = 44
-  ctx.beginPath()
-  for (let i = 0; i <= steps; i++) {
-    const u = i / steps
-    const a = startA + (endA - startA) * u
-    const env = Math.sin(u * Math.PI)
-    const wobble = wobbleAmp * env * (
-      Math.sin(a * 4 + phase * 6 + seed) * 0.6
-      + Math.cos(a * 7 - phase * 9 + seed * 1.7) * 0.4
-    )
-    const r = Math.max(4, radius + wobble)
-    const px = ox + Math.cos(a) * r
-    const py = oy + Math.sin(a) * r
-    if (i === 0) ctx.moveTo(px, py)
-    else ctx.lineTo(px, py)
-  }
-  ctx.stroke()
-}
-
-function drawFourPointStar(ctx, x, y, r, rot, alpha, color) {
-  ctx.save()
-  ctx.translate(x, y)
-  ctx.rotate(rot)
-  ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
-  ctx.fillStyle = color
-  ctx.beginPath()
-  const inner = r * 0.24
-  for (let i = 0; i < 8; i++) {
-    const rad = i % 2 === 0 ? r : inner
-    const ang = (i * Math.PI) / 4
-    const px = Math.cos(ang) * rad
-    const py = Math.sin(ang) * rad
-    if (i === 0) ctx.moveTo(px, py)
-    else ctx.lineTo(px, py)
-  }
-  ctx.closePath()
-  ctx.fill()
-  ctx.restore()
+const MATERIAL_PHYSICS = {
+  mercury: {
+    c2: 0.23,       // 波速平方（CFL 稳定 < 0.45）
+    damping: 0.962, // 真实厚液态玻璃黏弹性阻尼
+    radius: 4.4,
+    amp: 1.0,
+    specPow: 12,
+    specGain: 235,
+    shadowGain: 92,
+    caustic: 0.42,
+    tintWarm: [242, 134, 96],
+    tintCool: [94, 198, 250],
+  },
+  prism: {
+    c2: 0.25,
+    damping: 0.966,
+    radius: 4.0,
+    amp: 1.05,
+    specPow: 14,
+    specGain: 245,
+    shadowGain: 88,
+    caustic: 0.92,
+    tintWarm: [255, 118, 92],
+    tintCool: [72, 208, 255],
+  },
+  ripple: {
+    c2: 0.27,
+    damping: 0.976, // 低阻尼纯净水波：可真实撞到四边玻璃边界并弹回干涉
+    radius: 3.4,
+    amp: 0.96,
+    specPow: 14,
+    specGain: 240,
+    shadowGain: 84,
+    caustic: 0.24,
+    tintWarm: [224, 244, 255],
+    tintCool: [64, 180, 244],
+  },
+  crystal: {
+    c2: 0.29,
+    damping: 0.954,
+    radius: 3.1,
+    amp: 1.12,
+    specPow: 18,
+    specGain: 255,
+    shadowGain: 98,
+    caustic: 0.65,
+    tintWarm: [230, 246, 255],
+    tintCool: [125, 211, 252],
+  },
+  aurora: {
+    c2: 0.19,       // 高黏度极光液态凝胶：缓慢厚重、柔润折射
+    damping: 0.968,
+    radius: 5.4,
+    amp: 0.94,
+    specPow: 10,
+    specGain: 215,
+    shadowGain: 80,
+    caustic: 0.85,
+    tintWarm: [228, 112, 86],
+    tintCool: [132, 166, 255],
+  },
 }
 
 /**
- * R24 实时液态玻璃撞击 Canvas 2D 光学物理引擎：
- * - 闲置 0% CPU（仅撞击瞬间唤醒 640ms，结束立刻清屏并终止 rAF）；
- * - 支持 5 大迥异液态玻璃光学风格（mercury / prism / ripple / crystal / aurora）；
- * - 严格服从无障碍降级（motionTier='reduced' 时完全不渲染）。
+ * R25 真·二维流体波动方程 (2D Shallow-Water PDE) 液态玻璃光学引擎：
+ * - 不再画「死板光波圈」：在 96×60 Float32 高度场网格上实时求解二维波动方程；
+ * - 连续点击不同位置会同时叠加多组液态玻璃波，并在 4 条玻璃边界真实反射干涉；
+ * - 每像素计算 3D 液面法线 N = (-∂h/∂x, -∂h/∂y, 1)，基于左上天光高光 + 背光折射暗影 + 陡坡色散焦散，呈现真实厚玻璃与液态折射体积感；
+ * - 能量衰减到阈值立刻停止 rAF 并清屏，闲置 0% CPU。
  */
 export default function LiquidImpactCanvas({
   seq = 0,
-  edge = 'left',
-  impactPct = 50,
+  nx = 0.04,
+  ny = 0.5,
   styleId = 'mercury',
   strength = 'strong',
   motionTier = 'dynamic',
   theme = 'light',
 }) {
   const canvasRef = useRef(null)
+  const simRef = useRef(null)
 
+  // 初始化持久化的 2D 流体高度场求解器（支持多点击波纹真实叠加与边界反射！）
+  useEffect(() => {
+    const size = GRID_W * GRID_H
+    const offscreen = createOffscreenCanvas(GRID_W, GRID_H)
+    const offCtx = offscreen ? offscreen.getContext('2d') : null
+    simRef.current = {
+      prev: new Float32Array(size),
+      curr: new Float32Array(size),
+      next: new Float32Array(size),
+      offscreen,
+      offCtx,
+      imgData: offCtx ? offCtx.createImageData(GRID_W, GRID_H) : null,
+      raf: 0,
+      styleId: 'mercury',
+      theme: 'light',
+      k: 1,
+      splashes: [], // 液态玻璃局部表面张力水珠微高光
+    }
+    return () => {
+      if (simRef.current && simRef.current.raf) cancelAnimationFrame(simRef.current.raf)
+      simRef.current = null
+    }
+  }, [])
+
+  // 每次收到新的点击/撞击信号，在精确 (nx, ny) 注入真实的二维流体下压与折射冲击波
   useEffect(() => {
     const k = motionScaleForTier(motionTier)
     const canvas = canvasRef.current
-    if (!seq || !canvas || k === 0 || typeof requestAnimationFrame !== 'function') return undefined
+    const sim = simRef.current
+    if (!seq || !canvas || !sim || !sim.offCtx || !sim.imgData || k === 0 || typeof requestAnimationFrame !== 'function') {
+      return
+    }
+
+    sim.styleId = MATERIAL_PHYSICS[styleId] ? styleId : 'mercury'
+    sim.theme = theme
+    sim.k = k
+
+    const mat = MATERIAL_PHYSICS[sim.styleId]
+    const cx = Math.max(2, Math.min(GRID_W - 3, Math.round((Number.isFinite(nx) ? nx : 0.04) * (GRID_W - 1))))
+    const cy = Math.max(2, Math.min(GRID_H - 3, Math.round((Number.isFinite(ny) ? ny : 0.5) * (GRID_H - 1))))
+    const power = (strength === 'strong' ? 1.0 : (strength === 'light' ? 0.52 : 0.78)) * mat.amp * (0.65 + 0.35 * k)
+    const rad = Math.max(2.2, mat.radius * (strength === 'light' ? 0.78 : 1.0))
+    const rCeil = Math.ceil(rad * 1.9)
+
+    // 在精确点击点注入墨西哥帽型物理液面下凹 + 边缘凸起弯月面（瞬间激发真实液态重力波）
+    for (let dy = -rCeil; dy <= rCeil; dy++) {
+      const y = cy + dy
+      if (y <= 1 || y >= GRID_H - 2) continue
+      for (let dx = -rCeil; dx <= rCeil; dx++) {
+        const x = cx + dx
+        if (x <= 1 || x >= GRID_W - 2) continue
+        const d2 = (dx * dx + dy * dy) / (rad * rad)
+        if (d2 > 3.6) continue
+        const profile = (1 - d2 * 0.72) * Math.exp(-d2 * 1.18)
+        const idx = y * GRID_W + x
+        sim.curr[idx] = Math.max(-2.6, Math.min(2.6, sim.curr[idx] - profile * 1.95 * power))
+        sim.prev[idx] = Math.max(-2.6, Math.min(2.6, sim.prev[idx] - profile * 0.65 * power))
+      }
+    }
+
+    // 记录本次点击点微玻璃焦散闪烁，强化点击瞬间触感反馈
+    sim.splashes.push({
+      nx: Math.max(0.02, Math.min(0.98, Number.isFinite(nx) ? nx : 0.04)),
+      ny: Math.max(0.02, Math.min(0.98, Number.isFinite(ny) ? ny : 0.5)),
+      t0: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+      power,
+      styleId: sim.styleId,
+    })
+    if (sim.splashes.length > 6) sim.splashes.shift()
+
+    if (sim.raf) return // 求解器已在 60fps 运行，新波自动叠加干涉！
 
     const ctx = canvas.getContext('2d')
-    if (!ctx) return undefined
+    if (!ctx) return
 
-    const dpr = Math.min(2, globalThis.devicePixelRatio || 1)
-    const w = Math.max(1, canvas.clientWidth)
-    const h = Math.max(1, canvas.clientHeight)
-    canvas.width = Math.round(w * dpr)
-    canvas.height = Math.round(h * dpr)
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const stepAndDraw = (now) => {
+      if (!simRef.current) return
+      sim.raf = 0
+      const curMat = MATERIAL_PHYSICS[sim.styleId] || MATERIAL_PHYSICS.mercury
+      const { prev, curr, next, offscreen, offCtx, imgData } = sim
+      const c2 = curMat.c2
+      const damp = curMat.damping
 
-    const { ox, oy, nx, ny } = originForEdge(edge, w, h, impactPct)
-    const baseAngle = Math.atan2(ny, nx)
-    const spread = Math.PI * 0.54
-    const maxR = Math.min(w, h) * (strength === 'strong' ? 0.56 : 0.42) * (0.75 + 0.25 * k)
-    const isDark = theme === 'dark'
-    const seed = (seq * 1.6180339) % 10
-
-    // 预生成确定性轻量化微粒子（水珠 / 棱镜微光 / 冰晶切面 / 气泡）
-    const pCount = strength === 'strong' ? 14 : 9
-    const particles = Array.from({ length: pCount }, (_, i) => {
-      const frac = pCount > 1 ? (i / (pCount - 1)) - 0.5 : 0
-      const jitter = Math.sin(seed * 13 + i * 7.3) * 0.16
-      const ang = baseAngle + (frac * 1.55 + jitter) * (Math.PI * 0.48)
-      const spd = (0.38 + Math.abs(Math.cos(seed + i * 2.1)) * 0.72) * maxR
-      const size = 2.6 + (i % 4) * 1.7
-      const delay = (i % 3) * 0.045
-      const hueShift = i % 3
-      return { ang, spd, size, delay, hueShift, spin: (i % 2 ? 1 : -1) * (1.2 + (i % 3) * 0.9) }
-    })
-
-    const durMs = styleId === 'ripple' ? 680 : (styleId === 'aurora' ? 660 : 580)
-    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
-    let raf = 0
-    let stopped = false
-
-    const render = (now) => {
-      if (stopped) return
-      const rawT = Math.min(1, Math.max(0, (now - t0) / durMs))
-      ctx.clearRect(0, 0, w, h)
-
-      if (rawT >= 1) return
-
-      const p = easeOutCubic(rawT)
-      const p4 = easeOutQuart(rawT)
-      const fade = Math.pow(1 - rawT, 1.35) * (0.65 + 0.35 * k)
-
-      if (styleId === 'mercury') {
-        // 1) 受冲边缘液态玻璃弯月面压缩光垫
-        const cushionR = maxR * (0.34 + 0.28 * p)
-        const grad = ctx.createRadialGradient(ox, oy, 2, ox, oy, cushionR)
-        grad.addColorStop(0, isDark ? `rgba(255,255,255,${(0.46 * fade).toFixed(3)})` : `rgba(255,255,255,${(0.72 * fade).toFixed(3)})`)
-        grad.addColorStop(0.32, `rgba(235,133,98,${(0.30 * fade).toFixed(3)})`)
-        grad.addColorStop(0.65, `rgba(56,189,248,${(0.22 * fade).toFixed(3)})`)
-        grad.addColorStop(1, 'rgba(56,189,248,0)')
-        ctx.fillStyle = grad
-        ctx.beginPath()
-        ctx.arc(ox, oy, cushionR, baseAngle - Math.PI * 0.55, baseAngle + Math.PI * 0.55)
-        ctx.closePath()
-        ctx.fill()
-
-        // 2) RGB 色散三折射谐波液面波（不同折射率产生真实液态玻璃彩边）
-        const rings = [
-          { r: maxR * (0.14 + 0.86 * p4), col: `rgba(255,126,95,${(0.46 * fade).toFixed(3)})`, lw: 2.8, wob: 10 },
-          { r: maxR * (0.12 + 0.80 * p), col: `rgba(255,255,255,${(0.78 * fade).toFixed(3)})`, lw: 3.4, wob: 8 },
-          { r: maxR * (0.10 + 0.74 * p), col: `rgba(56,189,248,${(0.52 * fade).toFixed(3)})`, lw: 2.4, wob: 11 },
-          { r: maxR * (0.06 + 0.58 * p), col: `rgba(167,139,250,${(0.36 * fade).toFixed(3)})`, lw: 1.8, wob: 7 },
-        ]
-        for (const rg of rings) {
-          ctx.strokeStyle = rg.col
-          ctx.lineWidth = Math.max(0.8, rg.lw * (1 - rawT * 0.55))
-          drawHarmonicArc(ctx, ox, oy, rg.r, baseAngle - spread, baseAngle + spread, rawT, rg.wob * (1 - rawT * 0.5), seed)
+      // 1) 求解 2D 离散波动方程（带四边玻璃墙真实反射边界条件！）
+      let energy = 0
+      for (let y = 1; y < GRID_H - 1; y++) {
+        const row = y * GRID_W
+        for (let x = 1; x < GRID_W - 1; x++) {
+          const i = row + x
+          const lap = curr[i - 1] + curr[i + 1] + curr[i - GRID_W] + curr[i + GRID_W] - 4 * curr[i]
+          const val = (2 * curr[i] - prev[i] + c2 * lap) * damp
+          next[i] = val
+          energy += Math.abs(val)
         }
+      }
+      // Neumann 自由液面玻璃墙反射边界：波撞到窗口四边真实反弹！
+      for (let x = 1; x < GRID_W - 1; x++) {
+        next[x] = next[GRID_W + x] * 0.72
+        next[(GRID_H - 1) * GRID_W + x] = next[(GRID_H - 2) * GRID_W + x] * 0.72
+      }
+      for (let y = 1; y < GRID_H - 1; y++) {
+        const r = y * GRID_W
+        next[r] = next[r + 1] * 0.72
+        next[r + GRID_W - 1] = next[r + GRID_W - 2] * 0.72
+      }
 
-        // 3) 飞溅液态玻璃微水珠（带表面张力白亮高光，末段平滑被玻璃回吸）
-        for (const pt of particles) {
-          const lt = Math.max(0, Math.min(1, (rawT - pt.delay) / (1 - pt.delay)))
-          if (lt <= 0 || lt >= 1) continue
-          const dist = pt.spd * easeOutQuart(lt) * (1 - lt * 0.14)
-          const px = ox + Math.cos(pt.ang) * dist
-          const py = oy + Math.sin(pt.ang) * dist + (lt * lt * 12)
-          const rad = pt.size * Math.sin(lt * Math.PI) * (0.7 + 0.3 * k)
-          if (rad < 0.6) continue
-          const a = Math.sin(lt * Math.PI) * 0.85
-          const dg = ctx.createRadialGradient(px - rad * 0.3, py - rad * 0.3, rad * 0.1, px, py, rad)
-          dg.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`)
-          dg.addColorStop(0.55, pt.hueShift === 0 ? `rgba(120,210,255,${(a * 0.72).toFixed(3)})` : `rgba(244,148,112,${(a * 0.68).toFixed(3)})`)
-          dg.addColorStop(1, 'rgba(255,255,255,0)')
-          ctx.fillStyle = dg
-          ctx.beginPath()
-          ctx.arc(px, py, rad, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      } else if (styleId === 'prism') {
-        // 棱镜极光折光：扇形晶体焦散光线 + 7 色彩虹折射弧 + Bokeh 光尘
-        const spectral = [
-          'rgba(244, 108, 86, ',
-          'rgba(251, 186, 84, ',
-          'rgba(116, 224, 166, ',
-          'rgba(56, 189, 248, ',
-          'rgba(147, 130, 255, ',
-        ]
-        // 扇形焦散光束
-        const rayCount = 9
-        for (let i = 0; i < rayCount; i++) {
-          const u = (i / (rayCount - 1)) - 0.5
-          const ang = baseAngle + u * Math.PI * 0.88 + Math.sin(rawT * 3 + i) * 0.04
-          const len = maxR * (0.55 + 0.55 * p4) * (1 - Math.abs(u) * 0.35)
-          const ex = ox + Math.cos(ang) * len
-          const ey = oy + Math.sin(ang) * len
-          const colBase = spectral[i % spectral.length]
-          const lg = ctx.createLinearGradient(ox, oy, ex, ey)
-          lg.addColorStop(0, `${colBase}${(0.44 * fade).toFixed(3)})`)
-          lg.addColorStop(0.45, `rgba(255,255,255,${(0.32 * fade).toFixed(3)})`)
-          lg.addColorStop(1, `${colBase}0)`)
-          ctx.strokeStyle = lg
-          ctx.lineWidth = (6.5 - Math.abs(u) * 3.5) * (1 - rawT * 0.4)
-          ctx.beginPath()
-          ctx.moveTo(ox, oy)
-          ctx.lineTo(ex, ey)
-          ctx.stroke()
-        }
-        // 光谱色散折射弧
-        spectral.forEach((colBase, idx) => {
-          const r = maxR * (0.16 + 0.78 * p) - idx * 6.5
-          if (r < 6) return
-          ctx.strokeStyle = `${colBase}${(0.42 * fade).toFixed(3)})`
-          ctx.lineWidth = 3.2 * (1 - rawT * 0.45)
-          ctx.beginPath()
-          ctx.arc(ox, oy, r, baseAngle - spread, baseAngle + spread)
-          ctx.stroke()
-        })
-        // 浮游光尘 Bokeh
-        for (const pt of particles) {
-          const lt = Math.max(0, Math.min(1, (rawT - pt.delay) / (1 - pt.delay)))
-          if (lt <= 0 || lt >= 1) continue
-          const dist = pt.spd * 0.92 * easeOutCubic(lt)
-          const px = ox + Math.cos(pt.ang) * dist
-          const py = oy + Math.sin(pt.ang) * dist
-          const rad = pt.size * 1.35 * Math.sin(lt * Math.PI)
-          ctx.fillStyle = `${spectral[pt.hueShift % spectral.length]}${(0.45 * Math.sin(lt * Math.PI)).toFixed(3)})`
-          ctx.beginPath()
-          ctx.arc(px, py, Math.max(1, rad), 0, Math.PI * 2)
-          ctx.fill()
-        }
-      } else if (styleId === 'ripple') {
-        // 禅意水滴涟漪：3 相位真实水面重力波 + 毛细余波 + 微气泡
-        const waves = [
-          { delay: 0.0, scale: 1.0, lw: 3.4, alpha: 0.82 },
-          { delay: 0.14, scale: 0.82, lw: 2.4, alpha: 0.62 },
-          { delay: 0.28, scale: 0.62, lw: 1.7, alpha: 0.44 },
-        ]
-        for (const wv of waves) {
-          const lt = Math.max(0, Math.min(1, (rawT - wv.delay) / (1 - wv.delay)))
-          if (lt <= 0) continue
-          const r = maxR * wv.scale * easeOutCubic(lt)
-          const wa = Math.pow(1 - lt, 1.3) * wv.alpha * (0.65 + 0.35 * k)
-          // 亮波峰
-          ctx.strokeStyle = `rgba(255,255,255,${wa.toFixed(3)})`
-          ctx.lineWidth = Math.max(0.8, wv.lw * (1 - lt * 0.5))
-          drawHarmonicArc(ctx, ox, oy, r, baseAngle - spread * 1.08, baseAngle + spread * 1.08, lt, 3.2, seed)
-          // 暗波谷折射投影
-          ctx.strokeStyle = isDark ? `rgba(56,189,248,${(wa * 0.55).toFixed(3)})` : `rgba(18,130,200,${(wa * 0.42).toFixed(3)})`
-          ctx.lineWidth = Math.max(0.7, wv.lw * 0.75)
-          drawHarmonicArc(ctx, ox, oy, Math.max(4, r - 4.5), baseAngle - spread * 1.05, baseAngle + spread * 1.05, lt, 2.8, seed)
-        }
-        // 微气泡柔和上浮
-        for (const pt of particles.slice(0, 8)) {
-          const lt = Math.max(0, Math.min(1, (rawT - pt.delay) / (1 - pt.delay)))
-          if (lt <= 0 || lt >= 1) continue
-          const dist = pt.spd * 0.45 * easeOutCubic(lt)
-          const px = ox + Math.cos(pt.ang) * dist
-          const py = oy + Math.sin(pt.ang) * dist - lt * 26
-          const rad = pt.size * 0.9 * Math.sin(lt * Math.PI)
-          if (rad < 0.8) continue
-          ctx.strokeStyle = `rgba(255,255,255,${(0.72 * Math.sin(lt * Math.PI)).toFixed(3)})`
-          ctx.lineWidth = 1.2
-          ctx.beginPath()
-          ctx.arc(px, py, rad, 0, Math.PI * 2)
-          ctx.stroke()
-        }
-      } else if (styleId === 'crystal') {
-        // 冰晶星芒切面：多边形折光菱面 + 旋转四角钻石星芒
-        const facetR = maxR * (0.16 + 0.72 * p4)
-        ctx.strokeStyle = `rgba(210,242,255,${(0.74 * fade).toFixed(3)})`
-        ctx.lineWidth = 2.4 * (1 - rawT * 0.5)
-        ctx.beginPath()
-        const sides = 7
-        for (let i = 0; i <= sides; i++) {
-          const u = i / sides
-          const ang = baseAngle - spread + spread * 2 * u
-          const px = ox + Math.cos(ang) * facetR
-          const py = oy + Math.sin(ang) * facetR
-          if (i === 0) ctx.moveTo(px, py)
-          else ctx.lineTo(px, py)
-        }
-        ctx.stroke()
+      // 交换三缓冲（零 GC 分配）
+      sim.prev = curr
+      sim.curr = next
+      sim.next = prev
 
-        // 透明折射菱面 + 星芒迸射
-        for (const pt of particles) {
-          const lt = Math.max(0, Math.min(1, (rawT - pt.delay * 0.6) / (1 - pt.delay * 0.6)))
-          if (lt <= 0 || lt >= 1) continue
-          const dist = pt.spd * 0.88 * easeOutQuart(lt)
-          const px = ox + Math.cos(pt.ang) * dist
-          const py = oy + Math.sin(pt.ang) * dist
-          const alpha = Math.sin(lt * Math.PI) * 0.92
-          const starCol = pt.hueShift === 0 ? '#FFFFFF' : (pt.hueShift === 1 ? '#7DD3FC' : '#FCD34D')
-          drawFourPointStar(ctx, px, py, pt.size * 1.9 * Math.sin(lt * Math.PI), pt.spin * lt * 2.4, alpha, starCol)
-        }
-      } else {
-        // aurora：极光磁流体（三色柔和磁流体丝带波浪舒展）
-        const ribbons = [
-          { col: `rgba(212,101,62,${(0.46 * fade).toFixed(3)})`, off: 0, amp: 18, lw: 10 },
-          { col: `rgba(56,189,248,${(0.42 * fade).toFixed(3)})`, off: 14, amp: 24, lw: 8 },
-          { col: `rgba(167,139,250,${(0.36 * fade).toFixed(3)})`, off: 26, amp: 15, lw: 6 },
-        ]
-        const horiz = edge === 'left' || edge === 'right'
-        for (const rb of ribbons) {
-          ctx.strokeStyle = rb.col
-          ctx.lineWidth = Math.max(1.5, rb.lw * (1 - rawT * 0.55))
-          ctx.lineCap = 'round'
-          ctx.beginPath()
-          const segs = 30
-          for (let i = 0; i <= segs; i++) {
-            const u = i / segs
-            const bell = Math.sin(u * Math.PI)
-            const wave = Math.sin(u * Math.PI * 3 - rawT * 7 + seed) * rb.amp * bell * (1 - rawT * 0.35)
-            const push = (maxR * 0.34 * p + rb.off) * bell
-            if (horiz) {
-              const py = h * (0.08 + 0.84 * u)
-              const px = ox + nx * (push + wave)
-              if (i === 0) ctx.moveTo(px, py)
-              else ctx.lineTo(px, py)
-            } else {
-              const px = w * (0.08 + 0.84 * u)
-              const py = oy + ny * (push + wave)
-              if (i === 0) ctx.moveTo(px, py)
-              else ctx.lineTo(px, py)
-            }
+      // 清理过期点击微焦散
+      sim.splashes = sim.splashes.filter((sp) => (now - sp.t0) < 420)
+
+      const dpr = Math.min(2, globalThis.devicePixelRatio || 1)
+      const cw = Math.max(1, canvas.clientWidth)
+      const ch = Math.max(1, canvas.clientHeight)
+      const tw = Math.round(cw * dpr)
+      const th = Math.round(ch * dpr)
+      if (canvas.width !== tw || canvas.height !== th) {
+        canvas.width = tw
+        canvas.height = th
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, cw, ch)
+
+      // 能量耗尽：清空缓冲并彻底停止 rAF（闲置 0% CPU）
+      if (energy < 0.85 && sim.splashes.length === 0) {
+        sim.prev.fill(0)
+        sim.curr.fill(0)
+        sim.next.fill(0)
+        return
+      }
+
+      // 2) 基于真实 3D 液面法线的液态玻璃光学着色（高光 + 厚度背光暗影 + 菲涅尔微色散）
+      const px = imgData.data
+      const hBuf = sim.curr
+      const isDark = sim.theme === 'dark'
+      const [wr, wg, wb] = curMat.tintWarm
+      const [cr, cg, cb] = curMat.tintCool
+      const specGain = curMat.specGain * (isDark ? 0.92 : 1.0)
+      const shadowGain = curMat.shadowGain * (isDark ? 0.85 : 1.0)
+      const caustic = curMat.caustic
+
+      for (let y = 1; y < GRID_H - 1; y++) {
+        const row = y * GRID_W
+        for (let x = 1; x < GRID_W - 1; x++) {
+          const i = row + x
+          const gx = (hBuf[i + 1] - hBuf[i - 1]) * 2.2
+          const gy = (hBuf[i + GRID_W] - hBuf[i - GRID_W]) * 2.2
+          const slope2 = gx * gx + gy * gy
+          const p4 = i * 4
+          if (slope2 < 0.00025) {
+            px[p4 + 3] = 0
+            continue
           }
-          ctx.stroke()
+          const slope = Math.sqrt(slope2)
+          // 左上天光方向 L = (-0.64, -0.72) 与液面法线 (-gx, -gy) 点积
+          const lightDot = (-gx * -0.64) + (-gy * -0.72) // 正值：迎光面亮高光；负值：背光面玻璃折射厚影
+          const rim = Math.min(1, slope * 1.45)
+
+          let r = 255
+          let g = 255
+          let b = 255
+          let a = 0
+
+          if (lightDot > 0) {
+            // 迎光液态玻璃弯月面：清透白亮镜面高光 + 极微妙暖色棱镜色散
+            const spec = Math.min(1, Math.pow(Math.min(1, lightDot * 1.45), 1.55))
+            const sharp = Math.min(1, Math.pow(Math.min(1, lightDot * 1.3), 4.2))
+            const cMix = caustic * rim * (1 - sharp) * 0.52
+            r = 255 * (1 - cMix) + wr * cMix
+            g = 255 * (1 - cMix) + wg * cMix
+            b = 255 * (1 - cMix) + wb * cMix
+            a = Math.min(225, (spec * specGain * 0.62 + sharp * specGain * 0.55) * (0.7 + 0.3 * sim.k))
+          } else {
+            // 背光液态玻璃厚度暗影 + 冷青折射焦散（正是这层明暗对偶赋予真实的「玻璃厚度」和「液态体积感」！）
+            const sh = Math.min(1, Math.pow(Math.min(1, -lightDot * 1.55), 1.4))
+            const cMix = caustic * 0.55
+            const baseR = isDark ? 12 : 24
+            const baseG = isDark ? 26 : 44
+            const baseB = isDark ? 46 : 72
+            r = baseR * (1 - cMix) + cr * cMix
+            g = baseG * (1 - cMix) + cg * cMix
+            b = baseB * (1 - cMix) + cb * cMix
+            a = Math.min(148, sh * shadowGain * (0.75 + 0.25 * sim.k))
+          }
+
+          px[p4] = r
+          px[p4 + 1] = g
+          px[p4 + 2] = b
+          px[p4 + 3] = a
         }
       }
 
-      raf = requestAnimationFrame(render)
+      offCtx.putImageData(imgData, 0, 0)
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(offscreen, 0, 0, cw, ch)
+
+      // 3) 精确点击点瞬时液态玻璃透镜折射高光（水滴入水那一刻的锐利玻璃微折射点）
+      for (const sp of sim.splashes) {
+        const lt = Math.min(1, Math.max(0, (now - sp.t0) / 380))
+        const fade = Math.pow(1 - lt, 1.8) * sp.power
+        const sx = sp.nx * cw
+        const sy = sp.ny * ch
+        const radPx = (14 + 62 * (1 - Math.pow(1 - lt, 3))) * sp.power
+        const g = ctx.createRadialGradient(sx - radPx * 0.16, sy - radPx * 0.16, 1, sx, sy, radPx)
+        g.addColorStop(0, `rgba(255,255,255,${(0.62 * fade).toFixed(3)})`)
+        g.addColorStop(0.45, `rgba(255,255,255,${(0.16 * fade).toFixed(3)})`)
+        g.addColorStop(0.76, `rgba(110,204,255,${(0.14 * fade).toFixed(3)})`)
+        g.addColorStop(1, 'rgba(255,255,255,0)')
+        ctx.fillStyle = g
+        ctx.beginPath()
+        ctx.arc(sx, sy, radPx, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      sim.raf = requestAnimationFrame(stepAndDraw)
     }
 
-    raf = requestAnimationFrame(render)
-    return () => {
-      stopped = true
-      if (raf) cancelAnimationFrame(raf)
-      ctx.clearRect(0, 0, w, h)
-    }
-  }, [seq, edge, impactPct, styleId, strength, motionTier, theme])
+    sim.raf = requestAnimationFrame(stepAndDraw)
+  }, [seq, nx, ny, styleId, strength, motionTier, theme])
 
   if (motionTier === 'reduced') return null
   return <canvas ref={canvasRef} className="lic-canvas" data-impact-style={styleId} aria-hidden="true" />

@@ -49,6 +49,7 @@ import GenerativeView from '../../ui/GenerativeView.jsx'
 import LivingChamber from '../../ui/LivingChamber.jsx'
 import InlineApproval from '../../ui/InlineApproval.jsx'
 import DropdownMenu from '../../ui/DropdownMenu.jsx'
+import ModelPicker from '../../ui/ModelPicker.jsx'
 import ComposerMenu, { buildComposerMenuItems } from './ComposerMenu.jsx'
 import './ChatPanel.css'
 
@@ -394,18 +395,13 @@ export default function ChatPanel() {
                   📁 项目会话 · <strong>{shortFolderLabel(session && session.workspaceDir) || '已绑定工作目录'}</strong>
                 </span>
                 <div className="chat-mode-actions">
-                  <select
-                    className="chat-mini-btn"
-                    aria-label="切换本会话模型"
+                  <ModelPicker
                     value={(session && session.modelProfileId) || ''}
-                    onChange={(e) => setSessionModelOverride(sid, e.target.value)}
-                    title="为当前会话单独切换已保存的模型"
-                  >
-                    <option value="">🧠 模型：默认 ({settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'})</option>
-                    {(settings.savedModels || []).filter((m) => !m.kind || m.kind === 'chat').map((m) => (
-                      <option key={m.id} value={m.id}>🧠 {m.label} ({m.model})</option>
-                    ))}
-                  </select>
+                    defaultModel={settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'}
+                    models={settings.savedModels || []}
+                    onChange={(id) => setSessionModelOverride(sid, id)}
+                    onOpenVault={(e) => openModal('settings', captureTriggerRect(e))}
+                  />
                   <button type="button" className="chat-mini-btn" onClick={() => openProjectSessionModal('bind', sid)}>
                     更换目录
                   </button>
@@ -418,18 +414,13 @@ export default function ChatPanel() {
               <>
                 <span className="chat-mode-label">💬 普通会话 · 未绑定专属工作文件夹</span>
                 <div className="chat-mode-actions">
-                  <select
-                    className="chat-mini-btn"
-                    aria-label="切换本会话模型"
+                  <ModelPicker
                     value={(session && session.modelProfileId) || ''}
-                    onChange={(e) => setSessionModelOverride(sid, e.target.value)}
-                    title="为当前会话单独切换已保存的模型"
-                  >
-                    <option value="">🧠 模型：默认 ({settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'})</option>
-                    {(settings.savedModels || []).filter((m) => !m.kind || m.kind === 'chat').map((m) => (
-                      <option key={m.id} value={m.id}>🧠 {m.label} ({m.model})</option>
-                    ))}
-                  </select>
+                    defaultModel={settings.backendConfig.provider_model || settings.backendConfig.model || 'glm-4.5-flash'}
+                    models={settings.savedModels || []}
+                    onChange={(id) => setSessionModelOverride(sid, id)}
+                    onOpenVault={(e) => openModal('settings', captureTriggerRect(e))}
+                  />
                   <button type="button" className="chat-mini-btn" onClick={() => openProjectSessionModal('bind', sid)}>
                     📁 绑定项目文件夹
                   </button>

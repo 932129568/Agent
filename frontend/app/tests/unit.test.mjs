@@ -1079,3 +1079,36 @@ test('R24 safeExpertText 兼容 {en, zh} 多语言对象防 React #31 崩溃 + 6
   assert.equal(resolveImpactStyle('crystal', 1).id, 'crystal')
   assert.notEqual(resolveImpactStyle('random', 0).id, resolveImpactStyle('random', 1).id)
 })
+
+
+test('R25 真实点击位置二维力矩物理（右上 vs 左下反向推力与反向 3D 倾角）+ 12 支成建制原生专家团队', async () => {
+  const { computeDirectionalImpulse } = await import('../src/platform/kinetic.js')
+  const { NATIVE_EXPERT_TEAMS, buildAvailableTeams } = await import('../src/services/expertTeam.js')
+
+  const topRight = computeDirectionalImpulse({ nx: 0.9, ny: 0.1, strength: 'strong' })
+  const botLeft = computeDirectionalImpulse({ nx: 0.1, ny: 0.9, strength: 'strong' })
+  const center = computeDirectionalImpulse({ nx: 0.5, ny: 0.5, strength: 'strong' })
+
+  // 点击右上向左下推 (vx < 0, vy > 0)，点击左下向右上推 (vx > 0, vy < 0)
+  assert.ok(topRight.vx < -50 && topRight.vy > 50, `topRight=${JSON.stringify(topRight)}`)
+  assert.ok(botLeft.vx > 50 && botLeft.vy < -50, `botLeft=${JSON.stringify(botLeft)}`)
+  // 3D 杠杆力矩方向严格相反（按下哪一角，哪一角向屏幕内下沉）
+  assert.ok(topRight.vry > 0 && botLeft.vry < 0)
+  assert.ok(topRight.vrx > 0 && botLeft.vrx < 0)
+  // 正中心零横向偏心，纯 Z 轴压缩
+  assert.equal(center.vx, 0)
+  assert.equal(center.vy, 0)
+  assert.ok(center.vsc < -0.5)
+
+  // 原生专家团：12 支固定编制团队，每支均自带 Lead + 多名固定角色
+  assert.ok(NATIVE_EXPERT_TEAMS.length >= 12)
+  assert.ok(NATIVE_EXPERT_TEAMS.every((t) => t.lead && t.lead.name && Array.isArray(t.members) && t.members.length >= 2))
+  assert.ok(NATIVE_EXPERT_TEAMS.some((t) => t.id === 'software-company' && t.members.length === 4))
+  assert.ok(NATIVE_EXPERT_TEAMS.some((t) => t.id === 'design-engine' && t.members.length === 5))
+
+  // 本地多 Agent 团队包自动识别为独立原生团
+  const merged = buildAvailableTeams([
+    { id: 'custom-ops-team', metadata: { displayName: { zh: '本地自定义运维团', en: 'Custom Ops' } }, agents: ['./agents/lead.md', './agents/sre.md'] },
+  ])
+  assert.ok(merged.some((t) => t.id === 'custom-ops-team' && t.name === '本地自定义运维团'))
+})

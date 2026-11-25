@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyKineticImpulse, applySecondaryRecoil, registerMotionAnchor, captureTriggerRect, motionScaleForTier, IMPACT_STYLES, resolveImpactStyle } from '../platform/kinetic.js'
+import { applyKineticImpulse, applySecondaryRecoil, computeDirectionalImpulse, registerMotionAnchor, captureTriggerRect, motionScaleForTier, IMPACT_STYLES, resolveImpactStyle } from '../platform/kinetic.js'
 import { desktopBridge } from '../platform/libs.js'
 import {
   useSlice,
@@ -13,6 +13,10 @@ import {
   setSessionModelOverride,
   activateSavedModelGlobal,
   toggleDock,
+  // r25 起 AppShell 里新增了指针轻撞与强撞两处调用（176/311 行），
+  // 但导入清单漏了这个符号 ⇒ 运行期 ReferenceError: fireShellImpact is not defined，
+  // 指针撞击完全不工作且 pageErrors 被污染。
+  fireShellImpact,
   toggleSearchDock,
   createNewSession,
   createNewGroup,
@@ -64,9 +68,10 @@ export default function AppShell() {
   const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [impactEdge, setImpactEdge] = useState('')
   const [impactY, setImpactY] = useState('50%')
-  const [impactPct, setImpactPct] = useState(50)
+  const [impactPos, setImpactPos] = useState({ nx: 0.04, ny: 0.5 })
   const [impactSeq, setImpactSeq] = useState(0)
   const [activeImpactMeta, setActiveImpactMeta] = useState({ styleId: 'mercury', edge: 'left', strength: 'strong' })
+  const lastPointerRef = useRef({ nx: null, ny: null, at: 0 })
   const shellRef = useRef(null)
   const railRef = useRef(null)
   const topbarRef = useRef(null)
@@ -114,45 +119,67 @@ export default function AppShell() {
     const el = mainRef.current
     if (!sig || !el) return undefined
     const stylePreset = resolveImpactStyle(settings.impactStyle || 'mercury', sig.seq)
-    const isStrong = sig.strength === 'strong'
-    const speed = (isStrong ? 275 : 210) * (stylePreset.speedMul || 1)
-    const edge = sig.edge || 'left'
-    const yBias = sig.dy ? Math.max(-68, Math.min(68, sig.dy * 0.22)) : (isStrong ? 32 : 18)
-    const vx = edge === 'left' ? speed : (edge === 'right' ? -speed : 0)
-    const vy = edge === 'top' ? speed * 0.78 : (edge === 'bottom' ? -speed * 0.78 : yBias)
-    const vrot = edge === 'left' ? (sig.dy > 40 ? -6.5 : 7.5) : (edge === 'right' ? -7.5 : 0)
+    // 若触发源未显式传边缘测试（panel/medium），优先使用 220ms 内用户真实点击的屏幕归一化坐标
+    const freshPtr = (Date.now() - lastPointerRef.current.at) < 260 ? lastPointerRef.current : null
+    const useNx = sig.nx != null ? sig.nx : (sig.strength === 'panel' && freshPtr ? freshPtr.nx : null)
+    const useNy = sig.ny != null ? sig.ny : (sig.strength === 'panel' && freshPtr ? freshPtr.ny : null)
+    const phys = computeDirectionalImpulse({
+      nx: useNx,
+      ny: useNy,
+      edge: sig.edge || 'left',
+      dy: sig.dy || 0,
+      strength: sig.strength || 'strong',
+      stylePreset,
+    })
     const applied = applyKineticImpulse(el, {
-      vx,
-      vy,
-      vrot,
-      vsc: isStrong ? -0.62 : -0.34,
+      vx: phys.vx,
+      vy: phys.vy,
+      vrot: phys.vrot,
+      vsc: phys.vsc,
+      vrx: phys.vrx,
+      vry: phys.vry,
       omega: stylePreset.omega || 24,
       zeta: stylePreset.zeta || 0.44,
-      maxPx: isStrong ? 6.0 : 4.8,
-      maxRot: isStrong ? 0.38 : 0.24,
-      maxSc: isStrong ? 0.016 : 0.010,
+      maxPx: phys.maxPx,
+      maxRot: phys.maxRot,
+      maxSc: phys.maxSc,
+      maxTilt: phys.maxTilt,
       motionTier: settings.motion,
     })
     if (!applied) return undefined
-    // 液态玻璃耦合反作用力：受冲承重玻璃边缘（左栏或顶栏）同步产生体积守恒微回弹
-    if (edge === 'left' && railRef.current) {
-      applySecondaryRecoil(railRef.current, { edge, strength: sig.strength, motionTier: settings.motion })
-    } else if (edge === 'top' && topbarRef.current) {
-      applySecondaryRecoil(topbarRef.current, { edge, strength: sig.strength, motionTier: settings.motion })
+    if (phys.edge === 'left' && railRef.current) {
+      applySecondaryRecoil(railRef.current, { edge: 'left', strength: sig.strength, motionTier: settings.motion })
+    } else if (phys.edge === 'top' && topbarRef.current) {
+      applySecondaryRecoil(topbarRef.current, { edge: 'top', strength: sig.strength, motionTier: settings.motion })
     }
-    const pct = sig.dy ? Math.max(16, Math.min(84, Math.round(50 + sig.dy * 0.12))) : 50
-    setImpactPct(pct)
+    const pct = Math.max(12, Math.min(88, Math.round(phys.ny * 100)))
+    setImpactPos({ nx: phys.nx, ny: phys.ny })
     setImpactY(`${pct}%`)
-    setActiveImpactMeta({ styleId: stylePreset.id, edge, strength: sig.strength || 'strong' })
+    setActiveImpactMeta({ styleId: stylePreset.id, edge: phys.edge, strength: sig.strength || 'strong' })
     setImpactSeq((n) => n + 1)
     setImpactEdge('')
-    const t1 = requestAnimationFrame(() => setImpactEdge(edge))
+    const t1 = requestAnimationFrame(() => setImpactEdge(phys.edge))
     const t2 = setTimeout(() => setImpactEdge(''), 640)
     return () => {
       cancelAnimationFrame(t1)
       clearTimeout(t2)
     }
   }, [ui.impactSignal, settings.motion, settings.impactStyle])
+
+  // R25 全局指针坐标捕获：点击任意按钮、导航项、卡片时记录精确坐标，并向液态玻璃主舞台注入真实位置触感波
+  const handleShellPointerDown = (e) => {
+    if (settings.motion === 'reduced' || !mainRef.current || e.button !== 0) return
+    const rect = mainRef.current.getBoundingClientRect()
+    if (!rect || rect.width < 10 || rect.height < 10) return
+    const nx = Math.max(0.02, Math.min(0.98, (e.clientX - rect.left) / rect.width))
+    const ny = Math.max(0.02, Math.min(0.98, (e.clientY - rect.top) / rect.height))
+    lastPointerRef.current = { nx, ny, at: Date.now() }
+    const hitInteractive = e.target && typeof e.target.closest === 'function'
+      && e.target.closest('button, a, .chat-quick-card, .wf-node, .ss-item, .gp-msg, .sd-source')
+    if (hitInteractive && !e.target.closest('.ov-modal, .st-hit-pad')) {
+      fireShellImpact('pointer', 'light', { nx, ny, pointer: true })
+    }
+  }
 
   useEffect(() => {
     const onKey = (e) => {
@@ -306,7 +333,7 @@ export default function AppShell() {
   ]
 
   return (
-    <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)}>
+    <div ref={shellRef} className="hb-shell" data-zen={String(!!ui.zenMode)} onPointerDownCapture={handleShellPointerDown}>
       <nav ref={railRef} className="hb-rail" data-compact={String(compactRail)} aria-label="主导航">
         <div className="hb-rail-brand" onClick={() => setCompactRail((v) => !v)} style={{ cursor: 'pointer' }} title="点击切换导航栏宽/窄形态">
           <HarborLogo size={26} />
@@ -472,8 +499,8 @@ export default function AppShell() {
         )}
         <LiquidImpactCanvas
           seq={impactSeq}
-          edge={activeImpactMeta.edge}
-          impactPct={impactPct}
+          nx={impactPos.nx}
+          ny={impactPos.ny}
           styleId={activeImpactMeta.styleId}
           strength={activeImpactMeta.strength}
           motionTier={settings.motion}

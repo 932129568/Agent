@@ -163,11 +163,14 @@ export function applyKineticImpulse(el, {
   vy = 0,
   vrot = 0,
   vsc = -0.62,
+  vrx = null,
+  vry = null,
   omega = 24,
   zeta = 0.44,
   maxPx = 6.2,
   maxRot = 0.42,
   maxSc = 0.016,
+  maxTilt = 1.65,
   motionTier = 'dynamic',
 } = {}) {
   const k = motionScaleForTier(motionTier)
@@ -177,13 +180,14 @@ export function applyKineticImpulse(el, {
   const spRot = createDampedSpring({ omega, zeta, posEps: 0.005, velEps: 0.05 })
   const spSc = createDampedSpring({ omega: omega + 4, zeta: Math.min(0.82, zeta + 0.06), posEps: 0.0002, velEps: 0.002 })
 
+  const spTilt = createDampedSpring({ omega: omega + 2, zeta: Math.min(0.84, zeta + 0.04), posEps: 0.008, velEps: 0.08 })
   let b = _bodies.get(el)
   if (!b) {
     b = {
-      x: 0, y: 0, rot: 0, sc: 0,
-      vx: 0, vy: 0, vrot: 0, vsc: 0,
-      maxPx, maxRot, maxSc,
-      spPos, spRot, spSc,
+      x: 0, y: 0, rot: 0, sc: 0, rx: 0, ry: 0,
+      vx: 0, vy: 0, vrot: 0, vsc: 0, vrx: 0, vry: 0,
+      maxPx, maxRot, maxSc, maxTilt,
+      spPos, spRot, spSc, spTilt,
       raf: 0, lastT: 0,
     }
     _bodies.set(el, b)
@@ -191,15 +195,22 @@ export function applyKineticImpulse(el, {
     b.maxPx = maxPx
     b.maxRot = maxRot
     b.maxSc = maxSc
+    b.maxTilt = maxTilt
     b.spPos = spPos
     b.spRot = spRot
     b.spSc = spSc
+    b.spTilt = spTilt
   }
+
+  const effVrx = Number.isFinite(vrx) ? vrx : (-vy * 0.075)
+  const effVry = Number.isFinite(vry) ? vry : (vx * 0.085)
 
   b.vx = Math.max(-420, Math.min(420, b.vx + vx * k))
   b.vy = Math.max(-420, Math.min(420, b.vy + vy * k))
   b.vrot = Math.max(-24, Math.min(24, b.vrot + vrot * k))
   b.vsc = Math.max(-2.2, Math.min(2.2, b.vsc + vsc * k))
+  b.vrx = Math.max(-44, Math.min(44, b.vrx + effVrx * k))
+  b.vry = Math.max(-44, Math.min(44, b.vry + effVry * k))
 
   const tick = (now) => {
     b.raf = 0
@@ -209,33 +220,34 @@ export function applyKineticImpulse(el, {
     const sy = b.spPos(b.y, b.vy, dt)
     const sr = b.spRot(b.rot, b.vrot, dt)
     const ss = b.spSc(b.sc, b.vsc, dt)
+    const stx = b.spTilt(b.rx, b.vrx, dt)
+    const sty = b.spTilt(b.ry, b.vry, dt)
     b.x = sx.pos; b.vx = sx.vel
     b.y = sy.pos; b.vy = sy.vel
     b.rot = sr.pos; b.vrot = sr.vel
     b.sc = ss.pos; b.vsc = ss.vel
+    b.rx = stx.pos; b.vrx = stx.vel
+    b.ry = sty.pos; b.vry = sty.vel
 
-    if (sx.settled && sy.settled && sr.settled && ss.settled) {
+    if (sx.settled && sy.settled && sr.settled && ss.settled && stx.settled && sty.settled) {
       el.style.transform = ''
       el.style.willChange = ''
-      b.x = b.y = b.rot = b.sc = b.vx = b.vy = b.vrot = b.vsc = 0
+      b.x = b.y = b.rot = b.sc = b.rx = b.ry = 0
+      b.vx = b.vy = b.vrot = b.vsc = b.vrx = b.vry = 0
       return
     }
     const cx = softClamp(b.x, b.maxPx)
     const cy = softClamp(b.y, b.maxPx)
     const crot = softClamp(b.rot, b.maxRot)
     const csc = softClamp(b.sc, b.maxSc)
-    // R23 液态玻璃黏弹性撞击物理：
-    // 1) 体积守恒微压扁回弹（主撞击轴微压 scaleX=1+csc，垂直轴轻度鼓起 scaleY=1-csc*0.42）；
-    // 2) 液态微剪切 skewY（±0.26deg 极细腻液膜晃动，零眩晕）；
-    // 3) 3D 透视倾角 rotateY/rotateX，且严格保持 matrix3d 位移与压缩量纲基准
-    const ry = softClamp(cx * 0.24, 1.40)
-    const rx = softClamp(-cy * 0.19, 1.18)
-    const shearY = softClamp(cx * 0.045, 0.26)
+    const rxDeg = softClamp(b.rx, b.maxTilt)
+    const ryDeg = softClamp(b.ry, b.maxTilt)
+    const shearY = softClamp(cx * 0.042, 0.24)
     const scaleX = 1 + csc
     const scaleY = 1 - csc * 0.42
     el.style.transform =
       `perspective(1200px) translate3d(${cx.toFixed(2)}px,${cy.toFixed(2)}px,0)` +
-      ` rotateY(${ry.toFixed(3)}deg) rotateX(${rx.toFixed(3)}deg) rotate(${crot.toFixed(3)}deg)` +
+      ` rotateY(${ryDeg.toFixed(3)}deg) rotateX(${rxDeg.toFixed(3)}deg) rotate(${crot.toFixed(3)}deg)` +
       ` skewY(${shearY.toFixed(3)}deg) scale3d(${scaleX.toFixed(4)},${scaleY.toFixed(4)},1)`
     b.raf = requestAnimationFrame(tick)
   }
@@ -482,4 +494,90 @@ export function resolveImpactStyle(styleId = 'mercury', seq = 0) {
     return IMPACT_STYLES.find((s) => s.id === picked) || IMPACT_STYLES[0]
   }
   return IMPACT_STYLES.find((s) => s.id === styleId) || IMPACT_STYLES[0]
+}
+
+
+/**
+ * R25 真实点击位置二维力矩物理引擎：
+ * 根据真实点击归一化坐标 (nx, ny) ∈ [0,1]×[0,1] 计算质心杠杆臂 r = (nx - 0.5, ny - 0.5)：
+ * - 点右上角 (0.9, 0.1)：线性冲量向左下推开 (vx<0, vy>0)，同时右上角向屏幕纵深压下 (rotateY>0, rotateX>0)；
+ * - 点左下角 (0.1, 0.9)：线性冲量向右上推开 (vx>0, vy<0)，左下角压下；
+ * - 点正中心 (0.5, 0.5)：零偏心横移，纯粹 Z 轴深压回弹 + 360° 径向液态玻璃折射波。
+ */
+export function computeDirectionalImpulse({ nx = null, ny = null, edge = 'left', dy = 0, strength = 'strong', stylePreset = null } = {}) {
+  const isStrong = strength === 'strong'
+  const isLight = strength === 'light'
+  const mul = (stylePreset && stylePreset.speedMul) || 1
+  const force = (isStrong ? 275 : (isLight ? 115 : 205)) * mul
+
+  // 显式边缘撞击（无具体指针坐标时，兼容弹窗飞回锚点与四向校准按钮）
+  if (nx == null || ny == null) {
+    const pct = dy ? Math.max(0.16, Math.min(0.84, 0.5 + dy * 0.0012)) : 0.5
+    const fallbackCoord = {
+      left: { nx: 0.03, ny: pct },
+      right: { nx: 0.97, ny: pct },
+      top: { nx: 0.5, ny: 0.04 },
+      bottom: { nx: 0.5, ny: 0.96 },
+    }[edge] || { nx: 0.03, ny: 0.5 }
+    const yBias = dy ? Math.max(-68, Math.min(68, dy * 0.22)) : (isStrong ? 28 : 16)
+    const vx = edge === 'left' ? force : (edge === 'right' ? -force : 0)
+    const vy = edge === 'top' ? force * 0.78 : (edge === 'bottom' ? -force * 0.78 : yBias)
+    const vrot = edge === 'left' ? (dy > 40 ? -6.2 : 7.0) : (edge === 'right' ? -7.0 : 0)
+    return {
+      nx: fallbackCoord.nx,
+      ny: fallbackCoord.ny,
+      edge: edge || 'left',
+      vx,
+      vy,
+      vrot,
+      vsc: isStrong ? -0.62 : (isLight ? -0.22 : -0.34),
+      vrx: edge === 'top' ? 24 : (edge === 'bottom' ? -24 : (0.5 - fallbackCoord.ny) * 24),
+      vry: edge === 'left' ? -26 : (edge === 'right' ? 26 : 0),
+      maxPx: isStrong ? 6.0 : (isLight ? 2.8 : 4.6),
+      maxRot: isStrong ? 0.38 : (isLight ? 0.16 : 0.24),
+      maxSc: isStrong ? 0.016 : (isLight ? 0.007 : 0.011),
+      maxTilt: isStrong ? 1.75 : (isLight ? 0.95 : 1.25),
+    }
+  }
+
+  const cx = Math.max(0.02, Math.min(0.98, Number(nx)))
+  const cy = Math.max(0.02, Math.min(0.98, Number(ny)))
+  const armX = cx - 0.5 // [-0.48, +0.48]
+  const armY = cy - 0.5
+  const dist = Math.hypot(armX, armY)
+
+  // 从点击点向反方向推开（距离中心越远，切向力矩与位移越明显；正中心则纯 Z 轴下压）
+  const pushScale = Math.min(1, dist / 0.44)
+  const dirX = dist > 0.03 ? (-armX / dist) : 0
+  const dirY = dist > 0.03 ? (-armY / dist) : 0
+  const vx = dirX * force * (0.28 + 0.72 * pushScale)
+  const vy = dirY * force * (0.28 + 0.72 * pushScale)
+
+  // 真实 3D 杠杆力矩：按下哪一角，哪一角向屏幕里下沉（CSS rotateY>0 右侧下沉，rotateX>0 顶部下沉）
+  const torqueGain = isStrong ? 62 : (isLight ? 30 : 44)
+  const vry = armX * torqueGain
+  const vrx = -armY * torqueGain
+  const vrot = (armX * dirY - armY * dirX) * (isStrong ? 16 : 8) + (-armX * armY * (isStrong ? 22 : 10))
+  const vsc = (isStrong ? -0.64 : (isLight ? -0.24 : -0.38)) * (1 + (1 - pushScale) * 0.28)
+
+  // 确定最近边界用于耦合承重栏回弹
+  const derivedEdge = Math.abs(armX) >= Math.abs(armY)
+    ? (armX <= 0 ? 'left' : 'right')
+    : (armY <= 0 ? 'top' : 'bottom')
+
+  return {
+    nx: cx,
+    ny: cy,
+    edge: derivedEdge,
+    vx,
+    vy,
+    vrot,
+    vsc,
+    vrx,
+    vry,
+    maxPx: isStrong ? 6.0 : (isLight ? 2.6 : 4.6),
+    maxRot: isStrong ? 0.38 : (isLight ? 0.16 : 0.24),
+    maxSc: isStrong ? 0.016 : (isLight ? 0.008 : 0.012),
+    maxTilt: isStrong ? 1.85 : (isLight ? 0.95 : 1.35),
+  }
 }

@@ -29,6 +29,7 @@ import {
   CURATED_MCP_SERVERS,
   filterCuratedMcpServers,
 } from '../../services/mcpCatalog.js'
+import { NATIVE_EXPERT_TEAMS } from '../../services/expertTeam.js'
 import ExpertTeamRunner from './ExpertTeamRunner.jsx'
 import './MarketModal.css'
 
@@ -142,9 +143,12 @@ export default function MarketModal() {
 
   return (
     <div className="mk-body">
-      <div className="mk-bar" role="tablist" aria-label="生态市场板块">
+      <div className="mk-seg-bar" role="tablist" aria-label="生态市场板块">
         <button type="button" className={tab === 'industry' ? 'mk-btn mk-btn-primary' : 'mk-btn'} onClick={() => setTab('industry')}>
           🔥 行业专家库（{CURATED_INDUSTRY_PACKS.length}）
+        </button>
+        <button type="button" className={tab === 'team' ? 'mk-btn mk-btn-primary' : 'mk-btn'} onClick={() => setTab('team')}>
+          ✦ 多专家团队（{NATIVE_EXPERT_TEAMS.length}）
         </button>
         <button type="button" className={tab === 'skills' ? 'mk-btn mk-btn-primary' : 'mk-btn'} onClick={() => setTab('skills')}>
           ⚡ 热门 Skill 库（{CURATED_SKILLS.length}）
@@ -154,9 +158,6 @@ export default function MarketModal() {
         </button>
         <button type="button" className={tab === 'local' ? 'mk-btn mk-btn-primary' : 'mk-btn'} onClick={() => setTab('local')}>
           📦 本地插件包（{(market.experts || []).length}）
-        </button>
-        <button type="button" className={tab === 'team' ? 'mk-btn mk-btn-primary' : 'mk-btn'} onClick={() => setTab('team')}>
-          ✦ 多专家团队
         </button>
       </div>
 

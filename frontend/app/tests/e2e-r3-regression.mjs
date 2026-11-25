@@ -1278,17 +1278,18 @@ try {
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForSelector('.ov-modal', { state: 'detached', timeout: 4000 })
 
-  // Q1: 在智能对话输入模式条下拉直接切换刚保存的模型，顶部灵动岛同步更新
-  const chatModelSelect = page.locator('select[aria-label="切换本会话模型"]')
-  const savedOptVal = await chatModelSelect.locator('option:has-text("DeepSeek 旗舰代码")').getAttribute('value')
-  await chatModelSelect.selectOption(savedOptVal)
+  // Q1: 在智能对话输入模式条点击液态玻璃 ModelPicker 切换刚保存的模型，顶部灵动岛同步更新
+  const chatModelBtn = page.locator('button[aria-label="切换本会话模型"]')
+  await chatModelBtn.click()
+  await page.waitForSelector('.mp-panel [role="option"]:has-text("DeepSeek 旗舰代码")', { timeout: 3000 })
+  await page.locator('.mp-panel [role="option"]:has-text("DeepSeek 旗舰代码")').click()
   await page.waitForTimeout(160)
   const islandAfterSwitch = await page.locator('.hb-island').textContent()
   record(
     'Suite-Q',
-    '模型保存中心：自定义添加模型后在对话页一键切换并同步更新顶栏状态岛',
-    Boolean(savedOptVal) && /DeepSeek 旗舰代码/.test(islandAfterSwitch || ''),
-    `optVal=${savedOptVal}, island=${(islandAfterSwitch || '').trim()}`
+    '模型保存中心：自定义添加模型后通过液态玻璃 ModelPicker 一键切换并同步更新顶栏状态岛',
+    /DeepSeek 旗舰代码/.test(islandAfterSwitch || ''),
+    `island=${(islandAfterSwitch || '').trim()}`
   )
 
   // Q2: 从顶栏「外观 ▾」菜单重新打开「功能说明与软件特色」并按 Escape 平滑关闭
@@ -1357,11 +1358,12 @@ try {
   const r23McpCnt = await page.locator('[data-section="mcp-grid"] .mk-card').count()
   await page.locator('[data-section="mcp-grid"] .mk-card').first().locator('button:has-text("一键接入")').click()
   await page.waitForTimeout(180)
-  // R24 回归：点击「✦ 多专家团队」验证带 {en, zh} 元数据的本地包 + 56 大专家零 React #31 崩溃且梦之队预设可用
+  // R25 回归：点击「✦ 多专家团队」验证 12 支成建制原生专家团卡片 + 组织协作流水线就位（零手动拼凑、零 React #31）
   await page.locator('.mk-body button:has-text("多专家团队")').click()
-  await page.waitForSelector('[data-section="expert-team-runner"] .et-presets button', { timeout: 3000 })
-  const etTeamChipCnt = await page.locator('[data-section="expert-team-runner"] .et-chips .et-chip').count()
-  await page.locator('[data-section="expert-team-runner"] .et-presets button').first().click()
+  await page.waitForSelector('[data-section="expert-team-runner"] .et-team-card', { timeout: 3000 })
+  const etNativeTeamCnt = await page.locator('[data-section="expert-team-runner"] .et-team-card').count()
+  await page.locator('[data-section="expert-team-runner"] .et-team-card:has-text("Design Engine")').click()
+  const etPipelineNodes = await page.locator('[data-section="expert-team-runner"] .et-pipeline .et-node').count()
   await page.waitForTimeout(120)
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForSelector('.ov-modal', { state: 'detached', timeout: 3000 })
@@ -1374,6 +1376,13 @@ try {
   await page.waitForSelector('[data-section="impact-studio"]', { timeout: 3000 })
   await page.locator('[data-section="impact-studio"] button:has-text("棱镜折光")').click()
   await page.waitForSelector('canvas.lic-canvas[data-impact-style="prism"]', { timeout: 3000 })
+  // 点击交互式液态玻璃测试板右上角，验证真点击位置方向撞击（edge 切为 right/top）
+  const hitPadBox = await page.locator('.st-hit-pad').boundingBox()
+  if (hitPadBox) {
+    await page.mouse.click(hitPadBox.x + hitPadBox.width * 0.92, hitPadBox.y + hitPadBox.height * 0.5)
+    await page.waitForTimeout(80)
+  }
+  const edgeAfterRightHit = await page.locator('main.hb-main').getAttribute('data-impact-edge')
   await page.locator('[data-section="impact-studio"] button:has-text("液态水银")').click()
   await page.locator('.ov-modal .ov-close').click()
   await page.waitForSelector('.hb-liquid-impact .hb-lg-ripple-2', { timeout: 4000 })
@@ -1382,8 +1391,8 @@ try {
   record(
     'Suite-S',
     'R23 生态扩容（专家/Skill/MCP 全 50+）与液态玻璃三层光学焦散撞击层实测就位',
-    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && etTeamChipCnt >= 50 && sawLiquidLayer,
-    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, teamPool=${etTeamChipCnt}, liquidLayer=${sawLiquidLayer}`
+    r23ExpertCnt >= 50 && r23SkillCnt >= 50 && r23McpCnt >= 50 && etNativeTeamCnt >= 12 && etPipelineNodes >= 6 && edgeAfterRightHit === 'right' && sawLiquidLayer,
+    `experts=${r23ExpertCnt}, skills=${r23SkillCnt}, mcps=${r23McpCnt}, nativeTeams=${etNativeTeamCnt}, designNodes=${etPipelineNodes}, rightHit=${edgeAfterRightHit}, liquidLayer=${sawLiquidLayer}`
   )
 
   // D4: 全程零未捕获页面异常
