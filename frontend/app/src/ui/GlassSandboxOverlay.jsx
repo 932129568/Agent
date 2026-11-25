@@ -60,6 +60,8 @@ export default function GlassSandboxOverlay({
     }
 
     let pendingStart = null
+    let pendingPointerId = -1
+    let captureEl = null
     const onPointerDown = (e) => {
       if (e.button !== 0) return
       const el = findClosestGlassElement(e.target)
@@ -68,6 +70,7 @@ export default function GlassSandboxOverlay({
       const startX = e.clientX
       const startY = e.clientY
       pendingStart = { x: startX, y: startY }
+      pendingPointerId = e.pointerId
       cancelPendingGrab()
 
       pressTimerRef.current = setTimeout(() => {
@@ -89,6 +92,12 @@ export default function GlassSandboxOverlay({
           radius: parseFloat(cs.borderRadius) || 14,
         })
         setGlassSourceVisibility(id, false)
+        // **必须 setPointerCapture**：否则指针一出窗口，pointermove/up 就不再送达本页，
+        // 拖拽冻在窗口边缘 —— 方块永远出不去（用户实测"飞不出去、卡住"）。
+        // 捕获后 clientX/clientY 可以越界（负值或超过 innerWidth），逃逸判定才有机会触发。
+        try {
+          if (el.setPointerCapture) { el.setPointerCapture(pendingPointerId); captureEl = el }
+        } catch {}
         dragRef.current = {
           id: body.id,
           offX: startX - r.left,
@@ -125,6 +134,11 @@ export default function GlassSandboxOverlay({
       cancelPendingGrab()
       const d = dragRef.current
       if (!d || !storeRef.current) return
+      try {
+        if (captureEl && pendingPointerId >= 0) captureEl.releasePointerCapture(pendingPointerId)
+      } catch {}
+      captureEl = null
+      pendingPointerId = -1
       dragRef.current = null
       const now = performance.now()
       const recent = d.samples.filter((s) => (now - s.t) <= 110)
