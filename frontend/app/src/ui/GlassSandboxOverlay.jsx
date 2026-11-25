@@ -128,6 +128,29 @@ export default function GlassSandboxOverlay({
       const vy = (e.clientY - first.y) / dtS
       moveDraggedBody(storeRef.current, d.id, e.clientX - d.offX, e.clientY - d.offY, vx, vy)
       setTick((n) => n + 1)
+
+      // **拖到窗口边缘就直接逃逸**：不再依赖 pointerup（指针出窗后事件收不到，
+      // setPointerCapture 在源元素被隐藏时也会失效 —— 用户实测两次都卡在边缘）。
+      // 这里在指针抵达边缘 2px 内时，把方块推到窗外并给足速度，复用引擎 escape。
+      const vw = window.innerWidth, vh = window.innerHeight
+      const EDGE = 2
+      let side = null
+      if (e.clientX <= EDGE) side = 'left'
+      else if (e.clientX >= vw - EDGE) side = 'right'
+      else if (e.clientY <= EDGE) side = 'top'
+      else if (e.clientY >= vh - EDGE) side = 'bottom'
+      if (side) {
+        const b = storeRef.current.bodies.get(d.id)
+        if (b) {
+          const push = 900
+          if (side === 'left') { b.x = -b.w - 4; b.vx = -push }
+          else if (side === 'right') { b.x = vw + 4; b.vx = push }
+          else if (side === 'top') { b.y = -b.h - 4; b.vy = -push }
+          else { b.y = vh + 4; b.vy = push }
+          b.status = 'floating'
+          dragRef.current = null
+        }
+      }
     }
 
     const onPointerUp = (upEvent) => {

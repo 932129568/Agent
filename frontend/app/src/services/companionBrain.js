@@ -230,6 +230,10 @@ export function parseLlmCompanionAction(text = '') {
   if (type === 'customizer') return { cleanText, action: { type: 'open_customizer' } }
   if (type === 'morph') return { cleanText, action: { type: 'morph_form' } }
   if (type === 'dance') return { cleanText, action: { type: 'dance' } }
+  // ===== 跨软件能力（不局限于 Harbor 自己）=====
+  if (type === 'open_app') return { cleanText, action: { type: 'open_app', appName: payload || '' } }
+  if (type === 'type_text') return { cleanText, action: { type: 'type_text', text: payload || '' } }
+  if (type === 'shell') return { cleanText, action: { type: 'run_shell', command: payload || '' } }
   return { cleanText, action: null }
 }
 
@@ -297,8 +301,17 @@ ${kbBrief}
 - 玻璃碎了想修 → [[ACTION:repair]]
 - 想换形象/捏脸 → [[ACTION:customizer]]
 - 想变身 → [[ACTION:morph]]
+- 想打开电脑上的其他软件（微信/QQ/浏览器/音乐等）→ [[ACTION:open_app:软件名]]
+- 想让我把某段话准备好发到别的软件里 → [[ACTION:type_text:要发送的内容]]
+- 明确要求执行系统命令 → [[ACTION:shell:命令]]（高风险，必须先复述并等用户确认）
 2) 纯寒暄、纯提问、或信息不足无法执行 → **不要**输出动作标签，直接回答（120 字内），并在需要时反问一句关键信息。
-3) 回复要口语化、简短（≤120 字），先说"我理解你要…"，再说"我去做了/我需要你确认…"。`
+3) 回复要口语化、简短（≤120 字），先说"我理解你要…"，再说"我去做了/我需要你确认…"。
+
+【跨软件边界 · 重要】
+- 你不只会操作 Harbor：可以打开本机其他应用、把要说的话准备好。
+- 但**替用户向他人发送消息属于高风险动作**：必须先复述你要发的内容并征得同意，
+  未经同意不要自动输入/发送。type_text 只负责把内容准备好（放进剪贴板），
+  由用户自己粘贴发送；除非用户明确说"你直接发"。`
 
   const msgs = [
     { role: 'system', content: sysPrompt },

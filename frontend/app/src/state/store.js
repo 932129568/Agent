@@ -95,6 +95,8 @@ import {
   openOnboardingModal,
   closeOnboardingModal,
   setWebSearchMode,
+  companionOpenApp,
+  companionClipboardWrite,
 } from './uiSlice.js'
 import {
   resolveEndpointConfig,
@@ -379,6 +381,8 @@ function syncRuntimeTelemetryForSid(targetSid) {
 
 /* ---- 通用 UI & 图层调度（已解耦至 state/uiSlice.js，此处统一门面再导出） ---- */
 export {
+  companionOpenApp,
+  companionClipboardWrite,
   fireShellImpact,
   setActivePanel,
   toggleSidebar,

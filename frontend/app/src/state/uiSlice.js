@@ -159,3 +159,14 @@ export function setWebSearchMode(mode = 'auto') {
   }
   pushToast(labels[safe], 'info')
 }
+
+// ===== 跨软件能力（供 3D 助手调用；features/companion 不得直连 services/bridge，见 LAW-14）=====
+export async function companionOpenApp(appName) {
+  const { callJsApi } = await import('../services/bridge.js')
+  return callJsApi('open_app', [String(appName || '').trim()])
+}
+
+export async function companionClipboardWrite(text) {
+  const { callJsApi } = await import('../services/bridge.js')
+  return callJsApi('clipboard_write', [String(text || '')])
+}

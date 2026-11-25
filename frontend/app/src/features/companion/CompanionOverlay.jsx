@@ -21,6 +21,8 @@ import {
   setDockPreview,
   fireShellImpact,
   pushToast,
+  companionOpenApp,
+  companionClipboardWrite,
 } from '../../state/store.js'
 import {
   COMPANION_PERSONALITIES,
@@ -975,6 +977,35 @@ export default function CompanionOverlay({
       else if (act.type === 'write_input') await performWriteInput(act.text)
       else if (act.type === 'magic_blackhole') await performBlackHoleMagic(act.fileName)
       else if (act.type === 'repair_all') await performRepairAll(false)
+      // ===== 跨软件能力 =====
+      else if (act.type === 'open_app') {
+        // 打开本机其他应用（微信/QQ/浏览器…），不再局限于 Harbor 内部
+        const name = String(act.appName || '').trim()
+        if (!name) { pushToast('没说要打开哪个软件～', 'info'); return }
+        try {
+          await companionOpenApp(name)
+          pushToast(`已尝试打开「${name}」`, 'ok')
+          say(`我把「${name}」打开啦～`, 3200)
+        } catch (e) {
+          pushToast(`打开「${name}」失败：${String(e && e.message || e).slice(0, 40)}`, 'err')
+        }
+      } else if (act.type === 'type_text') {
+        // 只把内容准备好（进剪贴板），**不自动注入键盘**：
+        // 替用户向他人发消息属于高风险动作，必须由用户自己粘贴发送。
+        const text = String(act.text || '').trim()
+        if (!text) { pushToast('没有要准备的内容～', 'info'); return }
+        try {
+          await companionClipboardWrite(text)
+          pushToast('已复制到剪贴板，去目标软件里 Ctrl+V 即可', 'ok')
+          say(`我把要说的话准备好啦，你粘贴发送就好，我不替你按发送键～`, 4200)
+        } catch (e) {
+          pushToast('复制失败：' + String(e && e.message || e).slice(0, 40), 'err')
+        }
+      } else if (act.type === 'run_shell') {
+        // 高风险：一律先复述并要求用户确认，绝不静默执行
+        pushToast('执行系统命令前需要你确认，我先把命令念给你听', 'info')
+        say(`你要我执行：${String(act.command || '').slice(0, 40)} —— 确认的话请再说一次"执行"`, 5200)
+      }
       else if (act.type === 'dance') {
         setActionState('dance')
         bumpStats({ affection: 4, mood: '摇铃开心' })
