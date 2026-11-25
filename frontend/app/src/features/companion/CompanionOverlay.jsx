@@ -39,6 +39,7 @@ import {
   planAutopilotExecution,
   evaluateDeliverableQuality,
 } from '../../services/companionAutopilot.js'
+import { pickNextAutonomousBehavior } from '../../services/companionLife.js'
 import { buildAvailableTeams } from '../../services/expertTeam.js'
 import {
   biteGlassBody,
@@ -56,7 +57,6 @@ import {
 import { desktopBridge } from '../../platform/libs.js'
 import { computeViewportCoords } from '../../platform/kinetic.js'
 import YaluModelStage from '../../ui/YaluModelStage.jsx'
-import Companion3DCanvas from '../../ui/Companion3DCanvas.jsx'
 import CompanionCustomizer from './CompanionCustomizer.jsx'
 import './CompanionOverlay.css'
 
@@ -102,7 +102,7 @@ function pickExpressionUrl(pack, actionState, override = 'auto') {
   }
   if (actionState === 'supervising' || actionState === 'write_input' || actionState === 'crouch_click') return (exprs[1] || exprs[0]).src
   if (actionState === 'grabbed' || actionState === 'thrown' || actionState === 'guilty' || actionState === 'poke') return (exprs[2] || exprs[0]).src
-  if (actionState === 'deliver' || actionState === 'dance' || actionState === 'happy') return (exprs[3] || exprs[0]).src
+  if (actionState === 'deliver' || actionState === 'dance' || actionState === 'happy' || actionState === 'bell_play') return (exprs[3] || exprs[0]).src
   return exprs[0].src
 }
 
@@ -131,8 +131,6 @@ export default function CompanionOverlay({
   const [chatInput, setChatInput] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
   const [snackBarOpen, setSnackBarOpen] = useState(false)
-  const [pomodoroSec, setPomodoroSec] = useState(0)
-  const [starToy, setStarToy] = useState(null)
   const [autopilotHud, setAutopilotHud] = useState(null)
   const [messages, setMessages] = useState(() => {
     const p = COMPANION_PERSONALITIES.find((x) => x.id === loadCompanionAvatar().personality) || COMPANION_PERSONALITIES[0]
@@ -150,19 +148,22 @@ export default function CompanionOverlay({
   const flingRafRef = useRef(0)
   const petDragRef = useRef(null)
   const suppressClickRef = useRef(false)
+  const lastInteractAtRef = useRef(Date.now())
+  const lastDesktopReturnAtRef = useRef(0)
 
   const pack = getActiveModelPack(avatar.modelPackId)
   const packAssets = {
     front: pack.assets.front,
-    turnFront: pack.assets.turnFront,
     side: pack.assets.side,
     back: pack.assets.back,
-    staff: pack.assets.props.staff.src,
-    bell: pack.assets.props.bell.src,
+    animIdleStrip: pack.assets.animIdleStrip,
+    animActionStrip: pack.assets.animActionStrip,
+    animFrames: pack.assets.animFrames,
     showcaseVideo: pack.assets.showcaseVideo,
   }
 
-  const say = (text, ms = 3800) => {
+  const say = (text, ms = 3600) => {
+    if (!text) return
     setSpeech(text)
     if (speechTimerRef.current) clearTimeout(speechTimerRef.current)
     speechTimerRef.current = setTimeout(() => setSpeech(''), ms)
@@ -172,7 +173,7 @@ export default function CompanionOverlay({
     setStats((prev) => saveCompanionStats({
       ...prev,
       affection: (prev.affection || 0) + (delta.affection || 0),
-      energy: Math.max(0, Math.min(100, (prev.energy ?? 85) + (delta.energy || 0))),
+      energy: Math.max(0, Math.min(100, (prev.energy ?? 88) + (delta.energy || 0))),
       tasksDelivered: (prev.tasksDelivered || 0) + (delta.tasksDelivered || 0),
       snacksEaten: (prev.snacksEaten || 0) + (delta.snacksEaten || 0),
       headPats: (prev.headPats || 0) + (delta.headPats || 0),
@@ -180,21 +181,20 @@ export default function CompanionOverlay({
     }))
   }
 
-  // R30 走出 Harbor 窗口：移交到全屏透明桌面舞台自由漫游（在 Electron 桌面端生效；浏览器模式自动贴边探头）
-  const sendPetToDesktop = async (relX = null, relY = null, vx = 0, vy = 0) => {
+  // 自然跨窗走出到真实系统桌面（可由芽露自主漫步触发，也可由用户直接把她拖出/甩出窗外触发）
+  const stepOutToDesktop = async (relX = null, relY = null, vx = 0, vy = 0, quip = '') => {
     const desk = desktopBridge()
     if (!desk || typeof desk.getDesktopMetrics !== 'function' || typeof desk.syncDesktopStage !== 'function') {
-      say('当前为浏览器预览，桌面跨窗漫游请在桌面端 (`npm run desktop`) 体验～', 3200)
       return false
     }
     try {
       const m = await desk.getDesktopMetrics()
       const wb = (m && m.winBounds) || { x: 100, y: 100, width: 1320, height: 840 }
       const db = (m && m.displayBounds) || { x: 0, y: 0, width: 1920, height: 1080 }
-      const rx = relX != null ? relX : (posRef.current.x + 120)
+      const rx = relX != null ? relX : (posRef.current.x > wb.width * 0.5 ? wb.width + 24 : -136)
       const ry = relY != null ? relY : posRef.current.y
-      const deskX = Math.max(db.x + 16, Math.min(db.x + db.width - 140, wb.x + rx))
-      const deskY = Math.max(db.y + 16, Math.min(db.y + db.height - 204, wb.y + ry))
+      const deskX = Math.max(db.x + 16, Math.min(db.x + db.width - 144, wb.x + rx))
+      const deskY = Math.max(db.y + 16, Math.min(db.y + db.height - 210, wb.y + ry))
       setRoamingDesktop(true)
       setChatOpen(false)
       setCtxMenu(null)
@@ -202,29 +202,28 @@ export default function CompanionOverlay({
         pet: {
           active: true,
           roaming: true,
+          autoReturnSec: 20,
           name: avatar.name || '芽露',
-          spriteUrl: packAssets.front,
-          sideUrl: packAssets.side,
           x: deskX,
           y: deskY,
           vx,
           vy,
           facing: vx >= 0 ? 1 : -1,
-          speech: '叮铃铃～我走出窗口来你的桌面散步啦！双击或拖回窗口就回家 🌿',
+          speech: quip || '叮铃～外面的桌面好宽敞，芽露逛一圈就回来 🌿',
         },
       })
-      pushToast(`「${avatar.name || '芽露'}」已走出窗口在桌面自由漫游！双击她或点右下角即可召回`, 'ok')
       return true
     } catch {
       return false
     }
   }
 
-  const recallPetFromDesktop = (relX = null, relY = null) => {
+  const returnFromDesktop = (relX = null, relY = null) => {
     const desk = desktopBridge()
     if (desk && typeof desk.syncDesktopStage === 'function') {
       desk.syncDesktopStage({ hidePet: true })
     }
+    lastDesktopReturnAtRef.current = Date.now()
     setRoamingDesktop(false)
     const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
@@ -233,17 +232,16 @@ export default function CompanionOverlay({
       y: relY != null ? Math.max(16, Math.min(vh - 196, relY)) : Math.max(120, vh - 210),
     })
     setActionState('happy')
-    say('叮铃～外面逛够啦，我回到 Harbor 陪你干活咯 🌿', 3000)
-    setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 800)
+    say('叮铃～外面逛完回来啦 🌿', 2800)
+    setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 750)
   }
 
-  // 监听来自 Electron 桌面舞台的「芽露归窗」事件
   useEffect(() => {
     const desk = desktopBridge()
     if (!desk || typeof desk.onDesktopStageEvent !== 'function') return undefined
     return desk.onDesktopStageEvent((ev) => {
       if (ev && ev.type === 'pet_return') {
-        recallPetFromDesktop(ev.relX, ev.relY)
+        returnFromDesktop(ev.relX, ev.relY)
       }
     })
   }, [])
@@ -252,32 +250,17 @@ export default function CompanionOverlay({
     if (forceOpenSignal > 0) {
       const next = saveCompanionConfig({ ...config, visible: true })
       setConfig(next)
-      if (roamingDesktop) recallPetFromDesktop()
-      else say('叮铃铃～芽露回来报到啦 🌿', 2800)
+      if (roamingDesktop) returnFromDesktop()
+      else say('叮铃铃～芽露回来啦 🌿', 2600)
     }
   }, [forceOpenSignal])
 
-  useEffect(() => {
-    if (pomodoroSec <= 0) return undefined
-    const t = setInterval(() => {
-      setPomodoroSec((prev) => {
-        if (prev <= 1) {
-          setActionState('deliver')
-          say('🍅 25 分钟专注完成！摇响酒红铃铛为你庆功，起来喝口水吧 🔔✨', 5200)
-          bumpStats({ affection: 12, mood: '为你骄傲' })
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-    return () => clearInterval(t)
-  }, [pomodoroSec > 0])
-
+  // 视线追踪与右键菜单外部关闭
   useEffect(() => {
     if (!config.visible) return undefined
     const onMove = (e) => {
       const cur = posRef.current
-      const dx = e.clientX - (cur.x + 64)
+      const dx = e.clientX - (cur.x + 68)
       const dy = e.clientY - (cur.y + 84)
       setLook({
         x: Math.max(-1, Math.min(1, dx / 360)),
@@ -297,7 +280,128 @@ export default function CompanionOverlay({
     }
   }, [config.visible])
 
-  // 拎起拖动 + 抛物线甩飞（高速冲向窗口边缘或拖出窗口边时，桌面端自动走出窗口去桌面漫游！）
+  const walkTo = async (tx, ty, runState = 'run', durationMs = 740) => {
+    const start = { ...posRef.current }
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
+    const destX = Math.max(8, Math.min(vw - 140, tx - 64))
+    const destY = Math.max(16, Math.min(vh - 190, ty - 110))
+    setFacing(destX >= start.x ? 1 : -1)
+    setActionState(runState)
+    const steps = Math.max(12, Math.round(durationMs / 24))
+    for (let i = 1; i <= steps; i++) {
+      const u = i / steps
+      const ease = 1 - Math.pow(1 - u, 2.2)
+      setPos({ x: start.x + (destX - start.x) * ease, y: start.y + (destY - start.y) * ease })
+      await sleep(Math.round(durationMs / steps))
+    }
+  }
+
+  const returnToCorner = async () => {
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
+    await walkTo(vw - 96, vh - 96, 'run', 640)
+    setFacing(-1)
+    setActionState('idle')
+  }
+
+  // ============================================================================
+  // 核心：芽露自带的「自主活体生命循环」（无需任何菜单，自然散步/坐边/伸懒腰/敲铃铛/走出桌面！）
+  // ============================================================================
+  useEffect(() => {
+    if (!config.visible || config.autonomousLifeEnabled === false || settings.motion === 'reduced') return undefined
+    let cancelled = false
+    let timer = 0
+
+    const scheduleNext = () => {
+      const waitMs = 11000 + Math.round(Math.random() * 8000)
+      timer = setTimeout(async () => {
+        if (cancelled) return
+        if (busyTaskRef.current || chatOpen || customizer.open || isDraggingPet || roamingDesktop) {
+          scheduleNext()
+          return
+        }
+        const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
+        const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
+        const desk = desktopBridge()
+        const canVentureDesktop = Boolean(desk && typeof desk.syncDesktopStage === 'function')
+        const store = sandboxStoreRef && sandboxStoreRef.current
+        const candidates = store ? collectVisibleGlassBlocks().filter((c) => !store.bodies.has(c.id)) : []
+        const idleSec = (Date.now() - lastInteractAtRef.current) / 1000
+        const recentlyBack = (Date.now() - lastDesktopReturnAtRef.current) < 48000
+
+        const act = pickNextAutonomousBehavior({
+          pos: posRef.current,
+          vw,
+          vh,
+          energy: stats.energy,
+          idleSeconds: idleSec,
+          canVentureDesktop,
+          recentlyReturnedFromDesktop: recentlyBack,
+          sneakEatEnabled: config.sneakEatEnabled !== false,
+          hasGlassCandidates: candidates.length > 0,
+        })
+
+        busyTaskRef.current = true
+        try {
+          if (act.type === 'stroll') {
+            await walkTo(act.targetX, act.targetY, 'run', 860)
+            setActionState('idle')
+          } else if (act.type === 'sit_edge') {
+            await walkTo(act.targetX, act.targetY, 'run', 820)
+            setActionState('sit_edge')
+            await sleep(act.durationMs || 4200)
+            if (!cancelled) setActionState('idle')
+          } else if (act.type === 'stretch' || act.type === 'bell_play') {
+            setActionState(act.type)
+            if (act.quip) say(act.quip, 2600)
+            await sleep(act.durationMs || 2400)
+            if (!cancelled) setActionState('idle')
+          } else if (act.type === 'sleep') {
+            setActionState('sleep')
+            if (act.quip) say(act.quip, 3200)
+            bumpStats({ energy: 14, mood: '小憩充电' })
+            await sleep(act.durationMs || 6000)
+            if (!cancelled) setActionState('idle')
+          } else if (act.type === 'venture_desktop') {
+            await walkTo(act.edgeX, act.edgeY, 'run', 880)
+            setFacing(act.exitSide === 'left' ? -1 : 1)
+            setActionState('peek_edge')
+            if (act.quip) say(act.quip, 2600)
+            await sleep(880)
+            if (!cancelled && !chatOpen && !customizer.open) {
+              const exitRelX = act.exitSide === 'left' ? -120 : vw + 18
+              await stepOutToDesktop(exitRelX, posRef.current.y, act.exitSide === 'left' ? -90 : 90, 0, act.quip)
+            }
+          } else if (act.type === 'sneak_eat' && store && candidates.length > 0) {
+            const pick = candidates[Math.floor(Math.random() * candidates.length)]
+            say(`肚子咕噜噜…「${pick.label}」看起来好脆好好吃！`, 2600)
+            await walkTo(pick.x + pick.w / 2 + 24, pick.y + pick.h / 2 + 12, 'run', 800)
+            setActionState('sneak_eat')
+            await sleep(820)
+            biteGlassBody(store, pick)
+            bumpStats({ energy: 12, mood: '偷吃得逞' })
+            if (typeof onForceRefreshSandbox === 'function') onForceRefreshSandbox()
+            setActionState('guilty')
+            say(`啊呜！偷偷啃了一口「${pick.label}」（点我让我修补哦～）`, 3800)
+            await sleep(820)
+            await returnToCorner()
+          }
+        } finally {
+          busyTaskRef.current = false
+        }
+        if (!cancelled) scheduleNext()
+      }, waitMs)
+    }
+
+    scheduleNext()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [config.visible, config.autonomousLifeEnabled, config.sneakEatEnabled, settings.motion, chatOpen, customizer.open, isDraggingPet, roamingDesktop, stats.energy])
+
+  // 拎起拖动 + 抛物线物理（跨出窗口边自然走向真实桌面！）
   const startFlingPhysics = (vx0, vy0) => {
     if (flingRafRef.current) cancelAnimationFrame(flingRafRef.current)
     const vw0 = (typeof window !== 'undefined' && window.innerWidth) || 1280
@@ -307,10 +411,9 @@ export default function CompanionOverlay({
 
     let x = posRef.current.x
     let y = posRef.current.y
-    // 若直接拖到窗口边缘外松手 → 桌面端无缝走到系统桌面！
     if (canRoamDesktop && (x < -28 || x > vw0 - 98 || y < -24 || y > vh0 - 110)) {
       setDragTilt(0)
-      sendPetToDesktop(x, y, vx0 * 0.45, vy0 * 0.45)
+      stepOutToDesktop(x, y, vx0 * 0.45, vy0 * 0.45, '叮铃～到外面的桌面啦，我先四处逛逛 🌿')
       return
     }
 
@@ -320,12 +423,12 @@ export default function CompanionOverlay({
     if (speed0 < 160) {
       setDragTilt(0)
       setActionState('happy')
-      say('安全着陆～我就先在这儿陪着你啦 🌿', 2400)
-      setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 520)
+      say('安全着陆～我就先在这儿陪着你啦 🌿', 2200)
+      setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 500)
       return
     }
     setActionState('thrown')
-    say('哇啊啊起飞啦——酒红铃铛要响翻天啦 🔔', 2200)
+    say('哇啊啊起飞啦——腰间铃铛要响翻天啦 🔔', 2200)
     let lastT = performance.now()
     let bounces = 0
 
@@ -342,11 +445,10 @@ export default function CompanionOverlay({
       y += vy * dt
       vx *= 0.992
 
-      // 高速撞向左右/顶部边界且桌面跨窗可用 -> 直接冲出 Harbor 窗口飞向真实桌面！
-      if (canRoamDesktop && ((x < 2 && vx < -540) || (x > maxX && vx > 540) || (y < 6 && vy < -540))) {
+      if (canRoamDesktop && ((x < 2 && vx < -520) || (x > maxX && vx > 520) || (y < 6 && vy < -520))) {
         flingRafRef.current = 0
         setDragTilt(0)
-        sendPetToDesktop(x, y, vx * 0.72, vy * 0.72)
+        stepOutToDesktop(x, y, vx * 0.72, vy * 0.72, '飞到窗口外面的桌面啦～✨')
         return
       }
 
@@ -359,7 +461,7 @@ export default function CompanionOverlay({
 
       if (hitWall && Math.hypot(vx, vy) > 130) {
         bounces += 1
-        const vp = computeViewportCoords(x + 64, y + 88, vw, vh)
+        const vp = computeViewportCoords(x + 68, y + 92, vw, vh)
         fireShellImpact(hitSide, bounces === 1 ? 'strong' : 'medium', { nx: vp.nx, ny: vp.ny, pointer: true })
       }
 
@@ -372,8 +474,8 @@ export default function CompanionOverlay({
         flingRafRef.current = 0
         setDragTilt(0)
         setActionState('happy')
-        say('咚！稳稳落地～把我往窗边一甩就能去你桌面散步哦 🌿', 2800)
-        setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 700)
+        say('咚！稳稳落地～', 2200)
+        setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 650)
         return
       }
       flingRafRef.current = requestAnimationFrame(tick)
@@ -384,6 +486,7 @@ export default function CompanionOverlay({
   const handleActorPointerDown = (e) => {
     if (e.button !== 0) return
     e.stopPropagation()
+    lastInteractAtRef.current = Date.now()
     if (flingRafRef.current) {
       cancelAnimationFrame(flingRafRef.current)
       flingRafRef.current = 0
@@ -409,7 +512,7 @@ export default function CompanionOverlay({
         setIsDraggingPet(true)
         setCtxMenu(null)
         setActionState('grabbed')
-        say('咿呀！别拎着我晃呀～拖到窗口外面就能带我去桌面散步哦！', 2400)
+        say('咿呀！别拎着我晃呀～', 2000)
       }
       if (!d.dragging) return
       const now = performance.now()
@@ -420,7 +523,6 @@ export default function CompanionOverlay({
       const vx = (ev.clientX - first.x) / dtS
       const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
       const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
-      // 允许拖出窗口边缘（-56..vw-72），方便无缝跨窗走到桌面！
       const nx = Math.max(-56, Math.min(vw - 72, d.originX + (ev.clientX - d.startX)))
       const ny = Math.max(-44, Math.min(vh - 96, d.originY + (ev.clientY - d.startY)))
       setPos({ x: nx, y: ny })
@@ -452,63 +554,15 @@ export default function CompanionOverlay({
     globalThis.addEventListener('pointercancel', onUp)
   }
 
-  const walkTo = async (tx, ty, runState = 'run', durationMs = 740) => {
-    const start = { ...posRef.current }
-    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
-    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
-    const destX = Math.max(10, Math.min(vw - 138, tx - 64))
-    const destY = Math.max(16, Math.min(vh - 188, ty - 110))
-    setFacing(destX >= start.x ? 1 : -1)
-    setActionState(runState)
-    const steps = Math.max(12, Math.round(durationMs / 24))
-    for (let i = 1; i <= steps; i++) {
-      const u = i / steps
-      const ease = 1 - Math.pow(1 - u, 2.2)
-      setPos({ x: start.x + (destX - start.x) * ease, y: start.y + (destY - start.y) * ease })
-      await sleep(Math.round(durationMs / steps))
-    }
-  }
-
-  const returnToCorner = async () => {
-    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
-    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
-    await walkTo(vw - 96, vh - 96, 'run', 640)
-    setFacing(-1)
-    setActionState('idle')
-  }
-
   const performFeedSnack = async (snack) => {
     if (!snack) return
+    lastInteractAtRef.current = Date.now()
     setSnackBarOpen(false)
     setActionState('happy')
-    say(`${snack.icon} ${snack.quote}`, 3600)
+    say(`${snack.icon} ${snack.quote}`, 3400)
     bumpStats({ energy: snack.energy, affection: snack.affection, snacksEaten: 1, mood: '超满足' })
-    await sleep(1000)
+    await sleep(950)
     setActionState('idle')
-  }
-
-  const performStarCatchGame = async () => {
-    if (busyTaskRef.current || roamingDesktop) return
-    busyTaskRef.current = true
-    try {
-      const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
-      const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
-      const tx = 140 + Math.random() * Math.max(200, vw - 300)
-      const ty = 120 + Math.random() * Math.max(160, vh - 300)
-      setStarToy({ x: tx, y: ty })
-      say('发现发光晨露星晶！挥动露芽杖冲过去接住它 ⭐', 2600)
-      await walkTo(tx + 12, ty + 20, 'run', 660)
-      setStarToy(null)
-      const vp = computeViewportCoords(tx, ty, vw, vh)
-      fireShellImpact('pointer', 'medium', { nx: vp.nx, ny: vp.ny, pointer: true })
-      setActionState('deliver')
-      bumpStats({ affection: 8, energy: -4, mood: '超开心' })
-      say('接住啦！酒红铃铛叮铃响～好感度 +8 ✨', 3200)
-      await sleep(850)
-      setActionState('idle')
-    } finally {
-      busyTaskRef.current = false
-    }
   }
 
   const abortCurrentAutopilot = () => {
@@ -519,16 +573,15 @@ export default function CompanionOverlay({
     try { abortGroupRelay() } catch {}
     setAutopilotHud(null)
     setActionState('idle')
-    say('已按你的指示停止本次监工任务～', 2600)
+    say('已按你的指示停止本次监工任务～', 2400)
   }
 
-  // ============================================================================
-  // 全自动无人驾驶总管 (R30 根治「选专家卡住」：直切多专家团 Tab + 实时成员进度流 + 自动收起交稿！)
-  // ============================================================================
+  // 全自动无人驾驶总管：直切多专家团 Tab + 实时成员进度 + 自动收起交稿
   const performAutopilot = async (requirement) => {
     const req = String(requirement || '').trim()
     if (!req) return
-    if (roamingDesktop) recallPetFromDesktop()
+    lastInteractAtRef.current = Date.now()
+    if (roamingDesktop) returnFromDesktop()
     autopilotCancelRef.current = false
     const st0 = getState()
     const workflows = (st0.plugins && st0.plugins.workflows) || []
@@ -568,7 +621,7 @@ export default function CompanionOverlay({
     ].filter(Boolean).join('\n')
 
     setMessages((prev) => [...prev.slice(-16), { id: `ap_plan_${Date.now()}`, role: 'assistant', text: planMsg, engine: 'autopilot' }])
-    say(`已选定「${plan.moduleLabel}」，看我挥动露芽杖亲自跑去操作监工！`, 3600)
+    say(`已选定「${plan.moduleLabel}」，看我执露芽杖亲自操作监工！`, 3400)
 
     let deliverable = ''
     let execError = ''
@@ -584,9 +637,9 @@ export default function CompanionOverlay({
 
       const navHit = findUiControlByHint(plan.navTarget)
       if (navHit) {
-        await walkTo(navHit.cx + 30, navHit.cy + 14, 'run', 580)
+        await walkTo(navHit.cx + 30, navHit.cy + 14, 'run', 560)
         setActionState('crouch_click')
-        await sleep(200)
+        await sleep(180)
       }
 
       if (plan.mode === 'workflow' && plan.workflow) {
@@ -608,7 +661,6 @@ export default function CompanionOverlay({
           : []
         deliverable = outputs.length ? outputs[outputs.length - 1] : ''
       } else if (plan.mode === 'expert_team' && plan.team) {
-        // R30 关键根治：直接同步切入市场弹窗的「✦ 多专家团队」Tab 并锁定对应团队，绝不再卡在「选专家」页！
         openModal('market', null, { marketTab: 'team', marketTeamId: plan.team.id })
         await sleep(160)
         setActionState('supervising')
@@ -628,7 +680,7 @@ export default function CompanionOverlay({
               pct,
               running: true,
             })
-            say(latest.label.slice(0, 42), 2600)
+            say(latest.label.slice(0, 42), 2400)
           }
         })
         try {
@@ -650,7 +702,6 @@ export default function CompanionOverlay({
         } finally {
           if (typeof unsubTeam === 'function') unsubTeam()
         }
-        // 完成后自动收起市场弹窗，让右侧副屏的终稿清晰展现在用户眼前！
         if (!autopilotCancelRef.current && deliverable) {
           closeModal('left', true)
         }
@@ -686,24 +737,20 @@ export default function CompanionOverlay({
       } else {
         setActivePanel('chat')
         await sleep(140)
-        if (plan.expert) {
-          addComposerToken({ id: plan.expert.id, name: plan.expert.name, kind: 'agent', prompt: plan.expert.prompt })
-        }
-        if (plan.skill) {
-          addComposerToken({ id: plan.skill.id, name: `Skill · ${plan.skill.name}`, kind: 'skill', prompt: plan.skill.prompt })
-        }
+        if (plan.expert) addComposerToken({ id: plan.expert.id, name: plan.expert.name, kind: 'agent', prompt: plan.expert.prompt })
+        if (plan.skill) addComposerToken({ id: plan.skill.id, name: `Skill · ${plan.skill.name}`, kind: 'skill', prompt: plan.skill.prompt })
         const compHit = focusComposerInput()
         if (compHit) await walkTo(compHit.x + 120, compHit.y + 10, 'run', 500)
         setActionState('write_input')
         setAutopilotHud({
-          title: '芽露正在手写需求并派单',
+          title: '芽露正在执杖手写并派单',
           moduleLabel: `${plan.expert ? plan.expert.name : '智能对话'}`,
           stepText: '已自动装载最佳专家与 Skill，正在写入任务并启动运行…',
           pct: 48,
           running: true,
         })
         setComposerDraft(req)
-        await sleep(200)
+        await sleep(180)
         const sid = getState().sessions.currentId
         const beforeLen = ((getState().sessions.items.find((s) => s.id === sid) || {}).messages || []).length
         enqueueOrSendChat(req)
@@ -746,11 +793,11 @@ export default function CompanionOverlay({
         setDockPreview(`# 🌿 芽露全自动监工交付终稿\n\n> **原始需求**：${req}\n> **选用路线**：${plan.moduleLabel}\n> **验收评级**：${qa.grade}（${qa.score} 分 · ${qa.charCount} 字）\n\n---\n\n${deliverable}`)
         setActionState('deliver')
         bumpStats({ affection: 15, energy: -6, tasksDelivered: 1, mood: '圆满交稿' })
-        say(`叮铃铃～交稿啦！${qa.grade}，终稿已经放进右侧副屏咯 🔔✨`, 5000)
+        say(`叮铃铃～交稿啦！${qa.grade}，终稿已经放进右侧副屏咯 🔔✨`, 4800)
         pushToast(`芽露已完成「${plan.moduleLabel}」全自动监工并交稿！`, 'ok')
       } else {
         setActionState('guilty')
-        say(execError ? `呜…模型返回异常：${execError.slice(0, 32)}` : '这次没有拿到完整正文，请检查模型 API Key 后重试～', 4400)
+        say(execError ? `呜…模型返回异常：${execError.slice(0, 32)}` : '这次没有拿到完整正文，请检查模型配置后重试～', 4200)
       }
 
       setMessages((prev) => [
@@ -764,14 +811,14 @@ export default function CompanionOverlay({
           engine: 'autopilot',
         },
       ])
-      await sleep(1000)
+      await sleep(950)
       await returnToCorner()
     } catch (err) {
       setAutopilotHud(null)
       setActionState('guilty')
       const errTxt = String((err && err.message) || err)
       setMessages((prev) => [...prev.slice(-16), { id: `ap_err_${Date.now()}`, role: 'assistant', text: `执行遇到异常：${errTxt}`, engine: 'autopilot' }])
-      say('执行遇到小故障，我先退回角落等你指示～', 3600)
+      say('执行遇到小故障，我先退回角落等你指示～', 3400)
     }
   }
 
@@ -781,24 +828,24 @@ export default function CompanionOverlay({
       if (['chat', 'group', 'workflow', 'workspace'].includes(targetHint)) setActivePanel(targetHint)
       setActionState('happy')
       say(`已为你切换到「${label || targetHint}」～`)
-      await sleep(750)
+      await sleep(700)
       setActionState('idle')
       return
     }
     say(`哒哒哒～跑去帮你点「${label || targetHint}」！`)
-    await walkTo(hit.cx + 28, hit.cy + 16, 'run', 640)
+    await walkTo(hit.cx + 28, hit.cy + 16, 'run', 620)
     setFacing(hit.cx >= posRef.current.x + 64 ? 1 : -1)
     setActionState('crouch_click')
-    await sleep(280)
+    await sleep(260)
     triggerUiControlClick(targetHint)
     const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
     const vp = computeViewportCoords(hit.cx, hit.cy, vw, vh)
     fireShellImpact('pointer', 'medium', { nx: vp.nx, ny: vp.ny, pointer: true })
-    await sleep(340)
+    await sleep(320)
     setActionState('happy')
     say(`点好啦！已为你打开「${label || targetHint}」✨`)
-    await sleep(560)
+    await sleep(540)
     await returnToCorner()
   }
 
@@ -806,8 +853,8 @@ export default function CompanionOverlay({
     setActivePanel('chat')
     await sleep(140)
     const hit = focusComposerInput()
-    say('挥动露芽杖，跑去输入框帮你手写～')
-    if (hit) await walkTo(hit.x + 110, hit.y + 12, 'run', 640)
+    say('握好露芽杖，跑去输入框帮你手写～')
+    if (hit) await walkTo(hit.x + 110, hit.y + 12, 'run', 620)
     setActionState('write_input')
     const full = String(textToWrite || '')
     const step = Math.max(1, Math.ceil(full.length / 22))
@@ -815,20 +862,20 @@ export default function CompanionOverlay({
     for (let i = 0; i < full.length; i += step) {
       cur = full.slice(0, i + step)
       setComposerDraft(cur)
-      await sleep(40)
+      await sleep(38)
     }
     setComposerDraft(full)
     setActionState('happy')
     say('手写完毕！按回车就能发出去咯 ✍️')
-    await sleep(600)
+    await sleep(580)
     await returnToCorner()
   }
 
   const performBlackHoleMagic = async (fileName = '项目核心说明.md') => {
     setActivePanel('chat')
     setActionState('magic_blackhole')
-    say(`露芽杖·空间黑洞展开！正在把「${fileName}」取出来…`, 4200)
-    await sleep(860)
+    say(`露芽杖·微型黑洞展开！正在把「${fileName}」取出来…`, 4000)
+    await sleep(820)
     const startX = posRef.current.x + (facing > 0 ? 105 : 22)
     const startY = posRef.current.y + 68
     const composerHit = findUiControlByHint('composer')
@@ -856,7 +903,7 @@ export default function CompanionOverlay({
     setActionState('happy')
     say(`搞定！「${fileName}」已放进聊天框啦 🌀`)
     pushToast(`芽露已通过黑洞魔法将「${fileName}」放入输入框`, 'ok')
-    await sleep(700)
+    await sleep(680)
     setActionState('idle')
   }
 
@@ -870,22 +917,22 @@ export default function CompanionOverlay({
 
     for (const b of damaged) {
       if (b.status === 'shattered') {
-        say(isAutoPassive ? `哎呀「${b.label}」碎了一地！我用露芽杖把碎片收回来修补～` : `正在跑去捡「${b.label}」的玻璃碎片…`)
+        say(isAutoPassive ? `哎呀「${b.label}」碎了一地！我拿露芽杖把碎片收回来修补～` : `正在跑去捡「${b.label}」的玻璃碎片…`)
         const firstShard = b.shards[0]
         if (firstShard) {
-          await walkTo(firstShard.x, firstShard.y, 'run', 680)
+          await walkTo(firstShard.x, firstShard.y, 'run', 660)
           setActionState('collect_shards')
           for (const sh of b.shards) {
             sh.collected = true
             if (typeof onForceRefreshSandbox === 'function') onForceRefreshSandbox()
-            await sleep(48)
+            await sleep(46)
           }
           say('碎片收好啦！跑回原位用露芽杖凝聚修补～')
         }
-        await walkTo(b.origin.x + b.origin.w / 2 + 24, b.origin.y + b.origin.h / 2 + 12, 'collect_shards', 660)
+        await walkTo(b.origin.x + b.origin.w / 2 + 24, b.origin.y + b.origin.h / 2 + 12, 'collect_shards', 640)
       } else {
         say(`乖乖跑去把啃掉的「${b.label}」修补回亮晶晶的样子…`)
-        await walkTo(b.x + b.w / 2 + 24, b.y + b.h / 2 + 12, 'run', 660)
+        await walkTo(b.x + b.w / 2 + 24, b.y + b.h / 2 + 12, 'run', 640)
       }
 
       startRepairBody(store, b.id)
@@ -893,20 +940,20 @@ export default function CompanionOverlay({
       for (let step = 1; step <= 20; step++) {
         setRepairProgress(store, b.id, step / 20)
         if (typeof onForceRefreshSandbox === 'function') onForceRefreshSandbox()
-        await sleep(76)
+        await sleep(74)
       }
       setGlassSourceVisibility(b.id, true)
       if (typeof onForceRefreshSandbox === 'function') onForceRefreshSandbox()
       setActionState('happy')
       say(`「${b.label}」已经凝聚修补完好啦 🌿✨`)
-      await sleep(460)
+      await sleep(440)
     }
     await returnToCorner()
   }
 
   useEffect(() => {
     if (!shatterSignal || !config.visible || config.autoRepairShattered === false) return undefined
-    const delayMs = 5200 + Math.round(Math.random() * 4000)
+    const delayMs = 5000 + Math.round(Math.random() * 3800)
     const timer = setTimeout(() => {
       if (busyTaskRef.current || isDraggingPet || roamingDesktop) return
       busyTaskRef.current = true
@@ -915,43 +962,10 @@ export default function CompanionOverlay({
     return () => clearTimeout(timer)
   }, [shatterSignal, config.visible, config.autoRepairShattered, roamingDesktop])
 
-  useEffect(() => {
-    if (!config.visible || config.sneakEatEnabled === false || settings.motion === 'reduced') return undefined
-    const timer = setInterval(async () => {
-      if (busyTaskRef.current || chatOpen || customizer.open || isDraggingPet || roamingDesktop || stats.energy >= 88) return
-      const store = sandboxStoreRef && sandboxStoreRef.current
-      if (!store) return
-      const candidates = collectVisibleGlassBlocks().filter((c) => !store.bodies.has(c.id))
-      if (candidates.length === 0) return
-      const pick = candidates[Math.floor(Math.random() * candidates.length)]
-      busyTaskRef.current = true
-      try {
-        say(`肚子咕噜噜…「${pick.label}」看起来好脆好好吃！`, 2600)
-        await walkTo(pick.x + pick.w / 2 + 24, pick.y + pick.h / 2 + 12, 'run', 780)
-        setActionState('sneak_eat')
-        await sleep(820)
-        biteGlassBody(store, pick)
-        bumpStats({ energy: 10, mood: '偷吃得逞' })
-        if (typeof onForceRefreshSandbox === 'function') onForceRefreshSandbox()
-        setActionState('guilty')
-        say(`啊呜！偷偷啃了一口「${pick.label}」（点我喊我修补，或者喂我晨露蜜糖吧～）`, 4200)
-        await sleep(820)
-        await returnToCorner()
-      } finally {
-        busyTaskRef.current = false
-      }
-    }, 40000)
-    return () => clearInterval(timer)
-  }, [config.visible, config.sneakEatEnabled, settings.motion, chatOpen, customizer.open, isDraggingPet, roamingDesktop, stats.energy])
-
   const executeAction = async (act) => {
     if (!act || busyTaskRef.current) return
     if (act.type === 'open_customizer') {
       setCustomizer({ open: true, tab: 'avatar' })
-      return
-    }
-    if (act.type === 'throw_star') {
-      performStarCatchGame()
       return
     }
     busyTaskRef.current = true
@@ -961,14 +975,7 @@ export default function CompanionOverlay({
       else if (act.type === 'write_input') await performWriteInput(act.text)
       else if (act.type === 'magic_blackhole') await performBlackHoleMagic(act.fileName)
       else if (act.type === 'repair_all') await performRepairAll(false)
-      else if (act.type === 'morph_form') {
-        const nextForm = (avatar.bodyForm || 'yalu_model') === 'yalu_model' ? 'dafeiyu' : 'yalu_model'
-        setAvatar((prev) => saveCompanionAvatar({ ...prev, bodyForm: nextForm, name: nextForm === 'yalu_model' ? '芽露' : '大肥鱼' }))
-        setActionState('dance')
-        say(nextForm === 'yalu_model' ? '嘭✨ 变回芽露原版定妆啦 🌿' : '嘭✨ 切换为备用大肥鱼皮肤 🐳', 3000)
-        await sleep(900)
-        setActionState('idle')
-      } else if (act.type === 'dance') {
+      else if (act.type === 'dance') {
         setActionState('dance')
         bumpStats({ affection: 4, mood: '摇铃开心' })
         await sleep(1300)
@@ -999,6 +1006,7 @@ export default function CompanionOverlay({
   const handleSendChat = async (overrideText = '', { forceAutopilot = false } = {}) => {
     const text = String(overrideText || chatInput).trim()
     if (!text || chatBusy) return
+    lastInteractAtRef.current = Date.now()
     setChatInput('')
     setMessages((prev) => [...prev.slice(-16), { id: `u_${Date.now()}`, role: 'user', text }])
     setChatBusy(true)
@@ -1024,50 +1032,58 @@ export default function CompanionOverlay({
     }
   }
 
+  const cycleDriveMode = () => {
+    if (config.fullLlmDrive) {
+      updateConfigPatch({ llmEnabled: false, fullLlmDrive: false })
+      pushToast('芽露已切换为「🤖 本地全自动总管」（零 Token）', 'info')
+    } else if (config.llmEnabled) {
+      updateConfigPatch({ llmEnabled: true, fullLlmDrive: true })
+      pushToast('芽露已切换为「⚡ 完全大模型驱动」', 'info')
+    } else {
+      updateConfigPatch({ llmEnabled: true, fullLlmDrive: false })
+      pushToast('芽露已切换为「🧠 大模型闲聊 + 本地总管」', 'info')
+    }
+  }
+
   const updateAvatarPatch = (patch) => setAvatar((prev) => saveCompanionAvatar({ ...prev, ...patch }))
   const updateConfigPatch = (patch) => setConfig((prev) => saveCompanionConfig({ ...prev, ...patch }))
 
   if (!config.visible) return null
 
-  const isYaluModel = (avatar.bodyForm || 'yalu_model') === 'yalu_model'
   const exprAvatarUrl = pickExpressionUrl(pack, actionState, avatar.expressionOverride)
   const driveLabel = config.fullLlmDrive
-    ? '⚡ 完全大模型驱动'
-    : (config.autopilotEnabled !== false ? '🤖 全自动总管' : '🛡 纯本地离线')
+    ? '⚡ 完全大模型'
+    : (config.llmEnabled ? '🧠 闲聊增强' : '🤖 全自动总管')
   const lv = affectionLevel(stats.affection)
-  const pomoLabel = pomodoroSec > 0
-    ? `${String(Math.floor(pomodoroSec / 60)).padStart(2, '0')}:${String(pomodoroSec % 60).padStart(2, '0')}`
-    : ''
+  const storeNow = sandboxStoreRef && sandboxStoreRef.current
+  const hasDamagedGlass = Boolean(
+    storeNow && Array.from(storeNow.bodies.values()).some((b) => b.status === 'shattered' || b.biteNotches.length > 0 || b.cracks.length > 0)
+  )
 
   return (
     <div className="cp-root" data-companion-root="true">
-      {starToy && (
-        <div className="cp-star-toy" style={{ transform: `translate3d(${starToy.x.toFixed(1)}px, ${starToy.y.toFixed(1)}px, 0)` }} aria-hidden="true">
-          ⭐
-        </div>
-      )}
-
-      {/* 芽露走到桌面漫游时，在主窗右下角留一颗一键召回胶囊 */}
+      {/* 仅在芽露自己溜达到桌面时显示极简召回胶囊 */}
       {roamingDesktop && (
-        <button type="button" className="cp-recall-pill" onClick={() => recallPetFromDesktop()}>
-          🌿 召回「{avatar.name || '芽露'}」回主窗口
+        <button type="button" className="cp-recall-pill" onClick={() => returnFromDesktop()}>
+          🌿 呼唤「{avatar.name || '芽露'}」回窗
         </button>
       )}
 
-      {/* 芽露原版建模 / 备用皮肤可拎起互动主体 */}
+      {/* 芽露 3D 骨骼 / 60fps 原片逐帧活体主体（零体外漂浮道具！） */}
       {!roamingDesktop && (
         <div
           className="cp-actor"
           data-companion-actor="true"
-          data-body-form={avatar.bodyForm || 'yalu_model'}
+          data-render-mode={avatar.renderMode || 'yalu_3d'}
           data-action={actionState}
           data-dragging={String(isDraggingPet)}
           style={{ transform: `translate3d(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px, 0)` }}
-          title={`左键打开「${avatar.name || '芽露'}」全自动总管 · 按住拎起可拖出窗口去桌面散步 · 双击摇铃转圈 · 右键工坊与设置`}
+          title={`左键与「${avatar.name || '芽露'}」对话派单 · 按住可拎起拖出窗口 · 双击摇铃 · 右键工坊与驱动`}
           onPointerDown={handleActorPointerDown}
           onClick={(e) => {
             e.stopPropagation()
             if (suppressClickRef.current) return
+            lastInteractAtRef.current = Date.now()
             setCtxMenu(null)
             const rect = e.currentTarget.getBoundingClientRect()
             const relY = rect && rect.height ? (e.clientY - rect.top) / rect.height : 0.5
@@ -1075,12 +1091,12 @@ export default function CompanionOverlay({
               if (relY < 0.42) {
                 setActionState('pat')
                 bumpStats({ affection: 5, headPats: 1, mood: '被摸头好开心' })
-                say('叮铃～摸摸头最舒服啦 💕 有什么任务直接吩咐芽露！', 2800)
-                setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 900)
+                say('叮铃～摸摸头最舒服啦 💕 有什么任务交给芽露？', 2600)
+                setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 850)
               } else {
-                setActionState('poke')
-                say('哎呀别戳我的酒红铃铛啦～要把需求交给我监工吗？', 2600)
-                setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 700)
+                setActionState('bell_play')
+                say('叮铃铃～碰到我腰间的酒红铃铛啦 🔔', 2400)
+                setTimeout(() => { if (!busyTaskRef.current) setActionState('idle') }, 800)
               }
             }
             setChatOpen((v) => !v)
@@ -1094,39 +1110,26 @@ export default function CompanionOverlay({
             e.stopPropagation()
             const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280
             const vh = (typeof window !== 'undefined' && window.innerHeight) || 800
-            setCtxMenu({ x: Math.min(vw - 264, Math.max(12, e.clientX)), y: Math.min(vh - 410, Math.max(12, e.clientY - 140)) })
+            setCtxMenu({ x: Math.min(vw - 246, Math.max(12, e.clientX)), y: Math.min(vh - 170, Math.max(12, e.clientY - 70)) })
           }}
         >
           {speech && <div className="cp-speech">{speech}</div>}
-          {isYaluModel ? (
-            <YaluModelStage
-              assets={packAssets}
-              actionState={actionState}
-              facing={facing}
-              lookX={look.x}
-              lookY={look.y}
-              dragTilt={dragTilt}
-              propLoadout={avatar.propLoadout || 'both'}
-              auraTheme={avatar.auraTheme || 'natural'}
-              scale={avatar.scale || 1}
-              width={126}
-              height={178}
-            />
-          ) : (
-            <Companion3DCanvas
-              avatar={avatar}
-              actionState={actionState}
-              facing={facing}
-              lookX={look.x}
-              lookY={look.y}
-              dragTilt={dragTilt}
-              size={146}
-            />
-          )}
+          <YaluModelStage
+            assets={packAssets}
+            renderMode={avatar.renderMode || 'yalu_3d'}
+            actionState={actionState}
+            facing={facing}
+            lookX={look.x}
+            lookY={look.y}
+            dragTilt={dragTilt}
+            auraTheme={avatar.auraTheme || 'natural'}
+            scale={avatar.scale || 1}
+            width={136}
+            height={186}
+          />
           <span className="cp-name-tag">
-            <span>{isYaluModel ? '🌿' : '🐳'} {avatar.name || '芽露'}</span>
+            <span>🌿 {avatar.name || '芽露'}</span>
             <span className="cp-lv-badge">Lv.{lv}</span>
-            {pomoLabel && <span className="cp-lv-badge">🍅{pomoLabel}</span>}
           </span>
         </div>
       )}
@@ -1137,32 +1140,20 @@ export default function CompanionOverlay({
         </div>
       )}
 
+      {/* 极简纯净的对话与全自动派单小窗（告别花哨按钮堆砌！） */}
       {chatOpen && (
         <section className="cp-chat" aria-label="芽露全自动总管协作面板" onClick={(e) => e.stopPropagation()}>
           <div className="cp-chat-head">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              {isYaluModel && exprAvatarUrl && (
-                <img className="cp-expr-avatar" src={exprAvatarUrl} alt="芽露表情" />
-              )}
+              {exprAvatarUrl && <img className="cp-expr-avatar" src={exprAvatarUrl} alt="芽露表情" />}
               <strong style={{ fontSize: 13 }}>{avatar.name || '芽露'}</strong>
               <span className="cp-mode-pill">{driveLabel}</span>
             </div>
             <div style={{ display: 'flex', gap: 5 }}>
-              <button type="button" className="cp-mini-btn" title="让芽露走出 Harbor 窗口去系统桌面散步" onClick={() => sendPetToDesktop()}>🌍 去桌面</button>
+              <button type="button" className="cp-mini-btn" data-active={String(snackBarOpen)} onClick={() => setSnackBarOpen((v) => !v)}>🍓 投喂</button>
               <button type="button" className="cp-mini-btn" onClick={() => setCustomizer({ open: true, tab: 'avatar' })}>🎨 工坊</button>
               <button type="button" className="cp-mini-btn" onClick={() => setChatOpen(false)} aria-label="关闭助手聊天">×</button>
             </div>
-          </div>
-
-          <div className="cp-stats-bar">
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              <span className="cp-stat-pill">♡ Lv.{lv} ({stats.affection})</span>
-              <span className="cp-stat-pill">💧 精力 {stats.energy}%</span>
-              <span className="cp-stat-pill">📦 交稿 {stats.tasksDelivered}</span>
-            </div>
-            <button type="button" className="cp-mini-btn" data-active={String(snackBarOpen)} onClick={() => setSnackBarOpen((v) => !v)}>
-              🍓 投喂
-            </button>
           </div>
 
           {snackBarOpen && (
@@ -1180,9 +1171,7 @@ export default function CompanionOverlay({
               <div className="cp-autopilot-row">
                 <strong>{autopilotHud.title}</strong>
                 {autopilotHud.running ? (
-                  <button type="button" className="cp-mini-btn" onClick={abortCurrentAutopilot}>
-                    停止监工
-                  </button>
+                  <button type="button" className="cp-mini-btn" onClick={abortCurrentAutopilot}>停止监工</button>
                 ) : (
                   <button type="button" className="cp-mini-btn" onClick={() => setAutopilotHud(null)}>收起</button>
                 )}
@@ -1212,6 +1201,7 @@ export default function CompanionOverlay({
             ))}
           </div>
 
+          {/* 仅在需要时呈现极简情景入口（最多 2 项，绝不堆砌按钮！） */}
           <div className="cp-quick-row">
             <button
               type="button"
@@ -1221,19 +1211,11 @@ export default function CompanionOverlay({
             >
               🤖 全自动代办交稿
             </button>
-            <button type="button" className="cp-mini-btn" onClick={() => performStarCatchGame()}>⭐ 丢星晶逗她接</button>
-            <button type="button" className="cp-mini-btn" onClick={() => handleSendChat('帮我把被啃掉和碎裂的玻璃修补好')}>🛠 修补玻璃</button>
-            <button type="button" className="cp-mini-btn" onClick={() => handleSendChat('用黑洞帮我把 需求规格.md 放进聊天框')}>🌀 黑洞取文件</button>
-            <button
-              type="button"
-              className="cp-mini-btn"
-              onClick={() => {
-                if (pomodoroSec > 0) { setPomodoroSec(0); say('番茄钟已结束，随时叫芽露～') }
-                else { setPomodoroSec(25 * 60); setActionState('supervising'); say('🍅 25 分钟专注模式开启！芽露拿着露芽杖陪你～') }
-              }}
-            >
-              {pomodoroSec > 0 ? `🍅 停止(${pomoLabel})` : '🍅 番茄钟'}
-            </button>
+            {hasDamagedGlass ? (
+              <button type="button" className="cp-mini-btn" onClick={() => handleSendChat('帮我把受损的玻璃修补好')}>🛠 修补受损玻璃</button>
+            ) : (
+              <button type="button" className="cp-mini-btn" onClick={() => handleSendChat('用黑洞帮我把 需求规格.md 放进聊天框')}>🌀 黑洞取文件</button>
+            )}
           </div>
 
           <div className="cp-chat-foot">
@@ -1242,7 +1224,7 @@ export default function CompanionOverlay({
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSendChat() }}
-              placeholder="发需求给芽露，自动选专家团/工作流监工交稿…"
+              placeholder="直接发需求给芽露，她会自动选专家团/工作流监工交稿…"
             />
             <button
               type="button"
@@ -1257,56 +1239,23 @@ export default function CompanionOverlay({
         </section>
       )}
 
+      {/* 极简克制右键菜单（仅保留 3 项核心系统控制，所有互动/出窗漫步均为自然本能动作！） */}
       {ctxMenu && (
-        <div className="cp-ctx" role="menu" aria-label="3D 助手右键菜单" style={{ left: `${ctxMenu.x}px`, top: `${ctxMenu.y}px` }} onClick={(e) => e.stopPropagation()}>
+        <div className="cp-ctx" role="menu" aria-label="芽露右键菜单" style={{ left: `${ctxMenu.x}px`, top: `${ctxMenu.y}px` }} onClick={(e) => e.stopPropagation()}>
           <button type="button" className="cp-ctx-item" onClick={() => { setCtxMenu(null); setCustomizer({ open: true, tab: 'avatar' }) }}>
-            <span>🎨 芽露建模工坊与 60fps 成片</span><span>→</span>
+            <span>🎨 芽露 3D 工坊与大模型设置</span><span>→</span>
           </button>
-          <button type="button" className="cp-ctx-item" onClick={() => { setCtxMenu(null); sendPetToDesktop() }}>
-            <span>🌍 走出窗口去桌面自由漫步</span><span>✨</span>
-          </button>
-          <button type="button" className="cp-ctx-item" onClick={() => { setCtxMenu(null); performStarCatchGame() }}>
-            <span>⭐ 丢晨露星晶逗她接</span><span>🎮</span>
-          </button>
-          <button type="button" className="cp-ctx-item" onClick={() => { setCtxMenu(null); executeAction({ type: 'repair_all' }) }}>
-            <span>🛠 修补被啃/碎裂的玻璃</span><span>✨</span>
-          </button>
-          <div className="cp-ctx-div" />
-          <button type="button" className="cp-ctx-item" data-active={String(config.autopilotEnabled !== false)} onClick={() => {
-            const next = config.autopilotEnabled === false
-            updateConfigPatch({ autopilotEnabled: next })
-            pushToast(next ? '已开启「全自动无人驾驶总管」' : '已关闭自动派单', 'info')
-            setCtxMenu(null)
-          }}>
-            <span>🤖 全自动无人驾驶接管</span><span>{config.autopilotEnabled !== false ? '开' : '关'}</span>
-          </button>
-          <button type="button" className="cp-ctx-item" data-active={String(Boolean(config.llmEnabled))} onClick={() => {
-            const next = !config.llmEnabled
-            updateConfigPatch({ llmEnabled: next, ...(next ? {} : { fullLlmDrive: false }) })
-            pushToast(next ? '已为芽露开启大模型闲聊与路由增强' : '已切换为纯本地零 Token 驱动', 'info')
-            setCtxMenu(null)
-          }}>
-            <span>🧠 启用大模型使用</span><span>{config.llmEnabled ? '开' : '关'}</span>
-          </button>
-          <button type="button" className="cp-ctx-item" data-active={String(Boolean(config.fullLlmDrive))} onClick={() => {
-            const next = !config.fullLlmDrive
-            updateConfigPatch({ fullLlmDrive: next, ...(next ? { llmEnabled: true } : {}) })
-            pushToast(next ? '已开启「完全使用大模型驱动」' : '已恢复「本地优先驱动」', 'info')
-            setCtxMenu(null)
-          }}>
-            <span>⚡ 完全使用大模型驱动</span><span>{config.fullLlmDrive ? '开' : '关'}</span>
-          </button>
-          <button type="button" className="cp-ctx-item" onClick={() => { setCtxMenu(null); setCustomizer({ open: true, tab: 'llm' }) }}>
-            <span>⚙ 助手专属大模型设置</span><span>→</span>
+          <button type="button" className="cp-ctx-item" data-active={String(Boolean(config.fullLlmDrive))} onClick={() => { setCtxMenu(null); cycleDriveMode() }}>
+            <span>🧠 驱动模式切换</span><span>{driveLabel}</span>
           </button>
           <div className="cp-ctx-div" />
           <button type="button" className="cp-ctx-item" onClick={() => {
             setCtxMenu(null)
             setChatOpen(false)
             updateConfigPatch({ visible: false })
-            pushToast('已暂时隐藏芽露，可在顶栏「工具箱 → 唤出 3D 娱乐协助助手」随时唤回', 'info')
+            pushToast('已暂时隐藏芽露，可在顶栏「工具箱」随时唤回', 'info')
           }}>
-            <span>🙈 暂时隐藏助手</span><span>×</span>
+            <span>🙈 暂时隐藏芽露</span><span>×</span>
           </button>
         </div>
       )}

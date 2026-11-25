@@ -35,25 +35,17 @@
     will-change: transform;
   }
   .ds-pet:active { cursor: grabbing; }
-  .ds-pet img.sprite {
-    width: 112px; height: auto; max-height: 184px; object-fit: contain;
-    filter: drop-shadow(0 12px 20px rgba(15, 28, 56, 0.30));
-    pointer-events: none;
-    transition: transform 140ms ease-out;
+  .ds-pet canvas {
+    width: 132px; height: 192px; display: block; pointer-events: none;
+    filter: drop-shadow(0 12px 20px rgba(15, 28, 56, 0.28));
   }
   .ds-bubble {
-    margin-bottom: 4px; padding: 6px 11px; border-radius: 14px;
+    margin-bottom: 2px; padding: 6px 11px; border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.82);
     background: rgba(255,255,255,0.92); backdrop-filter: blur(16px);
     box-shadow: 0 8px 22px rgba(15,23,42,0.18);
     font-size: 11.5px; color: #161925; max-width: 220px; text-align: center;
     pointer-events: none;
-  }
-  .ds-tag {
-    margin-top: -6px; padding: 2px 9px; border-radius: 999px;
-    background: rgba(255,255,255,0.92); border: 1px solid rgba(255,255,255,0.85);
-    box-shadow: 0 4px 12px rgba(15,23,42,0.16);
-    font-size: 10.5px; font-weight: 700; color: #2d3748; pointer-events: none;
   }
 </style>
 </head>
@@ -71,14 +63,58 @@
   let draggingPet = null
   let hoveringInteractive = false
 
+  // 预加载芽露原版 60fps 透明动态精灵带（桌面漫步也保持丝滑逐帧动画！）
+  const stripIdle = new Image()
+  stripIdle.src = './assets/yalu/yalu-anim-idle.webp'
+  const stripAct = new Image()
+  stripAct.src = './assets/yalu/yalu-anim-action.webp'
+  const N_FRAMES = 16
+
+  let petWrapEl = null
+  let petBubbleEl = null
+  let petCanvas = null
+  let petCtx = null
+
   function setInteractive(on) {
     if (hoveringInteractive === on) return
     hoveringInteractive = on
     api.setDesktopStageIgnore(!on)
   }
 
-  function renderAll() {
-    stage.innerHTML = ''
+  function ensurePetDom() {
+    if (petWrapEl) return
+    petWrapEl = document.createElement('div')
+    petWrapEl.className = 'ds-pet'
+    petWrapEl.title = '拎起芽露可拖回 Harbor 窗口 · 双击立刻回窗'
+    petBubbleEl = document.createElement('div')
+    petBubbleEl.className = 'ds-bubble'
+    petBubbleEl.style.display = 'none'
+    petCanvas = document.createElement('canvas')
+    petCanvas.width = 264
+    petCanvas.height = 384
+    petCtx = petCanvas.getContext('2d')
+    petWrapEl.appendChild(petBubbleEl)
+    petWrapEl.appendChild(petCanvas)
+    petWrapEl.onpointerenter = () => setInteractive(true)
+    petWrapEl.onpointerleave = () => { if (!draggingBlock && !draggingPet) setInteractive(false) }
+    petWrapEl.onpointerdown = (e) => {
+      if (!pet) return
+      e.stopPropagation()
+      setInteractive(true)
+      draggingPet = { offX: e.clientX - pet.x, offY: e.clientY - pet.y, lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), vx: 0, vy: 0 }
+    }
+    petWrapEl.ondblclick = () => {
+      if (!pet) return
+      pet.active = false
+      setInteractive(false)
+      api.emitDesktopStageEvent({ type: 'pet_return', relX: Math.max(80, winBounds.width - 170), relY: Math.max(80, winBounds.height - 210) })
+      renderBlocks()
+    }
+    stage.appendChild(petWrapEl)
+  }
+
+  function renderBlocks() {
+    Array.from(stage.querySelectorAll('.ds-block, .ds-shard')).forEach((n) => n.remove())
     for (const b of blocks.values()) {
       if (b.shattered) {
         for (const sh of (b.shards || [])) {
@@ -110,41 +146,17 @@
     }
 
     if (pet && pet.active) {
-      const wrap = document.createElement('div')
-      wrap.className = 'ds-pet'
-      wrap.style.transform = `translate3d(${pet.x.toFixed(1)}px,${pet.y.toFixed(1)}px,0)`
-      if (pet.speech) {
-        const sp = document.createElement('div')
-        sp.className = 'ds-bubble'
-        sp.textContent = pet.speech
-        wrap.appendChild(sp)
+      ensurePetDom()
+      petWrapEl.style.display = 'flex'
+      petWrapEl.style.transform = `translate3d(${pet.x.toFixed(1)}px,${pet.y.toFixed(1)}px,0)`
+      if (pet.speech && (performance.now() - (pet.speechAt || 0) < 4200)) {
+        petBubbleEl.style.display = 'block'
+        petBubbleEl.textContent = pet.speech
+      } else {
+        petBubbleEl.style.display = 'none'
       }
-      const img = document.createElement('img')
-      img.className = 'sprite'
-      img.src = pet.spriteUrl || './assets/yalu/yalu-front.webp'
-      const flip = pet.facing > 0 ? -1 : 1
-      const tilt = pet.tilt || 0
-      img.style.transform = `scaleX(${flip}) rotate(${tilt.toFixed(1)}deg)`
-      wrap.appendChild(img)
-      const tag = document.createElement('div')
-      tag.className = 'ds-tag'
-      tag.textContent = `🌿 ${pet.name || '芽露'} · 桌面漫游中`
-      wrap.appendChild(tag)
-      wrap.title = '按住可拖着芽露满桌面逛或拖回 Harbor · 双击回主窗口'
-      wrap.onpointerenter = () => setInteractive(true)
-      wrap.onpointerleave = () => { if (!draggingBlock && !draggingPet) setInteractive(false) }
-      wrap.onpointerdown = (e) => {
-        e.stopPropagation()
-        setInteractive(true)
-        draggingPet = { offX: e.clientX - pet.x, offY: e.clientY - pet.y, lastX: e.clientX, lastY: e.clientY, lastT: performance.now(), vx: 0, vy: 0 }
-      }
-      wrap.ondblclick = () => {
-        pet.active = false
-        setInteractive(false)
-        api.emitDesktopStageEvent({ type: 'pet_return', relX: Math.max(80, winBounds.width - 170), relY: Math.max(80, winBounds.height - 200) })
-        renderAll()
-      }
-      stage.appendChild(wrap)
+    } else if (petWrapEl) {
+      petWrapEl.style.display = 'none'
     }
   }
 
@@ -157,21 +169,19 @@
       draggingBlock.vx = (e.clientX - draggingBlock.lastX) / dt
       draggingBlock.vy = (e.clientY - draggingBlock.lastY) / dt
       draggingBlock.lastX = e.clientX; draggingBlock.lastY = e.clientY; draggingBlock.lastT = now
-      b.x = e.clientX - draggingBlock.offX
-      b.y = e.clientY - draggingBlock.offY
+      b.x = e.clientX - draggingBlock.offX; b.y = e.clientY - draggingBlock.offY
       b.vx = 0; b.vy = 0
-      renderAll()
+      renderBlocks()
     } else if (draggingPet && pet) {
       const dt = Math.max(0.01, (now - draggingPet.lastT) / 1000)
       draggingPet.vx = (e.clientX - draggingPet.lastX) / dt
       draggingPet.vy = (e.clientY - draggingPet.lastY) / dt
       draggingPet.lastX = e.clientX; draggingPet.lastY = e.clientY; draggingPet.lastT = now
-      pet.x = e.clientX - draggingPet.offX
-      pet.y = e.clientY - draggingPet.offY
+      pet.x = e.clientX - draggingPet.offX; pet.y = e.clientY - draggingPet.offY
       pet.vx = 0; pet.vy = 0
-      pet.tilt = Math.max(-24, Math.min(24, -draggingPet.vx * 0.02))
+      pet.tilt = Math.max(-0.4, Math.min(0.4, -draggingPet.vx * 0.0005))
       pet.facing = draggingPet.vx >= 0 ? 1 : -1
-      renderAll()
+      renderBlocks()
     }
   })
 
@@ -191,10 +201,10 @@
       }
       draggingBlock = null
       setInteractive(false)
-      renderAll()
+      renderBlocks()
     }
     if (draggingPet && pet) {
-      const cx = pet.x + 56, cy = pet.y + 84
+      const cx = pet.x + 66, cy = pet.y + 96
       const insideHarbor = cx > winBounds.x + 16 && cx < winBounds.x + winBounds.width - 16 && cy > winBounds.y + 16 && cy < winBounds.y + winBounds.height - 16
       if (insideHarbor) {
         pet.active = false
@@ -206,7 +216,7 @@
       }
       draggingPet = null
       setInteractive(false)
-      renderAll()
+      renderBlocks()
     }
   })
 
@@ -216,18 +226,26 @@
     if (payload.addBlock) blocks.set(payload.addBlock.id, { ...payload.addBlock })
     if (payload.removeBlockId) blocks.delete(payload.removeBlockId)
     if (payload.clearAllBlocks) blocks.clear()
-    if (payload.pet) pet = { ...payload.pet }
+    if (payload.pet) {
+      pet = {
+        ...payload.pet,
+        speechAt: performance.now(),
+        ventureLeft: payload.pet.autoReturnSec || 22,
+      }
+    }
     if (payload.hidePet && pet) pet.active = false
-    renderAll()
+    renderBlocks()
   })
 
   let lastT = performance.now()
+  const t0 = lastT
   function loop(now) {
     const dt = Math.min(0.032, Math.max(0.008, (now - lastT) / 1000))
+    const elapsed = (now - t0) / 1000
     lastT = now
     const W = window.innerWidth
     const H = window.innerHeight
-    let dirty = false
+    let dirtyBlocks = false
 
     for (const b of blocks.values()) {
       if (draggingBlock && draggingBlock.id === b.id) continue
@@ -237,14 +255,13 @@
           if (sh.y > H - 24) { sh.y = H - 24; sh.vy *= -0.3 }
           sh.rot += sh.vrot * dt
         }
-        dirty = true
+        dirtyBlocks = true
         continue
       }
       if (Math.abs(b.vx) > 2 || Math.abs(b.vy) > 2) {
         b.x += b.vx * dt; b.y += b.vy * dt
         b.rot = (b.rot || 0) + (b.vx * 0.04) * dt
-        b.vx *= Math.pow(0.986, dt * 60)
-        b.vy *= Math.pow(0.986, dt * 60)
+        b.vx *= Math.pow(0.986, dt * 60); b.vy *= Math.pow(0.986, dt * 60)
         let hit = false
         if (b.x < 4) { b.x = 4; b.vx = Math.abs(b.vx) * 0.72; hit = true }
         else if (b.x + b.w > W - 4) { b.x = W - b.w - 4; b.vx = -Math.abs(b.vx) * 0.72; hit = true }
@@ -262,39 +279,82 @@
             api.emitDesktopStageEvent({ type: 'block_shattered_desktop', id: b.id })
           }
         }
-        dirty = true
+        dirtyBlocks = true
       }
     }
 
-    if (pet && pet.active && !draggingPet) {
-      if (Math.abs(pet.vx || 0) > 6 || Math.abs(pet.vy || 0) > 6 || pet.y < H - 210) {
-        pet.vy = (pet.vy || 0) + 1200 * dt
-        pet.x += (pet.vx || 0) * dt
-        pet.y += pet.vy * dt
-        pet.vx = (pet.vx || 0) * 0.985
-        if (pet.x < 8) { pet.x = 8; pet.vx = Math.abs(pet.vx) * 0.55 }
-        else if (pet.x > W - 128) { pet.x = W - 128; pet.vx = -Math.abs(pet.vx) * 0.55 }
-        if (pet.y > H - 204) { pet.y = H - 204; pet.vy = Math.abs(pet.vy) > 120 ? -Math.abs(pet.vy) * 0.4 : 0; pet.vx *= 0.8 }
-        if (pet.y < 10) { pet.y = 10; pet.vy = Math.abs(pet.vy) * 0.45 }
-        dirty = true
-      } else if (pet.roaming) {
-        pet.roamTimer = (pet.roamTimer || 0) - dt
-        if (pet.roamTimer <= 0) {
-          pet.roamDir = (Math.random() > 0.5 ? 1 : -1)
-          pet.roamTimer = 2.6 + Math.random() * 3.2
-          pet.facing = pet.roamDir
-          pet.spriteUrl = pet.sideUrl || pet.spriteUrl
+    if (pet && pet.active) {
+      let moving = false
+      if (!draggingPet) {
+        if (Math.abs(pet.vx || 0) > 6 || Math.abs(pet.vy || 0) > 6 || pet.y < H - 216) {
+          pet.vy = (pet.vy || 0) + 1200 * dt
+          pet.x += (pet.vx || 0) * dt; pet.y += pet.vy * dt
+          pet.vx = (pet.vx || 0) * 0.985
+          if (pet.x < 8) { pet.x = 8; pet.vx = Math.abs(pet.vx) * 0.55 }
+          else if (pet.x > W - 136) { pet.x = W - 136; pet.vx = -Math.abs(pet.vx) * 0.55 }
+          if (pet.y > H - 208) { pet.y = H - 208; pet.vy = Math.abs(pet.vy) > 120 ? -Math.abs(pet.vy) * 0.4 : 0; pet.vx *= 0.8 }
+          if (pet.y < 10) { pet.y = 10; pet.vy = Math.abs(pet.vy) * 0.45 }
+          moving = true
+        } else if (pet.roaming) {
+          // 在真实桌面上自然散步 18–24 秒后，主动走向 Harbor 窗口边界自然回家！
+          pet.ventureLeft = (pet.ventureLeft || 20) - dt
+          if (pet.ventureLeft <= 0) {
+            const homeX = winBounds.x + winBounds.width - 150
+            const dx = homeX - pet.x
+            pet.facing = dx >= 0 ? 1 : -1
+            if (Math.abs(dx) < 28) {
+              pet.active = false
+              setInteractive(false)
+              api.emitDesktopStageEvent({ type: 'pet_return', relX: Math.max(40, winBounds.width - 166), relY: Math.max(60, winBounds.height - 210) })
+              renderBlocks()
+            } else {
+              pet.x += Math.sign(dx) * 86 * dt
+              moving = true
+            }
+          } else {
+            pet.roamTimer = (pet.roamTimer || 0) - dt
+            if (pet.roamTimer <= 0) {
+              pet.roamDir = Math.random() > 0.35 ? (Math.random() > 0.5 ? 1 : -1) : 0
+              pet.roamTimer = 2.2 + Math.random() * 2.8
+              if (pet.roamDir !== 0) pet.facing = pet.roamDir
+            }
+            if (pet.roamDir) {
+              pet.x = Math.max(14, Math.min(W - 140, pet.x + pet.roamDir * 58 * dt))
+              if (pet.x <= 16 || pet.x >= W - 142) { pet.roamDir = -pet.roamDir; pet.facing = pet.roamDir }
+              moving = true
+            }
+          }
         }
-        pet.x = Math.max(16, Math.min(W - 136, pet.x + (pet.roamDir || 1) * 52 * dt))
-        if (pet.x <= 18 || pet.x >= W - 138) {
-          pet.roamDir = -(pet.roamDir || 1)
-          pet.facing = pet.roamDir
+      }
+      if (pet.active) {
+        ensurePetDom()
+        petWrapEl.style.display = 'flex'
+        petWrapEl.style.transform = `translate3d(${pet.x.toFixed(1)}px,${pet.y.toFixed(1)}px,0)`
+        if (pet.speech && (now - (pet.speechAt || 0) < 4200)) {
+          petBubbleEl.style.display = 'block'; petBubbleEl.textContent = pet.speech
+        } else {
+          petBubbleEl.style.display = 'none'
         }
-        dirty = true
+        // 在透明 Canvas 上丝滑渲染芽露 16 帧动画（彻底告别呆板静态贴图！）
+        const sheet = (moving && stripAct.complete && stripAct.naturalWidth) ? stripAct : (stripIdle.complete && stripIdle.naturalWidth ? stripIdle : null)
+        if (sheet && petCtx) {
+          petCtx.clearRect(0, 0, 264, 384)
+          const cw = sheet.naturalWidth / N_FRAMES
+          const ch = sheet.naturalHeight
+          const cyc = (elapsed * (moving ? 11 : 7)) % (N_FRAMES * 2 - 2)
+          const fi = cyc < N_FRAMES ? Math.floor(cyc) : Math.floor((N_FRAMES * 2 - 2) - cyc)
+          const hop = moving ? -Math.abs(Math.sin(elapsed * 11)) * 10 : 0
+          petCtx.save()
+          petCtx.translate(132, 376 + hop)
+          petCtx.rotate(pet.tilt || 0)
+          petCtx.scale((pet.facing > 0 ? -1 : 1), 1)
+          petCtx.drawImage(sheet, fi * cw, 0, cw, ch, -124, -372, 248, 372)
+          petCtx.restore()
+        }
       }
     }
 
-    if (dirty) renderAll()
+    if (dirtyBlocks) renderBlocks()
     requestAnimationFrame(loop)
   }
   requestAnimationFrame(loop)

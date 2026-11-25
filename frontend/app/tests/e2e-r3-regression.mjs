@@ -1429,18 +1429,20 @@ try {
   await page.waitForSelector('.hb-shell', { timeout: 15000 })
   const actor = page.locator('[data-companion-actor="true"]')
   await actor.waitFor({ state: 'visible', timeout: 8000 })
-  const yaluSpriteVisible = (await page.locator('[data-companion-actor="true"] [data-yalu-stage="sprite"] img.yms-sprite').count()) === 1
-  // T1: 右键打开芽露建模工坊 → 验证三视图/道具/60fps成片与大脑页签 100% 可点击
+  const yalu3dCanvasVisible = (await page.locator('[data-companion-actor="true"] [data-yalu-stage="yalu_3d"] canvas.yms-canvas').count()) === 1
+  const noFloatingProps = (await page.locator('.yms-prop-staff, .yms-prop-bell').count()) === 0
+
+  // T1: 右键极简菜单（仅 3 项，绝不堆砌动作菜单！）→ 打开芽露 3D 工坊验证 3D 动作、原片逐帧与 60fps 成片
   await actor.click({ button: 'right' })
   await page.waitForSelector('.cp-ctx', { timeout: 3000 })
-  const hasFullLlmToggle = (await page.locator('.cp-ctx button:has-text("完全使用大模型驱动")').count()) === 1
-  await page.locator('.cp-ctx button:has-text("芽露建模工坊")').click()
+  const ctxItemCount = await page.locator('.cp-ctx .cp-ctx-item').count()
+  await page.locator('.cp-ctx button:has-text("芽露 3D 工坊")').click()
   await page.waitForSelector('[data-section="companion-customizer"]', { timeout: 3000 })
-  await page.locator('[data-section="companion-customizer"] button:has-text("侧面")').click()
+  await page.locator('[data-section="companion-customizer"] button:has-text("坐边荡脚")').click()
   await page.locator('[data-section="companion-customizer"] button:has-text("60fps成片")').click()
   const videoStageMounted = (await page.locator('[data-section="companion-customizer"] video.yms-video').count()) === 1
   await page.locator('[data-section="companion-customizer"] button:has-text("无人驾驶与专属大模型")').click()
-  const brainTabOk = (await page.locator('[data-section="companion-customizer"]:has-text("全自动无人驾驶接管")').count()) === 1
+  const brainTabOk = (await page.locator('[data-section="companion-customizer"]:has-text("自主活体生命行为")').count()) === 1
   await page.locator('[data-section="companion-customizer"] button[aria-label="关闭捏脸工坊"]').click()
   await page.waitForSelector('[data-section="companion-customizer"]', { state: 'detached', timeout: 3000 })
 
@@ -1458,7 +1460,7 @@ try {
   const afterBox = await actor.boundingBox()
   const draggedOk = Boolean(beforeBox && afterBox && Math.hypot(afterBox.x - beforeBox.x, afterBox.y - beforeBox.y) > 40)
 
-  // T3: 左键打开总管面板 → 黑洞取文件 + 投喂 + 实测「全自动代办交稿」(自动选原生专家团并直切 team 页签绝不卡住，完成验收交稿！)
+  // T3: 左键打开极简总管面板 → 黑洞取文件 + 投喂 + 全自动选原生专家团零卡死完成交稿
   await actor.click()
   await page.waitForSelector('.cp-chat', { timeout: 3000 })
   await page.locator('.cp-chat button:has-text("黑洞取文件")').click()
@@ -1466,17 +1468,16 @@ try {
   const blackHoleChipOk = (await page.locator('.chat-token-chip:has-text("黑洞文件")').count()) > 0
   await page.locator('.cp-chat button:has-text("投喂")').click()
   await page.locator('.cp-chat button:has-text("晨露蜜糖")').click()
-  await page.waitForTimeout(220)
-  // 直接点「🤖 全自动代办交稿」：会路由到 expert_team（全栈软件研发公司），验证自动切到 team 页签且丝滑跑到交付验收单！
+  await page.waitForTimeout(200)
   await page.locator('.cp-chat button:has-text("全自动代办交稿")').click()
   await page.waitForSelector('.cp-chat .cp-msg:has-text("全自动监工交付验收单")', { timeout: 15000 })
   const autopilotDelivered = (await page.locator('.cp-chat .cp-msg:has-text("全自动监工交付验收单")').count()) > 0
   await page.locator('.cp-chat button[aria-label="关闭助手聊天"]').click()
   record(
     'Suite-T',
-    'R30 芽露原版建模与全自动监工：原版立绘/60fps成片 + 拎起拖动 + 黑洞取文件 + 自动选专家团零卡死完成交稿',
-    yaluSpriteVisible && hasFullLlmToggle && videoStageMounted && brainTabOk && draggedOk && blackHoleChipOk && autopilotDelivered,
-    `yalu=${yaluSpriteVisible}, video=${videoStageMounted}, brain=${brainTabOk}, dragged=${draggedOk}, bh=${blackHoleChipOk}, delivered=${autopilotDelivered}`
+    'R31 芽露 3D 骨骼活体 + 零体外漂浮道具 + 极简3项右键菜单 + 自主生命配置 + 自动选专家团零卡死交稿',
+    yalu3dCanvasVisible && noFloatingProps && ctxItemCount === 3 && videoStageMounted && brainTabOk && draggedOk && blackHoleChipOk && autopilotDelivered,
+    `yalu3d=${yalu3dCanvasVisible}, noFloatProps=${noFloatingProps}, ctxItems=${ctxItemCount}, video=${videoStageMounted}, brain=${brainTabOk}, dragged=${draggedOk}, bh=${blackHoleChipOk}, delivered=${autopilotDelivered}`
   )
 
   // D4: 全程零未捕获页面异常

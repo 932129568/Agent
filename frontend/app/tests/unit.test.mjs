@@ -1263,3 +1263,26 @@ test('R30 液态玻璃方块高速甩出窗口逃逸物理 (allowEscape) + 芽�
   assert.ok(yalu.assets.props.bell.src.endsWith('prop-bell.webp'))
   assert.ok(yalu.assets.showcaseVideo.endsWith('yalu-showcase.mp4'))
 })
+
+
+test('R31 芽露自主生命行为状态机（自动散步/坐边/敲腰铃/自主走出桌面/打盹）+ 60fps 原片精灵带资产就位', async () => {
+  const { pickNextAutonomousBehavior } = await import('../src/services/companionLife.js')
+  const { getActiveModelPack, DEFAULT_COMPANION_AVATAR } = await import('../src/services/companionCatalog.js')
+
+  assert.equal(DEFAULT_COMPANION_AVATAR.renderMode, 'yalu_3d')
+  const pack = getActiveModelPack('yalu_official')
+  assert.ok(pack.assets.animIdleStrip.endsWith('yalu-anim-idle.webp'))
+  assert.ok(pack.assets.animActionStrip.endsWith('yalu-anim-action.webp'))
+  assert.equal(pack.assets.animFrames, 16)
+
+  // 1) 桌面端闲置 → 自然触发走出窗口去桌面漫步
+  const v = pickNextAutonomousBehavior({ canVentureDesktop: true, recentlyReturnedFromDesktop: false, energy: 90, roll: 0.1 })
+  assert.equal(v.type, 'venture_desktop')
+  // 2) 精力低 → 自然打盹充电
+  const sl = pickNextAutonomousBehavior({ energy: 25, roll: 0.5 })
+  assert.equal(sl.type, 'sleep')
+  // 3) 坐边荡脚 / 敲腰间酒红铃铛 / 自由散步
+  assert.equal(pickNextAutonomousBehavior({ energy: 90, roll: 0.42 }).type, 'sit_edge')
+  assert.equal(pickNextAutonomousBehavior({ energy: 90, roll: 0.65 }).type, 'bell_play')
+  assert.equal(pickNextAutonomousBehavior({ energy: 90, roll: 0.88 }).type, 'stroll')
+})
