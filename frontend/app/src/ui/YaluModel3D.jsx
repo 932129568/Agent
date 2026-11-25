@@ -23,6 +23,14 @@ const ASSETS = {
 }
 
 const STAGE_HEIGHT = 2.0          // 归一化后人物高度（世界单位）
+
+/**
+ * 是否叠加独立道具模型。
+ * 实测（CDP 截图）：本体模型**已自带**花杖与腰间红铃，再叠加 staff.glb / bell.glb 会重复，
+ * 且没有骨骼无法把道具精确吸附到手部，表现为"右侧巨柱 + 头顶悬浮红球"。
+ * 因此默认关闭；等交付方给出骨骼/挂点，或人工调好 PROP_LAYOUT 后再置 true。
+ */
+const SHOW_PROPS = false
 const PROP_LAYOUT = {
   // 道具锚点按人物高度的比例给出，避免依赖模型原始尺寸
   staff: { side: 0.42, up: 0.52, z: -0.12, rotZ: -0.35, rotX: 0.18, scale: 0.62 },
@@ -157,7 +165,8 @@ export default function YaluModel3D({
       loader.load(url, (g) => resolve(g), undefined, () => resolve(null))
     })
 
-    Promise.all([load(ASSETS.yalu), load(ASSETS.staff), load(ASSETS.bell)]).then(([gYalu, gStaff, gBell]) => {
+    const propTasks = SHOW_PROPS ? [load(ASSETS.staff), load(ASSETS.bell)] : [Promise.resolve(null), Promise.resolve(null)]
+    Promise.all([load(ASSETS.yalu), ...propTasks]).then(([gYalu, gStaff, gBell]) => {
       if (disposed) return
       if (!gYalu) { host.dataset.stage3d = 'failed'; if (onReady) onReady(false); return }
 
