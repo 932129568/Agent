@@ -26,15 +26,18 @@ const STAGE_HEIGHT = 2.0          // 归一化后人物高度（世界单位）
 
 /**
  * 是否叠加独立道具模型。
- * 实测（CDP 截图）：本体模型**已自带**花杖与腰间红铃，再叠加 staff.glb / bell.glb 会重复，
- * 且没有骨骼无法把道具精确吸附到手部，表现为"右侧巨柱 + 头顶悬浮红球"。
- * 因此默认关闭；等交付方给出骨骼/挂点，或人工调好 PROP_LAYOUT 后再置 true。
+ * 实测（CDP 截图 ×3 轮）：本体 GLB 是**单网格单图元**，花杖与腰间红铃**长在同一个网格里**，
+ * 无法单独隐藏；再叠加 staff.glb / bell.glb 就必然重复（实测出现"两根杖""两个铃"）。
+ * 因此默认关闭。若要用这两件独立高模道具，需二选一：
+ *   a) 交付方把本体里的杖/铃删掉后重新导出；
+ *   b) 给本体绑骨骼，道具有挂点后再用 SHOW_PROPS=true + PROP_LAYOUT 精确吸附。
  */
-const SHOW_PROPS = false
+const SHOW_PROPS = false  // 见下方注释：本体的同一网格已含杖与铃，叠加必重复
 const PROP_LAYOUT = {
-  // 道具锚点按人物高度的比例给出，避免依赖模型原始尺寸
-  staff: { side: 0.42, up: 0.52, z: -0.12, rotZ: -0.35, rotX: 0.18, scale: 0.62 },
-  bell: { side: -0.30, up: 0.78, z: 0.10, scale: 0.16 },
+  // 单位：以人物归一化高度 H(=STAGE_HEIGHT) 为 1。
+  // 这两个是你说的"身上挂件"：杖进右手、铃挂左腰，先给初值，再按截图迭代对齐。
+  staff: { x: 0.04, y: 0.30, z: 0.16, rotZ: -0.20, rotX: 0.08, scale: 0.42 },
+  bell:  { x: -0.11, y: 0.44, z: 0.14, rotZ: 0.0, rotX: 0.0, scale: 0.09 },
 }
 
 /** 动作配方：无骨骼时用这些参数制造"生动"的差异 */
@@ -189,7 +192,7 @@ export default function YaluModel3D({
         prepareMaterials(s)
         fitObject(s, STAGE_HEIGHT * PROP_LAYOUT.staff.scale)
         propStaff.add(s)
-        propStaff.position.set(PROP_LAYOUT.staff.side, STAGE_HEIGHT * PROP_LAYOUT.staff.up, PROP_LAYOUT.staff.z)
+        propStaff.position.set(PROP_LAYOUT.staff.x * STAGE_HEIGHT, PROP_LAYOUT.staff.y * STAGE_HEIGHT, PROP_LAYOUT.staff.z * STAGE_HEIGHT)
         propStaff.rotation.set(PROP_LAYOUT.staff.rotX, 0, PROP_LAYOUT.staff.rotZ)
       }
       if (gBell) {
@@ -197,7 +200,7 @@ export default function YaluModel3D({
         prepareMaterials(b)
         fitObject(b, STAGE_HEIGHT * PROP_LAYOUT.bell.scale)
         propBell.add(b)
-        propBell.position.set(PROP_LAYOUT.bell.side, STAGE_HEIGHT * PROP_LAYOUT.bell.up, PROP_LAYOUT.bell.z)
+        propBell.position.set(PROP_LAYOUT.bell.x * STAGE_HEIGHT, PROP_LAYOUT.bell.y * STAGE_HEIGHT, PROP_LAYOUT.bell.z * STAGE_HEIGHT)
       }
 
       host.dataset.stage3d = 'ready'
@@ -250,7 +253,12 @@ export default function YaluModel3D({
         const cam = VIEW_CAMERA[st.viewAngle] || VIEW_CAMERA.auto
         const az = cam.azimuth + st.lookX * 0.18
         const el = cam.elevation + st.lookY * 0.10
-        const d = cam.distance / Math.max(0.6, st.scale)
+        // 距离必须由 FOV 反算：d = (H/2)/tan(fov/2) * 留白。
+        // 原来固定 3.05 < 需要的 3.27，导致头顶与脚底被裁掉。
+        const halfFov = (camera.fov * Math.PI) / 180 / 2
+        const needH = (STAGE_HEIGHT * 0.5) / Math.tan(halfFov)
+        const needW = (STAGE_HEIGHT * 0.42) / Math.tan(halfFov) / Math.max(0.35, camera.aspect)
+        const d = (Math.max(needH, needW) * 1.16) / Math.max(0.6, st.scale)
         tmp.set(
           Math.sin(az) * Math.cos(el) * d,
           STAGE_HEIGHT * 0.52 + Math.sin(el) * d,
